@@ -1,13 +1,14 @@
 // src/routes/dashboard/inventory/+page.server.ts
 import { protectLoad } from '$lib/server/permissions';
 import type { PageServerLoad } from './$types';
+import { adminDb } from '$lib/server/firebase-admin';
 
 export const load: PageServerLoad = protectLoad('consultar_stock', async ({ locals }) => {
-	const { supabase, profile } = locals;
+	const { tenantId } = locals;
 
-	// Simulación de productos filtrados por empresa
-	// En un caso real, haríamos: 
-	// const { data: products } = await supabase.from('products').select('*').eq('company_id', profile.company_id);
+	// In a real Multi-Tenant Firestore DB, we'd query:
+    // adminDb.collection(`tenants/${tenantId}/inventory`)
+    // OR if multi-database: admin.firestore('BD_empresa2').collection('inventory')
 
 	return {
 		products: [
@@ -15,6 +16,7 @@ export const load: PageServerLoad = protectLoad('consultar_stock', async ({ loca
 			{ id: '2', name: 'Monitor 4K 27"', sku: 'MON-27-4K', stock: 5, price: 450 },
 			{ id: '3', name: 'Teclado Mecánico', sku: 'KBD-MECH', stock: 45, price: 80 },
 			{ id: '4', name: 'Ratón Inalámbrico', sku: 'MSE-WIRE', stock: 0, price: 45 },
-		]
+		],
+        tenantId
 	};
 });

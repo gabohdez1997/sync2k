@@ -9,11 +9,11 @@
 		<p class="text-zinc-400">Control de productos y niveles de existencias.</p>
 	</div>
 
-	<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+	<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
 		{#each data.products as product}
-			<div class="bg-zinc-900 border border-zinc-800 rounded-xl p-5 space-y-3 hover:border-zinc-700 transition">
+			<div class="premium-card p-6 space-y-4">
 				<div class="flex justify-between items-start">
-					<span class="text-xs font-medium text-indigo-400 bg-indigo-400/10 px-2 py-0.5 rounded-full">
+					<span class="text-xs font-medium text-blue-400 bg-blue-400/10 px-2 py-0.5 rounded-full">
 						{product.sku}
 					</span>
 					<span class="text-lg font-bold text-white">${product.price}</span>

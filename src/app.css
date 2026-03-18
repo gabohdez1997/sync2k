@@ -1,26 +1,84 @@
-/* Tailwind v4 — CSS-first config */
 @import "tailwindcss";
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&display=swap');
+
+/* Tailwind v4 — CSS-first config */
 
 @theme {
-  --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
+  --font-sans: 'Outfit', 'Inter', ui-sans-serif, system-ui, sans-serif;
 
-  --color-brand-50:  #eef2ff;
-  --color-brand-100: #e0e7ff;
-  --color-brand-400: #818cf8;
-  --color-brand-500: #6366f1;
-  --color-brand-600: #4f46e5;
-  --color-brand-700: #4338ca;
+  /* Paleta Sync2k — azul profundo premium */
+  --color-brand-400: #4a8ae7;
+  --color-brand-500: #1e6fe0;
+  --color-brand-600: #1855c4;
+  --color-brand-700: #1244a8;
 
-  --color-surface-900: #09090b;
-  --color-surface-800: #18181b;
-  --color-surface-700: #27272a;
-  --color-surface-600: #3f3f46;
-  --color-surface-500: #52525b;
-  --color-surface-400: #71717a;
-  --color-surface-300: #a1a1aa;
-  --color-surface-200: #d4d4d8;
-  --color-surface-100: #f4f4f5;
+  /* Superficies semánticas */
+  --color-surface-base: var(--bg-primary);
+  --color-surface-raised: var(--bg-secondary);
+  --color-text-base: var(--text-primary);
+  --color-text-muted: var(--text-secondary);
+  --color-border-subtle: var(--border-color);
+
+  /* Glassmorphism Classes as utility */
+  --bg-glass: var(--glass-bg);
+  --blur-glass: 16px;
+}
+
+:root {
+  color-scheme: dark;
+  /* Theme Base: Dark (Sync2k Identity) */
+  --bg-primary: #050505;
+  --bg-secondary: #0f0f11;
+  --text-primary: #ffffff;
+  --text-secondary: #94a3b8;
+  --border-color: rgba(255, 255, 255, 0.06);
+  --glass-bg: rgba(15, 15, 17, 0.6);
+  --accent-gradient: linear-gradient(135deg, #1e6fe0 0%, #1244a8 100%);
+  --bg-gradient: radial-gradient(circle at 50% 0%, #111827 0%, #050505 100%);
+}
+
+:root.light {
+  color-scheme: light;
+  --bg-primary: #f8fafc;
+  --bg-secondary: #ffffff;
+  --text-primary: #0f172a;
+  --text-secondary: #64748b;
+  --border-color: rgba(0, 0, 0, 0.05);
+  --glass-bg: rgba(255, 255, 255, 0.65);
+  --accent-gradient: linear-gradient(135deg, #1855c4 0%, #4a8ae7 100%);
+  --bg-gradient: radial-gradient(circle at 50% 0%, #f1f5f9 0%, #f8fafc 100%);
+}
+
+/* Glassmorphism Utility */
+@utility glass {
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--blur-glass));
+  -webkit-backdrop-filter: blur(var(--blur-glass));
+  border: 1px solid var(--border-color);
+}
+
+/* Estilos base para Form Controls */
+select {
+  @apply cursor-pointer;
+  background-color: var(--bg-secondary);
+  color: var(--text-primary);
+}
+
+option {
+  background-color: var(--bg-secondary);
+  color: var(--text-primary);
+  @apply py-2;
+}
+
+.premium-card {
+  @apply glass rounded-2xl shadow-xl transition-all duration-300;
+  box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.5);
+}
+
+.btn-premium {
+  background: var(--accent-gradient);
+  @apply text-white font-semibold rounded-xl px-6 py-2.5 transition-all duration-300 hover:shadow-lg hover:shadow-blue-500/20 active:scale-95 disabled:opacity-50;
 }
 
 /* Base styles */
@@ -28,14 +86,19 @@ html {
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  background: var(--bg-gradient);
+  color: var(--text-primary);
+  min-height: 100vh;
+  transition: background 0.5s ease;
 }
 
 body {
-  @apply bg-zinc-950 text-zinc-100;
+  @apply min-h-screen;
 }
 
 /* Scrollbar customization */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: #3f3f46; border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: #52525b; }
+::-webkit-scrollbar-thumb { background: #1855c4; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #1e6fe0; }
+

@@ -1,5 +1,5 @@
 node_modules
-
+sync2k-agent
 # Output
 .output
 .vercel
@@ -21,3 +21,6 @@ Thumbs.db
 # Vite
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
+
+# Firebase secrets
+firebase/*.json

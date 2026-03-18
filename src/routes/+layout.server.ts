@@ -5,25 +5,21 @@
 import type { LayoutServerLoad } from './$types';
 
 export const load: LayoutServerLoad = async ({ locals }) => {
-  const { session, profile } = locals;
+  const { session, profile, tenantId } = locals;
 
   return {
     session,
+    tenantId,
     // Solo pasar datos seguros al cliente (nunca service_role keys, etc.)
     profile: profile
       ? {
-          id: profile.id,
+          uid: profile.uid,
           full_name: profile.full_name,
-          avatar_url: profile.avatar_url,
+          email: profile.email,
           permissions: profile.permissions,
           roles: profile.roles.map((r) => ({ id: r.id, name: r.name })),
-          company: profile.company
-            ? {
-                id: profile.company.id,
-                name: profile.company.name,
-                slug: profile.company.slug
-              }
-            : null
+          active: profile.active,
+          company: profile.company || { id: 'default', name: 'Sync2K', slug: 'sync2k' }
         }
       : null
   };

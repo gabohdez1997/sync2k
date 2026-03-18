@@ -32,7 +32,7 @@ function assertPermission(locals: App.Locals, permission: string): Profile {
   const profile = locals.profile;
 
   if (!profile) {
-    redirect(303, '/auth/login');
+    redirect(303, '/');
   }
 
   if (!hasPermission(profile, permission)) {
@@ -86,7 +86,7 @@ export function protectActionAny<T>(
 ): ActionHandler<T> {
   return (event: RequestEvent) => {
     const profile = event.locals.profile;
-    if (!profile) redirect(303, '/auth/login');
+    if (!profile) redirect(303, '/');
 
     const authorized = permissions.some((p) => hasPermission(profile, p));
     if (!authorized) {

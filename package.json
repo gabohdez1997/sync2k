@@ -18,16 +18,21 @@
 		"@tailwindcss/typography": "^0.5.19",
 		"@tailwindcss/vite": "^4.2.1",
 		"autoprefixer": "^10.4.27",
+		"dotenv": "^17.3.1",
 		"postcss": "^8.5.8",
 		"svelte": "^5.51.0",
 		"svelte-check": "^4.4.2",
 		"tailwindcss": "^4.2.1",
+		"ts-node": "^10.9.2",
+		"tsx": "^4.21.0",
 		"typescript": "^5.9.3",
 		"vite": "^7.3.1"
 	},
 	"dependencies": {
-		"@supabase/auth-helpers-sveltekit": "^0.15.0",
-		"@supabase/supabase-js": "^2.99.1",
+		"cookie": "^1.1.1",
+		"firebase": "^12.10.0",
+		"firebase-admin": "^13.7.0",
+		"lucide-svelte": "^0.577.0",
 		"svelte-sonner": "^1.1.0"
 	}
 }

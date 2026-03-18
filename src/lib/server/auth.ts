@@ -1,85 +1,133 @@
 // src/lib/server/auth.ts
-// Helpers para leer sesión y perfil del usuario en rutas server-side.
+import { adminDb, MasterCollections } from './firebase-admin';
 
-import type { SupabaseClient } from '@supabase/supabase-js';
-import type { Database } from '$lib/types/supabase';
-
-export type Profile = Database['public']['Tables']['profiles']['Row'] & {
-  company: Database['public']['Tables']['companies']['Row'] | null;
-  roles: Array<{
-    id: string;
-    name: string;
-    permissions: string[]; // array of permission keys
-  }>;
-  permissions: string[]; // flattened unique list
+export type CRUD = {
+  read: boolean;
+  create: boolean;
+  update: boolean;
+  delete: boolean;
 };
 
-/**
- * Obtiene el perfil completo del usuario autenticado, incluyendo
- * empresa, roles y permisos. Retorna null si no hay sesión.
- */
-export async function getUserProfile(
-  supabase: SupabaseClient<Database>
-): Promise<Profile | null> {
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
+export type Profile = {
+  uid: string;
+  full_name: string | null;
+  email: string | null;
+  permissions: Record<string, CRUD>;
+  roles: Array<{ id: string; name: string }>;
+  active: boolean;
+  company?: { 
+    id: string; 
+    name: string; 
+    slug: string;
+    agent_url?: string;
+    agent_api_key?: string;
+  } | null;
+};
 
-  if (!user) return null;
-
-  const { data: profile, error } = await supabase
-    .from('profiles')
-    .select(
-      `
-      *,
-      company:companies(*),
-      user_roles(
-        roles(
-          id,
-          name,
-          role_permissions(
-            permissions(key)
-          )
-        )
-      )
-    `
-    )
-    .eq('id', user.id)
-    .single();
-
-  if (error || !profile) return null;
-
-  // Aplanar roles y permisos
-  const roles = (profile.user_roles ?? []).map((ur: any) => {
-    const role = ur.roles;
-    const permissions: string[] = (role.role_permissions ?? []).map(
-      (rp: any) => rp.permissions.key
-    );
-    return { id: role.id, name: role.name, permissions };
-  });
-
-  const permissions = [...new Set(roles.flatMap((r) => r.permissions))];
-
-  return {
-    ...profile,
-    company: profile.company ?? null,
-    roles,
-    permissions
-  } as Profile;
+export function hasPermission(profile: Profile, optionId: string, action: keyof CRUD = 'read'): boolean {
+  return profile.permissions[optionId]?.[action] ?? false;
 }
 
 /**
- * Verifica si un perfil tiene un permiso específico.
+ * Obtiene el perfil del usuario, sus roles y permisos desde la BD_Master de Firestore.
+ * Combina los permisos de múltiples roles en un solo objeto CRUD estructurado.
  */
-export function hasPermission(profile: Profile | null, key: string): boolean {
-  if (!profile) return false;
-  return profile.permissions.includes(key);
-}
+export async function getUserProfile(uid: string, tenantId?: string | null): Promise<Profile | null> {
+  if (!adminDb) return null;
 
-/**
- * Verifica si un perfil tiene al menos uno de los nombres de rol dados.
- */
-export function hasRole(profile: Profile | null, ...roleNames: string[]): boolean {
-  if (!profile) return false;
-  return profile.roles.some((r) => roleNames.includes(r.name));
+  try {
+    const userDoc = await adminDb.collection(MasterCollections.USERS).doc(uid).get();
+    
+    if (!userDoc.exists) {
+      console.warn(`[AUTH] User document NOT FOUND for UID: ${uid}`);
+      return null;
+    }
+
+    const userData = userDoc.data();
+    
+    // Determinar qué roles usar: globales o específicos del tenant
+    let roleIds: string[] = userData?.roles || [];
+
+    if (tenantId) {
+      // Intentar buscar roles específicos para este usuario en esta empresa
+      const docId = `${uid}_${tenantId}`;
+      const userTenantDoc = await adminDb.collection(MasterCollections.USER_TENANTS).doc(docId).get();
+      if (userTenantDoc.exists) {
+        const tenantRoles = userTenantDoc.data()?.roles || [];
+        if (tenantRoles.length > 0) {
+          console.log(`[AUTH] Found tenant roles for ${uid} in ${tenantId}: ${JSON.stringify(tenantRoles)}`);
+          roleIds = tenantRoles;
+        }
+      }
+    }
+
+    console.log(`[AUTH] Final roles for ${uid} (tenant: ${tenantId}): ${JSON.stringify(roleIds)}`);
+    const rolesInfo = [];
+    const mergedPermissions: Record<string, CRUD> = {};
+
+    // Buscar cada rol en la colección de permisos para expandir
+    for (const roleId of roleIds) {
+        const roleDoc = await adminDb.collection(MasterCollections.PERMISSIONS).doc(roleId).get();
+        if (roleDoc.exists) {
+            const roleData = roleDoc.data();
+            console.log(`[AUTH] Merging role: ${roleId}. Perms: ${Object.keys(roleData?.permissions || {}).length} nodes`);
+            rolesInfo.push({ id: roleId, name: roleData?.name || roleId });
+            
+            // Permisos estructurados esperados: { "sales": { read: true, create: false, ... }, ... }
+            const rolePerms = roleData?.permissions || {};
+            
+            for (const [optionId, crud] of Object.entries(rolePerms)) {
+              if (!mergedPermissions[optionId]) {
+                mergedPermissions[optionId] = { read: false, create: false, update: false, delete: false };
+              }
+              const typedCrud = crud as Partial<CRUD>;
+              mergedPermissions[optionId].read = mergedPermissions[optionId].read || !!typedCrud.read;
+              mergedPermissions[optionId].create = mergedPermissions[optionId].create || !!typedCrud.create;
+              mergedPermissions[optionId].update = mergedPermissions[optionId].update || !!typedCrud.update;
+              mergedPermissions[optionId].delete = mergedPermissions[optionId].delete || !!typedCrud.delete;
+            }
+        } else {
+            console.warn(`[AUTH] Role document NOT FOUND: ${roleId}`);
+        }
+    }
+
+    // Cargar información de la empresa (basado en tenantId o en el perfil)
+    let companyInfo = userData?.company || null;
+
+    if (tenantId) {
+      // Si hay un tenantId, cargamos la configuración completa de esa empresa
+      const tenantSnap = await adminDb.collection(MasterCollections.CONNECTIONS)
+          .where('slug', '==', tenantId)
+          .limit(1)
+          .get();
+      
+      if (!tenantSnap.empty) {
+          const tenantData = tenantSnap.docs[0].data();
+          companyInfo = {
+              id: tenantSnap.docs[0].id,
+              name: tenantData.name,
+              slug: tenantData.slug,
+              agent_url: tenantData.agent_url,
+              agent_api_key: tenantData.agent_api_key
+          };
+      }
+    }
+
+    const profile = {
+      uid,
+      full_name: userData?.full_name || null,
+      email: userData?.email || null,
+      active: userData?.is_active ?? true, 
+      roles: rolesInfo,
+      permissions: mergedPermissions,
+      company: companyInfo
+    };
+    
+    console.log(`[AUTH] Profile generated for ${uid}. Total perm keys: ${Object.keys(mergedPermissions).length}`);
+    return profile;
+
+  } catch (error: any) {
+    console.error(`[AUTH] Error fetching user profile for ${uid}:`, error.message);
+    return null;
+  }
 }
