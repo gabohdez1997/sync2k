@@ -88,12 +88,16 @@ html {
   -moz-osx-font-smoothing: grayscale;
   background: var(--bg-gradient);
   color: var(--text-primary);
-  min-height: 100vh;
+  min-height: 100svh;
   transition: background 0.5s ease;
+  overflow-x: hidden;
 }
 
 body {
-  @apply min-h-screen;
+  @apply min-h-svh;
+  overflow-y: auto !important;
+  touch-action: pan-y;
+  overscroll-behavior: auto;
 }
 
 /* Scrollbar customization */

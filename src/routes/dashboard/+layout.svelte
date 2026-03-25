@@ -180,7 +180,7 @@
   });
 </script>
 
-<div class="h-screen overflow-hidden bg-surface-base flex flex-col md:flex-row font-sans text-text-base transition-colors duration-500">
+<div class="min-h-svh md:h-svh md:overflow-hidden bg-surface-base flex flex-col md:flex-row font-sans text-text-base transition-colors duration-500">
 
   <!-- ── Mobile Top Bar ───────────────────────────────────── -->
   <div class="md:hidden h-16 flex items-center px-4 glass sticky top-0 z-50">
@@ -413,7 +413,7 @@
   {/if}
 
   <!-- ── Main Content ──────────────────────────────────────── -->
-  <div class="flex-1 flex flex-col min-w-0">
+  <div class="md:flex-1 flex flex-col min-w-0">
     <header class="hidden md:flex h-16 items-center px-8 border-b border-border-subtle glass sticky top-0 z-30 justify-between">
       <div class="flex items-center gap-2 text-text-muted text-sm">
         <LayoutDashboard size={14} />
@@ -430,7 +430,7 @@
       </button>
     </header>
 
-    <main class="flex-1 p-4 md:p-8 overflow-auto relative">
+    <main class="md:flex-1 p-4 md:p-8 md:overflow-y-auto relative md:overscroll-contain touch-auto">
       <div class="max-w-7xl mx-auto pb-20 md:pb-0">
         {@render children?.()}
       </div>
