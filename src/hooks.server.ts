@@ -3,10 +3,10 @@
 
 import { redirect, type Handle } from '@sveltejs/kit';
 import { createServerClient } from '@supabase/ssr';
-import { PUBLIC_SUPABASE_URL, PUBLIC_SUPABASE_ANON_KEY } from '$env/static/public';
+import { env as publicEnv } from '$env/dynamic/public';
+import { env as privateEnv } from '$env/dynamic/private';
 import { getUserProfile } from '$lib/server/auth';
 import { jwtVerify } from 'jose';
-import { LOCAL_JWT_SECRET } from '$env/static/private';
 
 // Rutas que NO requieren sesión activa
 const PUBLIC_ROUTES = [
@@ -19,8 +19,8 @@ const PUBLIC_ROUTES = [
 export const handle: Handle = async ({ event, resolve }) => {
   // ── 1. Cliente Nube (Supabase SSR) ──
   const supabase = createServerClient(
-    PUBLIC_SUPABASE_URL,
-    PUBLIC_SUPABASE_ANON_KEY,
+    publicEnv.PUBLIC_SUPABASE_URL || '',
+    publicEnv.PUBLIC_SUPABASE_ANON_KEY || '',
     {
       cookies: {
         getAll:  () => event.cookies.getAll(),
@@ -57,7 +57,7 @@ export const handle: Handle = async ({ event, resolve }) => {
     const localToken = event.cookies.get('sync2k_local_session');
     if (localToken) {
       try {
-        const secretRaw = LOCAL_JWT_SECRET || 'secret_fallback';
+        const secretRaw = privateEnv.LOCAL_JWT_SECRET || 'secret_fallback';
         const secret = new TextEncoder().encode(secretRaw);
         const { payload } = await jwtVerify(localToken, secret);
         

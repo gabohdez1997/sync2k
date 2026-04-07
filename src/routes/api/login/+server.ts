@@ -97,7 +97,8 @@ export const POST: RequestHandler = async ({ request, locals, cookies }) => {
 
       // Firmar token JWS local
       const { SignJWT } = await import('jose');
-      const { LOCAL_JWT_SECRET } = await import('$env/static/private');
+      const { env } = await import('$env/dynamic/private');
+      const LOCAL_JWT_SECRET = env.LOCAL_JWT_SECRET;
       const secretRaw = LOCAL_JWT_SECRET || 'secret_fallback';
       const secret = new TextEncoder().encode(secretRaw);
 

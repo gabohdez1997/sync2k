@@ -1,5 +1,5 @@
 import pg from 'pg';
-import { LOCAL_PG_URL } from '$env/static/private';
+import { env } from '$env/dynamic/private';
 
 const { Pool } = pg;
 
@@ -8,11 +8,11 @@ let localPool: pg.Pool | null = null;
 
 export function getLocalPool(): pg.Pool {
   if (!localPool) {
-    if (!LOCAL_PG_URL) {
+    if (!env.LOCAL_PG_URL) {
       throw new Error('LOCAL_PG_URL no está definido en las variables de entorno.');
     }
     localPool = new Pool({
-      connectionString: LOCAL_PG_URL,
+      connectionString: env.LOCAL_PG_URL,
       // Configuración extra para estabilidad
       max:         10,
       idleTimeoutMillis: 30000,
