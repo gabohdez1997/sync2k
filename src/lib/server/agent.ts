@@ -1,5 +1,5 @@
 // src/lib/server/agent.ts
-import { PRIVATE_AGENT_API_KEY } from '$env/static/private';
+import { env } from '$env/dynamic/private';
 
 export interface AgentResponse<T> {
 	success: boolean;
@@ -34,7 +34,7 @@ export class AgentClient {
 			? (company.agent_url.endsWith('/api/v1') ? company.agent_url : `${company.agent_url}/api/v1`)
 			: `https://${company.slug}.sync2k.com/api/v1`;
 			
-		this.apiKey = company.agent_api_key || PRIVATE_AGENT_API_KEY;
+		this.apiKey = company.agent_api_key || env.PRIVATE_AGENT_API_KEY || '';
 
 		if (sqlCreds?.profit_user && sqlCreds?.profit_pass) {
 			this.sqlAuth = Buffer.from(`${sqlCreds.profit_user}:${sqlCreds.profit_pass}`).toString('base64');
