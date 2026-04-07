@@ -1,38 +1,42 @@
 // src/lib/server/audit.ts
-import { adminDb, MasterCollections } from './firebase-admin';
+// Migrado de Firestore → Supabase (tabla audit_log via log_action RPC)
+import { supabaseAdmin } from './supabase';
 
-export type AuditAction = 
-  | 'CREATE' 
-  | 'UPDATE' 
-  | 'DELETE' 
-  | 'TOGGLE_STATUS' 
-  | 'LOGIN' 
-  | 'LOGOUT';
+export type AuditAction =
+  | 'CREATE'
+  | 'UPDATE'
+  | 'DELETE'
+  | 'TOGGLE_STATUS'
+  | 'LOGIN'
+  | 'LOGOUT'
+  | 'VIEW';
 
 export interface AuditLog {
-  timestamp: string;
-  uid: string;
+  uid: string | null;
   user_email: string;
   action: AuditAction;
-  entity: string;
-  entity_id: string;
-  tenant_id?: string;
-  details?: any;
-  ip?: string;
-  user_agent?: string;
+  module: string;        // antes: 'entity'
+  record_id?: string;    // antes: 'entity_id'
+  old_data?: any;
+  new_data?: any;
+  branch_id?: string;
+  source?: 'cloud' | 'local';
 }
 
-export async function logAction(log: Omit<AuditLog, 'timestamp'>) {
-  if (!adminDb) return;
-
+export async function logAction(log: AuditLog) {
   try {
-    const fullLog: AuditLog = {
-      ...log,
-      timestamp: new Date().toISOString()
-    };
-
-    await adminDb.collection(MasterCollections.AUDIT).add(fullLog);
-  } catch (error) {
-    console.error('Error recording audit log:', error);
+    await supabaseAdmin.rpc('log_action', {
+      p_user_id:    log.uid,
+      p_user_email: log.user_email,
+      p_action:     log.action,
+      p_module:     log.module,
+      p_record_id:  log.record_id   ?? null,
+      p_old_data:   log.old_data    ? JSON.stringify(log.old_data)    : null,
+      p_new_data:   log.new_data    ? JSON.stringify(log.new_data)    : null,
+      p_branch_id:  log.branch_id   ?? null,
+      p_source:     log.source      ?? 'cloud'
+    });
+  } catch (err) {
+    console.error('[AUDIT] Error registrando acción:', err);
   }
 }

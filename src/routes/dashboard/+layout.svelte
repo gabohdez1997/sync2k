@@ -29,7 +29,9 @@
     Moon,
     RefreshCw,
     User,
-    Building
+    Building,
+    Store,
+    MapPin
   } from 'lucide-svelte';
   import { slide, fade } from 'svelte/transition';
 
@@ -71,6 +73,7 @@
       label: 'Almacén',
       icon: Package,
       subItems: [
+        { id: 'sec_articles', label: 'Ubicaciones', href: '/dashboard/articles', icon: MapPin },
         { id: 'inv_shipping', label: 'Despacho', href: '/dashboard/inventory/shipping', icon: Truck },
         { id: 'inv_void', label: 'Anulación', href: '/dashboard/inventory/void', icon: XCircle },
       ]
@@ -80,7 +83,12 @@
       label: 'Compras',
       icon: ShoppingCart,
       subItems: [
-        { id: 'pur_pending', label: 'Opciones por definir', href: '/dashboard/purchases/pending', icon: FileText },
+        { id: 'pur_articles', label: 'Artículos', href: '/dashboard/purchases/articles', icon: Package },
+        { id: 'pur_quotes', label: 'Cotizaciones', href: '/dashboard/purchases/quotes', icon: FileText },
+        { id: 'pur_orders', label: 'Orden de compra', href: '/dashboard/purchases/orders', icon: ClipboardList },
+        { id: 'pur_invoices', label: 'Facturas', href: '/dashboard/purchases/invoices', icon: Receipt },
+        { id: 'pur_payments', label: 'Pagos', href: '/dashboard/purchases/payments', icon: Wallet },
+        { id: 'pur_returns', label: 'Devoluciones', href: '/dashboard/purchases/returns', icon: RotateCcw },
       ]
     },
     {
@@ -91,6 +99,7 @@
         { id: 'sec_users', label: 'Usuarios', href: '/dashboard/users', icon: Users },
         { id: 'sec_roles', label: 'Roles y Permisos', href: '/dashboard/permissions', icon: Key },
         { id: 'sec_tenants', label: 'Empresas', href: '/dashboard/tenants', icon: Building },
+        { id: 'sec_branches', label: 'Sucursales', href: '/dashboard/branches', icon: Store },
         { id: 'sec_audit', label: 'Auditoría', href: '/dashboard/audit', icon: ClipboardList },
       ]
     }

@@ -71,7 +71,7 @@ export const load: PageServerLoad = protectLoad('sec_articles', async ({ url, lo
 			slug: companyInfo.slug,
 			agent_url: companyInfo.agent_url,
 			agent_api_key: companyInfo.agent_api_key
-		});
+		}, locals.profile);
 
 		const pageIndex = parseInt(url.searchParams.get('page') || '1', 10);
 		const limit = 12;
@@ -216,10 +216,15 @@ export const load: PageServerLoad = protectLoad('sec_articles', async ({ url, lo
 
 		const finalWarehouseIds = allowedWarehousesForBranch.map((a: any) => a.co_alma || a.id || a.warehouse_id).filter(Boolean);
 
-		const urlWarehouseId = url.searchParams.get('co_alma');
-		const warehouseId = (urlWarehouseId && finalWarehouseIds.includes(urlWarehouseId))
-			? urlWarehouseId
-			: '';
+		let urlWarehouseId = url.searchParams.get('co_alma') || '';
+		let warehouseId = '';
+
+		if (urlWarehouseId && finalWarehouseIds.includes(urlWarehouseId)) {
+			warehouseId = urlWarehouseId;
+		} else if (profileWarehouses.length > 0 && !isAdmin && finalWarehouseIds.length > 0) {
+			// Si el usuario tiene permisos restringidos y no hay almacén en URL, forzar el primer almacén permitido
+			warehouseId = finalWarehouseIds[0];
+		}
 
 		// ─── 6. FETCH ARTICLES ───────────────────────────────────────────────────
 		const searchTerm = url.searchParams.get('search') || '';
@@ -231,6 +236,7 @@ export const load: PageServerLoad = protectLoad('sec_articles', async ({ url, lo
 		const params = new URLSearchParams();
 		params.set('page', String(pageIndex));
 		params.set('limit', String(limit));
+		params.set('in_stock', 'all'); // Mostrar todos los artículos (incluso sin stock) para poder asignarles ubicación
 
 		if (searchTerm || lineaId || categoriaId || ubicacionId) {
 			// Use search endpoint
@@ -334,6 +340,26 @@ export const actions: Actions = {
 			return fail(400, { error: 'Faltan datos requeridos (código de artículo o empresa).' });
 		}
 
+		// --- PERMISSION VALIDATION ---
+		const userProfile = locals.profile;
+		if (!userProfile) {
+			return fail(401, { error: 'Sesión inválida o expirada.' });
+		}
+
+		const isAdmin = !userProfile.allowed_branches || userProfile.allowed_branches.length === 0;
+		
+		if (!isAdmin) {
+			if (!userProfile.allowed_branches.includes(sede_id)) {
+				return fail(403, { error: 'No tienes permiso para operar en esta sede.' });
+			}
+			if (userProfile.allowed_warehouses && userProfile.allowed_warehouses.length > 0) {
+				if (!userProfile.allowed_warehouses.includes(co_alma)) {
+					return fail(403, { error: 'No tienes permiso para operar en este almacén.' });
+				}
+			}
+		}
+		// -----------------------------
+
 		try {
 			const { adminDb, MasterCollections } = await import('$lib/server/firebase-admin');
 			let companyInfo: any = null;
@@ -354,7 +380,7 @@ export const actions: Actions = {
 				slug: companyInfo.slug,
 				agent_url: companyInfo.agent_url,
 				agent_api_key: companyInfo.agent_api_key
-			});
+			}, locals.profile);
 
 			// CRITICAL: Fetch the technical code (co_sucu) directly from Firestore using the UUID (sede_id)
 			// This bypasses any client-side mapping issues and ensures the Profit engine gets a valid code.
@@ -392,46 +418,40 @@ export const actions: Actions = {
 
 			const payload: any = { 
 				co_alma, 
-				// The agent's SQL routine likely expects the technical code in the JSON body's sede_id
-				sede_id: verifiedCoSucu || sede_id 
+				// The agent now requires 'sede' in the body.
+				sede: sede_id,
+				co_ubicacion,
+				co_ubicacion2,
+				co_ubicacion3,
+				usuario_id: locals.profile?.profit_user || 'ADMIN'
 			};
 			
-			// Optional fields: ONLY send if not empty
-			if (verifiedCoSucu) payload.co_sucu = verifiedCoSucu;
-			payload.usuario_id = locals.profile?.profit_user || 'ADMIN';
-			
-			if (co_ubicacion) payload.co_ubicacion = co_ubicacion;
-			if (co_ubicacion2) payload.co_ubicacion2 = co_ubicacion2;
-			if (co_ubicacion3) payload.co_ubicacion3 = co_ubicacion3;
-
-			const endpoint = `/articulos/${co_art}/ubicaciones?sede=${sede_id}`;
-			const payloadLog = { ...payload };
-			console.log(`[ASSIGN LOCATIONS] REQ: PUT ${endpoint}`, JSON.stringify(payloadLog, null, 2));
+			const endpoint = `/articulos/${co_art}/ubicaciones`;
+			console.log(`[ASSIGN LOCATIONS] REQ: PUT ${endpoint}`, JSON.stringify(payload, null, 2));
 			
 			let res = await agentClient.request(endpoint, {
 				method: 'PUT',
 				body: JSON.stringify(payload)
 			});
 
-			// SELF-HEALING RETRY: If Agent says "Sede not found" for the UUID, 
-			// retry using the technical short code (verifiedCoSucu).
-			let wasRetried = false;
-			if (!res.success && (res.message?.toLowerCase().includes('no encontrada')) && verifiedCoSucu && verifiedCoSucu !== sede_id) {
-				const retryEndpoint = `/articulos/${co_art}/ubicaciones?sede=${verifiedCoSucu}`;
-				console.log(`[ASSIGN LOCATIONS] RETRYING with short code: PUT ${retryEndpoint}`);
-				res = await agentClient.request(retryEndpoint, {
-					method: 'PUT',
-					body: JSON.stringify(payload)
-				});
-				wasRetried = true;
+			if ((res as any).success === false) {
+				// Fallback retry if sede name mismatch (using co_sucu as sede parameter)
+				if (res.message?.toLowerCase().includes('no encontrada') && verifiedCoSucu && verifiedCoSucu !== sede_id) {
+					payload.sede = verifiedCoSucu;
+					console.log(`[ASSIGN LOCATIONS] RETRYING with technical code: ${verifiedCoSucu}`);
+					res = await agentClient.request(endpoint, {
+						method: 'PUT',
+						body: JSON.stringify(payload)
+					});
+				}
 			}
 
 			if ((res as any).success === false) {
 				const agentMsg = (res as any).message || (res as any).error || 'Error sin mensaje del agente';
 				const agentDetail = (res as any).details || (res as any).data || '';
 				return fail(400, { 
-					error: `Fallo del Agente: ${agentMsg}${wasRetried ? ' (Retry Failed)' : ''}`,
-					detail: `REQ: ${co_art} | SEDE_URL: ${sede_id} | SEDE_JSON: ${payload.sede_id} | SUCU: ${verifiedCoSucu} | USER: ${payload.usuario_id} | ERR: ${typeof agentDetail === 'object' ? JSON.stringify(agentDetail) : agentDetail}`
+					error: `Fallo del Agente: ${agentMsg}`,
+					detail: `REQ: ${co_art} | SEDE_ID: ${sede_id} | SUCU: ${verifiedCoSucu} | USER: ${payload.usuario_id} | ERR: ${typeof agentDetail === 'object' ? JSON.stringify(agentDetail) : agentDetail}`
 				});
 			}
 
@@ -443,4 +463,5 @@ export const actions: Actions = {
 		}
 	}
 };
+
 

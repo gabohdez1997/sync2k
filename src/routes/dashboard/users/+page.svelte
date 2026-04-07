@@ -13,11 +13,9 @@
     Loader2, 
     Mail, 
     Shield, 
-    MoreHorizontal,
-    Search,
-    Building,
     Database,
-    Key
+    Key,
+    Search
   } from "lucide-svelte";
   import type { PageData, ActionData } from "./$types";
 
@@ -35,8 +33,8 @@
   let email = $state("");
   let isActive = $state(true);
   let selectedRoles = $state<string[]>([]);
-  let selectedTenantId = $state<string | null>(null); // null = Global
   let profitUser = $state("");
+  let profitPass = $state("");
   let password = $state("");
 
   // Computed / Filtered
@@ -55,8 +53,8 @@
     email = "";
     isActive = true;
     selectedRoles = [];
-    selectedTenantId = null;
     profitUser = "";
+    profitPass = "";
     password = "";
     showModal = true;
   }
@@ -67,31 +65,12 @@
     fullName = user.full_name;
     email = user.email;
     isActive = user.is_active;
-    
-    // Al abrir, seleccionamos Global por defecto
-    selectedTenantId = null; 
     selectedRoles = user.globalRoles || []; 
-    profitUser = "";
+    profitUser = user.profit_user || "";
+    profitPass = "";
     password = "";
     showModal = true;
   }
-
-  // Reactivo: Cambiar roles mostrados según el tenant seleccionado en el modal
-  $effect(() => {
-    if (isEditing && showModal && userId) {
-      const user = data.users.find((u: any) => u.id === userId);
-      if (user) {
-        if (selectedTenantId === null) {
-          selectedRoles = user.globalRoles || [];
-          profitUser = "";
-        } else {
-          const tRoles = user.tenantRoles.find((tr: any) => tr.tenantId === selectedTenantId);
-          selectedRoles = tRoles ? tRoles.roles : [];
-          profitUser = tRoles ? tRoles.profit_user : "";
-        }
-      }
-    }
-  });
 
   function toggleRole(roleId: string) {
     if (selectedRoles.includes(roleId)) {
@@ -121,7 +100,7 @@
         <Users class="text-brand-500" size={40} />
         Gestión de Usuarios
       </h1>
-      <p class="text-text-muted mt-2 text-lg">Administra los accesos y roles de tu equipo administrativo.</p>
+      <p class="text-text-muted mt-2 text-lg">Administra los accesos y credenciales de Profit.</p>
     </div>
     
     <button 
@@ -175,10 +154,8 @@
               </td>
               <td class="px-8 py-5">
                 <div class="flex flex-col gap-2">
-                  <!-- Global Roles -->
                   {#if user.globalRoles && user.globalRoles.length > 0}
                     <div class="flex flex-wrap gap-1 items-center">
-                      <span class="text-[9px] font-black text-text-muted uppercase tracking-tighter w-12">Global:</span>
                       {#each user.globalRoles as roleId}
                         {@const role = data.availableRoles.find((r: any) => r.id === roleId)}
                         <span class="px-2 py-0.5 rounded-md bg-white/5 text-text-muted text-[9px] font-bold border border-white/10 uppercase">
@@ -188,32 +165,17 @@
                     </div>
                   {/if}
 
-                  <!-- Tenant Roles -->
-                  {#each user.tenantRoles as tr}
-                    {@const tenant = data.tenants.find((t: any) => t.id === tr.tenantId)}
-                    {#if tr.roles && tr.roles.length > 0}
-                      <div class="flex flex-wrap gap-1 items-center">
-                        <span class="text-[9px] font-black text-brand-500 uppercase tracking-tighter w-12 truncate" title={tenant?.name || tr.tenantId}>
-                          {tenant?.name?.substring(0,6) || tr.tenantId}:
-                        </span>
-                        {#each tr.roles as roleId}
-                          {@const role = data.availableRoles.find((r: any) => r.id === roleId)}
-                          <span class="px-2 py-0.5 rounded-md bg-brand-500/10 text-brand-500 text-[9px] font-bold border border-brand-500/20 uppercase">
-                            {role?.name || roleId}
-                          </span>
-                        {/each}
-                        {#if tr.profit_user}
-                          <span class="px-2 py-0.5 rounded-md bg-indigo-500/10 text-indigo-400 text-[9px] font-bold border border-indigo-500/20 uppercase flex items-center gap-1">
-                            <Database size={8} />
-                            {tr.profit_user}
-                          </span>
-                        {/if}
-                      </div>
-                    {/if}
-                  {/each}
+                  {#if user.profit_user}
+                    <div class="flex items-center gap-1 mt-1">
+                      <span class="px-2 py-0.5 rounded-md bg-indigo-500/10 text-indigo-400 text-[10px] font-bold border border-indigo-500/20 uppercase flex items-center gap-1 w-max">
+                        <Database size={10} />
+                        Profit: {user.profit_user}
+                      </span>
+                    </div>
+                  {/if}
 
-                  {#if (!user.globalRoles || user.globalRoles.length === 0) && user.tenantRoles.length === 0}
-                    <span class="text-[10px] text-text-muted opacity-50 italic">Sin roles asignados</span>
+                  {#if (!user.globalRoles || user.globalRoles.length === 0)}
+                    <span class="text-[10px] text-text-muted opacity-50 italic">Sin roles analíticos asignados</span>
                   {/if}
                 </div>
               </td>
@@ -317,57 +279,49 @@
       >
         <input type="hidden" name="userId" value={userId} />
         <input type="hidden" name="is_active" value={isActive} />
-        <input type="hidden" name="tenantId" value={selectedTenantId ?? ''} />
 
-        <!-- Role Scope Selection (Global vs Tenant) -->
-        <div class="space-y-4">
-          <label class="text-xs font-bold uppercase tracking-widest text-text-muted ml-1">Alcance de los Roles</label>
-          <div class="flex p-1 bg-surface-base border border-border-subtle rounded-2xl">
-            <button 
-              type="button"
-              onclick={() => selectedTenantId = null}
-              class="flex-1 py-3 rounded-xl text-sm font-bold transition-all {selectedTenantId === null ? 'bg-brand-600 text-white shadow-lg' : 'text-text-muted hover:text-text-base'}"
-            >
-              Globales
-            </button>
-            <select 
-              bind:value={selectedTenantId}
-              class="flex-1 bg-transparent py-3 px-4 rounded-xl text-sm font-bold text-text-muted hover:text-text-base outline-none cursor-pointer {selectedTenantId !== null ? 'bg-brand-600/10 text-brand-400' : ''}"
-            >
-              <option value={null} disabled selected={selectedTenantId === null}>Seleccionar Empresa...</option>
-              {#each (data as any).tenants as tenant}
-                <option value={tenant.id}>{tenant.name}</option>
-              {/each}
-            </select>
+        <!-- Profit Credentials -->
+        <div class="p-4 bg-brand-500/5 rounded-2xl border border-brand-500/10 space-y-4">
+          <div class="flex items-center gap-3">
+            <Database size={16} class="text-brand-400" />
+            <p class="text-xs text-text-muted">Credenciales Operativas en <span class="text-brand-400 font-bold">Profit Plus</span></p>
           </div>
-          {#if selectedTenantId}
-            <div class="p-4 bg-brand-500/5 rounded-2xl border border-brand-500/10 space-y-4">
-              <div class="flex items-center gap-3">
-                <Building size={16} class="text-brand-400" />
-                <p class="text-xs text-text-muted">Asignando roles específicos para la empresa <span class="text-brand-400 font-bold">{(data as any).tenants.find((t: any) => t.id === selectedTenantId)?.name}</span></p>
-              </div>
-              
-              <div class="space-y-2">
-                <label for="profit_user" class="text-[10px] font-black uppercase tracking-widest text-brand-500/70 ml-1">ID Usuario en Profit Plus</label>
-                <div class="relative">
-                  <Database size={18} class="absolute left-4 top-1/2 -translate-y-1/2 text-brand-400 opacity-40" />
-                  <input 
-                    id="profit_user"
-                    name="profit_user"
-                    type="text" 
-                    bind:value={profitUser}
-                    placeholder="Ej: j_perez"
-                    class="w-full bg-surface-base border border-brand-500/20 rounded-2xl pl-12 pr-5 py-4 text-text-base text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/30 transition-all font-mono uppercase"
-                  />
-                </div>
-                <p class="text-[9px] text-text-muted/60 ml-1 italic">Este código vincula las acciones del usuario con su ficha en Profit Plus para esta empresa.</p>
+          
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="space-y-2">
+              <label for="profit_user" class="text-[10px] font-black uppercase tracking-widest text-brand-500/70 ml-1">ID Agente SQL</label>
+              <div class="relative">
+                <Database size={18} class="absolute left-4 top-1/2 -translate-y-1/2 text-brand-400 opacity-40" />
+                <input 
+                  id="profit_user"
+                  name="profit_user"
+                  type="text" 
+                  bind:value={profitUser}
+                  placeholder="Ej: j_perez"
+                  class="w-full bg-surface-base border border-brand-500/20 rounded-2xl pl-12 pr-5 py-4 text-text-base text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/30 transition-all font-mono"
+                />
               </div>
             </div>
-          {/if}
+
+            <div class="space-y-2">
+              <label for="profit_pass" class="text-[10px] font-black uppercase tracking-widest text-brand-500/70 ml-1">Clave SQL</label>
+              <div class="relative">
+                <Key size={18} class="absolute left-4 top-1/2 -translate-y-1/2 text-brand-400 opacity-40" />
+                <input 
+                  id="profit_pass"
+                  name="profit_pass"
+                  type="password" 
+                  bind:value={profitPass}
+                  placeholder="••••••••"
+                  class="w-full bg-surface-base border border-brand-500/20 rounded-2xl pl-12 pr-5 py-4 text-text-base text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/30 transition-all font-mono"
+                />
+              </div>
+            </div>
+          </div>
+          <p class="text-[9px] text-text-muted/60 ml-1 italic">Estos credenciales vinculan e identifican las acciones del usuario directamente en la base de datos local Profit Plus.</p>
         </div>
 
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <!-- Full Name -->
           <div class="space-y-2">
             <label for="full_name" class="text-xs font-bold uppercase tracking-widest text-text-muted ml-1">Nombre Completo</label>
             <input 
@@ -381,7 +335,6 @@
             />
           </div>
 
-          <!-- Email -->
           <div class="space-y-2">
             <label for="email" class="text-xs font-bold uppercase tracking-widest text-text-muted ml-1">Correo Electrónico</label>
             <input 
@@ -395,10 +348,9 @@
             />
           </div>
 
-          <!-- Password -->
-          <div class="space-y-2">
+          <div class="space-y-2 md:col-span-2">
             <label for="password" class="text-xs font-bold uppercase tracking-widest text-text-muted ml-1">
-              Contraseña {isEditing ? '(Opcional)' : ''}
+              Contraseña Web {isEditing ? '(Opcional)' : ''}
             </label>
             <div class="relative">
               <Key size={18} class="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted opacity-40" />
@@ -408,12 +360,12 @@
                 type="password" 
                 bind:value={password}
                 required={!isEditing}
-                placeholder={isEditing ? 'Dejar en blanco para no cambiar' : '••••••••'}
+                placeholder={isEditing ? 'Dejar en blanco para conservar la actual' : '••••••••'}
                 class="w-full bg-surface-base border border-border-subtle rounded-2xl pl-12 pr-5 py-4 text-text-base focus:outline-none focus:ring-2 focus:ring-brand-500/50 transition-all placeholder:text-text-muted/40"
               />
             </div>
             {#if isEditing}
-              <p class="text-[9px] text-text-muted/60 ml-1 italic">Solo completa este campo si deseas cambiar la contraseña del usuario.</p>
+              <p class="text-[9px] text-text-muted/60 ml-1 italic">Solo completa este campo si deseas resetear el acceso a la nube/local.</p>
             {/if}
           </div>
         </div>
@@ -423,7 +375,7 @@
           <div class="flex items-center justify-between">
             <label class="text-xs font-bold uppercase tracking-widest text-text-muted ml-1 flex items-center gap-2">
               <Shield size={14} />
-              Roles Asignados
+              Roles de Plataforma
             </label>
             <span class="text-[10px] text-brand-500 font-bold">{selectedRoles.length} seleccionados</span>
           </div>
@@ -448,7 +400,6 @@
                   </div>
                 {/if}
               </button>
-              <!-- Hidden Inputs for formData.getAll('roles') -->
               {#if selectedRoles.includes(role.id)}
                 <input type="hidden" name="roles" value={role.id} />
               {/if}
@@ -464,7 +415,7 @@
             </div>
             <div>
               <p class="text-sm font-bold text-text-base">Estado de Cuenta</p>
-              <p class="text-xs text-text-muted">{isActive ? 'El usuario puede iniciar sesión' : 'Acceso bloqueado temporalmente'}</p>
+              <p class="text-xs text-text-muted">{isActive ? 'El usuario puede iniciar sesión en la web' : 'Acceso bloqueado'}</p>
             </div>
           </div>
           <button 

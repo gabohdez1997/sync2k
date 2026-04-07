@@ -1,90 +1,118 @@
 // src/hooks.server.ts
-import { redirect, type Handle } from '@sveltejs/kit';
-import { adminAuth } from '$lib/server/firebase-admin';
-import { getUserProfile } from '$lib/server/auth';
+// Gateway SSR — Supabase Auth + Fallback Local
 
-// ─── Rutas que NO requieren autenticación ────────────────────
+import { redirect, type Handle } from '@sveltejs/kit';
+import { createServerClient } from '@supabase/ssr';
+import { PUBLIC_SUPABASE_URL, PUBLIC_SUPABASE_ANON_KEY } from '$env/static/public';
+import { getUserProfile } from '$lib/server/auth';
+import { jwtVerify } from 'jose';
+import { LOCAL_JWT_SECRET } from '$env/static/private';
+
+// Rutas que NO requieren sesión activa
 const PUBLIC_ROUTES = [
   '/',
   '/auth/register',
   '/auth/forgot-password',
   '/api/login',
-  '/api/repair-auth'
 ];
 
-
-
 export const handle: Handle = async ({ event, resolve }) => {
-  // ... (existing logic for tenant and session)
-  const host = event.request.headers.get('host') || '';
-  let tenantId: string | null = null;
-  
-  // Limpiar el puerto si existe
-  const hostName = host.split(':')[0];
-  const parts = hostName.split('.');
+  // ── 1. Cliente Nube (Supabase SSR) ──
+  const supabase = createServerClient(
+    PUBLIC_SUPABASE_URL,
+    PUBLIC_SUPABASE_ANON_KEY,
+    {
+      cookies: {
+        getAll:  () => event.cookies.getAll(),
+        setAll: (cookiesToSet) => {
+          cookiesToSet.forEach(({ name, value, options }) =>
+            event.cookies.set(name, value, { ...options, path: '/' })
+          );
+        }
+      }
+    }
+  );
 
-  // Lógica de Subdominio:
-  // 1. Si es algo.localhost o algo.midominio.com (3+ partes)
-  if (parts.length >= 2) {
-    // Si la última parte es localhost y hay algo antes
-    if (parts[parts.length - 1] === 'localhost' && parts.length > 1) {
-      tenantId = parts[0];
-    } 
-    // Para dominios reales (ej: cliente.sync2k.com)
-    else if (parts.length >= 3 && parts[0] !== 'www') {
-      tenantId = parts[0];
+  event.locals.supabase = supabase;
+  event.locals.session  = null;
+  event.locals.profile  = null;
+
+  // ── 2. Identificación Principal (Online) ──────────────────────────
+  let authErrorObj = null;
+  let session = null;
+
+  try {
+    const res = await supabase.auth.getSession();
+    session = res.data.session;
+    if (res.error) authErrorObj = res.error;
+  } catch (err: any) {
+    authErrorObj = err;
+    console.warn('[HOOKS] Supabase Auth falló (¿Offline?):', err.message);
+  }
+
+  // ── 3. Identificación Fallback (Offline) ────────────────────────
+  let isOfflineMode = false;
+
+  if (!session) {
+    const localToken = event.cookies.get('sync2k_local_session');
+    if (localToken) {
+      try {
+        const secretRaw = LOCAL_JWT_SECRET || 'secret_fallback';
+        const secret = new TextEncoder().encode(secretRaw);
+        const { payload } = await jwtVerify(localToken, secret);
+        
+        if (payload && payload.sub) {
+          isOfflineMode = true;
+          session = {
+            user: { id: payload.sub, email: payload.email as string },
+            access_token: localToken,
+            refresh_token: ''
+          } as any;
+          
+          // Opcional: si hay red, podríamos intentar redirigir a login o forzar limpieza, 
+          // pero dejémoslo usar su sesión local sin problema por hoy.
+        }
+      } catch (err) {
+        // Token inválido o expirado. Limpiar.
+        event.cookies.delete('sync2k_local_session', { path: '/' });
+      }
     }
   }
 
-  // Fallback a query param solo para debugging rápido en localhost pelado
-  if (!tenantId && hostName === 'localhost') {
-    tenantId = event.url.searchParams.get('tenant') || 'default_tenant';
+  // ── 4. Carga de Perfil ────────────────────────────────────────────
+  if (session?.user) {
+    event.locals.session = session;
+
+    // Obtiene perfil (automáticamente hace fallback a BD local si Supabase se cae)
+    const profile = await getUserProfile(session.user.id);
+
+    if (profile?.active) {
+      event.locals.profile = profile;
+    } else if (profile && !profile.active) {
+      event.locals.profile = null;
+    }
   }
 
-  event.locals.tenantId = tenantId;
-
+  // ── 5. Protección de rutas privadas ────────────────────────────────
   const path = event.url.pathname;
-  const isPublicRoute = PUBLIC_ROUTES.some((r) => 
+  const isPublic = PUBLIC_ROUTES.some(r =>
     r === '/' ? path === '/' : path.startsWith(r)
   );
 
-  const sessionCookie = event.cookies.get('session');
-  event.locals.session = null;
-  event.locals.profile = null;
-
-  if (sessionCookie && adminAuth) {
-    try {
-      event.locals.session = await adminAuth.verifySessionCookie(sessionCookie, true);
-    } catch (error) {
-      event.cookies.delete('session', { path: '/' });
-    }
-  }
-
-  if (event.locals.session) {
-    const profile = await getUserProfile(event.locals.session.uid, event.locals.tenantId);
-    if (profile) {
-      if (profile.active) {
-        event.locals.profile = profile;
-      } else if (!isPublicRoute) {
-        redirect(303, '/?error=account_disabled');
-      }
-    } else if (!isPublicRoute) {
-      event.cookies.delete('session', { path: '/' });
-      redirect(303, '/?error=profile_not_found');
-    }
-  }
-
-  if (!isPublicRoute) {
+  if (!isPublic) {
     if (!event.locals.session) {
       redirect(303, `/?redirectTo=${encodeURIComponent(path)}`);
     }
-
-    const profile = event.locals.profile;
-    if (!profile) {
-      // Si llegamos aquí sin perfil y no es ruta pública, algo falló arriba
+    if (!event.locals.profile) {
+      await supabase.auth.signOut().catch(()=>null);
+      event.cookies.delete('sync2k_local_session', { path: '/' });
       redirect(303, '/?error=profile_not_found');
     }
   }
 
-  return resolve(event);
+  // ── 6. Respuesta ──────────────────────────────────────────────────
+  return resolve(event, {
+    filterSerializedResponseHeaders: (name) =>
+      name === 'content-range' || name === 'x-supabase-api-version'
+  });
 };

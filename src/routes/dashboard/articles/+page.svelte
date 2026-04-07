@@ -16,6 +16,9 @@
     ListFilter,
     MapPin,
     X,
+    CheckSquare,
+    Square,
+    Printer,
   } from "lucide-svelte";
   import { toast } from "svelte-sonner";
   import type { PageData, ActionData } from "./$types";
@@ -29,6 +32,40 @@
   });
 
   let searchTerm = $state($page.url.searchParams.get("search") || "");
+
+  // ── ARTICLE SELECTION ──────────────────────────────────────────────────────
+  let selectedCodes = $state(new Set<string>());
+
+  const visibleArticles = $derived(
+    (data.articles || []).filter((a: any, i: number, arr: any[]) =>
+      arr.findIndex((b: any) => (b.co_art || b.codigo) === (a.co_art || a.codigo)) === i
+    )
+  );
+
+  const allVisibleSelected = $derived(
+    visibleArticles.length > 0 &&
+    visibleArticles.every((a: any) => selectedCodes.has(a.co_art || a.codigo || a.id))
+  );
+
+  function toggleArticle(code: string) {
+    const next = new Set(selectedCodes);
+    if (next.has(code)) next.delete(code); else next.add(code);
+    selectedCodes = next;
+  }
+
+  function toggleAll() {
+    if (allVisibleSelected) {
+      // deselect all visible
+      const next = new Set(selectedCodes);
+      visibleArticles.forEach((a: any) => next.delete(a.co_art || a.codigo || a.id));
+      selectedCodes = next;
+    } else {
+      // select all visible
+      const next = new Set(selectedCodes);
+      visibleArticles.forEach((a: any) => next.add(a.co_art || a.codigo || a.id));
+      selectedCodes = next;
+    }
+  }
   let showModal = $state(false);
   let selectedArticle = $state<any>(null);
   let formUbic1 = $state("");
@@ -68,11 +105,14 @@
   function openLocationModal(article: any) {
     selectedArticle = article;
     
-    // Pre-populate branch and warehouse from existing locations if available
+    // Si no hay sede o almacén seleccionados en los filtros principales,
+    // intentamos tomarlos de la primera ubicación o existencia del artículo.
     const firstLoc = article.ubicaciones?.[0] || article.existencia?.[0];
     if (firstLoc) {
-      if (firstLoc.sede_id) selectedBranch = firstLoc.sede_id;
-      if (firstLoc.co_alma) selectedWarehouse = firstLoc.co_alma;
+      if (!selectedBranch && firstLoc.sede_id) selectedBranch = firstLoc.sede_id;
+      if (!selectedWarehouse && (firstLoc.co_alma || firstLoc.id)) {
+          selectedWarehouse = firstLoc.co_alma || firstLoc.id;
+      }
     }
 
     formUbic1 = article.co_ubicacion || "";
@@ -179,6 +219,28 @@
       () => (isSearching = false),
     );
   }
+
+  function handlePrintLabels() {
+    // Points to /api/labels which returns a pure standalone HTML page —
+    // no SvelteKit layout, no dashboard chrome, clean for printing.
+    const url = new URL($page.url.origin + "/api/labels");
+    if (selectedTenant) url.searchParams.set("tenant_id", selectedTenant);
+    if (selectedBranch) url.searchParams.set("branch_id", selectedBranch);
+    if (selectedWarehouse) url.searchParams.set("co_alma", selectedWarehouse);
+
+    if (selectedCodes.size > 0) {
+      // Print only selected articles — pass codes directly, skip filters
+      url.searchParams.set("co_arts", Array.from(selectedCodes).join(","));
+    } else {
+      // No selection → print ALL matching the current filters (up to 500)
+      if (searchTerm) url.searchParams.set("search", searchTerm);
+      if (selectedLinea) url.searchParams.set("linea", selectedLinea);
+      if (selectedCategoria) url.searchParams.set("categoria", selectedCategoria);
+      if (selectedUbicacion) url.searchParams.set("co_ubicacion", selectedUbicacion);
+    }
+
+    window.open(url.toString(), "_blank");
+  }
 </script>
 
 <div class="flex flex-col gap-8" in:fade>
@@ -193,7 +255,8 @@
         Asigna y visualiza las ubicaciones físicas de los artículos en el
         almacén.
         {#if data.articles?.length}
-          <span class="block text-[10px] text-brand-500/50 font-mono mt-1">
+          <span class="flex items-center gap-1.5 text-xs text-brand-500/80 font-medium mt-2 bg-brand-500/10 w-fit px-3 py-1.5 rounded-lg border border-brand-500/20">
+            <Package size={14} />
             Mostrando {data.articles.length} artículos en esta página
           </span>
         {/if}
@@ -279,26 +342,33 @@
         </div>
       {/if}
 
-      <div class="relative flex-1 w-full lg:w-auto">
-        <Search
-          class="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted"
-          size={20}
-        />
+      <form class="relative flex-1 w-full lg:w-auto" onsubmit={(e) => { e.preventDefault(); handleSearch(); }}>
+        <Search class="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted group-focus-within:text-brand-500 transition-colors" size={20} />
         <input
           type="text"
           bind:value={searchTerm}
-          placeholder="Buscar articulo por código o descripción"
-          class="w-full h-14 bg-surface-base pl-12 pr-4 rounded-2xl border border-white/5 focus:border-brand-500/50 outline-none font-medium placeholder:text-text-muted transition-all"
-          onkeydown={(e) => e.key === "Enter" && handleSearch(e)}
+          placeholder="Buscar articulo por código o descripción..."
+          class="w-full h-14 bg-surface-base pl-12 pr-28 rounded-2xl border border-white/5 focus:border-brand-500/50 outline-hidden font-medium placeholder:text-text-muted transition-all"
         />
-      </div>
+        <button
+          type="submit"
+          disabled={isSearching}
+          class="absolute right-2 top-1/2 -translate-y-1/2 bg-white/5 hover:bg-white/10 disabled:opacity-50 px-5 py-2 rounded-xl text-sm font-bold transition-all"
+        >
+          {isSearching ? "..." : "Buscar"}
+        </button>
+      </form>
 
       <button
-        onclick={() => handleSearch()}
-        disabled={isSearching}
-        class="h-14 px-8 bg-brand-600 hover:bg-brand-500 disabled:opacity-50 text-white rounded-2xl font-bold transition-all active:scale-95 shadow-lg shadow-brand-600/20 shrink-0"
+        onclick={handlePrintLabels}
+        class="h-14 px-6 {selectedCodes.size > 0 ? 'bg-brand-600 hover:bg-brand-500 border-brand-500/50 shadow-lg shadow-brand-600/20 text-white' : 'bg-surface-raised hover:bg-white/5 border-white/5 hover:border-white/10 text-text-base'} border rounded-2xl font-bold transition-all active:scale-95 flex items-center gap-2 shrink-0 group"
+        title={selectedCodes.size > 0 ? `Imprimir ${selectedCodes.size} artículo(s) seleccionado(s)` : 'Imprimir todos los artículos del filtro (hasta 500)'}
       >
-        {isSearching ? "Buscando..." : "Buscar"}
+        <Printer size={20} class={selectedCodes.size > 0 ? 'text-white' : 'text-brand-400 group-hover:text-brand-300'} />
+        Etiquetas
+        {#if selectedCodes.size > 0}
+          <span class="bg-white/20 text-white text-xs font-black px-2 py-0.5 rounded-full">{selectedCodes.size}</span>
+        {/if}
       </button>
     </div>
 
@@ -316,7 +386,7 @@
            <option value="">Todas las Ubicaciones</option>
            {#each data.context.ubicaciones as ubic}
              <option value={ubic.id || ubic.co_ubicacion} class="bg-surface-base text-text-base">
-                {ubic.descripcion || ubic.name || (ubic.id || ubic.co_ubicacion)}
+                {ubic.co_ubicacion || ubic.id} - {ubic.descripcion || ubic.name || ubic.co_ubicacion || ubic.id}
              </option>
            {/each}
         </select>
@@ -407,23 +477,76 @@
       </div>
     </div>
   {:else}
+    <!-- Selection toolbar -->
+    <div class="flex items-center justify-between gap-4 mb-2">
+      <div class="flex items-center gap-3">
+        <button
+          onclick={toggleAll}
+          class="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-all border
+            {allVisibleSelected
+              ? 'bg-brand-500/20 border-brand-500/40 text-brand-300 hover:bg-brand-500/30'
+              : 'bg-surface-raised border-white/5 text-text-muted hover:bg-white/5 hover:text-text-base'}"
+        >
+          {#if allVisibleSelected}
+            <CheckSquare size={16} />
+            Deseleccionar todo
+          {:else}
+            <Square size={16} />
+            Seleccionar todo
+          {/if}
+        </button>
+        {#if selectedCodes.size > 0}
+          <span class="text-sm text-brand-400 font-bold">{selectedCodes.size} artículo(s) seleccionado(s)</span>
+          <button
+            onclick={() => (selectedCodes = new Set())}
+            class="text-xs text-text-muted hover:text-red-400 transition-colors flex items-center gap-1"
+          >
+            <X size={12} /> Limpiar
+          </button>
+        {/if}
+      </div>
+      {#if selectedCodes.size === 0}
+        <span class="text-xs text-text-muted italic">
+          Sin selección → imprime todos los del filtro (hasta 500)
+        </span>
+      {/if}
+    </div>
+
     <div
       class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"
     >
-      {#each data.articles.filter((a, i, arr) => arr.findIndex((b) => (b.co_art || b.codigo) === (a.co_art || a.codigo)) === i) as article}
-        <div
-          class="glass p-6 rounded-3xl border border-white/5 hover:border-brand-500/30 transition-all hover:shadow-2xl hover:shadow-brand-500/5 flex flex-col gap-4"
+      {#each visibleArticles as article}
+        {@const artCode = article.co_art || article.codigo || article.id || ''}
+        {@const isSelected = selectedCodes.has(artCode)}
+        <label
+          for="select-{artCode}"
+          class="glass p-6 rounded-3xl border transition-all hover:shadow-2xl flex flex-col gap-4 cursor-pointer select-none
+            {isSelected
+              ? 'border-brand-500/60 shadow-brand-500/10 bg-brand-500/5'
+              : 'border-white/5 hover:border-brand-500/30 hover:shadow-brand-500/5'}"
         >
+          <input
+            id="select-{artCode}"
+            type="checkbox"
+            class="sr-only"
+            checked={isSelected}
+            onchange={() => toggleArticle(artCode)}
+          />
           <div class="flex justify-between items-start relative group">
             <div
-              class="h-12 w-12 rounded-2xl bg-brand-500/10 flex items-center justify-center text-brand-500"
+              class="h-12 w-12 rounded-2xl flex items-center justify-center transition-all
+                {isSelected ? 'bg-brand-500 text-white' : 'bg-brand-500/10 text-brand-500'}"
             >
-              <MapPin size={24} />
+              {#if isSelected}
+                <CheckSquare size={22} />
+              {:else}
+                <MapPin size={24} />
+              {/if}
             </div>
             <span
               class="px-2 py-1 rounded-md bg-surface-base border border-border-subtle text-xs font-mono text-text-muted"
             >
-              {article.co_art || article.codigo || article.id || "N/A"}
+              {artCode || "N/A"}
             </span>
           </div>
 
@@ -474,8 +597,9 @@
                 </div>
               </div>
 
+              <!-- Stop propagation so clicking this button doesn't toggle the card selection -->
               <button
-                onclick={() => openLocationModal(article)}
+                onclick={(e) => { e.preventDefault(); e.stopPropagation(); openLocationModal(article); }}
                 class="mt-3 w-full py-2 bg-brand-500/10 hover:bg-brand-500/20 text-brand-400 font-bold rounded-xl transition-colors border border-brand-500/20 text-sm"
               >
                 Modificar Ubicaciones
@@ -515,7 +639,7 @@
               </div>
             {/if}
           </div>
-        </div>
+        </label>
       {/each}
     </div>
 
@@ -609,20 +733,22 @@
           </div>
         {/if}
 
-        <!-- SELECTOR DE SEDE/SUCURSAL (OBLIGATORIO) -->
+        <!-- SELECTOR DE ALMACÉN (OBLIGATORIO) -->
         <div class="space-y-1">
-          <label for="formSede" class="text-[10px] uppercase font-black tracking-widest text-brand-400 ml-1">Sucursal / Sede Profit</label>
+          <label for="formAlma" class="text-[10px] uppercase font-black tracking-widest text-brand-400 ml-1">Almacén / Depósito Profit</label>
           <div class="relative">
-            <Store class="absolute left-4 top-1/2 -translate-y-1/2 text-brand-400" size={18} />
+            <Package class="absolute left-4 top-1/2 -translate-y-1/2 text-brand-400" size={18} />
             <select 
-              id="formSede"
-              bind:value={selectedBranch}
+              id="formAlma"
+              bind:value={selectedWarehouse}
               required
               class="w-full h-12 bg-surface-raised border border-white/10 rounded-xl pl-12 pr-4 text-sm font-medium focus:border-brand-500 transition-colors cursor-pointer"
             >
-              <option value="">-- Seleccionar Sucursal --</option>
-              {#each data.context?.branches || [] as branch}
-                <option value={branch.id}>{branch.name}</option>
+              <option value="">-- Seleccionar Almacén --</option>
+              {#each data.context?.warehouses || [] as alma}
+                <option value={alma.co_alma || alma.id}>
+                  {alma.des_alma || alma.nombre || alma.id}
+                </option>
               {/each}
             </select>
           </div>

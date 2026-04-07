@@ -20,3 +20,4 @@ export const load: PageServerLoad = protectLoad('consultar_stock', async ({ loca
         tenantId
 	};
 });
+

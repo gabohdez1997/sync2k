@@ -1,290 +1,204 @@
 // src/routes/dashboard/users/+page.server.ts
-import { protectLoad, protectAction } from '$lib/server/permissions';
-import { adminDb, MasterCollections, adminAuth } from '$lib/server/firebase-admin';
-import { logAction } from '$lib/server/audit';
+// Migrado de Firestore → Supabase (tablas profiles + user_roles)
+
 import { fail } from '@sveltejs/kit';
-import type { Actions, PageServerLoad } from './$types';
+import { protectLoad, protectAction } from '$lib/server/permissions';
+import { supabaseAdmin } from '$lib/server/supabase';
+import bcrypt from 'bcryptjs';
+import type { PageServerLoad, Actions } from './$types';
 
-// Helper para evitar bloqueos infinitos
-const withTimeout = <T>(promise: Promise<T>, ms: number, label: string): Promise<T> => {
-	const timeout = new Promise<never>((_, reject) => {
-		setTimeout(() => reject(new Error(`Timeout: ${label} excedió los ${ms}ms`)), ms);
-	});
-	return Promise.race([promise, timeout]);
-};
-
+// ─── Load ──────────────────────────────────────────────────────
 export const load: PageServerLoad = protectLoad('sec_users', async () => {
-	let users: any[] = [];
-	let availableRoles: any[] = [];
-	let tenants: any[] = [];
+  const [
+    { data: users },
+    { data: roles },
+    { data: branches }
+  ] = await Promise.all([
+    supabaseAdmin
+      .from('profiles')
+      .select(`id, full_name, email, active, profit_user, updated_at,
+               user_roles(role_id, roles(id, name))`)
+      .order('full_name'),
 
-	if (adminDb) {
-		try {
-			console.time('[LOAD USERS PAGE]');
-			// 1. Cargar Usuarios
-			const usersSnap = await withTimeout(
-				adminDb.collection(MasterCollections.USERS).get(),
-				5000,
-				'Fetch Users'
-			);
-			const usersList = usersSnap.docs.map(doc => {
-				const data = doc.data();
-				return { 
-					id: doc.id,
-					full_name: data.full_name || '',
-					email: data.email || '',
-					is_active: data.is_active ?? true,
-					globalRoles: data.roles || [], // Roles globales
-					tenantRoles: [] as any[], // Llenaremos esto después
-					updatedAt: data.updatedAt 
-						? (typeof data.updatedAt === 'string' ? data.updatedAt : (data.updatedAt.toDate?.()?.toISOString() || data.updatedAt.toString()))
-						: null
-				};
-			});
+    supabaseAdmin
+      .from('roles')
+      .select('id, name')
+      .order('name'),
 
-			// 2. Cargar Roles por Empresa (roles_usuarios)
-			const userTenantsSnap = await withTimeout(
-				adminDb.collection(MasterCollections.USER_TENANTS).get(),
-				5000,
-				'Fetch Roles-Usuarios'
-			);
-			
-			// 3. Cargar Roles disponibles
-			const rolesSnap = await withTimeout(
-				adminDb.collection(MasterCollections.PERMISSIONS).get(),
-				5000,
-				'Fetch Available Roles'
-			);
-			availableRoles = rolesSnap.docs.map(doc => ({ id: doc.id, name: doc.data().name ?? doc.id }));
+    supabaseAdmin
+      .from('branches')
+      .select('id, name')
+      .eq('active', true)
+      .order('name')
+  ]);
 
-			// 4. Cargar Empresas
-			const tenantsSnap = await withTimeout(
-				adminDb.collection(MasterCollections.CONNECTIONS).get(),
-				5000,
-				'Fetch Tenants'
-			);
-			tenants = tenantsSnap.docs.map(doc => ({ id: doc.id, name: doc.data().name || doc.id }));
+  const usersMapped = (users ?? []).map((u: any) => ({
+    id: u.id,
+    full_name: u.full_name,
+    email: u.email,
+    is_active: u.active,
+    profit_user: u.profit_user,
+    globalRoles: u.user_roles?.map((ur: any) => ur.role_id) || [],
+    tenantRoles: [], // Deprecated
+    updated_at: u.updated_at
+  }));
 
-			// 5. Unificar datos: Asignar tenantRoles a cada usuario
-			users = usersList.map(user => {
-				const assignments = userTenantsSnap.docs
-					.filter(doc => doc.data().uid === user.id)
-					.map(doc => {
-						const d = doc.data();
-						return {
-							tenantId: d.tenant_slug || d.tenantId,
-							roles: d.roles || [],
-							profit_user: d.profit_user || ''
-						};
-					});
-				return { ...user, tenantRoles: assignments };
-			});
-
-			console.timeEnd('[LOAD USERS PAGE]');
-		} catch (error) {
-			console.error('Error fetching data for users page:', error);
-		}
-	}
-
-	return {
-		users,
-		availableRoles,
-		tenants
-	};
+  return {
+    users:          usersMapped,
+    availableRoles: roles ?? [],
+    branches:       branches ?? []
+  };
 });
 
+// ─── Actions ───────────────────────────────────────────────────
 export const actions: Actions = {
-	saveUser: protectAction('sec_users', async ({ request, locals }) => {
-		if (!adminDb) return fail(500, { message: 'Base de datos no disponible' });
 
-		const formData = await request.formData();
-		const userId = formData.get('userId') as string;
-		const tenantId = formData.get('tenantId') as string; // Opcional: para roles por empresa
-		const fullName = formData.get('full_name') as string;
-		const email = formData.get('email') as string;
-		const password = formData.get('password') as string;
-		const profitUser = formData.get('profit_user') as string;
-		const isActive = formData.get('is_active') === 'true';
-		const roles = formData.getAll('roles') as string[];
+  saveUser: protectAction('sec_users', async ({ request, locals }) => {
+    const formData   = await request.formData();
+    const userId     = (formData.get('userId') as string)?.trim() || null;
+    const fullName   = (formData.get('full_name') as string)?.trim();
+    const email      = (formData.get('email') as string)?.trim().toLowerCase();
+    const password   = (formData.get('password') as string)?.trim() || null;
+    const profitUser = (formData.get('profit_user') as string)?.trim() || null;
+    const profitPass = (formData.get('profit_pass') as string)?.trim() || null;
+    const isActive   = formData.get('is_active') !== 'false';
+    const roleIds    = formData.getAll('roles') as string[];
 
-		if (!fullName || !email) return fail(400, { message: 'Datos incompletos' });
+    if (!fullName || !email) return fail(400, { message: 'Nombre y email son requeridos.' });
 
-		try {
-			console.time(`[SAVE USER] ${email}`);
-			let finalUid = userId || email;
-			
-			// 1. Sincronizar con Firebase Auth si hay AdminAuth disponible
-			if (adminAuth) {
-				try {
-					let effectiveUserId = userId;
+    try {
+      let finalUid = userId;
 
-					if (effectiveUserId) {
-						// Actualizar existente
-						const updateData: any = { displayName: fullName };
-						if (password) updateData.password = password;
-						await adminAuth.updateUser(effectiveUserId, updateData);
-					} else {
-						// Crear nuevo si no existe ID
-						try {
-							const existingUser = await adminAuth.getUserByEmail(email);
-							if (existingUser) {
-								effectiveUserId = existingUser.uid;
-								const updateData: any = { displayName: fullName };
-								if (password) updateData.password = password;
-								await adminAuth.updateUser(effectiveUserId, updateData);
-							}
-						} catch (e: any) {
-							if (e.code === 'auth/user-not-found') {
-								const newUser = await adminAuth.createUser({
-									email,
-									password: password || 'sync2k_default_password',
-									displayName: fullName,
-									emailVerified: true
-								});
-								effectiveUserId = newUser.uid;
-							} else throw e;
-						}
-					}
-					
-					// IMPORTANTE: Asegurarnos de que el ID final sea el UID de Firebase
-					finalUid = effectiveUserId || email;
-				} catch (authError: any) {
-					console.error('Firebase Auth Sync Error:', authError);
-				}
-			}
+      if (userId) {
+        // ── Actualizar usuario existente ───────────────────────
+        const updateData: any = {
+          full_name:   fullName,
+          profit_user: profitUser,
+          profit_pass: profitPass,
+          active:      isActive,
+          updated_at:  new Date().toISOString()
+        };
 
-			const batch = adminDb.batch();
-			
-			// 2. Perfil base del usuario (USANDO SIEMPRE EL UID como ID de documento)
-			const userRef = adminDb.collection(MasterCollections.USERS).doc(finalUid);
-			
-			const userData: any = {
-				full_name: fullName,
-				email: email,
-				is_active: isActive,
-				updatedAt: new Date().toISOString()
-			};
+        if (password) {
+          // Actualizar en Supabase Auth
+          await supabaseAdmin.auth.admin.updateUserById(userId, { password });
+          // Actualizar hash para modo offline
+          updateData.password_hash = await bcrypt.hash(password, 12);
+        }
 
-			if (!tenantId) {
-				userData.roles = roles;
-			}
+        const { error } = await supabaseAdmin
+          .from('profiles')
+          .update(updateData)
+          .eq('id', userId);
+        if (error) return fail(500, { message: error.message });
 
-			if (userId) {
-				batch.set(userRef, userData, { merge: true });
-			} else {
-				batch.set(userRef, { ...userData, createdAt: new Date().toISOString() });
-			}
+      } else {
+        // ── Crear usuario nuevo ────────────────────────────────
+        if (!password) return fail(400, { message: 'La contraseña es requerida para usuarios nuevos.' });
 
-			// 3. Roles y Mapping por Empresa
-			if (tenantId && finalUid) {
-				const userTenantRef = adminDb.collection(MasterCollections.USER_TENANTS).doc(`${finalUid}_${tenantId}`);
-				batch.set(userTenantRef, {
-					uid: finalUid,
-					tenant_slug: tenantId,
-					roles: roles,
-					profit_user: profitUser || '',
-					updatedAt: new Date().toISOString()
-				}, { merge: true });
-			}
+        // Crear en Supabase Auth
+        const { data: authData, error: authErr } = await supabaseAdmin.auth.admin.createUser({
+          email,
+          password,
+          email_confirm: true,
+          user_metadata: { full_name: fullName }
+        });
+        if (authErr) return fail(500, { message: `Auth error: ${authErr.message}` });
 
-			await withTimeout(batch.commit(), 5000, 'Commit Save User');
+        finalUid = authData.user.id;
+        const passwordHash = await bcrypt.hash(password, 12);
 
-			// 4. Auditoría
-			await logAction({
-				uid: (locals as any).uid || 'system',
-				user_email: (locals as any).user?.email || 'system',
-				action: userId ? 'UPDATE' : 'CREATE',
-				entity: 'usuarios',
-				entity_id: finalUid,
-				tenant_id: tenantId || undefined,
-				details: { fullName, email, roles, tenantId }
-			});
+        const { error: profileErr } = await supabaseAdmin
+          .from('profiles')
+          .insert({
+            id:            finalUid,
+            full_name:     fullName,
+            email:         email,
+            password_hash: passwordHash,
+            profit_user:   profitUser,
+            profit_pass:   profitPass,
+            active:        isActive
+          });
+        if (profileErr) return fail(500, { message: profileErr.message });
+      }
 
-			console.timeEnd(`[SAVE USER] ${email}`);
-			return { success: true };
-		} catch (error: any) {
-			console.error('Error saving user:', error);
-			return fail(500, { message: `Error: ${error.message}` });
-		}
-	}),
+      // ── Sincronizar roles ──────────────────────────────────────
+      if (finalUid && roleIds.length >= 0) {
+        // Borrar roles actuales y reinsertar
+        await supabaseAdmin.from('user_roles').delete().eq('user_id', finalUid);
+        if (roleIds.length > 0) {
+          await supabaseAdmin.from('user_roles').insert(
+            roleIds.map(role_id => ({ user_id: finalUid!, role_id }))
+          );
+        }
+      }
 
-	toggleStatus: protectAction('sec_users', async ({ request, locals }) => {
-		if (!adminDb) return fail(500, { message: 'Base de datos no disponible' });
+      await supabaseAdmin.rpc('log_action', {
+        p_user_id:    locals.profile?.id ?? null,
+        p_user_email: locals.profile?.email ?? 'system',
+        p_action:     userId ? 'UPDATE' : 'CREATE',
+        p_module:     'sec_users',
+        p_record_id:  finalUid
+      });
 
-		const formData = await request.formData();
-		const userId = formData.get('userId') as string;
-		const currentStatus = formData.get('active') === 'true';
-		
-		if (!userId) return fail(400, { message: 'ID de usuario no proporcionado' });
+      return { success: true };
+    } catch (err: any) {
+      console.error('[SAVE USER] Error:', err);
+      return fail(500, { message: err.message });
+    }
+  }),
 
-		try {
-			await withTimeout(
-				adminDb.collection(MasterCollections.USERS).doc(userId).update({
-					is_active: !currentStatus,
-					updatedAt: new Date().toISOString()
-				}),
-				5000,
-				'Toggle User Status'
-			);
+  toggleStatus: protectAction('sec_users', async ({ request, locals }) => {
+    const formData     = await request.formData();
+    const userId       = formData.get('userId') as string;
+    const currentActive = formData.get('active') === 'true';
 
-			// Auditoría
-			await logAction({
-				uid: (locals as any).uid || 'system',
-				user_email: (locals as any).user?.email || 'system',
-				action: 'TOGGLE_STATUS',
-				entity: 'usuarios',
-				entity_id: userId,
-				details: { newStatus: !currentStatus }
-			});
+    if (!userId) return fail(400, { message: 'ID de usuario requerido.' });
 
-			return { success: true };
-		} catch (error: any) {
-			console.error('Error toggling status:', error);
-			return fail(500, { message: `Error: ${error.message}` });
-		}
-	}),
+    const { error } = await supabaseAdmin
+      .from('profiles')
+      .update({ active: !currentActive, updated_at: new Date().toISOString() })
+      .eq('id', userId);
 
-	deleteUser: protectAction('sec_users', async ({ request, locals }) => {
-		if (!adminDb) return fail(500, { message: 'Base de datos no disponible' });
+    if (error) return fail(500, { message: error.message });
 
-		const formData = await request.formData();
-		const userId = formData.get('userId') as string;
+    await supabaseAdmin.rpc('log_action', {
+      p_user_id:    locals.profile?.id ?? null,
+      p_user_email: locals.profile?.email ?? 'system',
+      p_action:     'TOGGLE_STATUS',
+      p_module:     'sec_users',
+      p_record_id:  userId,
+      p_new_data:   JSON.stringify({ active: !currentActive })
+    });
 
-		if (!userId) return fail(400, { message: 'ID de usuario no proporcionado' });
+    return { success: true };
+  }),
 
-		try {
-			const batch = adminDb.batch();
-			
-			// 1. Eliminar perfil global
-			batch.delete(adminDb.collection(MasterCollections.USERS).doc(userId));
-			
-			// 2. Eliminar todas las asignaciones de tenant (OJO: Esto requiere busca previa para batch.delete)
-			// Por ahora solo eliminamos el perfil base. Si se requiere limpieza total:
-			const tenantRolesSnap = await adminDb.collection(MasterCollections.USER_TENANTS).where('uid', '==', userId).get();
-			tenantRolesSnap.docs.forEach(doc => batch.delete(doc.ref));
+  deleteUser: protectAction('sec_users', async ({ request, locals }) => {
+    const formData = await request.formData();
+    const userId   = formData.get('userId') as string;
 
-			await withTimeout(batch.commit(), 5000, 'Delete User Batch');
+    if (!userId) return fail(400, { message: 'ID de usuario requerido.' });
 
-			// 3. Eliminar de Firebase Auth (Opcional pero recomendado)
-			if (adminAuth) {
-				try {
-					await adminAuth.deleteUser(userId);
-				} catch (e) { console.error('Error deleting from Auth:', e); }
-			}
+    // Eliminar de Supabase Auth (en cascada elimina user_roles)
+    const { error: authErr } = await supabaseAdmin.auth.admin.deleteUser(userId);
+    if (authErr) console.warn('[DELETE USER] Auth error:', authErr.message);
 
-			// Auditoría
-			await logAction({
-				uid: (locals as any).uid || 'system',
-				user_email: (locals as any).user?.email || 'system',
-				action: 'DELETE',
-				entity: 'usuarios',
-				entity_id: userId
-			});
+    // Eliminar perfil (ON DELETE CASCADE limpia user_roles)
+    const { error } = await supabaseAdmin
+      .from('profiles')
+      .delete()
+      .eq('id', userId);
+    if (error) return fail(500, { message: error.message });
 
-			return { success: true };
-		} catch (error: any) {
-			console.error('Error deleting user:', error);
-			return fail(500, { message: `Error: ${error.message}` });
-		}
-	})
+    await supabaseAdmin.rpc('log_action', {
+      p_user_id:    locals.profile?.id ?? null,
+      p_user_email: locals.profile?.email ?? 'system',
+      p_action:     'DELETE',
+      p_module:     'sec_users',
+      p_record_id:  userId
+    });
+
+    return { success: true };
+  })
 };

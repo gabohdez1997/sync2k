@@ -52,9 +52,9 @@
       rif: '',
       logo: '',
       tunnel_token: '',
+      tunnel_token: '',
       agent_url: '',
-      agent_api_key: '',
-      sql_config: { host: '', database: '', user: '', password: '' }
+      agent_api_key: ''
     };
     showModal = true;
   }
@@ -93,7 +93,7 @@
         <Building size={40} class="text-brand-500" />
         Gestión de Empresas
       </h1>
-      <p class="text-text-muted mt-2 text-lg">Configura las conexiones SQL Server para cada tenant del sistema.</p>
+      <p class="text-text-muted mt-2 text-lg">Configura las empresas conectadas al sistema.</p>
     </div>
     
     <button 
@@ -176,7 +176,7 @@
         </div>
 
         <div class="mt-6 pt-6 border-t border-white/5 flex items-center justify-between text-[10px] uppercase font-black tracking-widest text-text-muted/50">
-           <span>SQL SERVER READY</span>
+           <span>EMPRESA ACTIVA</span>
            <div class="flex items-center gap-1 text-green-500">
              <div class="h-1 w-1 rounded-full bg-green-500 animate-pulse"></div>
              ACTIVO
@@ -361,64 +361,6 @@
                   bind:value={editingTenant.tunnel_token}
                   placeholder="Token del túnel..."
                   class="w-full h-14 bg-indigo-500/5 border border-indigo-500/10 rounded-2xl pl-12 pr-5 focus:border-indigo-500 outline-hidden transition-all text-sm font-mono"
-                />
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Conexión SQL -->
-        <div class="space-y-6">
-          <div class="flex items-center gap-3 text-brand-400">
-            <Database size={18} />
-            <h3 class="text-xs uppercase font-black tracking-widest">Configuración SQL Server</h3>
-          </div>
-
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div class="space-y-2">
-              <label class="text-xs font-bold text-text-muted ml-1" for="sqlHost">IP / Host Servidor</label>
-              <input 
-                type="text" 
-                name="sqlHost" 
-                bind:value={editingTenant.sql_config.host}
-                placeholder="192.168.1.10"
-                class="w-full h-14 bg-white/5 border border-white/10 rounded-2xl px-5 focus:border-brand-500 outline-hidden transition-all"
-              />
-            </div>
-            <div class="space-y-2">
-              <label class="text-xs font-bold text-text-muted ml-1" for="sqlDb">Nombre Base de Datos</label>
-              <input 
-                type="text" 
-                name="sqlDb" 
-                bind:value={editingTenant.sql_config.database}
-                placeholder="Profit_Sync_2024"
-                class="w-full h-14 bg-white/5 border border-white/10 rounded-2xl px-5 focus:border-brand-500 outline-hidden transition-all"
-              />
-            </div>
-          </div>
-
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div class="space-y-2">
-              <label class="text-xs font-bold text-text-muted ml-1" for="sqlUser">Usuario SQL</label>
-              <div class="relative">
-                <User class="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted opacity-40" size={18} />
-                <input 
-                  type="text" 
-                  name="sqlUser" 
-                  bind:value={editingTenant.sql_config.user}
-                  class="w-full h-14 bg-white/5 border border-white/10 rounded-2xl pl-12 pr-5 focus:border-brand-500 outline-hidden transition-all"
-                />
-              </div>
-            </div>
-            <div class="space-y-2">
-              <label class="text-xs font-bold text-text-muted ml-1" for="sqlPass">Contraseña SQL</label>
-              <div class="relative">
-                <Lock class="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted opacity-40" size={18} />
-                <input 
-                  type="password" 
-                  name="sqlPass" 
-                  bind:value={editingTenant.sql_config.password}
-                  class="w-full h-14 bg-white/5 border border-white/10 rounded-2xl pl-12 pr-5 focus:border-brand-500 outline-hidden transition-all"
                 />
               </div>
             </div>

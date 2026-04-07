@@ -1,39 +1,33 @@
 // src/routes/dashboard/audit/+page.server.ts
-import { adminDb, MasterCollections } from '$lib/server/firebase-admin';
+// Migrado de Firestore → Supabase (tabla audit_log)
+
 import { protectLoad } from '$lib/server/permissions';
+import { supabaseAdmin } from '$lib/server/supabase';
 import type { PageServerLoad } from './$types';
 
-export const load: PageServerLoad = protectLoad('sec_audit', async ({ locals }) => {
-    let logs: any[] = [];
-    let tenants: any[] = [];
+export const load: PageServerLoad = protectLoad('sec_audit', async ({ url }) => {
+  const limit  = Math.min(parseInt(url.searchParams.get('limit') || '200'), 500);
+  const module = url.searchParams.get('module') || null;
 
-    if (adminDb) {
-        try {
-            // 1. Fetch Logs (Limited to 200 for now, ordered by newer first)
-            const logsSnap = await adminDb.collection(MasterCollections.AUDIT)
-                .orderBy('timestamp', 'desc')
-                .limit(200)
-                .get();
-            
-            logs = logsSnap.docs.map(doc => ({
-                id: doc.id,
-                ...doc.data()
-            }));
+  let query = supabaseAdmin
+    .from('audit_log')
+    .select(`
+      id, action, module, record_id,
+      user_email, source, created_at,
+      old_data, new_data, metadata,
+      branch_id, branches(name)
+    `)
+    .order('created_at', { ascending: false })
+    .limit(limit);
 
-            // 2. Fetch Tenants for lookup
-            const tenantsSnap = await adminDb.collection(MasterCollections.CONNECTIONS).get();
-            tenants = tenantsSnap.docs.map(doc => ({
-                id: doc.id,
-                name: doc.data().name || doc.id
-            }));
+  if (module) query = query.eq('module', module);
 
-        } catch (error) {
-            console.error('Error loading audit logs:', error);
-        }
-    }
+  const { data: logs, error } = await query;
 
-    return {
-        logs,
-        tenants
-    };
+  if (error) {
+    console.error('[AUDIT] Error cargando logs:', error.message);
+    return { logs: [] };
+  }
+
+  return { logs: logs ?? [] };
 });

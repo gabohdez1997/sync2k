@@ -15,6 +15,7 @@
     DollarSign,
     Package,
     Building,
+    ShoppingCart,
     Loader2,
   } from "lucide-svelte";
   import type { PageData, ActionData } from './$types';
@@ -54,8 +55,22 @@
       label: "Almacén",
       icon: Package,
       options: [
+        { id: "sec_articles", label: "Ubicaciones" },
         { id: "inv_shipping", label: "Despacho" },
         { id: "inv_void", label: "Anulación" },
+      ],
+    },
+    {
+      id: "purchases",
+      label: "Compras",
+      icon: ShoppingCart,
+      options: [
+        { id: "pur_articles", label: "Artículos" },
+        { id: "pur_quotes", label: "Cotizaciones" },
+        { id: "pur_orders", label: "Orden de compra" },
+        { id: "pur_invoices", label: "Facturas" },
+        { id: "pur_payments", label: "Pagos" },
+        { id: "pur_returns", label: "Devoluciones" },
       ],
     },
     {
@@ -66,6 +81,7 @@
         { id: "sec_users", label: "Usuarios" },
         { id: "sec_roles", label: "Roles y Permisos" },
         { id: "sec_tenants", label: "Empresas" },
+        { id: "sec_branches", label: "Sucursales" },
         { id: "sec_audit", label: "Auditoría" },
       ],
     },
@@ -92,7 +108,7 @@
 
   // Categorías expandidas
   let expandedCategories = $state<Record<string, boolean>>({
-    general: true, sales: true, cash: true, warehouse: true, security: true,
+    general: true, sales: true, cash: true, warehouse: true, purchases: true, security: true,
   });
 
   // Loader states
@@ -110,10 +126,71 @@
     return perms;
   }
 
+  let tenantId = $state("");
+  let branchIds = $state<string[]>([]);
+  let warehouseIds = $state<string[]>([]);
+
+  let availableBranches = $state<any[]>([]);
+  let availableWarehouses = $state<any[]>([]);
+  let loadingContext = $state(false);
+  let contextError = $state<string | null>(null);
+
+  let filteredWarehouses = $derived(
+    branchIds.length === 0 
+      ? availableWarehouses 
+      : availableWarehouses.filter(w => {
+          const wSede = (w.sede_id || w.co_sucur || "").toString().trim();
+          return branchIds.includes(wSede);
+        })
+  );
+
+  async function loadBranchesAndWarehouses(tid: string) {
+    contextError = null;
+    if (!tid) {
+      availableBranches = [];
+      availableWarehouses = [];
+      return;
+    }
+    loadingContext = true;
+    try {
+      const [bRes, wRes] = await Promise.all([
+        fetch(`/api/agent/branches?tenant_id=${tid}`),
+        fetch(`/api/agent/warehouses?tenant_id=${tid}`)
+      ]);
+      const bData = await bRes.json();
+      const wData = await wRes.json();
+      
+      if (bData.error) throw new Error(`Sucursales: ${bData.error}`);
+      if (wData.error) throw new Error(`Almacenes: ${wData.error}`);
+
+      availableBranches = bData.branches || [];
+      availableWarehouses = wData.warehouses || [];
+    } catch (e: any) {
+      console.error("Error loading context", e);
+      contextError = e.message;
+    } finally {
+      loadingContext = false;
+    }
+  }
+
   // ── Seleccionar un rol ─────────────────────────────────────────────────────
-  function selectRole(role: { id: string; name: string; permissions: Record<string, any> }) {
+  function selectRole(role: { id: string; name: string; permissions: Record<string, any>; tenant_id?: string; branch_ids?: string[]; warehouse_ids?: string[] }) {
     selectedRoleId = role.id;
     roleName = role.name;
+    tenantId = role.tenant_id || "";
+    branchIds = role.branch_ids || [];
+    warehouseIds = role.warehouse_ids || [];
+
+    if (tenantId) {
+      loadBranchesAndWarehouses(tenantId).then(() => {
+        // preserve after load in case of reset
+        branchIds = role.branch_ids || [];
+        warehouseIds = role.warehouse_ids || [];
+      });
+    } else {
+      availableBranches = [];
+      availableWarehouses = [];
+    }
 
     const base = buildEmptyPermissions();
     for (const optId of Object.keys(base)) {
@@ -133,6 +210,11 @@
   function newRole() {
     selectedRoleId = null;
     roleName = "Nuevo Rol";
+    tenantId = "";
+    branchIds = [];
+    warehouseIds = [];
+    availableBranches = [];
+    availableWarehouses = [];
     rolePermissions = buildEmptyPermissions();
   }
 
@@ -211,6 +293,9 @@
       >
         <input type="hidden" name="roleId" value={selectedRoleId ?? ''} />
         <input type="hidden" name="roleName" value={roleName} />
+        <input type="hidden" name="tenantId" value={tenantId} />
+        <input type="hidden" name="branchIds" value={JSON.stringify(branchIds)} />
+        <input type="hidden" name="warehouseIds" value={JSON.stringify(warehouseIds)} />
         <input type="hidden" name="permissions" value={JSON.stringify(rolePermissions)} />
         <button
           type="submit"
@@ -273,7 +358,7 @@
         </div>
 
         <div class="space-y-2">
-          <label for="roleName" class="text-xs font-bold uppercase tracking-widest text-text-muted ml-1">
+          <label for="roleName" class="text-[10px] font-black uppercase tracking-widest text-text-muted ml-1">
             Nombre del Rol
           </label>
           <input
@@ -281,8 +366,77 @@
             type="text"
             bind:value={roleName}
             placeholder="Ej: Administrador"
-            class="w-full bg-surface-base border border-border-subtle rounded-xl px-4 py-3 text-text-base focus:outline-none focus:ring-2 focus:ring-brand-500/50 transition-all placeholder:text-text-muted/40"
+            class="w-full h-12 bg-surface-base border border-border-subtle rounded-xl px-4 text-sm font-bold focus:outline-none focus:border-brand-500/50 transition-all placeholder:text-text-muted/40"
           />
+        </div>
+
+        <div class="space-y-4 pt-2 border-t border-border-subtle mt-4">
+          <div class="space-y-2">
+            <label for="tenantId" class="text-[10px] font-black uppercase tracking-widest text-brand-400 ml-1 flex items-center gap-1.5">
+               <Building size={12} />
+               Empresa Asociada
+            </label>
+            <select
+              id="tenantId"
+              bind:value={tenantId}
+              onchange={() => { branchIds = []; warehouseIds = []; loadBranchesAndWarehouses(tenantId); }}
+              class="w-full h-12 bg-surface-base border border-border-subtle rounded-xl px-4 text-sm font-bold focus:outline-none focus:border-brand-500/50 transition-all appearance-none cursor-pointer"
+            >
+              <option value="">Todas las empresas (Global)</option>
+              {#each data.tenants as tenant}
+                <option value={tenant.id}>{tenant.name}</option>
+              {/each}
+            </select>
+          </div>
+
+          {#if tenantId}
+            <div class="space-y-3">
+              <label for="branchIds" class="text-[10px] font-black uppercase tracking-widest text-brand-400 ml-1">
+                Restringir a Sucursales
+              </label>
+              {#if loadingContext}
+                 <div class="h-12 flex items-center px-4 text-text-muted text-sm bg-surface-base rounded-xl border border-border-subtle"><Loader2 size={16} class="animate-spin mr-2" /> Cargando...</div>
+              {:else if availableBranches.length === 0}
+                 <div class="h-12 flex items-center px-4 text-text-muted text-sm bg-surface-base rounded-xl border border-border-subtle opacity-50">Sin sucursales</div>
+              {:else}
+                 <div class="bg-surface-base border border-border-subtle rounded-xl p-3 flex flex-col gap-2 max-h-40 overflow-y-auto">
+                   {#each availableBranches as branch}
+                     <label class="flex items-center gap-3 p-2 hover:bg-white/5 rounded-lg cursor-pointer transition-colors">
+                       <input type="checkbox" bind:group={branchIds} value={branch.id} class="w-4 h-4 rounded border-border-subtle text-brand-500 focus:ring-brand-500 bg-black/20" />
+                       <span class="text-sm font-medium">{branch.name} <span class="text-[10px] opacity-40 italic ml-1">({branch.server})</span></span>
+                     </label>
+                   {/each}
+                 </div>
+              {/if}
+            </div>
+
+            <div class="space-y-3">
+              <label for="warehouseIds" class="text-[10px] font-black uppercase tracking-widest text-brand-400 ml-1">
+                Restringir a Almacenes
+              </label>
+              {#if loadingContext}
+                 <div class="h-12 flex items-center px-4 text-text-muted text-sm bg-surface-base rounded-xl border border-border-subtle"><Loader2 size={16} class="animate-spin mr-2" /> Cargando...</div>
+              {:else if filteredWarehouses.length === 0}
+                 <div class="h-12 flex items-center px-4 text-text-muted text-sm bg-surface-base rounded-xl border border-border-subtle opacity-50">Sin almacenes para las sedes elegidas</div>
+              {:else}
+                <div class="bg-surface-base border border-border-subtle rounded-xl p-3 flex flex-col gap-2 max-h-40 overflow-y-auto">
+                  {#each filteredWarehouses as warehouse}
+                     {@const wid = warehouse.co_alma || warehouse.id}
+                     <label class="flex items-center gap-3 p-2 hover:bg-white/5 rounded-lg cursor-pointer transition-colors">
+                       <input type="checkbox" bind:group={warehouseIds} value={wid} class="w-4 h-4 rounded border-border-subtle text-brand-500 focus:ring-brand-500 bg-black/20" />
+                       <span class="text-sm font-medium">{warehouse.des_alma || warehouse.name || wid} <span class="text-[10px] opacity-40 italic ml-1">({wid})</span></span>
+                     </label>
+                  {/each}
+                </div>
+              {/if}
+            </div>
+            
+            {#if contextError}
+               <div class="p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-xs text-red-400 font-bold mt-2">
+                 Error de red: {contextError}
+               </div>
+            {/if}
+          {/if}
         </div>
 
         <!-- Delete button (only for selected roles) -->

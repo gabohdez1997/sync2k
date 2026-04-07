@@ -1,31 +1,34 @@
-// See https://svelte.dev/docs/kit/types#app.d.ts
-// for information about these interfaces
-
-import type { DecodedIdToken } from 'firebase-admin/auth';
+// src/app.d.ts
+import type { SupabaseClient, Session } from '@supabase/supabase-js';
 
 declare global {
 	namespace App {
 		interface Locals {
-			/** Verified Firebase Session Cookie Claim */
-			session: DecodedIdToken | null;
-
-			/** Extracted Tenant ID from subdomain (e.g. 'empresa1' from empresa1.sync2k.com) */
-			tenantId: string | null;
-
-			/** Full User Profile from BD_Master */
+			supabase: SupabaseClient;
+			session: Session | null;
 			profile: import('$lib/server/auth').Profile | null;
 		}
 
 		interface PageData {
-			session: DecodedIdToken | null;
-			tenantId: string | null;
+			session: Session | null;
 			profile?: {
-				uid: string;
+				id: string;
 				full_name: string | null;
 				email: string | null;
 				permissions: Record<string, import('$lib/server/auth').CRUD>;
 				roles: Array<{ id: string; name: string }>;
 				active: boolean;
+				allowed_branches: Array<{
+					id: string;
+					name: string;
+					agent_url: string | null;
+					agent_token: string;
+					profit_branch_code: string | null;
+					profit_server_id: string | null;
+				}>;
+				allowed_warehouses: string[];
+				profit_user: string | null;
+				profit_pass: string | null;
 			} | null;
 		}
 

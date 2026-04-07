@@ -6,6 +6,7 @@ export interface AgentResponse<T> {
 	message?: string;
 	data?: T;
 	count?: number;
+	details?: any;
 	pagination?: {
 		total: number;
 		pages: number;
@@ -20,8 +21,13 @@ export interface AgentResponse<T> {
 export class AgentClient {
 	private baseUrl: string;
 	private apiKey: string;
+	private sqlAuth: string | null = null;
+	private profitUser: string | null = null;
 
-	constructor(company: { slug: string; agent_url?: string; agent_api_key?: string }) {
+	constructor(
+		company: { slug: string; agent_url?: string; agent_api_key?: string }, 
+		sqlCreds?: { profit_user?: string | null, profit_pass?: string | null }
+	) {
 		// Priorizar la URL y API Key configuradas en la empresa, 
 		// con fallback al subdominio estándar y la clave privada de .env
 		this.baseUrl = company.agent_url 
@@ -29,15 +35,29 @@ export class AgentClient {
 			: `https://${company.slug}.sync2k.com/api/v1`;
 			
 		this.apiKey = company.agent_api_key || PRIVATE_AGENT_API_KEY;
+
+		if (sqlCreds?.profit_user && sqlCreds?.profit_pass) {
+			this.sqlAuth = Buffer.from(`${sqlCreds.profit_user}:${sqlCreds.profit_pass}`).toString('base64');
+		}
+
+		// Guardar el código de usuario Profit para el header de auditoría
+		this.profitUser = sqlCreds?.profit_user || null;
 	}
 
-	private async request<T>(endpoint: string, options: RequestInit = {}): Promise<AgentResponse<T>> {
+	public async request<T>(endpoint: string, options: RequestInit = {}): Promise<AgentResponse<T>> {
 		const url = `${this.baseUrl}${endpoint}`;
-		const headers = {
-			'Content-Type': 'application/json',
-			'x-api-key': this.apiKey,
-			...options.headers
-		};
+		const headers = new Headers(options.headers || {});
+		if (!headers.has('Content-Type')) {
+			headers.set('Content-Type', 'application/json');
+		}
+		headers.set('x-api-key', this.apiKey);
+
+		if (this.sqlAuth) {
+			headers.set('x-sql-auth', this.sqlAuth);
+		}
+		if (this.profitUser) {
+			headers.set('x-profit-user', this.profitUser);
+		}
 
 		try {
 			// Usamos fetch nativo (disponible en Node 18+ y SvelteKit)
@@ -47,7 +67,8 @@ export class AgentClient {
 				const errorData = await response.json().catch(() => ({}));
 				return {
 					success: false,
-					message: errorData.message || `Error del Agente: ${response.statusText}`
+					message: errorData.message || `Error del Agente: ${response.statusText}`,
+					details: errorData.results || errorData.error
 				};
 			}
 			
@@ -91,8 +112,14 @@ export class AgentClient {
 	/**
 	 * Crea o actualiza un cliente
 	 */
-	async saveCustomer(customer: any, isNew: boolean = true) {
-		return this.request<any>(isNew ? '/clientes' : `/clientes/${customer.co_cli}`, {
+	async saveCustomer(customer: any, isNew: boolean = true, sedeId: string = '') {
+		// Al CREAR: enviar a la sede seleccionada (o broadcast si no hay sede)
+		// Al EDITAR: broadcast a TODAS las sedes para mantener consistencia
+		const sedeParam = (isNew && sedeId) ? `?sede=${encodeURIComponent(sedeId)}` : '';
+		const endpoint = isNew
+			? `/clientes${sedeParam}`
+			: `/clientes/${encodeURIComponent(customer.co_cli)}`;
+		return this.request<any>(endpoint, {
 			method: isNew ? 'POST' : 'PUT',
 			body: JSON.stringify(customer)
 		});
@@ -112,5 +139,19 @@ export class AgentClient {
 	 */
 	async getCustomer(co_cli: string) {
 		return this.request<any>(`/clientes/${co_cli}`);
+	}
+
+	/**
+	 * Módulo de configuración de servidores (Dashboard -> Sucursales)
+	 */
+	async getDatabaseConfig() {
+		return this.request<any>('/config/database');
+	}
+
+	/**
+	 * Obtiene el catálogo de zonas
+	 */
+	async getZonas() {
+		return this.request<any>('/catalogos/zonas');
 	}
 }

@@ -1,309 +1,161 @@
 // src/routes/dashboard/branches/+page.server.ts
+// Migrado de Firestore + Firebase API → Supabase (tabla branches) + Supabase Auth
+
 import { protectLoad, protectAction } from '$lib/server/permissions';
-import { adminDb, MasterCollections } from '$lib/server/firebase-admin';
-import { logAction } from '$lib/server/audit';
+import { supabaseAdmin } from '$lib/server/supabase';
 import { AgentClient } from '$lib/server/agent';
 import { fail } from '@sveltejs/kit';
-import { PUBLIC_FIREBASE_API_KEY } from '$env/static/public';
 import type { Actions, PageServerLoad } from './$types';
 
-export const load: PageServerLoad = protectLoad('sec_branches', async ({ url }) => {
-	let branches: any[] = [];
-	let tenants: any[] = [];
-	let loadError: string | null = null;
-	const selectedTenantId = url.searchParams.get('tenant_id');
+// ─── Load ──────────────────────────────────────────────────────
+export const load: PageServerLoad = protectLoad('sec_branches', async ({ locals }) => {
+  const { data: branches, error } = await supabaseAdmin
+    .from('branches')
+    .select('id, name, agent_url, agent_token, profit_branch_codes, sql_config, profit_server_id, local_dns_alias, active, sort_order, updated_at')
+    .order('sort_order')
+    .order('name');
 
-	if (adminDb) {
-		try {
-			// Load tenants for the dropdown link
-			const snapTenants = await adminDb.collection(MasterCollections.CONNECTIONS).get();
-			tenants = snapTenants.docs.map(doc => {
-				const data = doc.data();
-				return {
-					id: doc.id,
-					name: data.name || '',
-					slug: data.slug || doc.id,
-					agent_url: data.agent_url,
-					agent_api_key: data.agent_api_key
-				};
-			});
+  if (error) {
+    console.error('[BRANCHES] Error cargando sucursales:', error.message);
+    return { branches: [], agentServers: [], loadError: error.message };
+  }
 
-			// If a tenant is selected, fetch its branches directly from the associated Agent
-			if (selectedTenantId) {
-				const selectedTenant = tenants.find(t => t.id === selectedTenantId || t.slug === selectedTenantId);
-				if (selectedTenant && selectedTenant.agent_url) {
-					const agentClient = new AgentClient({
-						slug: selectedTenant.slug,
-						agent_url: selectedTenant.agent_url,
-						agent_api_key: selectedTenant.agent_api_key
-					});
-					
-					const resData = await agentClient.getDatabaseConfig();
+  // Intentar conectar al agente de la primera sucursal activa (preview de servers SQL)
+  let agentServers: any[] = [];
+  let loadError: string | null = null;
+  const activeBranch = (branches ?? []).find(b => b.active && b.agent_url);
 
-					if (resData.success === false) {
-						const errMsg = (resData as any).message || 'Desconocido';
-						console.error(`Agent ${selectedTenant.name} returned error:`, errMsg);
-						loadError = `Rechazo del Agente: ${errMsg}`;
-					} else {
-						// Unwrap payload whether it is {servers: []} or root array or {data: {servers: []}}
-						const resDataAny = resData as any;
-						const parsedServers = resDataAny?.data?.servers || resDataAny?.servers || resDataAny?.data || (Array.isArray(resDataAny) ? resDataAny : []);
-						
-						if (Array.isArray(parsedServers)) {
-							branches = parsedServers.map((s: any) => ({
-								...s,
-								tenant_id: selectedTenantId, // inject tenant_id for the UI
-								sql_config: { host: s.server, database: s.database, user: s.user, password: s.password }
-							}));
-						}
-					}
-				}
-			}
-		} catch (error: any) {
-			console.error('Error fetching data for branches:', error);
-			loadError = `Error interno o de conexión Node: ${error.message || 'Error desconocido al contactar al Agente'}`;
-		}
-	}
+  if (activeBranch) {
+    try {
+      const client = new AgentClient(
+        {
+          slug:          activeBranch.id,
+          agent_url:     activeBranch.agent_url!,
+          agent_api_key: activeBranch.agent_token
+        },
+        locals.profile
+      );
+      const res = await client.getDatabaseConfig();
+      const resAny = res as any;
+      agentServers = resAny?.data?.servers || resAny?.servers || [];
+    } catch (e: any) {
+      loadError = `No se pudo conectar al agente: ${e.message}`;
+    }
+  }
 
-	return {
-		branches,
-		tenants,
-		loadError
-	};
+  return {
+    branches:     branches ?? [],
+    agentServers,
+    loadError
+  };
 });
 
+// ─── Actions ───────────────────────────────────────────────────
 export const actions: Actions = {
-	saveBranch: protectAction('sec_branches', async ({ request, locals }) => {
-		if (!adminDb) return fail(500, { message: 'Base de datos no disponible' });
 
-		const formData = await request.formData();
-		const tenant_id = formData.get('tenant_id') as string;
-		const name = formData.get('name') as string;
-		const description = formData.get('description') as string;
-		const sqlHost = formData.get('sqlHost') as string;
-		const sqlDb = formData.get('sqlDb') as string;
-		const sqlUser = formData.get('sqlUser') as string;
-		const sqlPass = formData.get('sqlPass') as string;
-		const co_sucu = formData.get('co_sucu') as string;
-		const is_default = formData.get('is_default') === 'on';
+  saveBranch: protectAction('sec_branches', async ({ request, locals }) => {
+    const formData        = await request.formData();
+    const branchId        = (formData.get('branchId') as string)?.trim() || null;
+    const name            = (formData.get('name') as string)?.trim();
+    const agentUrl        = (formData.get('agent_url') as string)?.trim() || null;
+    const agentToken      = (formData.get('agent_token') as string)?.trim() || null;
+    
+    // Parsear el array de códigos JSON
+    const profitBranchCodesStr = formData.get('profit_branch_codes') as string;
+    let profitBranchCodes = [];
+    try {
+      if (profitBranchCodesStr) profitBranchCodes = JSON.parse(profitBranchCodesStr);
+    } catch(e) { }
 
-		const branchIdRaw = formData.get('branchId') as string;
-		const branchId = branchIdRaw && branchIdRaw.trim() !== "" ? branchIdRaw : null;
-		
-		if (!name || !tenant_id) {
-			return fail(400, { message: 'El nombre y la empresa asocida son obligatorios' });
-		}
+    // Parsear configuración SQL local JSON
+    const sqlConfigStr = formData.get('sql_config') as string;
+    let sqlConfig = {};
+    try {
+      if (sqlConfigStr) sqlConfig = JSON.parse(sqlConfigStr);
+    } catch(e) { }
 
-		try {
-			// Sync directly with Agent API
-			const tenantDoc = await adminDb.collection(MasterCollections.CONNECTIONS).doc(tenant_id).get();
-			const tenantData = tenantDoc.data();
-			
-			if (!tenantData || !tenantData.agent_url) {
-				return fail(400, { message: 'La empresa seleccionada no tiene un Agente configurado' });
-			}
+    const profitServer    = (formData.get('profit_server_id') as string)?.trim() || null;
+    const localDns        = (formData.get('local_dns_alias') as string)?.trim() || null;
+    const sortOrder       = parseInt(formData.get('sort_order') as string || '0');
+    const active          = formData.get('active') !== 'false';
 
-			const isNew = !branchId;
-			let actualBranchId: string;
+    if (!name) return fail(400, { message: 'El nombre de la sucursal es requerido.' });
 
-			// If it's a "new" branch from the UI, triple check Firestore to avoid duplicates by name
-			if (isNew) {
-				const existingSnap = await adminDb.collection(MasterCollections.CONNECTIONS)
-					.doc(tenant_id)
-					.collection('branches')
-					.where('name', '==', name)
-					.limit(1)
-					.get();
-				
-				if (!existingSnap.empty) {
-					actualBranchId = existingSnap.docs[0].id;
-					console.log(`[BRANCHES] Existing branch found by name. Reusing UUID: ${actualBranchId}`);
-				} else {
-					actualBranchId = crypto.randomUUID();
-				}
-			} else {
-				actualBranchId = branchId as string;
-			}
+    const payload: any = {
+      name,
+      agent_url:           agentUrl,
+      profit_branch_codes: profitBranchCodes,
+      sql_config:          sqlConfig,
+      profit_server_id:    profitServer,
+      local_dns_alias:     localDns,
+      sort_order:          sortOrder,
+      active,
+      updated_at:          new Date().toISOString()
+    };
 
-			let payload: any;
-			let urlEndpoint = '/config/database';
+    // Solo actualizar agent_token si se envió uno nuevo
+    if (agentToken) payload.agent_token = agentToken;
 
-			if (isNew && !branchId) { // Really new (not just re-pushing)
-				payload = {
-					servers: [{
-						id: actualBranchId,
-						name: name,
-						server: sqlHost,
-						database: sqlDb,
-						user: sqlUser,
-						password: sqlPass,
-						co_sucur: co_sucu,
-						is_default: is_default
-					}]
-				};
-			} else {
-				urlEndpoint = `/config/database/${actualBranchId}`;
-				payload = {
-					name: name,
-					server: sqlHost,
-					database: sqlDb,
-					user: sqlUser,
-					password: sqlPass,
-					co_sucur: co_sucu,
-					is_default: is_default
-				};
-			}
+    let savedId: string;
 
-			const response = await fetch(`${tenantData.agent_url.replace(/\/$/, '')}/api/v1${urlEndpoint}`, {
-				method: isNew ? 'POST' : 'PATCH',
-				headers: { 
-					'Content-Type': 'application/json',
-					'x-api-key': tenantData.agent_api_key || ''
-				},
-				body: JSON.stringify(payload)
-			});
+    if (branchId) {
+      const { error } = await supabaseAdmin
+        .from('branches')
+        .update(payload)
+        .eq('id', branchId);
+      if (error) return fail(500, { message: error.message });
+      savedId = branchId;
+    } else {
+      const { data, error } = await supabaseAdmin
+        .from('branches')
+        .insert(payload)
+        .select('id')
+        .single();
+      if (error) return fail(500, { message: error.message });
+      savedId = data.id;
+    }
 
-			if (!response.ok) {
-				const errText = await response.text();
-				console.error(`Agent API Sync error (${isNew ? 'POST' : 'PATCH'}):`, errText);
-				return fail(response.status, { message: `HTTP ${response.status}: ${errText.substring(0, 100)}` });
-			}
+    await supabaseAdmin.rpc('log_action', {
+      p_user_id:    locals.profile?.id ?? null,
+      p_user_email: locals.profile?.email ?? 'system',
+      p_action:     branchId ? 'UPDATE' : 'CREATE',
+      p_module:     'sec_branches',
+      p_record_id:  savedId
+    });
 
-			const rawJson = await response.text();
-			let resJson: any = null;
-			try {
-				resJson = JSON.parse(rawJson);
-			} catch (_) {}
+    return { success: true, savedId };
+  }),
 
-			if (resJson && resJson.success === false) {
-				console.error('Agent API Sync returned success=false:', resJson);
-				return fail(400, { message: `Rechazado: ${JSON.stringify(resJson).substring(0, 100)}` });
-			}
+  deleteBranch: protectAction('sec_branches', async ({ request, locals }) => {
+    const formData  = await request.formData();
+    const branchId  = (formData.get('branchId') as string)?.trim();
+    const password  = (formData.get('password') as string)?.trim();
 
-			// Auditoría
-			await logAction({
-				uid: (locals as any).uid || 'system',
-				user_email: (locals as any).user?.email || 'system',
-				action: branchId ? 'UPDATE' : 'CREATE',
-				entity: 'sucursales_agente',
-				entity_id: actualBranchId,
-				tenant_id: tenant_id,
-				details: { name, description, co_sucu, is_default }
-			});
+    if (!branchId) return fail(400, { message: 'ID de sucursal requerido.' });
+    if (!password) return fail(400, { message: 'La contraseña es requerida para confirmar.' });
 
-			// Backup en Firestore por si se pierde la conexión
-			try {
-				await adminDb.collection(MasterCollections.CONNECTIONS)
-					.doc(tenant_id)
-					.collection('branches')
-					.doc(actualBranchId)
-					.set({
-						id: actualBranchId,
-						name: name,
-						description: description || '',
-						server: sqlHost,
-						database: sqlDb,
-						user: sqlUser,
-						password: sqlPass,
-						co_sucur: co_sucu,
-						is_default: is_default,
-						updatedAt: new Date()
-					}, { merge: true });
-			} catch (fsError) {
-				console.error('Error guardando backup de sucursal en Firestore:', fsError);
-				// No fallamos toda la petición si el backup falla pero el agente lo aceptó
-			}
+    // Verificar contraseña del admin con Supabase Auth
+    const email = locals.session?.user?.email;
+    if (!email) return fail(401, { message: 'Sesión no válida.' });
 
-			return { success: true };
-		} catch (error: any) {
-			console.error('Error saving branch:', error);
-			return fail(500, { message: error.message || 'Error al guardar sucursal' });
-		}
-	}),
+    const { error: authErr } = await supabaseAdmin.auth.signInWithPassword({ email, password });
+    if (authErr) return fail(401, { message: 'Contraseña de confirmación incorrecta.' });
 
-	deleteBranch: protectAction('sec_branches', async ({ request, locals }) => {
-		if (!adminDb) return fail(500, { message: 'Base de datos no disponible' });
+    const { error } = await supabaseAdmin
+      .from('branches')
+      .delete()
+      .eq('id', branchId);
 
-		const formData = await request.formData();
-		const branchId = formData.get('branchId') as string;
-		const password = formData.get('password') as string;
+    if (error) return fail(500, { message: error.message });
 
-		const tenant_id = formData.get('tenant_id') as string;
+    await supabaseAdmin.rpc('log_action', {
+      p_user_id:    locals.profile?.id ?? null,
+      p_user_email: locals.profile?.email ?? 'system',
+      p_action:     'DELETE',
+      p_module:     'sec_branches',
+      p_record_id:  branchId
+    });
 
-		if (!branchId) return fail(400, { message: 'ID de sucursal no proporcionado' });
-		if (!tenant_id) return fail(400, { message: 'ID de empresa no proporcionado' });
-		if (!password) return fail(400, { message: 'La contraseña es obligatoria para confirmar' });
-
-		try {
-			// Verificar contraseña con Firebase REST API (Identity Toolkit)
-			const email = (locals as any).session?.email;
-			if (!email) return fail(401, { message: 'Sesión no válida' });
-
-			const verifyResponse = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${PUBLIC_FIREBASE_API_KEY}`, {
-				method: 'POST',
-				body: JSON.stringify({
-					email,
-					password,
-					returnSecureToken: true
-				}),
-				headers: { 'Content-Type': 'application/json' }
-			});
-
-			if (!verifyResponse.ok) {
-				return fail(401, { message: 'Contraseña de confirmación incorrecta' });
-			}
-
-			// Sync delete with Agent API directly
-			const tenantDoc = await adminDb.collection(MasterCollections.CONNECTIONS).doc(tenant_id).get();
-			const tenantData = tenantDoc.data();
-			
-			if (!tenantData || !tenantData.agent_url) {
-				return fail(400, { message: 'La empresa seleccionada no tiene un Agente configurado' });
-			}
-
-			const response = await fetch(`${tenantData.agent_url.replace(/\/$/, '')}/api/v1/config/database/${branchId}`, {
-				method: 'DELETE',
-				headers: { 
-					'Content-Type': 'application/json',
-					'x-api-key': tenantData.agent_api_key || ''
-				}
-			});
-
-			if (!response.ok) {
-				console.error('Agent API Sync error (delete):', await response.text());
-				return fail(500, { message: 'Error eliminando la sucursal del Agente (HTTP Error)' });
-			}
-
-			const resJsonDelete = await response.json().catch(() => null);
-			if (resJsonDelete && resJsonDelete.success === false) {
-				console.error('Agent API Sync returned success=false (delete):', resJsonDelete);
-				return fail(500, { message: resJsonDelete.message || 'El agente rechazó la eliminación.' });
-			}
-
-			// Auditoría
-			await logAction({
-				uid: (locals as any).uid || 'system',
-				user_email: (locals as any).user?.email || 'system',
-				action: 'DELETE',
-				entity: 'sucursales_agente',
-				entity_id: branchId
-			});
-
-			// Eliminar de Firestore backup
-			try {
-				await adminDb.collection(MasterCollections.CONNECTIONS)
-					.doc(tenant_id)
-					.collection('branches')
-					.doc(branchId)
-					.delete();
-			} catch (fsError) {
-				console.error('Error eliminando backup de sucursal en Firestore:', fsError);
-			}
-
-			return { success: true };
-		} catch (error: any) {
-			console.error('Error deleting branch:', error);
-			return fail(500, { message: error.message || 'Error al eliminar sucursal' });
-		}
-	})
+    return { success: true };
+  })
 };
