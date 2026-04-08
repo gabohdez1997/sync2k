@@ -1,61 +1,52 @@
+// src/routes/dashboard/articles/labels/+page.server.ts
 import { protectLoad } from '$lib/server/permissions';
 import { AgentClient } from '$lib/server/agent';
-import { adminDb, MasterCollections } from '$lib/server/firebase-admin';
 import type { PageServerLoad } from './$types';
 
-export const load: PageServerLoad = protectLoad('sec_articles', async ({ url, locals }) => {
+export const load: PageServerLoad = protectLoad('inv_articles', async ({ url, locals }) => {
 	try {
-		const userProfile = (locals as any).profile;
-		const urlTenant = url.searchParams.get('tenant_id');
+        const profile = (locals as any).profile;
+		if (!profile) throw new Error('Perfil no cargado.');
+
+		// 1. Obtener sucursales autorizadas del perfil (Supabase)
+		const allowedBranches = profile.allowed_branches || [];
 		
-		// Resolve which company to use
-		const profileSlug = userProfile?.company?.slug;
-		const targetId = urlTenant || profileSlug;
-
-		if (!targetId) {
-			return { articles: [], error: 'Empresa no especificada.' };
+		if (allowedBranches.length === 0) {
+			return { articles: [], error: 'No tienes sucursales asignadas.', companyName: 'GalpeApp' };
 		}
 
-		// 1. FETCH COMPANY INFO FROM FIRESTORE
-		let companyInfo: any = null;
-		const snap = await adminDb!.collection(MasterCollections.CONNECTIONS).doc(targetId).get();
-		if (snap.exists) {
-			companyInfo = snap.data();
-		} else {
-			const query = await adminDb!.collection(MasterCollections.CONNECTIONS).where('slug', '==', targetId).get();
-			if (!query.empty) companyInfo = query.docs[0].data();
+		// 2. Seleccionar sucursal activa
+		const urlBranchId = url.searchParams.get('branch_id');
+		const selectedBranch = urlBranchId 
+			? allowedBranches.find(b => b.id === urlBranchId)
+			: allowedBranches[0];
+
+		if (!selectedBranch || !selectedBranch.agent_url) {
+			return { articles: [], error: 'Sucursal no configurada correctamente.', companyName: 'GalpeApp' };
 		}
 
-		if (!companyInfo?.agent_url) {
-			return { articles: [], error: 'No se encontró la configuración del Agente.' };
-		}
-
-		const companyLogo: string = companyInfo?.logo || '';
-
-		// 2. INIT AGENT CLIENT
+		// 3. Inicializar AgentClient
 		const agentClient = new AgentClient({
-			slug: companyInfo.slug,
-			agent_url: companyInfo.agent_url,
-			agent_api_key: companyInfo.agent_api_key
-		}, locals.profile);
+			slug: selectedBranch.id,
+			agent_url: selectedBranch.agent_url,
+			agent_api_key: selectedBranch.agent_token
+		}, profile);
 
-		// 3. FETCH ARTICLES
-		const branchId = url.searchParams.get('branch_id');
+		// 4. Parámetros de búsqueda
 		const warehouseId = url.searchParams.get('co_alma');
-		const coArtsParam = url.searchParams.get('co_arts'); // comma-separated selected codes
+		const coArtsParam = url.searchParams.get('co_arts'); // Códigos seleccionados
 
 		let articles: any[] = [];
 
 		if (coArtsParam) {
-			// ── SELECTION MODE: fetch specific articles by code ──────────────────
+			// MODO SELECCIÓN: buscar códigos específicos
 			const codes = coArtsParam.split(',').map(c => c.trim()).filter(Boolean);
-			console.log(`[LABELS] Selection mode: fetching ${codes.length} specific articles`);
-
+			
 			const baseParams = new URLSearchParams();
-			if (branchId) { baseParams.set('sede_id', branchId); baseParams.set('sede', branchId); }
+			baseParams.set('sede_id', selectedBranch.id);
+            baseParams.set('sede', selectedBranch.profit_branch_code || selectedBranch.id);
 			if (warehouseId) baseParams.set('co_alma', warehouseId);
 
-			// Fetch all selected codes in parallel (batch of individual lookups)
 			const results = await Promise.allSettled(
 				codes.map(code => {
 					const p = new URLSearchParams(baseParams);
@@ -73,7 +64,7 @@ export const load: PageServerLoad = protectLoad('sec_articles', async ({ url, lo
 				}
 			}
 		} else {
-			// ── FILTER MODE: fetch all matching the filters (up to 500) ──────────
+			// MODO FILTRO: buscar por términos
 			const searchTerm = url.searchParams.get('search') || '';
 			const lineaId = url.searchParams.get('linea') || '';
 			const categoriaId = url.searchParams.get('categoria') || '';
@@ -88,7 +79,9 @@ export const load: PageServerLoad = protectLoad('sec_articles', async ({ url, lo
 			}
 			if (lineaId) params.set('linea', lineaId);
 			if (categoriaId) params.set('categoria', categoriaId);
-			if (branchId) { params.set('sede_id', branchId); params.set('sede', branchId); }
+            
+			params.set('sede_id', selectedBranch.id);
+            params.set('sede', selectedBranch.profit_branch_code || selectedBranch.id);
 			if (warehouseId) params.set('co_alma', warehouseId);
 			if (ubicacionId) params.set('co_ubicacion', ubicacionId);
 
@@ -96,27 +89,19 @@ export const load: PageServerLoad = protectLoad('sec_articles', async ({ url, lo
 				? `/articulos/search?${params.toString()}`
 				: `/articulos?${params.toString()}`;
 
-			console.log(`[LABELS] Filter mode, fetching from: ${endpoint}`);
 			const resData = await agentClient.request<any>(endpoint);
-
-			const rawItems = (resData as any).data?.items
-				|| (resData as any).items
-				|| (resData as any).data
-				|| (Array.isArray(resData) ? resData : []);
+			const rawItems = resData?.data?.items || resData?.items || resData?.data || (Array.isArray(resData) ? resData : []);
 			articles = Array.isArray(rawItems) ? rawItems : [];
 		}
 
-		console.log(`[LABELS] Total articles to print: ${articles.length}`);
-
 		return {
 			articles,
-			companyName: companyInfo.name || targetId,
-			companyLogo
+			companyName: 'GalpeApp',
+			companyLogo: '' // Se maneja en el layout global o por settings si se requiere
 		};
 
 	} catch (e: any) {
 		console.error('[LABELS] Fatal error:', e);
-		return { articles: [], error: `Error interno: ${e.message}` };
+		return { articles: [], error: `Error interno: ${e.message}`, companyName: 'GalpeApp' };
 	}
 });
-

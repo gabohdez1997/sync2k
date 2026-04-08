@@ -26,8 +26,18 @@
   let { data, form }: { data: PageData; form: any } = $props();
 
   $effect(() => {
-    if (data.context?.branches) {
-      console.log("[SYNC2K] Available Branches (Client):", data.context.branches.map((b: any) => ({ id: b.id.slice(0,4), name: b.name, code: b.co_sucu })));
+    if (data.branches) {
+      console.log("[SYNC2K] Available Branches (Client):", data.branches.map((b: any) => ({ id: b.id.slice(0,4), name: b.name, code: b.co_sucu })));
+    }
+  });
+
+  let selectedBranch = $state($page.url.searchParams.get("branch_id") || "");
+
+  // Auto-selección si solo hay una sucursal
+  $effect(() => {
+    if (!selectedBranch && data.branches?.length === 1) {
+      selectedBranch = data.branches[0].id;
+      handleSearch();
     }
   });
 
@@ -125,8 +135,6 @@
   }
   let isSearching = $state(false);
 
-  let selectedBranch = $state("");
-  let selectedTenant = $state("");
   let selectedWarehouse = $state("");
   let selectedLinea = $state($page.url.searchParams.get("linea") || "");
   let selectedCategoria = $state($page.url.searchParams.get("categoria") || "");
@@ -154,14 +162,14 @@
   $effect(() => {
     selectedBranch =
       data.context?.branchId || $page.url.searchParams.get("branch_id") || "";
-    selectedTenant =
-      data.context?.tenantId || $page.url.searchParams.get("tenant_id") || "";
     selectedWarehouse =
       data.context?.warehouseId || $page.url.searchParams.get("co_alma") || "";
     selectedLinea = $page.url.searchParams.get("linea") || "";
     selectedCategoria = $page.url.searchParams.get("categoria") || "";
     selectedUbicacion = $page.url.searchParams.get("co_ubicacion") || "";
   });
+
+  let showAll = $state($page.url.searchParams.get("show_all") === "true");
 
   // Ya no necesitamos tasa en el estado global si viene en el artículo,
   // pero mantendremos el toggle de USD/Bs.
@@ -182,12 +190,6 @@
       url.searchParams.set("branch_id", selectedBranch);
     } else {
       url.searchParams.delete("branch_id");
-    }
-
-    if (selectedTenant) {
-      url.searchParams.set("tenant_id", selectedTenant);
-    } else {
-      url.searchParams.delete("tenant_id");
     }
 
     if (selectedWarehouse) {
@@ -214,6 +216,12 @@
       url.searchParams.delete("co_ubicacion");
     }
 
+    if (showAll) {
+      url.searchParams.set("show_all", "true");
+    } else {
+      url.searchParams.delete("show_all");
+    }
+
     url.searchParams.set("page", "1");
     goto(url.toString(), { keepFocus: true }).finally(
       () => (isSearching = false),
@@ -224,7 +232,6 @@
     // Points to /api/labels which returns a pure standalone HTML page —
     // no SvelteKit layout, no dashboard chrome, clean for printing.
     const url = new URL($page.url.origin + "/api/labels");
-    if (selectedTenant) url.searchParams.set("tenant_id", selectedTenant);
     if (selectedBranch) url.searchParams.set("branch_id", selectedBranch);
     if (selectedWarehouse) url.searchParams.set("co_alma", selectedWarehouse);
 
@@ -244,61 +251,41 @@
 </script>
 
 <div class="flex flex-col gap-8" in:fade>
-  <!-- Header -->
-  <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
-    <div>
+  <div class="flex flex-col md:flex-row md:items-center justify-between gap-6">
+    <div class="flex flex-col gap-2">
       <h1 class="text-4xl font-black tracking-tight flex items-center gap-3">
         <MapPin size={40} class="text-brand-500" />
         Gestión de Ubicaciones
       </h1>
-      <p class="text-text-muted mt-2 text-lg">
-        Asigna y visualiza las ubicaciones físicas de los artículos en el
-        almacén.
-        {#if data.articles?.length}
-          <span class="flex items-center gap-1.5 text-xs text-brand-500/80 font-medium mt-2 bg-brand-500/10 w-fit px-3 py-1.5 rounded-lg border border-brand-500/20">
-            <Package size={14} />
-            Mostrando {data.articles.length} artículos en esta página
-          </span>
-        {/if}
+      <p class="text-text-muted text-lg">
+        Asigna y visualiza las ubicaciones físicas de los artículos en el almacén.
       </p>
+      {#if data.articles?.length}
+        <span class="flex items-center gap-1.5 text-xs text-brand-500/80 font-medium mt-1 bg-brand-500/10 w-fit px-3 py-1.5 rounded-lg border border-brand-500/20">
+          <Package size={14} />
+          Mostrando {data.articles.length} artículos en esta página
+        </span>
+      {/if}
     </div>
+
+    <button
+      onclick={handlePrintLabels}
+      class="h-14 px-8 {selectedCodes.size > 0 ? 'bg-brand-600 hover:bg-brand-500 border-brand-500/50 shadow-lg shadow-brand-600/20 text-white' : 'bg-surface-raised hover:bg-white/5 border-white/5 hover:border-white/10 text-text-base'} border rounded-2xl font-bold transition-all active:scale-95 flex items-center gap-3 shrink-0 group"
+      title={selectedCodes.size > 0 ? `Imprimir ${selectedCodes.size} artículo(s) seleccionado(s)` : 'Imprimir todos los artículos del filtro (hasta 500)'}
+    >
+      <Printer size={20} class={selectedCodes.size > 0 ? 'text-white' : 'text-brand-400 group-hover:text-brand-300'} />
+      <span class="hidden sm:inline">Imprimir</span> Etiquetas
+      {#if selectedCodes.size > 0}
+        <span class="bg-white/20 text-white text-xs font-black px-2 py-0.5 rounded-full">{selectedCodes.size}</span>
+      {/if}
+    </button>
   </div>
 
   <!-- SEARCH & FILTERS SECTION -->
   <div class="flex flex-col gap-4 mb-8">
-    <!-- FIRST ROW: TENANT, BRANCH, WAREHOUSE, SEARCH -->
+    <!-- FIRST ROW: BRANCH, WAREHOUSE, SEARCH -->
     <div class="flex flex-col lg:flex-row gap-4 items-center">
-      {#if (data.tenants?.length ?? 0) > 1}
-        <div class="relative w-full lg:w-72 shrink-0">
-          <Box
-            class="absolute left-4 top-1/2 -translate-y-1/2 text-brand-400"
-            size={18}
-          />
-          <select
-            bind:value={selectedTenant}
-            onchange={() => handleSearch()}
-            class="w-full h-14 bg-surface-base/80 pl-11 pr-10 rounded-2xl border border-white/5 focus:border-brand-500/50 outline-none appearance-none font-bold text-sm cursor-pointer hover:bg-white/5 transition-all text-brand-100"
-          >
-            <option value="">Seleccionar Empresa...</option>
-            {#each data.tenants || [] as t}
-              <option value={t.id} class="bg-surface-base text-text-base"
-                >{t.name}</option
-              >
-            {/each}
-          </select>
-        </div>
-      {:else}
-        <div
-          class="h-14 bg-white/5 border border-white/10 rounded-2xl px-6 flex items-center gap-3 shrink-0"
-        >
-          <Box class="text-brand-400" size={18} />
-          <span class="font-bold text-sm text-brand-100">
-            {data.tenants?.[0]?.name || data.context?.tenantId || "Empresa"}
-          </span>
-        </div>
-      {/if}
-
-      {#if data.context?.branches && data.context.branches.length > 0}
+      {#if data.branches && data.branches.length > 0}
         <div class="relative w-full lg:w-64 shrink-0">
           <Store
             class="absolute left-4 top-1/2 -translate-y-1/2 text-brand-400"
@@ -309,7 +296,8 @@
             onchange={() => handleSearch()}
             class="w-full h-14 bg-surface-base/80 pl-11 pr-10 rounded-2xl border border-white/5 focus:border-brand-500/50 outline-none appearance-none font-bold text-sm cursor-pointer hover:bg-white/5 transition-all text-brand-300"
           >
-            {#each data.context.branches as branch}
+            <option value="">Seleccionar Sucursal</option>
+            {#each data.branches as branch}
               <option value={branch.id} class="bg-surface-base text-text-base">
                 {branch.name}
               </option>
@@ -359,16 +347,15 @@
         </button>
       </form>
 
+      <!-- STOCK TOGGLE -->
       <button
-        onclick={handlePrintLabels}
-        class="h-14 px-6 {selectedCodes.size > 0 ? 'bg-brand-600 hover:bg-brand-500 border-brand-500/50 shadow-lg shadow-brand-600/20 text-white' : 'bg-surface-raised hover:bg-white/5 border-white/5 hover:border-white/10 text-text-base'} border rounded-2xl font-bold transition-all active:scale-95 flex items-center gap-2 shrink-0 group"
-        title={selectedCodes.size > 0 ? `Imprimir ${selectedCodes.size} artículo(s) seleccionado(s)` : 'Imprimir todos los artículos del filtro (hasta 500)'}
+        onclick={() => { showAll = !showAll; handleSearch(); }}
+        class="h-14 px-6 bg-surface-base/80 border {showAll ? 'border-brand-500/30 bg-brand-500/5 text-brand-300' : 'border-white/5 text-text-muted'} rounded-2xl flex items-center gap-3 transition-all hover:bg-white/5 font-bold text-sm shrink-0"
       >
-        <Printer size={20} class={selectedCodes.size > 0 ? 'text-white' : 'text-brand-400 group-hover:text-brand-300'} />
-        Etiquetas
-        {#if selectedCodes.size > 0}
-          <span class="bg-white/20 text-white text-xs font-black px-2 py-0.5 rounded-full">{selectedCodes.size}</span>
-        {/if}
+        <div class="w-10 h-6 rounded-full relative transition-colors {showAll ? 'bg-brand-600' : 'bg-white/10'}">
+          <div class="absolute top-1 left-1 w-4 h-4 bg-white rounded-full transition-transform {showAll ? 'translate-x-4' : 'translate-x-0'}"></div>
+        </div>
+        <span>Mostrar catálogo completo</span>
       </button>
     </div>
 
@@ -437,16 +424,15 @@
   </div>
 
   <!-- Resultados -->
-  {#if data.requireTenantSelection}
+  {#if data.requireBranchSelection}
     <div
       class="glass p-12 rounded-3xl border border-white/5 flex flex-col items-center justify-center text-center gap-4 opacity-70 mt-8"
     >
-      <Package size={48} class="text-text-muted/30" />
+      <Store size={48} class="text-text-muted/30" />
       <div>
-        <h3 class="text-xl font-bold">Selecciona una Empresa</h3>
+        <h3 class="text-xl font-bold">Selecciona una Sucursal (Nodo de Datos)</h3>
         <p class="text-text-muted mt-2">
-          Utiliza el menú desplegable superior para elegir la empresa a
-          consultar.
+          Utiliza el menú desplegable superior para elegir la sucursal de la cual extraeremos el listado de inventario.
         </p>
       </div>
     </div>
@@ -713,11 +699,8 @@
         class="p-6 flex flex-col gap-6"
       >
         <input type="hidden" name="co_art" value={selectedArticle.co_art || selectedArticle.codigo} />
-        <input type="hidden" name="tenantId" value={selectedTenant} />
         <input type="hidden" name="co_alma" value={coAlmaToSend} />
-        <input type="hidden" name="co_sucu" value={coSucuToSend} />
-        <input type="hidden" name="sede_id" value={selectedBranch} />
-        <input type="hidden" name="sede_name" value={currentBranchObj?.name || ""} />
+        <input type="hidden" name="branchId" value={selectedBranch} />
 
         {#if form && typeof form === 'object' && 'error' in form}
           <div class="p-4 mb-4 bg-red-500/10 border border-red-500/20 rounded-2xl text-red-500 text-sm flex flex-col gap-2">

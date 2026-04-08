@@ -11,7 +11,7 @@ import type { Actions, PageServerLoad } from './$types';
 export const load: PageServerLoad = protectLoad('sec_branches', async ({ locals }) => {
   const { data: branches, error } = await supabaseAdmin
     .from('branches')
-    .select('id, name, agent_url, agent_token, profit_branch_codes, sql_config, profit_server_id, local_dns_alias, active, sort_order, updated_at')
+    .select('id, name, agent_url, agent_token, profit_branch_codes, sql_config, profit_server_id, local_dns_alias, active, sort_order, updated_at, rif, address, latitude, longitude, logo_url, phone')
     .order('sort_order')
     .order('name');
 
@@ -33,7 +33,7 @@ export const load: PageServerLoad = protectLoad('sec_branches', async ({ locals 
           agent_url:     activeBranch.agent_url!,
           agent_api_key: activeBranch.agent_token
         },
-        locals.profile
+        locals.profile || undefined
       );
       const res = await client.getDatabaseConfig();
       const resAny = res as any;
@@ -59,6 +59,8 @@ export const actions: Actions = {
     const name            = (formData.get('name') as string)?.trim();
     const agentUrl        = (formData.get('agent_url') as string)?.trim() || null;
     const agentToken      = (formData.get('agent_token') as string)?.trim() || null;
+    const logoFile        = formData.get('logo_file') as File;
+    const existingLogoUrl = formData.get('logo_url') as string;
     
     // Parsear el array de códigos JSON
     const profitBranchCodesStr = formData.get('profit_branch_codes') as string;
@@ -79,6 +81,34 @@ export const actions: Actions = {
     const sortOrder       = parseInt(formData.get('sort_order') as string || '0');
     const active          = formData.get('active') !== 'false';
 
+    // Nuevos campos Legales y Ubicación
+    const rif             = (formData.get('rif') as string)?.trim() || null;
+    const address         = (formData.get('address') as string)?.trim() || null;
+    const phone           = (formData.get('phone') as string)?.trim() || null;
+    let logoUrl           = (formData.get('logo_url') as string)?.trim() || null;
+    const latitude        = formData.get('latitude') ? parseFloat(formData.get('latitude') as string) : null;
+    const longitude       = formData.get('longitude') ? parseFloat(formData.get('longitude') as string) : null;
+
+    // ─── Proceso de Subida de Logo ─────────────────────────────
+    if (logoFile && logoFile.size > 0 && logoFile.name) {
+      const fileName = `${branchId || 'new'}_${Date.now()}_${logoFile.name.replace(/\s+/g, '_')}`;
+      const filePath = `logos/${fileName}`;
+
+      const { data: uploadData, error: uploadErr } = await supabaseAdmin.storage
+        .from('brand-assets')
+        .upload(filePath, logoFile, { upsert: true });
+
+      if (uploadErr) {
+        console.error('[STORAGE] Error subiendo logo:', uploadErr.message);
+      } else {
+        const { data: publicData } = supabaseAdmin.storage
+          .from('brand-assets')
+          .getPublicUrl(filePath);
+        
+        logoUrl = publicData.publicUrl;
+      }
+    }
+
     if (!name) return fail(400, { message: 'El nombre de la sucursal es requerido.' });
 
     const payload: any = {
@@ -90,6 +120,12 @@ export const actions: Actions = {
       local_dns_alias:     localDns,
       sort_order:          sortOrder,
       active,
+      rif,
+      address,
+      phone,
+      logo_url:            logoUrl,
+      latitude,
+      longitude,
       updated_at:          new Date().toISOString()
     };
 
@@ -97,8 +133,13 @@ export const actions: Actions = {
     if (agentToken) payload.agent_token = agentToken;
 
     let savedId: string;
+    let oldData: any = null;
 
     if (branchId) {
+      // Obtener datos actuales para la auditoría (Estado Anterior)
+      const { data: current } = await supabaseAdmin.from('branches').select('*').eq('id', branchId).single();
+      oldData = current;
+
       const { error } = await supabaseAdmin
         .from('branches')
         .update(payload)
@@ -120,7 +161,10 @@ export const actions: Actions = {
       p_user_email: locals.profile?.email ?? 'system',
       p_action:     branchId ? 'UPDATE' : 'CREATE',
       p_module:     'sec_branches',
-      p_record_id:  savedId
+      p_record_id:  savedId,
+      p_branch_id:  savedId,
+      p_old_data:   oldData ? JSON.stringify(oldData) : null,
+      p_new_data:   JSON.stringify(payload)
     });
 
     return { success: true, savedId };
@@ -153,7 +197,8 @@ export const actions: Actions = {
       p_user_email: locals.profile?.email ?? 'system',
       p_action:     'DELETE',
       p_module:     'sec_branches',
-      p_record_id:  branchId
+      p_record_id:  branchId,
+      p_branch_id:  branchId
     });
 
     return { success: true };

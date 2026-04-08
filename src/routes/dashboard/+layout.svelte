@@ -27,6 +27,7 @@
     LogOut,
     Sun,
     Moon,
+    Settings,
     RefreshCw,
     User,
     Building,
@@ -100,6 +101,7 @@
         { id: 'sec_roles', label: 'Roles y Permisos', href: '/dashboard/permissions', icon: Key },
         { id: 'sec_tenants', label: 'Empresas', href: '/dashboard/tenants', icon: Building },
         { id: 'sec_branches', label: 'Sucursales', href: '/dashboard/branches', icon: Store },
+        { id: 'sec_settings', label: 'Ajustes', href: '/dashboard/settings', icon: Settings },
         { id: 'sec_audit', label: 'Auditoría', href: '/dashboard/audit', icon: ClipboardList },
       ]
     }
@@ -189,13 +191,17 @@
   });
 </script>
 
+<svelte:head>
+  <title>{data.systemSettings?.app_title ?? 'GalpeApp'}</title>
+</svelte:head>
+
 <div class="min-h-svh md:h-svh md:overflow-hidden bg-surface-base flex flex-col md:flex-row font-sans text-text-base transition-colors duration-500">
 
   <!-- ── Mobile Top Bar ───────────────────────────────────── -->
   <div class="md:hidden h-16 flex items-center px-4 glass sticky top-0 z-50">
     <div class="flex items-center font-black text-2xl tracking-tighter">
-      <span class="text-brand-500">Sync</span>
-      <span class="text-text-base">2K</span>
+      <span class="text-brand-500">{data.systemSettings?.app_name?.slice(0, 5) ?? 'Galpe'}</span>
+      <span class="text-text-base">{data.systemSettings?.app_name?.slice(5) ?? 'App'}</span>
     </div>
   </div>
 
@@ -208,12 +214,12 @@
     <!-- Brand -->
     <div class="h-16 flex items-center px-4 border-b border-border-subtle gap-3 shrink-0">
       <div class="flex items-center font-black text-2xl tracking-tighter shrink-0 transition-opacity {sidebarOpen ? 'opacity-100' : 'opacity-0 w-0 overflow-hidden'}">
-        <span class="text-brand-500">Sync</span>
-        <span class="text-text-base">2K</span>
+        <span class="text-brand-500">{data.systemSettings?.app_name?.slice(0, 5) ?? 'Galpe'}</span>
+        <span class="text-text-base">{data.systemSettings?.app_name?.slice(5) ?? 'App'}</span>
       </div>
       {#if !sidebarOpen}
         <div class="flex items-center font-black text-xl tracking-tighter shrink-0 mx-auto text-brand-500">
-          S
+          {data.systemSettings?.app_name?.[0] ?? 'G'}
         </div>
       {/if}
       <button
@@ -491,6 +497,9 @@
         <span class="text-[10px] font-bold uppercase tracking-tighter">Cuenta</span>
       </button>
     </nav>
+    <footer class="hidden md:flex h-8 items-center px-8 border-t border-border-subtle bg-black/20 text-[10px] text-text-muted">
+       {data.systemSettings?.footer_text ?? `© ${new Date().getFullYear()} GalpeApp. Todos los derechos reservados.`}
+    </footer>
   </div>
 </div>
 

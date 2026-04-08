@@ -12,7 +12,16 @@
     Filter,
     Clock,
     Database,
-    Shield
+    Shield,
+    Eye,
+    Info,
+    ArrowRight,
+    UserCog,
+    Package,
+    Store,
+    Key,
+    Minus,
+    X
   } from "lucide-svelte";
   import type { PageData } from "./$types";
 
@@ -20,21 +29,35 @@
 
   // ── States ─────────────────────────────────────────────────────────────────
   let searchQuery = $state("");
-  let selectedTenant = $state<string | null>(null);
+  let selectedBranch = $state<string | null>(null);
   let selectedAction = $state<string | null>(null);
+
+  // States for Detail Modal
+  let showDetailModal = $state(false);
+  let selectedLog = $state<any>(null);
+
+  const moduleInfo: Record<string, { label: string, icon: any, color: string }> = {
+    'sec_branches':  { label: 'Sucursales', icon: Store, color: 'text-blue-400' },
+    'sec_articles':  { label: 'Artículos', icon: Package, color: 'text-emerald-400' },
+    'sec_users':     { label: 'Usuarios', icon: UserCog, color: 'text-indigo-400' },
+    'sec_roles':     { label: 'Permisos y Roles', icon: Key, color: 'text-orange-400' },
+    'sec_audit':     { label: 'Auditoría', icon: ClipboardList, color: 'text-zinc-400' },
+    'auth_login':    { label: 'Sesión', icon: Shield, color: 'text-brand-400' },
+    'auth_logout':   { label: 'Sesión', icon: Shield, color: 'text-zinc-500' }
+  };
 
   // Computed / Filtered
   let filteredLogs = $derived(
     data.logs.filter((log: any) => {
       const matchesSearch = 
         log.user_email?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        log.entity?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        log.module?.toLowerCase().includes(searchQuery.toLowerCase()) ||
         log.action?.toLowerCase().includes(searchQuery.toLowerCase());
       
-      const matchesTenant = !selectedTenant || log.tenant_id === selectedTenant;
+      const matchesBranch = !selectedBranch || log.branch_id === selectedBranch;
       const matchesAction = !selectedAction || log.action === selectedAction;
 
-      return matchesSearch && matchesTenant && matchesAction;
+      return matchesSearch && matchesBranch && matchesAction;
     })
   );
 
@@ -48,6 +71,7 @@
   };
 
   function formatDate(timestamp: string) {
+    if (!timestamp) return 'N/A';
     return new Date(timestamp).toLocaleString('es-VE', {
       day: '2-digit',
       month: '2-digit',
@@ -56,6 +80,17 @@
       minute: '2-digit',
       second: '2-digit'
     });
+  }
+
+  function formatJSON(data: any): string {
+    if (!data) return '';
+    try {
+      // Si ya es un objeto, lo formateamos. Si es string, intentamos parsearlo primero.
+      const obj = typeof data === 'string' ? JSON.parse(data) : data;
+      return JSON.stringify(obj, null, 2);
+    } catch (e) {
+      return String(data);
+    }
   }
 </script>
 
@@ -88,12 +123,12 @@
     <div class="relative">
       <Building size={18} class="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted" />
       <select 
-        bind:value={selectedTenant}
+        bind:value={selectedBranch}
         class="w-full bg-surface-raised border border-border-subtle rounded-2xl pl-12 pr-4 py-3 text-text-base text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/50 transition-all appearance-none cursor-pointer"
       >
-        <option value={null}>Todas las empresas</option>
-        {#each (data as any).tenants as tenant}
-          <option value={tenant.id}>{tenant.name}</option>
+        <option value={null}>Todas las Sucursales</option>
+        {#each (data as any).branches as branch}
+          <option value={branch.id}>{branch.name}</option>
         {/each}
       </select>
     </div>
@@ -125,23 +160,25 @@
             <th class="px-8 py-5 text-xs font-bold uppercase tracking-widest text-text-muted border-b border-border-subtle">Fecha y Hora</th>
             <th class="px-8 py-5 text-xs font-bold uppercase tracking-widest text-text-muted border-b border-border-subtle">Usuario</th>
             <th class="px-8 py-5 text-xs font-bold uppercase tracking-widest text-text-muted border-b border-border-subtle text-center">Acción</th>
-            <th class="px-8 py-5 text-xs font-bold uppercase tracking-widest text-text-muted border-b border-border-subtle">Entidad / Detalle</th>
-            <th class="px-8 py-5 text-xs font-bold uppercase tracking-widest text-text-muted border-b border-border-subtle">Empresa</th>
+            <th class="px-8 py-5 text-xs font-bold uppercase tracking-widest text-text-muted border-b border-border-subtle">Recurso Afectado</th>
+            <th class="px-8 py-5 text-xs font-bold uppercase tracking-widest text-text-muted border-b border-border-subtle">Sede</th>
+            <th class="px-8 py-5 text-xs font-bold uppercase tracking-widest text-text-muted border-b border-border-subtle text-right"></th>
           </tr>
         </thead>
         <tbody class="divide-y divide-border-subtle">
           {#each filteredLogs as log (log.id)}
+            {@const mInfo = moduleInfo[log.module] || { label: log.module, icon: Info, color: 'text-text-muted' }}
             <tr class="hover:bg-brand-500/5 transition-colors group">
               <td class="px-8 py-5">
                 <div class="flex items-center gap-3 text-text-base whitespace-nowrap">
                    <Clock size={14} class="text-brand-500" />
-                   <span class="text-sm font-medium">{formatDate(log.timestamp)}</span>
+                   <span class="text-sm font-medium">{formatDate(log.created_at)}</span>
                 </div>
               </td>
               <td class="px-8 py-5">
                 <div class="flex flex-col">
                   <span class="text-sm font-bold text-text-base">{log.user_email}</span>
-                  <span class="text-[10px] text-text-muted font-mono">{log.uid}</span>
+                  <span class="text-[9px] text-text-muted font-mono">{log.source}</span>
                 </div>
               </td>
               <td class="px-8 py-5 text-center">
@@ -152,29 +189,33 @@
               <td class="px-8 py-5">
                 <div class="flex flex-col gap-1">
                   <div class="flex items-center gap-2">
-                    <span class="text-xs font-bold text-text-base uppercase tracking-tighter">{log.entity}:</span>
-                    <span class="text-xs text-text-muted italic">{log.entity_id}</span>
+                    <mInfo.icon size={14} class={mInfo.color} />
+                    <span class="text-xs font-bold text-text-base uppercase tracking-tight">{mInfo.label}</span>
                   </div>
-                  {#if log.details}
-                     <div class="text-[10px] text-text-muted opacity-60 bg-black/20 p-2 rounded-lg font-mono truncate max-w-xs">
-                        {JSON.stringify(log.details)}
-                     </div>
-                  {/if}
+                  <span class="text-[10px] text-text-muted font-mono opacity-60">ID: {log.record_id || 'N/A'}</span>
                 </div>
               </td>
               <td class="px-8 py-5">
-                {#if log.tenant_id}
-                  {@const tenant = data.tenants.find((t: any) => t.id === log.tenant_id)}
+                {#if log.branch_id}
                   <div class="flex items-center gap-2 text-brand-400 font-bold text-xs uppercase tracking-widest">
                     <Building size={14} />
-                    {tenant?.name || log.tenant_id}
+                    {(log.branches as any)?.name || (Array.isArray(log.branches) ? (log.branches[0] as any)?.name : null) || 'Sede Local'}
                   </div>
                 {:else}
-                  <div class="flex items-center gap-2 text-text-muted opacity-40 font-bold text-xs uppercase tracking-widest">
+                  <div class="flex items-center gap-2 text-brand-500/40 font-bold text-xs uppercase tracking-widest">
                     <Shield size={14} />
-                    GLOBAL
+                    SISTEMA
                   </div>
                 {/if}
+              </td>
+              <td class="px-8 py-5 text-right">
+                <button 
+                  onclick={() => { selectedLog = log; showDetailModal = true; }}
+                  class="h-10 w-10 flex items-center justify-center rounded-xl bg-white/5 hover:bg-brand-500/10 text-text-muted hover:text-brand-400 transition-all active:scale-95"
+                  title="Ver detalles completos"
+                >
+                  <Eye size={18} />
+                </button>
               </td>
             </tr>
           {:else}
@@ -189,3 +230,130 @@
     </div>
   </div>
 </div>
+
+<!-- DETALLES MODAL -->
+{#if showDetailModal && selectedLog}
+  <div class="fixed inset-0 z-50 flex items-center justify-center p-4" in:fade>
+    <div 
+      class="absolute inset-0 bg-black/90 backdrop-blur-md"
+      onclick={() => (showDetailModal = false)}
+      onkeydown={(e) => e.key === 'Escape' && (showDetailModal = false)}
+      role="button"
+      tabindex="-1"
+    ></div>
+
+    <div 
+      class="glass w-full max-w-3xl rounded-[40px] border border-white/10 shadow-2xl relative z-10 overflow-hidden flex flex-col max-h-[90vh]"
+      in:fly={{ y: 20, duration: 400 }}
+    >
+      <!-- Header -->
+      <div class="p-8 border-b border-white/5 flex justify-between items-center bg-brand-500/5">
+        <div class="flex items-center gap-4">
+          <div class="h-12 w-12 rounded-2xl bg-brand-500/10 flex items-center justify-center text-brand-400">
+            <Info size={24} />
+          </div>
+          <div>
+            <h2 class="text-2xl font-black tracking-tight">Detalles de la Acción</h2>
+            <p class="text-text-muted text-sm">ID de Auditoría: {selectedLog.id}</p>
+          </div>
+        </div>
+        <button onclick={() => (showDetailModal = false)} class="p-3 hover:bg-white/10 rounded-full text-text-muted transition-colors">
+          <X size={24} />
+        </button>
+      </div>
+
+      <!-- Content -->
+      <div class="flex-1 overflow-auto p-8 space-y-8 custom-scrollbar">
+        <!-- Action Summary -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div class="p-6 rounded-3xl bg-white/5 border border-white/10 space-y-1">
+            <p class="text-[10px] font-black uppercase tracking-widest text-text-muted">Acción</p>
+            <p class="text-lg font-black text-brand-400">{selectedLog.action}</p>
+          </div>
+          <div class="p-6 rounded-3xl bg-white/5 border border-white/10 space-y-1">
+            <p class="text-[10px] font-black uppercase tracking-widest text-text-muted">Usuario</p>
+            <p class="text-sm font-bold text-text-base truncate">{selectedLog.user_email}</p>
+          </div>
+          <div class="p-6 rounded-3xl bg-white/5 border border-white/10 space-y-1">
+            <p class="text-[10px] font-black uppercase tracking-widest text-text-muted">Fecha</p>
+            <p class="text-sm font-bold text-text-base">{formatDate(selectedLog.created_at)}</p>
+          </div>
+        </div>
+
+        <!-- Data Change (The "Diff" view) -->
+        <div class="space-y-4">
+          <div class="flex items-center gap-3 text-brand-400">
+            <Database size={18} />
+            <h3 class="text-xs uppercase font-black tracking-widest">Cambios en los Datos</h3>
+          </div>
+
+          <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+             <!-- OLD DATA -->
+             <div class="space-y-2">
+               <label class="text-[10px] font-black uppercase tracking-widest text-text-muted ml-4">Estado Anterior</label>
+               <div class="bg-black/40 rounded-[32px] p-6 border border-white/5 min-h-[200px] font-mono text-[11px] overflow-auto max-h-60 custom-scrollbar leading-relaxed">
+                  {#if selectedLog.old_data}
+                    <pre class="text-red-400/80">{formatJSON(selectedLog.old_data)}</pre>
+                  {:else}
+                    <div class="h-full flex flex-col items-center justify-center text-text-muted/20">
+                      <Minus size={32} />
+                      <p>Sin datos previos</p>
+                    </div>
+                  {/if}
+               </div>
+             </div>
+
+             <!-- NEW DATA -->
+             <div class="space-y-2">
+               <label class="text-[10px] font-black uppercase tracking-widest text-text-muted ml-4">Nuevo Estado</label>
+               <div class="bg-brand-500/[0.03] rounded-[32px] p-6 border border-brand-500/10 min-h-[200px] font-mono text-[11px] overflow-auto max-h-60 custom-scrollbar leading-relaxed">
+                  {#if selectedLog.new_data}
+                    <pre class="text-emerald-400/90">{formatJSON(selectedLog.new_data)}</pre>
+                  {:else if selectedLog.metadata}
+                    <pre class="text-blue-400/90">{formatJSON(selectedLog.metadata)}</pre>
+                  {:else}
+                    <div class="h-full flex flex-col items-center justify-center text-text-muted/20">
+                      <Minus size={32} />
+                      <p>Sin cambios registrados</p>
+                    </div>
+                  {/if}
+               </div>
+             </div>
+          </div>
+        </div>
+
+        <!-- Additional Info -->
+        <div class="p-6 rounded-3xl bg-brand-500/5 border border-brand-500/10 flex items-center justify-between">
+          <div class="flex items-center gap-4">
+             <div class="h-10 w-10 rounded-xl bg-brand-500/10 flex items-center justify-center text-brand-400">
+               <Shield size={20} />
+             </div>
+             <div>
+               <p class="text-xs font-bold text-text-base">Origen de la Acción</p>
+               <p class="text-[10px] text-text-muted uppercase tracking-widest">{selectedLog.source || 'Cloud'}</p>
+             </div>
+          </div>
+          <div class="text-right">
+             <p class="text-xs font-bold text-text-base">Módulo</p>
+             <p class="text-[10px] text-brand-400 font-black uppercase tracking-widest">{selectedLog.module}</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Footer -->
+      <div class="p-8 border-t border-white/5 bg-black/20">
+        <button 
+          onclick={() => (showDetailModal = false)}
+          class="w-full h-16 rounded-2xl font-bold bg-white/5 hover:bg-white/10 transition-all active:scale-95 text-text-base border border-transparent hover:border-white/10"
+        >
+          Cerrar Detalles
+        </button>
+      </div>
+    </div>
+  </div>
+{/if}
+
+<style>
+  .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+  .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.1); border-radius: 10px; }
+</style>

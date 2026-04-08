@@ -1,50 +1,72 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { adminDb, MasterCollections } from '$lib/server/firebase-admin';
+import { supabaseAdmin } from '$lib/server/supabase';
 import { AgentClient } from '$lib/server/agent';
 
+/**
+ * GET /api/agent/branches?tenant_id=...
+ * Migrado de Firestore → Supabase.
+ * Obtiene la configuración de servidores (bases de datos) desde el agente asociado a una sucursal/empresa.
+ */
 export const GET: RequestHandler = async ({ url, locals }) => {
-	// Simple auth check
-	if (!(locals as any).session?.uid && !(locals as any).profile?.uid) {
+	const session = (locals as any).session;
+	const profile = (locals as any).profile;
+
+	if (!session?.user?.id && !profile?.id) {
 		return json({ error: 'Unauthorized' }, { status: 401 });
 	}
 
-	const tenantId = url.searchParams.get('tenant_id');
-	if (!tenantId) {
-		return json({ error: 'tenant_id is required' }, { status: 400 });
-	}
-
-	if (!adminDb) {
-		return json({ error: 'Database not initialized' }, { status: 500 });
+	const branchId = url.searchParams.get('tenant_id'); // Usamos tenant_id por compatibilidad legacy, pero es un branch_id
+	if (!branchId) {
+		return json({ error: 'branch_id/tenant_id is required' }, { status: 400 });
 	}
 
 	try {
-		// Fetch tenant info
-		const snapTenants = await adminDb.collection(MasterCollections.CONNECTIONS).get();
-		const tenants = snapTenants.docs.map(doc => ({ id: doc.id, ...(doc.data() as any) }));
-		const selectedTenant = tenants.find(t => t.id === tenantId || t.slug === tenantId);
+		// Buscamos la sucursal en Supabase
+		const { data: branch, error: dbError } = await supabaseAdmin
+			.from('branches')
+			.select('id, name, agent_url, agent_token')
+			.eq('id', branchId)
+			.single();
 
-		if (!selectedTenant || !selectedTenant.agent_url) {
-			return json({ error: 'Tenant non-existent or has no agent_url' }, { status: 404 });
+		if (dbError || !branch) {
+			// Intento por nombre si no es un UUID
+			const { data: branchByName } = await supabaseAdmin
+				.from('branches')
+				.select('id, name, agent_url, agent_token')
+				.ilike('name', `%${branchId}%`)
+				.limit(1)
+				.single();
+			
+			if (!branchByName || !branchByName.agent_url) {
+				return json({ error: 'Sucursal no encontrada o sin agente configurado' }, { status: 404 });
+			}
+			
+			// Si la encontramos por nombre, usamos sus datos
+			(branch as any) = branchByName;
+		}
+
+		if (!branch.agent_url) {
+			return json({ error: 'La sucursal no tiene una URL de agente configurada' }, { status: 404 });
 		}
 
 		const agentClient = new AgentClient({
-			slug: selectedTenant.slug,
-			agent_url: selectedTenant.agent_url,
-			agent_api_key: selectedTenant.agent_api_key
+			slug: branch.id,
+			agent_url: branch.agent_url,
+			agent_api_key: branch.agent_token
 		});
 
 		const resData = await agentClient.getDatabaseConfig();
 
-		if (resData.success === false) {
-			return json({ error: (resData as any).message || 'Agent error' }, { status: 500 });
+		if ((resData as any).success === false) {
+			return json({ error: (resData as any).message || 'Error del agente' }, { status: 500 });
 		}
 
 		const parsedServers = (resData as any)?.data?.servers || (resData as any)?.servers || (resData as any)?.data || (Array.isArray(resData) ? resData : []);
 		
 		return json({ branches: Array.isArray(parsedServers) ? parsedServers : [] });
 	} catch (err: any) {
+		console.error('[API_BRANCHES] Error:', err.message);
 		return json({ error: err.message }, { status: 500 });
 	}
 };
-

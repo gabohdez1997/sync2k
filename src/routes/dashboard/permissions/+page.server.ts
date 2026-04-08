@@ -62,8 +62,13 @@ export const actions: Actions = {
     };
 
     let savedId: string;
+    let oldData: any = null;
 
     if (roleId) {
+      // Obtener datos actuales para la auditoría
+      const { data: current } = await supabaseAdmin.from('roles').select('*').eq('id', roleId).single();
+      oldData = current;
+
       // Actualizar existente
       const { error } = await supabaseAdmin
         .from('roles')
@@ -88,7 +93,9 @@ export const actions: Actions = {
       p_user_email: locals.profile?.email ?? 'system',
       p_action:     roleId ? 'UPDATE' : 'CREATE',
       p_module:     'sec_roles',
-      p_record_id:  savedId
+      p_record_id:  savedId,
+      p_old_data:   oldData ? JSON.stringify(oldData) : null,
+      p_new_data:   JSON.stringify(payload)
     });
 
     return { success: true, savedId, savedName: roleName };

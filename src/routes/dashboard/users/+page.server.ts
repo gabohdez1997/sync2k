@@ -86,11 +86,25 @@ export const actions: Actions = {
           updateData.password_hash = await bcrypt.hash(password, 12);
         }
 
+        // Obtener datos actuales para la auditoría
+        const { data: current } = await supabaseAdmin.from('profiles').select('*').eq('id', userId).single();
+        const oldData = current;
+
         const { error } = await supabaseAdmin
           .from('profiles')
           .update(updateData)
           .eq('id', userId);
         if (error) return fail(500, { message: error.message });
+
+        await supabaseAdmin.rpc('log_action', {
+          p_user_id:    locals.profile?.id ?? null,
+          p_user_email: locals.profile?.email ?? 'system',
+          p_action:     'UPDATE',
+          p_module:     'sec_users',
+          p_record_id:  userId,
+          p_old_data:   JSON.stringify(oldData),
+          p_new_data:   JSON.stringify(updateData)
+        });
 
       } else {
         // ── Crear usuario nuevo ────────────────────────────────
@@ -133,13 +147,16 @@ export const actions: Actions = {
         }
       }
 
-      await supabaseAdmin.rpc('log_action', {
-        p_user_id:    locals.profile?.id ?? null,
-        p_user_email: locals.profile?.email ?? 'system',
-        p_action:     userId ? 'UPDATE' : 'CREATE',
-        p_module:     'sec_users',
-        p_record_id:  finalUid
-      });
+      if (!userId) {
+        await supabaseAdmin.rpc('log_action', {
+          p_user_id:    locals.profile?.id ?? null,
+          p_user_email: locals.profile?.email ?? 'system',
+          p_action:     'CREATE',
+          p_module:     'sec_users',
+          p_record_id:  finalUid,
+          p_new_data:   JSON.stringify({ fullName, email, profitUser, isActive, roleIds })
+        });
+      }
 
       return { success: true };
     } catch (err: any) {

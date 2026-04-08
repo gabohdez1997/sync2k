@@ -30,9 +30,12 @@ export class AgentClient {
 	) {
 		// Priorizar la URL y API Key configuradas en la empresa, 
 		// con fallback al subdominio estándar y la clave privada de .env
-		this.baseUrl = company.agent_url 
-			? (company.agent_url.endsWith('/api/v1') ? company.agent_url : `${company.agent_url}/api/v1`)
-			: `https://${company.slug}.sync2k.com/api/v1`;
+		let rawUrl = company.agent_url || `https://${company.slug}.sync2k.com`;
+		rawUrl = rawUrl.replace(/\/+$/, ''); // Remove any trailing slashes safely
+
+		this.baseUrl = rawUrl.endsWith('/api/v1') 
+			? rawUrl 
+			: `${rawUrl}/api/v1`;
 			
 		this.apiKey = company.agent_api_key || env.PRIVATE_AGENT_API_KEY || '';
 

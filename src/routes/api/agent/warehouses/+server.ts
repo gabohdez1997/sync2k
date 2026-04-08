@@ -1,52 +1,58 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { adminDb, MasterCollections } from '$lib/server/firebase-admin';
 import { AgentClient } from '$lib/server/agent';
+import { supabaseAdmin } from '$lib/server/supabase';
 
+/**
+ * GET /api/agent/warehouses?branch_id=...
+ * Migrado de Firestore → Supabase.
+ * Obtiene los almacenes desde el agente asociado a una sucursal específica.
+ */
 export const GET: RequestHandler = async ({ url, locals }) => {
 	// Simple auth check
-	if (!(locals as any).session?.uid && !(locals as any).profile?.uid) {
+	if (!locals.profile?.id) {
 		return json({ error: 'Unauthorized' }, { status: 401 });
 	}
 
-	const tenantId = url.searchParams.get('tenant_id');
-	if (!tenantId) {
-		return json({ error: 'tenant_id is required' }, { status: 400 });
-	}
-	
-	const branchId = url.searchParams.get('branch_id'); // Optionally filter by branch if needed by agent later
-
-	if (!adminDb) {
-		return json({ error: 'Database not initialized' }, { status: 500 });
+	const branchId = url.searchParams.get('branch_id');
+	if (!branchId) {
+		return json({ error: 'branch_id is required' }, { status: 400 });
 	}
 
 	try {
-		// Fetch tenant info
-		const snapTenants = await adminDb.collection(MasterCollections.CONNECTIONS).get();
-		const tenants = snapTenants.docs.map(doc => ({ id: doc.id, ...(doc.data() as any) }));
-		const selectedTenant = tenants.find(t => t.id === tenantId || t.slug === tenantId);
+		// Buscamos la sucursal en Supabase (Única fuente de verdad)
+		const { data: branch, error } = await supabaseAdmin
+			.from('branches')
+			.select('*')
+			.eq('id', branchId)
+			.single();
 
-		if (!selectedTenant || !selectedTenant.agent_url) {
-			return json({ error: 'Tenant non-existent or has no agent_url' }, { status: 404 });
+		if (error || !branch) {
+			return json({ error: 'Sucursal no encontrada' }, { status: 404 });
+		}
+		
+		if (!branch.agent_url) {
+			return json({ error: 'La sucursal no tiene un agente configurado' }, { status: 404 });
 		}
 
 		const agentClient = new AgentClient({
-			slug: selectedTenant.slug,
-			agent_url: selectedTenant.agent_url,
-			agent_api_key: selectedTenant.agent_api_key
+			slug: branch.id,
+			agent_url: branch.agent_url,
+			agent_api_key: branch.agent_token
 		});
 
-		// The user specified: /api/v1/catalogos/almacenes te traera todos los almacenes
+		// Fetch warehouses from Agent
 		const resData = await agentClient.request<any>('/catalogos/almacenes');
 
 		if (resData.success === false) {
-			return json({ error: resData.message || 'Agent error' }, { status: 500 });
+			return json({ error: resData.message || 'Error del Agente' }, { status: 500 });
 		}
 
 		const warehouses = (resData as any)?.data || (Array.isArray(resData) ? resData : []);
 		return json({ warehouses: Array.isArray(warehouses) ? warehouses : [] });
+
 	} catch (err: any) {
+		console.error('[API WAREHOUSES] Error:', err.message);
 		return json({ error: err.message }, { status: 500 });
 	}
 };
-

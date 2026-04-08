@@ -204,7 +204,7 @@
       <div class="p-8 border-b border-white/5 flex justify-between items-center bg-brand-500/5">
         <div>
           <h2 class="text-2xl font-black tracking-tight">{editingTenant.id ? 'Editar Empresa' : 'Nueva Empresa'}</h2>
-          <p class="text-text-muted text-sm capitalize">{editingTenant.id ? `ID: ${editingTenant.id}` : 'Configura una nueva instancia de Sync2k'}</p>
+          <p class="text-text-muted text-sm capitalize">{editingTenant.id ? `ID: ${editingTenant.id}` : 'Configura una nueva instancia de GalpeApp'}</p>
         </div>
         <button onclick={() => (showModal = false)} class="p-3 hover:bg-white/10 rounded-full text-text-muted transition-colors">
           <X size={24} />
@@ -308,7 +308,7 @@
                   class="w-full h-14 bg-white/5 border border-white/10 rounded-2xl px-5 focus:border-brand-500 focus:bg-white/10 outline-hidden transition-all font-mono readonly:opacity-50 readonly:cursor-not-allowed"
                 />
                 {#if !editingTenant.id}
-                  <p class="text-[10px] text-text-muted mt-1 ml-1 lowercase">Se usará como: <b>{editingTenant.slug || '...'}.sync2k.com</b></p>
+                  <p class="text-[10px] text-text-muted mt-1 ml-1 lowercase">Se usará como: <b>{editingTenant.slug || '...'}.galpeapp.com</b></p>
                 {/if}
               </div>
             </div>
@@ -319,7 +319,7 @@
         <div class="space-y-6">
           <div class="flex items-center gap-3 text-indigo-400">
             <Cpu size={18} />
-            <h3 class="text-xs uppercase font-black tracking-widest">Agente Sync2k (Cloudflare Tunnel)</h3>
+            <h3 class="text-xs uppercase font-black tracking-widest">Agente GalpeApp (Cloudflare Tunnel)</h3>
           </div>
           
           <div class="bg-indigo-500/5 border border-indigo-500/10 rounded-3xl p-6 space-y-4">
@@ -331,7 +331,7 @@
                   type="text" 
                   name="agent_url" 
                   bind:value={editingTenant.agent_url}
-                  placeholder="https://empresa.sync2k.com"
+                  placeholder="https://empresa.galpeapp.com"
                   class="w-full h-14 bg-indigo-500/5 border border-indigo-500/10 rounded-2xl pl-12 pr-5 focus:border-indigo-500 outline-hidden transition-all text-sm"
                 />
               </div>

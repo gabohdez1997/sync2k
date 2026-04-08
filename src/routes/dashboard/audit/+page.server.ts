@@ -29,5 +29,11 @@ export const load: PageServerLoad = protectLoad('sec_audit', async ({ url }) => 
     return { logs: [] };
   }
 
-  return { logs: logs ?? [] };
+  // Fetch branches for filter
+  const { data: branches } = await supabaseAdmin.from('branches').select('id, name').order('name');
+
+  return { 
+    logs: logs ?? [],
+    branches: branches ?? []
+  };
 });

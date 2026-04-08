@@ -343,7 +343,7 @@
               type="email" 
               required
               bind:value={email}
-              placeholder="juan@sync2k.com"
+              placeholder="juan@galpeapp.com"
               class="w-full bg-surface-base border border-border-subtle rounded-2xl px-5 py-4 text-text-base focus:outline-none focus:ring-2 focus:ring-brand-500/50 transition-all placeholder:text-text-muted/40"
             />
           </div>

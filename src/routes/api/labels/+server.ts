@@ -4,7 +4,7 @@
 
 import type { RequestHandler } from './$types';
 import { AgentClient } from '$lib/server/agent';
-import { adminDb, MasterCollections } from '$lib/server/firebase-admin';
+import { supabaseAdmin } from '$lib/server/supabase';
 
 export const GET: RequestHandler = async ({ url, locals }) => {
   const profile = (locals as any).profile;
@@ -13,35 +13,26 @@ export const GET: RequestHandler = async ({ url, locals }) => {
   }
 
   try {
-    // ── 1. Resolve company ─────────────────────────────────────────────────
-    const urlTenant = url.searchParams.get('tenant_id');
-    const profileSlug = profile?.company?.slug;
-    const targetId = urlTenant || profileSlug;
+    // ── 1. Resolve branch ───────────────────────────────────────────────────
+    const branchId = url.searchParams.get('branch_id');
+    if (!branchId) return htmlError('Sede no especificada.');
+    
+    const { data: dbBranch, error: branchErr } = await supabaseAdmin
+      .from('branches')
+      .select('id, name, agent_url, agent_token, logo_url')
+      .eq('id', branchId)
+      .single();
 
-    if (!targetId) return htmlError('Empresa no especificada.');
-
-    let companyInfo: any = null;
-    const snap = await adminDb!.collection(MasterCollections.CONNECTIONS).doc(targetId).get();
-    if (snap.exists) {
-      companyInfo = snap.data();
-    } else {
-      const q = await adminDb!
-        .collection(MasterCollections.CONNECTIONS)
-        .where('slug', '==', targetId)
-        .get();
-      if (!q.empty) companyInfo = q.docs[0].data();
+    if (branchErr || !dbBranch?.agent_url) {
+      return htmlError('No se encontró la configuración del Agente para esta sede.');
     }
 
-    if (!companyInfo?.agent_url) return htmlError('No se encontró la configuración del Agente.');
-
     const agentClient = new AgentClient({
-      slug: companyInfo.slug,
-      agent_url: companyInfo.agent_url,
-      agent_api_key: companyInfo.agent_api_key
-    });
+      slug: dbBranch.id,
+      agent_url: dbBranch.agent_url,
+      agent_api_key: dbBranch.agent_token
+    }, profile || undefined);
 
-    // ── 2. Fetch articles ──────────────────────────────────────────────────
-    const branchId = url.searchParams.get('branch_id');
     const warehouseId = url.searchParams.get('co_alma');
     const coArtsParam = url.searchParams.get('co_arts');
 
@@ -103,8 +94,8 @@ export const GET: RequestHandler = async ({ url, locals }) => {
     }
 
     // ── 3. Generate HTML ───────────────────────────────────────────────────
-    const companyName = companyInfo.name || targetId;
-    const companyLogo: string = companyInfo.logo || '';
+    const companyName = dbBranch.name || 'Galpe';
+    const companyLogo: string = dbBranch.logo_url || '';
 
     const html = buildHtml(articles, companyName, companyLogo);
     return new Response(html, {

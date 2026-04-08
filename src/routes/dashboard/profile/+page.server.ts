@@ -1,5 +1,5 @@
 // src/routes/dashboard/profile/+page.server.ts
-import { adminAuth, adminDb, MasterCollections } from '$lib/server/firebase-admin';
+import { supabaseAdmin } from '$lib/server/supabase';
 import { logAction } from '$lib/server/audit';
 import { fail, redirect } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
@@ -16,7 +16,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 export const actions: Actions = {
     updateProfile: async ({ request, locals }) => {
         const session = locals.session;
-        if (!session || !adminAuth || !adminDb) {
+        if (!session) {
             return fail(401, { message: 'No autorizado' });
         }
 
@@ -34,36 +34,41 @@ export const actions: Actions = {
         }
 
         try {
-            const uid = session.uid;
+            const userId = session.user.id;
             
-            // 1. Actualizar en Firebase Auth
-            const authUpdate: any = { displayName: fullName };
+            // 1. Actualizar en Supabase Auth (si hay password)
             if (password) {
-                authUpdate.password = password;
+                const { error: authError } = await supabaseAdmin.auth.admin.updateUserById(userId, {
+                    password: password
+                });
+                if (authError) throw authError;
             }
-            await adminAuth.updateUser(uid, authUpdate);
 
-            // 2. Actualizar en Firestore (BD Master)
-            await adminDb.collection(MasterCollections.USERS).doc(uid).update({
-                full_name: fullName,
-                updatedAt: new Date().toISOString()
-            });
+            // 2. Actualizar en la tabla 'profiles' (BD Supabase)
+            const { error: profileError } = await supabaseAdmin
+                .from('profiles')
+                .update({
+                    full_name: fullName,
+                    updated_at: new Date().toISOString()
+                })
+                .eq('id', userId);
+
+            if (profileError) throw profileError;
 
             // 3. Auditoría
             await logAction({
-                uid: uid,
-                user_email: session.email || 'unknown',
+                uid: userId,
+                user_email: session.user.email || 'unknown',
                 action: 'UPDATE',
                 entity: 'perfil',
-                entity_id: uid,
+                entity_id: userId,
                 details: { fullName, hasPasswordChange: !!password }
             });
 
             return { success: true, message: 'Perfil actualizado correctamente' };
         } catch (error: any) {
             console.error('Error updating profile:', error);
-            return fail(500, { message: 'Error interno al actualizar el perfil' });
+            return fail(500, { message: 'Error interno al actualizar el perfil: ' + error.message });
         }
     }
 };
-
