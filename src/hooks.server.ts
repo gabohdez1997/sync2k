@@ -43,9 +43,17 @@ export const handle: Handle = async ({ event, resolve }) => {
   let session = null;
 
   try {
-    const res = await supabase.auth.getSession();
-    session = res.data.session;
-    if (res.error) authErrorObj = res.error;
+    const resAuth = await supabase.auth.getSession();
+    if (resAuth.data.session) {
+      const { data: { user }, error } = await supabase.auth.getUser();
+      if (error) {
+        authErrorObj = error;
+      } else {
+        session = resAuth.data.session;
+        session.user = user;
+      }
+    }
+    if (resAuth.error) authErrorObj = resAuth.error;
   } catch (err: any) {
     authErrorObj = err;
     console.warn('[HOOKS] Supabase Auth falló (¿Offline?):', err.message);

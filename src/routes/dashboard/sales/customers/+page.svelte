@@ -128,6 +128,7 @@
     contribu_e = customer.bContribu_E ?? customer.contribu_e ?? false;
     porc_esp = customer.dePorc_Esp ?? customer.porc_esp ?? 100;
     showModal = true;
+    selectedBranch = data.selectedBranchId || data.context?.branchId || "";
   }
 
   $effect(() => {

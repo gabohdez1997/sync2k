@@ -88,15 +88,16 @@ async function runSync() {
 
     // Tabla: BRANCHES
     console.log('   Sincronizando sucursales...');
-    const lastBranchUpdate = await getLastSyncTime(localClient, 'branches');
+    // Obtenemos todas las sucursales de la nube para un mirror completo
     const { data: cloudBranches, error: errBranches } = await supabase
       .from('branches')
-      .select('*')
-      .gt('updated_at', lastBranchUpdate);
+      .select('*');
 
     if (errBranches) throw errBranches;
 
     if (cloudBranches && cloudBranches.length > 0) {
+      const cloudIds = cloudBranches.map(b => b.id);
+      
       for (const branch of cloudBranches) {
         await localClient.query(`
           INSERT INTO branches (id, name, agent_url, agent_token, profit_branch_codes, sql_config, profit_server_id, local_dns_alias, active, sort_order, updated_at, created_at)
@@ -112,11 +113,75 @@ async function runSync() {
             active = EXCLUDED.active,
             sort_order = EXCLUDED.sort_order,
             updated_at = EXCLUDED.updated_at
-        `, [branch.id, branch.name, branch.agent_url, branch.agent_token, JSON.stringify(branch.profit_branch_codes), JSON.stringify(branch.sql_config), branch.profit_server_id, branch.local_dns_alias, branch.active, branch.sort_order, branch.updated_at, branch.created_at]);
+        `, [
+          branch.id, 
+          branch.name, 
+          branch.agent_url, 
+          branch.agent_token, 
+          branch.profit_branch_codes ? JSON.stringify(branch.profit_branch_codes) : '[]', 
+          branch.sql_config ? JSON.stringify(branch.sql_config) : '{}', 
+          branch.profit_server_id, 
+          branch.local_dns_alias, 
+          branch.active, 
+          branch.sort_order, 
+          branch.updated_at, 
+          branch.created_at
+        ]);
       }
+
+      // Limpieza: Desactivar sucursales locales que ya no existen en la Nube
+      const { rowCount: deactivatedCount } = await localClient.query(`
+        UPDATE branches 
+        SET active = false 
+        WHERE id NOT IN (${cloudIds.map((_, i) => `$${i + 1}`).join(', ')})
+        AND active = true
+      `, cloudIds);
+
+      if (deactivatedCount > 0) {
+        console.log(`   ⚠ ${deactivatedCount} sucursales locales desactivadas (no existen en la Nube).`);
+      }
+
       tablesSynced.push('branches');
       recordsSynced += cloudBranches.length;
-      console.log(`   ✓ ${cloudBranches.length} sucursales sincronizadas.`);
+      console.log(`   ✓ ${cloudBranches.length} sucursales procesadas.`);
+    }
+
+    // Tabla: SYSTEM_SETTINGS
+    console.log('   Sincronizando ajustes del sistema...');
+    const { data: settings, error: errSettings } = await supabase
+      .from('system_settings')
+      .select('*')
+      .single();
+
+    if (errSettings && errSettings.code !== 'PGRST116') throw errSettings;
+
+    if (settings) {
+      await localClient.query(`
+        INSERT INTO system_settings (id, app_name, app_title, app_logo_url, app_logo_width, primary_color, footer_text, pwa_enabled, updated_at, created_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+        ON CONFLICT (id) DO UPDATE SET
+          app_name = EXCLUDED.app_name,
+          app_title = EXCLUDED.app_title,
+          app_logo_url = EXCLUDED.app_logo_url,
+          app_logo_width = EXCLUDED.app_logo_width,
+          primary_color = EXCLUDED.primary_color,
+          footer_text = EXCLUDED.footer_text,
+          pwa_enabled = EXCLUDED.pwa_enabled,
+          updated_at = EXCLUDED.updated_at
+      `, [
+        settings.id, 
+        settings.app_name, 
+        settings.app_title, 
+        settings.app_logo_url, 
+        settings.app_logo_width, 
+        settings.primary_color, 
+        settings.footer_text, 
+        settings.pwa_enabled, 
+        settings.updated_at, 
+        settings.created_at
+      ]);
+      console.log('   ✓ Ajustes del sistema sincronizados.');
+      tablesSynced.push('system_settings');
     }
 
     // Tabla: PROFILES & USER_ROLES
@@ -165,10 +230,55 @@ async function runSync() {
     }
 
     // ==========================================
-    // 2. UPSYNC (Local -> Cloud) Ej: Audit log
+    // 2. DOWNSYNC: AUDIT_LOG (Cloud -> Local)
     // ==========================================
-    // Se podría enviar la bitácora offline generada localmente hacia la nube aquí.
-    
+    console.log('   Sincronizando auditoría...');
+    try {
+      // audit_log es inmutable (solo INSERT), usamos created_at para sync incremental
+      const { rows: lastAuditRows } = await localClient.query(
+        `SELECT MAX(created_at) as last_created FROM audit_log`
+      );
+      let lastAuditSync = lastAuditRows[0]?.last_created;
+      if (lastAuditSync && lastAuditSync instanceof Date) lastAuditSync = lastAuditSync.toISOString();
+      lastAuditSync = lastAuditSync || new Date(0).toISOString();
+
+      const { data: cloudAuditLogs, error: errAudit } = await supabase
+        .from('audit_log')
+        .select('*')
+        .gt('created_at', lastAuditSync)
+        .order('created_at', { ascending: true })
+        .limit(500);
+
+      if (errAudit) throw errAudit;
+
+      if (cloudAuditLogs && cloudAuditLogs.length > 0) {
+        for (const log of cloudAuditLogs) {
+          await localClient.query(`
+            INSERT INTO audit_log (id, user_id, user_email, action, module, record_id, old_data, new_data, metadata, branch_id, source, created_at)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+            ON CONFLICT (id) DO NOTHING
+          `, [
+            log.id,
+            log.user_id,
+            log.user_email,
+            log.action,
+            log.module,
+            log.record_id,
+            log.old_data ? JSON.stringify(log.old_data) : null,
+            log.new_data ? JSON.stringify(log.new_data) : null,
+            log.metadata ? JSON.stringify(log.metadata) : null,
+            log.branch_id,
+            log.source,
+            log.created_at
+          ]);
+        }
+        tablesSynced.push('audit_log');
+        recordsSynced += cloudAuditLogs.length;
+        console.log(`   ✓ ${cloudAuditLogs.length} registros de auditoría sincronizados.`);
+      }
+    } catch (auditErr) {
+      console.warn('   ⚠ Error sincronizando audit_log:', auditErr.message);
+    }
     // Registrar éxito
     if (recordsSynced > 0) {
       await localClient.query(`

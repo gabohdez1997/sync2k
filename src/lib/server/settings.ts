@@ -5,6 +5,7 @@ export interface SystemSettings {
   app_name: string;
   app_title: string;
   app_logo_url: string;
+  app_logo_width: number;
   primary_color: string;
   footer_text: string;
   pwa_enabled: boolean;
@@ -14,6 +15,7 @@ export const DEFAULT_SETTINGS: SystemSettings = {
   app_name: 'GalpeApp',
   app_title: 'GalpeApp | Gestión Inteligente',
   app_logo_url: '/logo.png',
+  app_logo_width: 200,
   primary_color: '#3b82f6',
   footer_text: '© ' + new Date().getFullYear() + ' GalpeApp. Todos los Derechos Reservados.',
   pwa_enabled: true

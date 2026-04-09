@@ -100,7 +100,8 @@
         <img
           src={data.systemSettings.app_logo_url}
           alt="Logo"
-          class="h-16 mx-auto drop-shadow-2xl mb-2"
+          style="width: {data.systemSettings.app_logo_width ?? 200}px; height: auto;"
+          class="mx-auto drop-shadow-2xl mb-2"
         />
       {:else}
         <div class="flex items-baseline justify-center gap-0.5">

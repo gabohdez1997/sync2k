@@ -11,6 +11,7 @@ export const actions: Actions = {
     const app_name = formData.get('app_name') as string;
     const app_title = formData.get('app_title') as string;
     const footer_text = formData.get('footer_text') as string;
+    const app_logo_width = parseInt(formData.get('app_logo_width') as string) || 200;
     
     // Identificar archivo y URL actual
     const logoFile = formData.get('app_logo_file') as File;
@@ -62,6 +63,7 @@ export const actions: Actions = {
         app_name,
         app_title,
         app_logo_url,
+        app_logo_width,
         footer_text
       });
 

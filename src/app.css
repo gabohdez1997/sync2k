@@ -1,17 +1,17 @@
-@import "tailwindcss";
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
 @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&display=swap');
+@import "tailwindcss";
 
 /* Tailwind v4 — CSS-first config */
 
 @theme {
   --font-sans: 'Outfit', 'Inter', ui-sans-serif, system-ui, sans-serif;
 
-  /* Paleta Sync2k — azul profundo premium */
-  --color-brand-400: #4a8ae7;
-  --color-brand-500: #1e6fe0;
-  --color-brand-600: #1855c4;
-  --color-brand-700: #1244a8;
+  /* Paleta Sync2k — Dinámica estilo Chrome */
+  --color-brand-400: hsl(var(--brand-h), var(--brand-s), calc(var(--brand-l) + 10%));
+  --color-brand-500: hsl(var(--brand-h), var(--brand-s), var(--brand-l));
+  --color-brand-600: hsl(var(--brand-h), var(--brand-s), calc(var(--brand-l) - 10%));
+  --color-brand-700: hsl(var(--brand-h), var(--brand-s), calc(var(--brand-l) - 20%));
 
   /* Superficies semánticas */
   --color-surface-base: var(--bg-primary);
@@ -27,6 +27,11 @@
 
 :root {
   color-scheme: dark;
+  /* Default: Blue */
+  --brand-h: 217;
+  --brand-s: 91%;
+  --brand-l: 60%;
+
   /* Theme Base: Dark (Sync2k Identity) */
   --bg-primary: #050505;
   --bg-secondary: #0f0f11;
@@ -34,7 +39,7 @@
   --text-secondary: #94a3b8;
   --border-color: rgba(255, 255, 255, 0.06);
   --glass-bg: rgba(15, 15, 17, 0.6);
-  --accent-gradient: linear-gradient(135deg, #1e6fe0 0%, #1244a8 100%);
+  --accent-gradient: linear-gradient(135deg, var(--color-brand-500) 0%, var(--color-brand-700) 100%);
   --bg-gradient: radial-gradient(circle at 50% 0%, #111827 0%, #050505 100%);
 }
 
@@ -46,7 +51,7 @@
   --text-secondary: #64748b;
   --border-color: rgba(0, 0, 0, 0.05);
   --glass-bg: rgba(255, 255, 255, 0.65);
-  --accent-gradient: linear-gradient(135deg, #1855c4 0%, #4a8ae7 100%);
+  --accent-gradient: linear-gradient(135deg, var(--color-brand-600) 0%, var(--color-brand-400) 100%);
   --bg-gradient: radial-gradient(circle at 50% 0%, #f1f5f9 0%, #f8fafc 100%);
 }
 
@@ -76,33 +81,27 @@ option {
   box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.5);
 }
 
-.btn-premium {
+/* Estándar de Botones Premium */
+.btn-primary {
   background: var(--accent-gradient);
-  @apply text-white font-semibold rounded-xl px-6 py-2.5 transition-all duration-300 hover:shadow-lg hover:shadow-blue-500/20 active:scale-95 disabled:opacity-50;
+  @apply text-white font-semibold rounded-xl px-6 py-2.5 transition-all duration-300 hover:shadow-lg hover:shadow-brand-500/20 active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2;
 }
 
-/* Base styles */
-html {
-  font-family: var(--font-sans);
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  background: var(--bg-gradient);
-  color: var(--text-primary);
-  min-height: 100svh;
-  transition: background 0.5s ease;
-  overflow-x: hidden;
+.btn-secondary {
+  @apply bg-brand-500/10 text-brand-500 font-semibold border border-brand-500/20 rounded-xl px-6 py-2.5 transition-all duration-300 hover:bg-brand-500/20 active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2;
 }
 
-body {
-  @apply min-h-svh;
-  overflow-y: auto !important;
-  touch-action: pan-y;
-  overscroll-behavior: auto;
+.btn-flat {
+  @apply text-brand-500 font-semibold px-4 py-2 rounded-xl transition-all duration-300 hover:bg-brand-500/10 active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2;
+}
+
+.btn-transparent {
+  @apply text-text-muted font-medium px-4 py-2 rounded-xl transition-all duration-300 hover:text-white hover:bg-white/5 active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2;
 }
 
 /* Scrollbar customization */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: #1855c4; border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: #1e6fe0; }
+::-webkit-scrollbar-thumb { background: var(--color-brand-600); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--color-brand-500); }
 

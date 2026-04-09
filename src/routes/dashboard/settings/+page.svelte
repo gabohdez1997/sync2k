@@ -23,6 +23,7 @@
   let appName = $state(data.systemSettings?.app_name || "");
   let appTitle = $state(data.systemSettings?.app_title || "");
   let appLogoUrl = $state(data.systemSettings?.app_logo_url || "");
+  let appLogoWidth = $state(data.systemSettings?.app_logo_width || 200);
   let footerText = $state(data.systemSettings?.footer_text || "");
 
   $effect(() => {
@@ -149,6 +150,37 @@
                 <input type="hidden" name="app_logo_url_current" value={data.systemSettings?.app_logo_url || ""} />
               </div>
             </div>
+          </div>
+
+          <div class="space-y-4">
+            <label for="app_logo_width" class="text-xs font-black uppercase tracking-widest text-text-muted ml-1 flex items-center gap-2">
+              <Layout size={14} /> Ancho del Logo en Login (px)
+            </label>
+            <div class="flex items-center gap-6 bg-surface-base p-4 rounded-2xl border border-border-subtle">
+              <input
+                id="app_logo_width"
+                name="app_logo_width"
+                type="range"
+                min="60"
+                max="600"
+                step="10"
+                bind:value={appLogoWidth}
+                class="flex-1 accent-brand-500 cursor-pointer"
+              />
+              <div class="flex items-center gap-2">
+                <input
+                  type="number"
+                  min="60"
+                  max="600"
+                  bind:value={appLogoWidth}
+                  class="w-20 h-10 bg-surface-raised border border-border-subtle rounded-xl px-3 text-sm font-bold text-center focus:border-brand-500 outline-none transition-all"
+                />
+                <span class="text-xs text-text-muted font-black uppercase">px</span>
+              </div>
+            </div>
+            <p class="text-[10px] text-text-muted italic px-1">
+              El alto se ajustará automáticamente para mantener la proporción original de la imagen.
+            </p>
           </div>
 
           <div class="space-y-2">

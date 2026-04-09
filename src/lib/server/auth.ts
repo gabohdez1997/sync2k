@@ -26,6 +26,11 @@ export type Profile = {
   allowed_warehouses: string[];
   profit_user: string | null;
   profit_pass: string | null;
+  theme_config: {
+    mode: 'light' | 'dark' | 'system';
+    accentHue: number;
+    accentSaturation: number;
+  } | null;
 };
 
 export function hasPermission(
@@ -107,5 +112,6 @@ export async function getUserProfile(userId: string): Promise<Profile | null> {
     allowed_warehouses: rawData.allowed_warehouses ?? [],
     profit_user:       rawData.profit_user ?? null,
     profit_pass:       rawData.profit_pass ?? null,
+    theme_config:      rawData.theme_config ?? null,
   };
 }

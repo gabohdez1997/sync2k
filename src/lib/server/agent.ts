@@ -116,8 +116,8 @@ export class AgentClient {
 	 * Crea o actualiza un cliente
 	 */
 	async saveCustomer(customer: any, isNew: boolean = true, sedeId: string = '') {
-		// Al CREAR: enviar a la sede seleccionada (o broadcast si no hay sede)
-		// Al EDITAR: broadcast a TODAS las sedes para mantener consistencia
+		// Al CREAR: enviar a la sede seleccionada.
+		// Al EDITAR: broadcast a TODAS las sedes enviando sede=null
 		const sedeParam = (isNew && sedeId) ? `?sede=${encodeURIComponent(sedeId)}` : '';
 		const endpoint = isNew
 			? `/clientes${sedeParam}`

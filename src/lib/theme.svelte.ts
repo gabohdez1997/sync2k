@@ -1,51 +1,90 @@
 // src/lib/theme.svelte.ts
 import { browser } from '$app/environment';
 
-type Theme = 'light' | 'dark';
+export type ThemeMode = 'light' | 'dark' | 'system';
+
+export interface ThemeConfig {
+    mode: ThemeMode;
+    accentHue: number;
+    accentSaturation: number;
+}
+
+export const DEFAULT_CONFIG: ThemeConfig = {
+    mode: 'system',
+    accentHue: 217, // Azul por defecto
+    accentSaturation: 91
+};
 
 // State managed with Svelte 5 Runes
-let currentTheme = $state<Theme>(
-  browser ? (localStorage.getItem('theme') as Theme) || 'dark' : 'dark'
+let config = $state<ThemeConfig>(
+    browser ? JSON.parse(localStorage.getItem('theme_config') || JSON.stringify(DEFAULT_CONFIG)) : DEFAULT_CONFIG
 );
 
-export function getTheme() {
-  return currentTheme;
+export function getThemeConfig() {
+    return config;
 }
 
-export function toggleTheme() {
-  const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
-  currentTheme = newTheme;
+export function updateThemeConfig(partial: Partial<ThemeConfig>, saveToServer = false) {
+    config = { ...config, ...partial };
+    if (browser) {
+        localStorage.setItem('theme_config', JSON.stringify(config));
+        applyTheme();
 
-  if (browser) {
-    localStorage.setItem('theme', newTheme);
-    applyTheme(newTheme);
-  }
+        if (saveToServer) {
+            fetch('/api/theme', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ theme_config: config })
+            }).catch(e => console.error("Error auto-saving theme:", e));
+        }
+    }
 }
 
-function applyTheme(theme: Theme) {
-  if (!browser) return;
-  
-  const root = document.documentElement;
-  if (theme === 'light') {
-    root.classList.add('light');
-    root.classList.remove('dark');
-  } else {
-    root.classList.add('dark');
-    root.classList.remove('light');
-  }
+function applyTheme() {
+    if (!browser) return;
+    
+    const root = document.documentElement;
+    const isDark = config.mode === 'dark' || (config.mode === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+    
+    if (isDark) {
+        root.classList.add('dark');
+        root.classList.remove('light');
+    } else {
+        root.classList.add('light');
+        root.classList.remove('dark');
+    }
 
-  // Update theme-color meta tag
-  const meta = document.querySelector('meta[name="theme-color"]');
-  if (meta) {
-    meta.setAttribute('content', theme === 'dark' ? '#0e0e11' : '#ffffff');
-  }
+    // Aplicar variables HSL
+    root.style.setProperty('--brand-h', config.accentHue.toString());
+    root.style.setProperty('--brand-s', `${config.accentSaturation}%`);
+    
+    // Ajustar luminosidad base segun el tema para mejor contraste
+    root.style.setProperty('--brand-l', isDark ? '60%' : '50%');
+
+    // Update theme-color meta tag
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) {
+        meta.setAttribute('content', isDark ? '#0a0a0c' : '#ffffff');
+    }
 }
 
 // Initial hydration/sync
 export function initTheme() {
-  if (browser) {
-    const saved = localStorage.getItem('theme') as Theme || 'dark';
-    currentTheme = saved;
-    applyTheme(saved);
-  }
+    if (browser) {
+        applyTheme();
+        
+        // Listen for system theme changes
+        window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+            if (config.mode === 'system') applyTheme();
+        });
+    }
+}
+
+export function getTheme() {
+    return config.mode;
+}
+
+export function toggleTheme() {
+    const isDark = config.mode === 'dark' || (config.mode === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+    updateThemeConfig({ mode: isDark ? 'light' : 'dark' });
 }

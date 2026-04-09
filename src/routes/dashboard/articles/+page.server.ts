@@ -324,7 +324,9 @@ export const actions: Actions = {
 			let oldData: any = null;
 			try {
 				const currentRes = await agentClient.request(endpoint);
-				oldData = (currentRes as any).data || currentRes;
+				if ((currentRes as any).success !== false) {
+					oldData = (currentRes as any).data || currentRes;
+				}
 			} catch (e) {
 				console.warn('[AUDIT] No se pudo obtener el estado anterior:', e);
 			}

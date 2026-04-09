@@ -2,7 +2,7 @@
 <script lang="ts">
   import { page } from '$app/stores';
   import type { LayoutData } from './$types';
-  import { getTheme, toggleTheme } from '$lib/theme.svelte';
+  import { getThemeConfig, updateThemeConfig, toggleTheme, getTheme, DEFAULT_CONFIG } from '$lib/theme.svelte';
   import { 
     LayoutDashboard, 
     ShoppingBag, 
@@ -40,6 +40,22 @@
 
   let profile = $derived(data.profile);
   let permissions = $derived(profile?.permissions ?? {});
+
+  // Sincronizar tema con el perfil del usuario SOLO una vez al cargar
+  let hasSyncedTheme = false;
+  $effect(() => {
+    if (profile && !hasSyncedTheme) {
+      if (profile.theme_config) {
+        updateThemeConfig(profile.theme_config);
+      } else {
+        updateThemeConfig(DEFAULT_CONFIG);
+      }
+      hasSyncedTheme = true;
+    } else if (!profile && hasSyncedTheme) {
+      // Si se cierra sesión, resetear bandera
+      hasSyncedTheme = false;
+    }
+  });
 
 
   const navGroups = [
@@ -101,7 +117,7 @@
         { id: 'sec_roles', label: 'Roles y Permisos', href: '/dashboard/permissions', icon: Key },
         { id: 'sec_tenants', label: 'Empresas', href: '/dashboard/tenants', icon: Building },
         { id: 'sec_branches', label: 'Sucursales', href: '/dashboard/branches', icon: Store },
-        { id: 'sec_settings', label: 'Ajustes', href: '/dashboard/settings', icon: Settings },
+        //id: 'sec_settings', label: 'Ajustes', href: '/dashboard/settings', icon: Settings },
         { id: 'sec_audit', label: 'Auditoría', href: '/dashboard/audit', icon: ClipboardList },
       ]
     }
@@ -319,7 +335,7 @@
     <!-- Footer Profile -->
     <div class="p-4 border-t border-border-subtle bg-black/20">
       <div class="flex items-center gap-3">
-        <div class="h-9 w-9 rounded-full bg-linear-to-tr from-brand-600 to-blue-400 flex items-center justify-center text-white font-bold shrink-0 shadow-lg">
+        <div class="h-9 w-9 rounded-full bg-linear-to-tr from-brand-600 to-brand-400 flex items-center justify-center text-white font-bold shrink-0 shadow-lg">
           {profile?.full_name?.[0] ?? 'U'}
         </div>
         {#if sidebarOpen}

@@ -24,6 +24,7 @@ export const actions: Actions = {
         const fullName = formData.get('full_name') as string;
         const password = formData.get('password') as string;
         const confirmPassword = formData.get('confirm_password') as string;
+        const themeConfigStr = formData.get('theme_config') as string;
 
         if (!fullName) {
             return fail(400, { message: 'El nombre completo es obligatorio' });
@@ -49,6 +50,7 @@ export const actions: Actions = {
                 .from('profiles')
                 .update({
                     full_name: fullName,
+                    theme_config: themeConfigStr ? JSON.parse(themeConfigStr) : undefined,
                     updated_at: new Date().toISOString()
                 })
                 .eq('id', userId);

@@ -11,9 +11,12 @@
     ShieldCheck, 
     KeyRound,
     AlertCircle,
-    CheckCircle2
+    CheckCircle2,
+    Palette
   } from 'lucide-svelte';
   import type { PageData, ActionData } from './$types';
+  import ThemePicker from '$lib/components/ui/ThemePicker.svelte';
+  import { getThemeConfig } from '$lib/theme.svelte';
 
   let { data, form }: { data: PageData; form: ActionData } = $props();
 
@@ -30,11 +33,12 @@
   });
 
   let profile = $derived(data.profile);
+  let fullName = $state(data.profile?.full_name ?? '');
+  let password = $state('');
+  let confirmPassword = $state('');
+  let themeConfig = $derived(getThemeConfig());
 </script>
 
-<svelte:head>
-  <title>Mi Perfil | Sync2K</title>
-</svelte:head>
 
 <div class="max-w-4xl mx-auto space-y-12 animate-in fade-in slide-in-from-bottom-4 duration-700">
   
@@ -103,7 +107,7 @@
                 type="text" 
                 id="full_name"
                 name="full_name" 
-                value={profile?.full_name}
+                bind:value={fullName}
                 required
                 placeholder="Tu nombre aquí..."
                 class="w-full h-14 bg-white/5 border border-white/10 rounded-2xl pl-12 pr-5 focus:border-brand-500 focus:bg-brand-500/5 outline-hidden transition-all font-medium"
@@ -125,6 +129,23 @@
             </div>
           </div>
         </div>
+      </div>
+      
+      <!-- Personalization Section -->
+      <div class="glass p-8 rounded-[32px] border border-white/5 space-y-6">
+        <div class="flex items-center gap-3 text-brand-400">
+          <Palette size={20} />
+          <h2 class="text-sm font-black uppercase tracking-widest">Personalización</h2>
+        </div>
+        
+        <p class="text-xs text-text-muted italic leading-relaxed font-medium">
+          Selecciona tu modo preferido y color de acento. Estos cambios se aplicarán instantáneamente y se guardarán en tu perfil al actualizar.
+        </p>
+
+        <ThemePicker />
+        
+        <!-- Hidden input to send theme config in form -->
+        <input type="hidden" name="theme_config" value={JSON.stringify(themeConfig)} />
       </div>
 
       <!-- Action Button Desktop -->
@@ -166,6 +187,7 @@
                 type={showPassword ? "text" : "password"} 
                 id="password"
                 name="password" 
+                bind:value={password}
                 placeholder="••••••••"
                 class="w-full h-14 bg-white/5 border border-white/10 rounded-2xl pl-12 pr-5 focus:border-amber-500 outline-hidden transition-all font-mono"
               />
@@ -180,6 +202,7 @@
                 type={showPassword ? "text" : "password"} 
                 id="confirm_password"
                 name="confirm_password" 
+                bind:value={confirmPassword}
                 placeholder="••••••••"
                 class="w-full h-14 bg-white/5 border border-white/10 rounded-2xl pl-12 pr-5 focus:border-amber-500 outline-hidden transition-all font-mono"
               />
