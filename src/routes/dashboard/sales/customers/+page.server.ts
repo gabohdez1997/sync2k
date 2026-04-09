@@ -236,7 +236,10 @@ export const actions: Actions = {
         const branchId = formData.get('branch_id') as string;
         const password = formData.get('password') as string;
 
+        console.log(`[DELETE CUSTOMER] Attempting to delete client: ${co_cli} in branch: ${branchId}`);
+
         if (!co_cli) return fail(400, { message: 'Código de cliente no proporcionado' });
+        if (!branchId) return fail(400, { message: 'ID de sucursal no proporcionado en el formulario.' });
         if (!password) return fail(400, { message: 'La contraseña es requerida para confirmar la eliminación.' });
 
         // 1. Verificar contraseña del usuario con Supabase Auth
@@ -263,7 +266,8 @@ export const actions: Actions = {
             .single();
 
         if (branchErr || !dbBranch?.agent_url) {
-            return fail(400, { message: 'Sucursal no válida' });
+            console.error(`[DELETE CUSTOMER] Branch lookup failed for ID ${branchId}:`, branchErr?.message || 'No agent URL');
+            return fail(400, { message: 'Sucursal no válida dentro del sistema Central.' });
         }
 
         const agent = new AgentClient({

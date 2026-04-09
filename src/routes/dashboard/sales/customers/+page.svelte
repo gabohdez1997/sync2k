@@ -892,7 +892,7 @@
           class="space-y-4 pt-4"
         >
           <input type="hidden" name="co_cli" value={customerToDelete?.co_cli} />
-          <input type="hidden" name="branch_id" value={selectedBranch || data.selectedBranchId} />
+          <input type="hidden" name="branch_id" value={selectedBranch || data.context?.branchId || data.selectedBranchId} />
 
           <div class="space-y-2 text-left">
             <label class="text-[10px] font-black uppercase tracking-widest text-text-muted ml-1" for="del-pass"
