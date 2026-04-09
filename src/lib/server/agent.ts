@@ -62,39 +62,51 @@ export class AgentClient {
 			headers.set('x-profit-user', this.profitUser);
 		}
 
-		try {
-			// Usamos fetch nativo (disponible en Node 18+ y SvelteKit)
-			const response = await fetch(url, { ...options, headers });
-			
-			if (!response.ok) {
-				const errorData = await response.json().catch(() => ({}));
-				return {
-					success: false,
-					message: errorData.message || `Error del Agente: ${response.statusText}`,
-					details: errorData.results || errorData.error
-				};
-			}
-			
-			const data = await response.json();
+		const maxRetries = 2;
+		let lastError: any = null;
 
-			// Mapear campos de paginación si existen en el top-level
-			if (data.total_items !== undefined) {
-				data.pagination = {
-					total: data.total_items,
-					pages: data.total_pages,
-					currentPage: data.page,
-					limit: data.limit
-				};
+		for (let attempt = 1; attempt <= maxRetries; attempt++) {
+			try {
+				const response = await fetch(url, { ...options, headers });
+				
+				if (!response.ok) {
+					const errorData = await response.json().catch(() => ({}));
+					return {
+						success: false,
+						message: errorData.message || `Error del Agente: ${response.statusText}`,
+						details: errorData.results || errorData.error
+					};
+				}
+				
+				const data = await response.json();
+
+				// Mapear campos de paginación si existen en el top-level
+				if (data.total_items !== undefined) {
+					data.pagination = {
+						total: data.total_items,
+						pages: data.total_pages,
+						currentPage: data.page,
+						limit: data.limit
+					};
+				}
+				
+				return data;
+			} catch (error: any) {
+				lastError = error;
+				console.warn(`[AgentClient] Intento ${attempt}/${maxRetries} fallido en ${url}:`, error.message);
+				
+				if (attempt < maxRetries) {
+					// Pequeña espera antes de reintentar (500ms)
+					await new Promise(resolve => setTimeout(resolve, 500));
+				}
 			}
-			
-			return data;
-		} catch (error: any) {
-			console.error(`Error calling agent at ${url}:`, error);
-			return {
-				success: false,
-				message: `No se pudo conectar con el Agente en ${this.baseUrl}. Verifique que el servidor local de la empresa esté en línea.`
-			};
 		}
+
+		console.error(`[AgentClient] Error fatal tras ${maxRetries} intentos en ${url}:`, lastError);
+		return {
+			success: false,
+			message: `No se pudo conectar con el Agente en ${this.baseUrl} tras varios intentos. Verifique que el servidor local de la empresa esté en línea.`
+		};
 	}
 
 	/**
