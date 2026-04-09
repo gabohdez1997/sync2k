@@ -20,6 +20,7 @@
     Trash2,
     X,
     Check,
+    Lock,
     Briefcase,
     Tag,
     UserCircle,
