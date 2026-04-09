@@ -38,7 +38,19 @@ export function hasPermission(
   optionId: string,
   action: keyof CRUD = 'read'
 ): boolean {
-  return profile.permissions[optionId]?.[action] ?? false;
+  if (!profile.permissions) {
+    console.warn(`[PERMISSIONS] El perfil de ${profile.email} no tiene objeto de permisos.`);
+    return false;
+  }
+
+  const hasIt = profile.permissions[optionId]?.[action] ?? false;
+
+  if (!hasIt) {
+    console.log(`[PERMISSIONS] Acceso DENEGADO para ${profile.email}: ${optionId}.${action}`);
+    // console.log(`[PERMISSIONS] Permisos actuales:`, JSON.stringify(profile.permissions));
+  }
+
+  return hasIt;
 }
 
 /**
@@ -102,7 +114,11 @@ export async function getUserProfile(userId: string): Promise<Profile | null> {
   }
 
   // Log de éxito interno para depuración en Vercel si es necesario
-  // console.log(`[AUTH] Perfil cargado exitosamente para ${rawData.email}`);
+  if (rawData.permissions && Object.keys(rawData.permissions).length > 0) {
+     console.log(`[AUTH] Perfil cargado para ${rawData.email}. Permisos detected: ${Object.keys(rawData.permissions).length}`);
+  } else {
+     console.warn(`[AUTH] Advertencia: El perfil de ${rawData.email} no tiene permisos definidos.`);
+  }
 
   return {
     id:                rawData.id,
