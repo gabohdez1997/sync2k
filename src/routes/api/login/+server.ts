@@ -49,8 +49,10 @@ export const POST: RequestHandler = async ({ request, locals, cookies }) => {
       .single();
 
     if (profileError || !profile) {
+      console.error('[LOGIN ONLINE] Error validando perfil:', profileError?.message || 'Perfil nulo');
       await locals.supabase.auth.signOut();
-      return json({ error: 'No se encontró tu perfil de usuario. Contacta al administrador.' }, { status: 403 });
+      const detail = profileError ? ` (${profileError.message})` : '';
+      return json({ error: `No se encontró tu perfil de usuario${detail}. Contacta al administrador.` }, { status: 403 });
     }
     if (!profile.active) {
       await locals.supabase.auth.signOut();
