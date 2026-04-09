@@ -77,7 +77,10 @@ SELECT
       ))
       FROM user_roles ur
       JOIN roles r ON r.id = ur.role_id
-      JOIN branches b ON b.id = ANY(r.branch_ids)
+      JOIN branches b ON (
+        (r.branch_ids IS NULL OR cardinality(r.branch_ids) = 0)
+        OR b.id = ANY(r.branch_ids)
+      )
       WHERE ur.user_id = p.id AND b.active = true
     ),
     '[]'::jsonb

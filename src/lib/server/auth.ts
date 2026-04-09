@@ -101,6 +101,9 @@ export async function getUserProfile(userId: string): Promise<Profile | null> {
     return null;
   }
 
+  // Log de éxito interno para depuración en Vercel si es necesario
+  // console.log(`[AUTH] Perfil cargado exitosamente para ${rawData.email}`);
+
   return {
     id:                rawData.id,
     full_name:         rawData.full_name ?? null,
