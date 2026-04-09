@@ -38,6 +38,12 @@
   let isEditing = $state(false);
   let loading = $state(false);
 
+  // Estados para Eliminación con Clave
+  let showDeleteModal = $state(false);
+  let customerToDelete = $state<any>(null);
+  let deletePassword = $state("");
+  let isDeleting = $state(false);
+
   // Form State
   let co_cli = $state("");
   let descripcion = $state("");
@@ -144,6 +150,12 @@
       toast.error(data.error);
     }
   });
+
+  function openDeleteModal(customer: any) {
+    customerToDelete = customer;
+    deletePassword = "";
+    showDeleteModal = true;
+  }
 </script>
 
 <div class="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
@@ -403,34 +415,13 @@
                     >
                       <Edit2 size={18} />
                     </button>
-                    <form
-                      method="POST"
-                      action="?/deleteCustomer"
-                      use:enhance={({ cancel }) => {
-                        if (
-                          !confirm(
-                            `¿Eliminar al cliente ${customer.descripcion}?`,
-                          )
-                        )
-                          cancel();
-                        return async ({ update }) => {
-                          await update();
-                          toast.success("Cliente eliminado");
-                        };
-                      }}
+                    <button
+                      onclick={() => openDeleteModal(customer)}
+                      class="p-2 text-text-muted hover:text-red-500 hover:bg-red-500/10 rounded-xl transition-all"
+                      title="Eliminar"
                     >
-                      <input
-                        type="hidden"
-                        name="co_cli"
-                        value={customer.co_cli}
-                      />
-                      <button
-                        class="p-2 text-text-muted hover:text-red-500 hover:bg-red-500/10 rounded-xl transition-all"
-                        title="Eliminar"
-                      >
-                        <Trash2 size={18} />
-                      </button>
-                    </form>
+                      <Trash2 size={18} />
+                    </button>
                   </div>
                 </td>
               </tr>
@@ -845,6 +836,108 @@
           </button>
         </div>
       </form>
+    </div>
+  </div>
+{/if}
+
+<!-- Modal de Confirmación de Eliminación -->
+{#if showDeleteModal}
+  <div class="fixed inset-0 z-[60] flex items-center justify-center p-4">
+    <div
+      class="absolute inset-0 bg-black/90 backdrop-blur-md"
+      onclick={() => !isDeleting && (showDeleteModal = false)}
+      onkeydown={(e) =>
+        e.key === "Escape" && !isDeleting && (showDeleteModal = false)}
+      role="button"
+      tabindex="-1"
+    ></div>
+
+    <div
+      class="glass w-full max-w-md rounded-[40px] border border-white/10 shadow-2xl relative z-10 overflow-hidden"
+      transition:scale={{ duration: 300, start: 0.95 }}
+    >
+      <div class="p-8 text-center space-y-6">
+        <div
+          class="h-20 w-20 rounded-3xl bg-red-500/20 text-red-500 flex items-center justify-center mx-auto shadow-lg shadow-red-500/10"
+        >
+          <Trash2 size={40} />
+        </div>
+
+        <div class="space-y-2">
+          <h2 class="text-2xl font-black tracking-tight">Confirmar Eliminación</h2>
+          <p class="text-text-muted text-sm px-4">
+            ¿Estás seguro de que deseas eliminar al cliente <span
+              class="text-text-base font-bold">{customerToDelete?.descripcion}</span
+            >? Esta acción es irreversible en Profit Plus.
+          </p>
+        </div>
+
+        <form
+          method="POST"
+          action="?/deleteCustomer"
+          use:enhance={() => {
+            isDeleting = true;
+            return async ({ result, update }) => {
+              await update();
+              isDeleting = false;
+              if (result.type === "success") {
+                showDeleteModal = false;
+                toast.success("Cliente eliminado correctamente");
+              } else if (result.type === "failure" && result.data?.message) {
+                toast.error(result.data.message as string);
+              }
+            };
+          }}
+          class="space-y-4 pt-4"
+        >
+          <input type="hidden" name="co_cli" value={customerToDelete?.co_cli} />
+          <input type="hidden" name="branch_id" value={selectedBranch || data.selectedBranchId} />
+
+          <div class="space-y-2 text-left">
+            <label class="text-[10px] font-black uppercase tracking-widest text-text-muted ml-1" for="del-pass"
+              >Contraseña de Confirmación</label
+            >
+            <div class="relative">
+              <Lock
+                size={18}
+                class="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted opacity-40"
+              />
+              <input
+                id="del-pass"
+                type="password"
+                name="password"
+                bind:value={deletePassword}
+                required
+                placeholder="Introduzca su contraseña"
+                class="w-full h-14 bg-white/5 border border-white/10 rounded-2xl pl-12 pr-5 focus:border-red-500/50 outline-none transition-all"
+              />
+            </div>
+          </div>
+
+          <div class="flex gap-3 pt-4">
+            <button
+              type="button"
+              onclick={() => (showDeleteModal = false)}
+              disabled={isDeleting}
+              class="flex-1 h-14 rounded-2xl font-bold bg-white/5 hover:bg-white/10 transition-all text-text-muted disabled:opacity-50"
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              disabled={isDeleting || !deletePassword}
+              class="flex-1 h-14 rounded-2xl font-bold bg-red-600 hover:bg-red-500 text-white shadow-lg shadow-red-500/20 transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2"
+            >
+              {#if isDeleting}
+                <Loader2 size={18} class="animate-spin" />
+              {:else}
+                <Check size={18} />
+                Eliminar
+              {/if}
+            </button>
+          </div>
+        </form>
+      </div>
     </div>
   </div>
 {/if}

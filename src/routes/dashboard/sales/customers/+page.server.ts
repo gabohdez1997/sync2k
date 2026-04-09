@@ -234,10 +234,19 @@ export const actions: Actions = {
         const formData = await request.formData();
         const co_cli = formData.get('co_cli') as string;
         const branchId = formData.get('branch_id') as string;
+        const password = formData.get('password') as string;
 
         if (!co_cli) return fail(400, { message: 'Código de cliente no proporcionado' });
+        if (!password) return fail(400, { message: 'La contraseña es requerida para confirmar la eliminación.' });
 
-        // Permisos
+        // 1. Verificar contraseña del usuario con Supabase Auth
+        const email = locals.session?.user?.email;
+        if (!email) return fail(401, { message: 'Sesión no válida.' });
+
+        const { error: authErr } = await supabaseAdmin.auth.signInWithPassword({ email, password });
+        if (authErr) return fail(401, { message: 'Contraseña de confirmación incorrecta.' });
+
+        // 2. Permisos de sucursal
 		const isAdmin = !profile.allowed_branches || profile.allowed_branches.length === 0;
 		if (!isAdmin) {
 			const allowedBranchIds = (profile.allowed_branches as any[]).map(b => typeof b === 'object' ? b.id : b);
@@ -246,7 +255,7 @@ export const actions: Actions = {
 			}
 		}
 
-        // Fetch branch
+        // 3. Obtener datos de la sucursal para el Agente
         const { data: dbBranch, error: branchErr } = await supabaseAdmin
             .from('branches')
             .select('id, name, agent_url, agent_token, profit_branch_codes')
