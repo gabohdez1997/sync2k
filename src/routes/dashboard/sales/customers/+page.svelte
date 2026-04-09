@@ -155,6 +155,8 @@
   function openDeleteModal(customer: any) {
     customerToDelete = customer;
     deletePassword = "";
+    // Asegurar que la sucursal esté seleccionada antes de abrir
+    selectedBranch = data.selectedBranchId || data.context?.branchId || "";
     showDeleteModal = true;
   }
 </script>
