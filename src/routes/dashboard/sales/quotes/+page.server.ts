@@ -98,6 +98,10 @@ export const load: PageServerLoad = protectLoad('sales_quotes', async ({ url, lo
 		if (lineaId) params.set('linea', lineaId);
 		if (categoriaId) params.set('categoria', categoriaId);
 		
+		const sortParam = url.searchParams.get('sort');
+		if (sortParam === 'asc') params.set('sort', 'price_asc');
+		if (sortParam === 'desc') params.set('sort', 'price_desc');
+		
 		params.set('sede_id', selectedBranch.id);
 		if (warehouseId) params.set('co_alma', warehouseId);
 
@@ -119,7 +123,11 @@ export const load: PageServerLoad = protectLoad('sales_quotes', async ({ url, lo
 				categorias,
 				warehouses: allowedWarehouses
 			},
-			pagination: resData.pagination || { total: 0, pages: 1, currentPage: 1 }
+			pagination: {
+				page: resData.page || pageIndex,
+				totalPages: resData.total_pages || 1,
+				totalItems: resData.total_items || (resData.data ? resData.data.length : 0)
+			}
 		};
 
 	} catch (e: any) {

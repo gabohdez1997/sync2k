@@ -84,175 +84,156 @@
     use:enhance={() => {
       isSaving = true;
       return async ({ update }) => {
-        await update();
+        await update({ reset: false });
         isSaving = false;
+        password = '';
+        confirmPassword = '';
       };
     }}
-    class="grid grid-cols-1 md:grid-cols-3 gap-8"
+    class="flex flex-col gap-6"
   >
-    <!-- Left Col: Personal Info -->
-    <div class="md:col-span-2 space-y-6">
-      <div class="glass p-8 rounded-[32px] border border-white/5 space-y-6">
-        <div class="flex items-center gap-3 text-brand-400">
-          <User size={20} />
-          <h2 class="text-sm font-black uppercase tracking-widest">Información Personal</h2>
+    <!-- Personal Info Section -->
+    <div class="glass p-8 rounded-[32px] border border-white/5 space-y-6">
+      <div class="flex items-center gap-3 text-brand-400">
+        <User size={20} />
+        <h2 class="text-sm font-black uppercase tracking-widest">Información Personal</h2>
+      </div>
+
+      <div class="space-y-4">
+        <div class="space-y-2">
+          <label class="text-xs font-bold text-text-muted ml-1" for="full_name">Nombre Completo</label>
+          <div class="relative group">
+            <User class="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted transition-colors group-focus-within:text-brand-500" size={20} />
+            <input 
+              type="text" 
+              id="full_name"
+              name="full_name" 
+              bind:value={fullName}
+              required
+              placeholder="Tu nombre aquí..."
+              class="w-full h-14 bg-white/5 border border-white/10 rounded-2xl pl-12 pr-5 focus:border-brand-500 focus:bg-brand-500/5 outline-hidden transition-all font-medium"
+            />
+          </div>
         </div>
 
-        <div class="space-y-4">
-          <div class="space-y-2">
-            <label class="text-xs font-bold text-text-muted ml-1" for="full_name">Nombre Completo</label>
-            <div class="relative group">
-              <User class="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted transition-colors group-focus-within:text-brand-500" size={20} />
-              <input 
-                type="text" 
-                id="full_name"
-                name="full_name" 
-                bind:value={fullName}
-                required
-                placeholder="Tu nombre aquí..."
-                class="w-full h-14 bg-white/5 border border-white/10 rounded-2xl pl-12 pr-5 focus:border-brand-500 focus:bg-brand-500/5 outline-hidden transition-all font-medium"
-              />
-            </div>
-          </div>
-
-          <div class="space-y-2 opacity-60">
-            <label class="text-xs font-bold text-text-muted ml-1" for="email">Correo Electrónico (No editable)</label>
-            <div class="relative">
-              <Mail class="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted" size={20} />
-              <input 
-                type="email" 
-                id="email"
-                value={profile?.email}
-                disabled
-                class="w-full h-14 bg-white/5 border border-white/10 rounded-2xl pl-12 pr-5 outline-hidden cursor-not-allowed italic"
-              />
-            </div>
+        <div class="space-y-2 opacity-60">
+          <label class="text-xs font-bold text-text-muted ml-1" for="email">Correo Electrónico (No editable)</label>
+          <div class="relative">
+            <Mail class="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted" size={20} />
+            <input 
+              type="email" 
+              id="email"
+              value={profile?.email}
+              disabled
+              class="w-full h-14 bg-white/5 border border-white/10 rounded-2xl pl-12 pr-5 outline-hidden cursor-not-allowed italic"
+            />
           </div>
         </div>
       </div>
-      
-      <!-- Personalization Section -->
-      <div class="glass p-8 rounded-[32px] border border-white/5 space-y-6">
-        <div class="flex items-center gap-3 text-brand-400">
-          <Palette size={20} />
-          <h2 class="text-sm font-black uppercase tracking-widest">Personalización</h2>
-        </div>
-        
-        <p class="text-xs text-text-muted italic leading-relaxed font-medium">
-          Selecciona tu modo preferido y color de acento. Estos cambios se aplicarán instantáneamente y se guardarán en tu perfil al actualizar.
+    </div>
+    
+    <!-- Security Section -->
+    <div class="glass p-8 rounded-[32px] border border-white/5 space-y-6">
+      <div class="flex items-center gap-3 text-brand-400">
+        <KeyRound size={20} />
+        <h2 class="text-sm font-black uppercase tracking-widest">Seguridad</h2>
+      </div>
+
+      <div class="space-y-4">
+        <p class="text-[10px] text-text-muted italic leading-relaxed">
+          Deja estos campos en blanco si no deseas cambiar tu contraseña actual.
         </p>
 
-        <ThemePicker />
-        
-        <!-- Hidden input to send theme config in form -->
-        <input type="hidden" name="theme_config" value={JSON.stringify(themeConfig)} />
-      </div>
+        <div class="space-y-2">
+          <label class="text-xs font-bold text-text-muted ml-1" for="password">Nueva Contraseña</label>
+          <div class="relative group">
+            <Lock class="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted group-focus-within:text-brand-500" size={20} />
+            <input 
+              type={showPassword ? "text" : "password"} 
+              id="password"
+              name="password" 
+              bind:value={password}
+              placeholder="••••••••"
+              class="w-full h-14 bg-white/5 border border-white/10 rounded-2xl pl-12 pr-5 focus:border-brand-500 outline-hidden transition-all font-mono"
+            />
+          </div>
+        </div>
 
-      <!-- Action Button Desktop -->
-      <div class="hidden md:flex justify-end pt-4">
-        <button 
-          type="submit" 
-          disabled={isSaving}
-          class="h-16 px-12 rounded-2xl bg-linear-to-tr from-brand-600 to-indigo-600 text-white font-black shadow-xl shadow-brand-500/20 hover:shadow-brand-500/40 hover:scale-[1.02] active:scale-95 transition-all disabled:opacity-50 flex items-center gap-3"
-        >
-          {#if isSaving}
-            <Loader2 size={24} class="animate-spin" />
-            Guardando Cambios...
-          {:else}
-            <Save size={24} />
-            Actualizar Perfil
-          {/if}
-        </button>
+        <div class="space-y-2">
+          <label class="text-xs font-bold text-text-muted ml-1" for="confirm_password">Confirmar Contraseña</label>
+          <div class="relative group">
+            <Lock class="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted group-focus-within:text-brand-500" size={20} />
+            <input 
+              type={showPassword ? "text" : "password"} 
+              id="confirm_password"
+              name="confirm_password" 
+              bind:value={confirmPassword}
+              placeholder="••••••••"
+              class="w-full h-14 bg-white/5 border border-white/10 rounded-2xl pl-12 pr-5 focus:border-brand-500 outline-hidden transition-all font-mono"
+            />
+          </div>
+        </div>
+
+        <label class="flex items-center gap-3 p-2 cursor-pointer group">
+          <input type="checkbox" bind:checked={showPassword} class="hidden" />
+          <div class="h-5 w-5 rounded-md border border-white/20 flex items-center justify-center transition-all group-hover:bg-white/5 {showPassword ? 'bg-brand-500 border-brand-500' : ''}">
+            {#if showPassword}
+              <div class="h-2 w-2 bg-white rounded-full"></div>
+            {/if}
+          </div>
+          <span class="text-xs font-bold text-text-muted group-hover:text-text-base">Mostrar contraseñas</span>
+        </label>
+        
+        <!-- Security Advice -->
+        <div class="flex flex-col md:flex-row items-center md:items-start gap-4 p-6 rounded-[24px] bg-blue-500/5 border border-blue-500/10 mt-6 !mt-8">
+          <div class="p-2 bg-blue-500/10 rounded-xl text-blue-400 shrink-0">
+            <AlertCircle size={20} />
+          </div>
+          <div>
+            <h4 class="text-sm font-bold text-blue-300">Consejo de Seguridad</h4>
+            <p class="text-xs text-blue-300/60 leading-relaxed mt-1">
+              Usa una contraseña fuerte de al menos 8 caracteres que incluya letras, números y símbolos. 
+              Nunca compartas tus credenciales de acceso con terceros.
+            </p>
+          </div>
+        </div>
       </div>
     </div>
 
-    <!-- Right Col: Security -->
-    <div class="space-y-6">
-      <div class="glass p-8 rounded-[32px] border border-white/5 space-y-6">
-        <div class="flex items-center gap-3 text-amber-400">
-          <KeyRound size={20} />
-          <h2 class="text-sm font-black uppercase tracking-widest">Seguridad</h2>
-        </div>
-
-        <div class="space-y-4">
-          <p class="text-[10px] text-text-muted italic leading-relaxed">
-            Deja estos campos en blanco si no deseas cambiar tu contraseña actual.
-          </p>
-
-          <div class="space-y-2">
-            <label class="text-xs font-bold text-text-muted ml-1" for="password">Nueva Contraseña</label>
-            <div class="relative group">
-              <Lock class="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted group-focus-within:text-amber-500" size={20} />
-              <input 
-                type={showPassword ? "text" : "password"} 
-                id="password"
-                name="password" 
-                bind:value={password}
-                placeholder="••••••••"
-                class="w-full h-14 bg-white/5 border border-white/10 rounded-2xl pl-12 pr-5 focus:border-amber-500 outline-hidden transition-all font-mono"
-              />
-            </div>
-          </div>
-
-          <div class="space-y-2">
-            <label class="text-xs font-bold text-text-muted ml-1" for="confirm_password">Confirmar Contraseña</label>
-            <div class="relative group">
-              <Lock class="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted group-focus-within:text-amber-500" size={20} />
-              <input 
-                type={showPassword ? "text" : "password"} 
-                id="confirm_password"
-                name="confirm_password" 
-                bind:value={confirmPassword}
-                placeholder="••••••••"
-                class="w-full h-14 bg-white/5 border border-white/10 rounded-2xl pl-12 pr-5 focus:border-amber-500 outline-hidden transition-all font-mono"
-              />
-            </div>
-          </div>
-
-          <label class="flex items-center gap-3 p-2 cursor-pointer group">
-            <input type="checkbox" bind:checked={showPassword} class="hidden" />
-            <div class="h-5 w-5 rounded-md border border-white/20 flex items-center justify-center transition-all group-hover:bg-white/5 {showPassword ? 'bg-amber-500 border-amber-500' : ''}">
-              {#if showPassword}
-                <div class="h-2 w-2 bg-white rounded-full"></div>
-              {/if}
-            </div>
-            <span class="text-xs font-bold text-text-muted group-hover:text-text-base">Mostrar contraseñas</span>
-          </label>
-        </div>
+    <!-- Personalization Section -->
+    <div class="glass p-8 rounded-[32px] border border-white/5 space-y-6">
+      <div class="flex items-center gap-3 text-brand-400">
+        <Palette size={20} />
+        <h2 class="text-sm font-black uppercase tracking-widest">Personalización</h2>
       </div>
+      
+      <p class="text-xs text-text-muted italic leading-relaxed font-medium">
+        Selecciona tu modo preferido y color de acento. Estos cambios se aplicarán instantáneamente y se guardarán en tu perfil al actualizar.
+      </p>
 
-      <!-- Action Button Mobile -->
-      <div class="md:hidden pt-4">
-        <button 
-          type="submit" 
-          disabled={isSaving}
-          class="w-full h-16 rounded-2xl bg-linear-to-tr from-brand-600 to-indigo-600 text-white font-black shadow-xl shadow-brand-500/20 active:scale-95 transition-all disabled:opacity-50 flex items-center justify-center gap-3"
-        >
-          {#if isSaving}
-            <Loader2 size={24} class="animate-spin" />
-            Guardando...
-          {:else}
-            <Save size={24} />
-            Actualizar Perfil
-          {/if}
-        </button>
-      </div>
+      <ThemePicker />
+      
+      <!-- Hidden input to send theme config in form -->
+      <input type="hidden" name="theme_config" value={JSON.stringify(themeConfig)} />
+    </div>
+
+    <!-- Action Button (Unified) -->
+    <div class="flex justify-end pt-4">
+      <button 
+        type="submit" 
+        disabled={isSaving}
+        class="w-full md:w-auto h-16 px-12 rounded-2xl bg-linear-to-tr from-brand-600 to-indigo-600 text-white font-black shadow-xl shadow-brand-500/20 hover:shadow-brand-500/40 hover:scale-[1.02] active:scale-95 transition-all disabled:opacity-50 flex items-center justify-center gap-3"
+      >
+        {#if isSaving}
+          <Loader2 size={24} class="animate-spin" />
+          Guardando Cambios...
+        {:else}
+          <Save size={24} />
+          Actualizar Perfil
+        {/if}
+      </button>
     </div>
   </form>
-
-  <!-- Security Advice -->
-  <div class="flex items-start gap-4 p-6 rounded-[24px] bg-blue-500/5 border border-blue-500/10">
-    <div class="p-2 bg-blue-500/10 rounded-xl text-blue-400">
-      <AlertCircle size={20} />
-    </div>
-    <div>
-      <h4 class="text-sm font-bold text-blue-300">Consejo de Seguridad</h4>
-      <p class="text-xs text-blue-300/60 leading-relaxed mt-1">
-        Usa una contraseña fuerte de al menos 8 caracteres que incluya letras, números y símbolos. 
-        Nunca compartas tus credenciales de acceso con terceros.
-      </p>
-    </div>
-  </div>
 
 </div>
 

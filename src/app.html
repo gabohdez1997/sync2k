@@ -15,10 +15,17 @@
 			}
 		</script>
 		<script>
-			// Inine script to prevent FOUC (Flash of Unstyled Content)
+			// Inline script to prevent FOUC (Flash of Unstyled Content)
 			try {
-				const theme = localStorage.getItem('theme') || 'dark';
-				if (theme === 'light') document.documentElement.classList.add('light');
+				const stored = localStorage.getItem('theme_config');
+				let isDark = true;
+				if (stored) {
+					const config = JSON.parse(stored);
+					if (config.mode === 'light' || (config.mode === 'system' && !window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+						isDark = false;
+					}
+				}
+				if (!isDark) document.documentElement.classList.add('light');
 				else document.documentElement.classList.add('dark');
 			} catch (e) {}
 		</script>

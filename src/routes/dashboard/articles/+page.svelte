@@ -560,7 +560,7 @@
                   <span class="text-[10px] text-text-muted uppercase font-bold"
                     >Principal</span
                   >
-                  <span class="font-bold text-sm text-text-base"
+                  <span class="font-bold text-sm text-brand-400"
                     >{article.co_ubicacion || "Ninguna"}</span
                   >
                 </div>
@@ -570,7 +570,7 @@
                   <span class="text-[10px] text-text-muted uppercase font-bold"
                     >Secundaria</span
                   >
-                  <span class="font-bold text-sm text-text-base"
+                  <span class="font-bold text-sm text-brand-400"
                     >{article.co_ubicacion2 || "Ninguna"}</span
                   >
                 </div>
@@ -580,7 +580,7 @@
                   <span class="text-[10px] text-text-muted uppercase font-bold"
                     >Terciaria</span
                   >
-                  <span class="font-bold text-sm text-text-base"
+                  <span class="font-bold text-sm text-brand-400"
                     >{article.co_ubicacion3 || "Ninguna"}</span
                   >
                 </div>
@@ -611,7 +611,7 @@
                   class="flex items-center justify-between py-1 bg-surface-base/50 px-2 rounded-md border border-white/5"
                 >
                   <span class="text-xs text-text-muted">{alm.des_alma}</span>
-                  <span class="font-bold text-green-400 text-sm"
+                  <span class="font-bold text-brand-400 text-sm"
                     >{alm.stock ?? alm.cant_stock ?? 0}</span
                   >
                 </div>
@@ -621,7 +621,7 @@
                 class="flex items-center justify-between py-1 bg-surface-base/50 px-2 rounded-md border border-white/5"
               >
                 <span class="text-xs text-text-muted">Total (Global)</span>
-                <span class="text-lg font-black text-green-400">
+                <span class="text-lg font-black text-brand-400">
                   {article.stock !== undefined
                     ? article.stock
                     : article.s_actual || "0"}

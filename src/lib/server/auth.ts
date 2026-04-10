@@ -121,6 +121,23 @@ export async function getUserProfile(userId: string): Promise<Profile | null> {
     return null;
   }
 
+  // Fallback: Si la vista profile_complete no tiene theme_config (stale view)
+  // intentamos obtenerlo directamente de la tabla profiles.
+  if (rawData.theme_config === undefined) {
+    try {
+        if (isOfflineFallback) {
+            const { queryLocalDb } = await import('$lib/server/local-db');
+            const res = await queryLocalDb('SELECT theme_config FROM profiles WHERE id = $1', [userId]);
+            if (res.rows[0]) rawData.theme_config = res.rows[0].theme_config;
+        } else {
+            const { data } = await supabaseAdmin.from('profiles').select('theme_config').eq('id', userId).single();
+            if (data) rawData.theme_config = data.theme_config;
+        }
+    } catch (e) {
+        // Ignorar si falla el fallback
+    }
+  }
+
   // Log de éxito interno para depuración en Vercel si es necesario
   if (rawData.permissions && Object.keys(rawData.permissions).length > 0) {
      console.log(`[AUTH] Perfil cargado para ${rawData.email}. Permisos detected: ${Object.keys(rawData.permissions).length}`);
@@ -139,6 +156,6 @@ export async function getUserProfile(userId: string): Promise<Profile | null> {
     allowed_warehouses: rawData.allowed_warehouses ?? [],
     profit_user:       rawData.profit_user ?? null,
     profit_pass:       rawData.profit_pass ?? null,
-    theme_config:      rawData.theme_config ?? null,
+    theme_config:      rawData.theme_config || null,
   };
 }

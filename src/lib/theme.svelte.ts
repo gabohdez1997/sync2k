@@ -86,5 +86,5 @@ export function getTheme() {
 
 export function toggleTheme() {
     const isDark = config.mode === 'dark' || (config.mode === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
-    updateThemeConfig({ mode: isDark ? 'light' : 'dark' });
+    updateThemeConfig({ mode: isDark ? 'light' : 'dark' }, true);
 }

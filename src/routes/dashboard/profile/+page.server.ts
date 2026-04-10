@@ -57,6 +57,22 @@ export const actions: Actions = {
 
             if (profileError) throw profileError;
 
+            // 2.5 Sincronizar actualización a la BD Local (SQLite)
+            try {
+                const { queryLocalDb } = await import('$lib/server/local-db');
+                if (themeConfigStr) {
+                    await queryLocalDb('UPDATE profiles SET full_name = $1, theme_config = $2::jsonb, updated_at = CURRENT_TIMESTAMP WHERE id = $3', [
+                        fullName, JSON.stringify(JSON.parse(themeConfigStr)), userId
+                    ]);
+                } else {
+                     await queryLocalDb('UPDATE profiles SET full_name = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2', [
+                        fullName, userId
+                    ]);
+                }
+            } catch (e: any) {
+                console.warn('[API/PROFILE] Error actualizando BD local:', e.message);
+            }
+
             // 3. Auditoría
             await logAction({
                 uid: userId,
