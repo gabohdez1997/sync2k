@@ -25,6 +25,9 @@
 
   let { data, form }: { data: PageData; form: any } = $props();
 
+  // Permisos CRUD del usuario para esta sección
+  const canUpdate = data.crud?.update ?? false;
+
   $effect(() => {
     if (data.branches) {
       console.log("[SYNC2K] Available Branches (Client):", data.branches.map((b: any) => ({ id: b.id.slice(0,4), name: b.name, code: b.co_sucu })));
@@ -583,13 +586,14 @@
                 </div>
               </div>
 
-              <!-- Stop propagation so clicking this button doesn't toggle the card selection -->
-              <button
-                onclick={(e) => { e.preventDefault(); e.stopPropagation(); openLocationModal(article); }}
-                class="mt-3 w-full py-2 bg-brand-500/10 hover:bg-brand-500/20 text-brand-400 font-bold rounded-xl transition-colors border border-brand-500/20 text-sm"
-              >
-                Modificar Ubicaciones
-              </button>
+              {#if canUpdate}
+                <button
+                  onclick={(e) => { e.preventDefault(); e.stopPropagation(); openLocationModal(article); }}
+                  class="mt-3 w-full py-2 bg-brand-500/10 hover:bg-brand-500/20 text-brand-400 font-bold rounded-xl transition-colors border border-brand-500/20 text-sm"
+                >
+                  Modificar Ubicaciones
+                </button>
+              {/if}
             </div>
           </div>
 

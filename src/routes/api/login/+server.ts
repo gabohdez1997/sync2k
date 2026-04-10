@@ -42,18 +42,29 @@ export const POST: RequestHandler = async ({ request, locals, cookies }) => {
 
     // Validar perfil Online
     const { supabaseAdmin } = await import('$lib/server/supabase');
-    const { data: profile, error: profileError } = await supabaseAdmin
+    const { data: profiles, error: profileError } = await supabaseAdmin
       .from('profiles')
       .select('id, active, full_name')
-      .eq('id', authData.user.id)
-      .single();
+      .eq('id', authData.user.id);
 
-    if (profileError || !profile) {
-      console.error('[LOGIN ONLINE] Error validando perfil:', profileError?.message || 'Perfil nulo');
+    if (profileError || !profiles || profiles.length === 0) {
+      const hasKey = !!supabaseAdmin;
+      const uidInfo = authData.user.id.substring(0, 5);
+      const errMsg = profileError?.message || (profiles?.length === 0 ? 'Perfil no encontrado en DB' : 'Error desconocido');
+      
+      console.error(`[LOGIN ONLINE] Error validando perfil (UID: ${authData.user.id}, Key: ${hasKey}):`, errMsg);
       await locals.supabase.auth.signOut();
-      const detail = profileError ? ` (${profileError.message})` : '';
-      return json({ error: `No se encontró tu perfil de usuario${detail}. Contacta al administrador.` }, { status: 403 });
+      
+      return json({ 
+        error: `No se encontró tu perfil de usuario [id:${uidInfo}]. Contacta al administrador. (${errMsg})` 
+      }, { status: 403 });
     }
+
+    if (profiles.length > 1) {
+      console.error(`[LOGIN ONLINE] ¡AVISO! Se detectaron ${profiles.length} perfiles para el ID ${authData.user.id}. Continuando con el primero.`);
+    }
+
+    const profile = profiles[0];
     if (!profile.active) {
       await locals.supabase.auth.signOut();
       return json({ error: 'Tu cuenta ha sido desactivada. Contacta al administrador.' }, { status: 403 });

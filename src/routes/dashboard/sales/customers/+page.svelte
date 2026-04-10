@@ -34,6 +34,11 @@
   let { data, form }: { data: PageData; form: ActionData } = $props();
 
   let searchQuery = $state(data.search || "");
+
+  // Permisos CRUD del usuario para esta sección
+  const canCreate = data.crud?.create ?? false;
+  const canUpdate = data.crud?.update ?? false;
+  const canDelete = data.crud?.delete ?? false;
   let isSearching = $state(false);
   let showModal = $state(false);
   let isEditing = $state(false);
@@ -155,8 +160,12 @@
   function openDeleteModal(customer: any) {
     customerToDelete = customer;
     deletePassword = "";
-    // Asegurar que la sucursal esté seleccionada antes de abrir
-    selectedBranch = data.selectedBranchId || data.context?.branchId || "";
+    // Asegurar que la sucursal esté seleccionada antes de abrir el modal
+    // Prioridad: 
+    // 1. La sucursal actualmente seleccionada en el estado (que viene del URL)
+    // 2. data.selectedBranchId (poblado por el load)
+    // 3. data.context?.branchId (fallback)
+    selectedBranch = selectedBranch || data.selectedBranchId || data.context?.branchId || "";
     showDeleteModal = true;
   }
 </script>
@@ -183,13 +192,15 @@
       </p>
     </div>
 
-    <button
-      onclick={openCreateModal}
-      class="flex items-center justify-center gap-3 bg-brand-600 hover:bg-brand-500 text-white px-8 py-4 rounded-2xl font-black shadow-xl shadow-brand-500/20 transition-all active:scale-95"
-    >
-      <Plus size={20} />
-      Nuevo Cliente
-    </button>
+    {#if canCreate}
+      <button
+        onclick={openCreateModal}
+        class="flex items-center justify-center gap-3 bg-brand-600 hover:bg-brand-500 text-white px-8 py-4 rounded-2xl font-black shadow-xl shadow-brand-500/20 transition-all active:scale-95"
+      >
+        <Plus size={20} />
+        Nuevo Cliente
+      </button>
+    {/if}
   </div>
 
   <!-- Search, Filters and Stats -->
@@ -411,20 +422,24 @@
                   <div
                     class="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity"
                   >
-                    <button
-                      onclick={() => openEditModal(customer)}
-                      class="p-2 text-text-muted hover:text-brand-500 hover:bg-brand-500/10 rounded-xl transition-all"
-                      title="Editar"
-                    >
-                      <Edit2 size={18} />
-                    </button>
-                    <button
-                      onclick={() => openDeleteModal(customer)}
-                      class="p-2 text-text-muted hover:text-red-500 hover:bg-red-500/10 rounded-xl transition-all"
-                      title="Eliminar"
-                    >
-                      <Trash2 size={18} />
-                    </button>
+                    {#if canUpdate}
+                      <button
+                        onclick={() => openEditModal(customer)}
+                        class="p-2 text-text-muted hover:text-brand-500 hover:bg-brand-500/10 rounded-xl transition-all"
+                        title="Editar"
+                      >
+                        <Edit2 size={18} />
+                      </button>
+                    {/if}
+                    {#if canDelete}
+                      <button
+                        onclick={() => openDeleteModal(customer)}
+                        class="p-2 text-text-muted hover:text-red-500 hover:bg-red-500/10 rounded-xl transition-all"
+                        title="Eliminar"
+                      >
+                        <Trash2 size={18} />
+                      </button>
+                    {/if}
                   </div>
                 </td>
               </tr>
@@ -475,15 +490,16 @@
 
 <!-- Management Modal -->
 {#if showModal}
+  {@const handleBackdropClose = (e) => { if (e.target === e.currentTarget) showModal = false; }}
   <div
     class="fixed inset-0 bg-black/60 backdrop-blur-md z-50 flex items-center justify-center p-4 text-text-base"
     transition:fade
-    onclick={() => (showModal = false)}
+    onmousedown={handleBackdropClose}
   >
     <div
       class="bg-surface-raised w-full max-w-2xl rounded-[40px] border border-border-subtle shadow-2xl overflow-hidden flex flex-col"
       transition:fly={{ y: 50, duration: 400 }}
-      onclick={(e) => e.stopPropagation()}
+      onmousedown={(e) => e.stopPropagation()}
       onkeydown={(e) => e.key === "Escape" && (showModal = false)}
       role="dialog"
       aria-modal="true"
@@ -894,7 +910,7 @@
           class="space-y-4 pt-4"
         >
           <input type="hidden" name="co_cli" value={customerToDelete?.co_cli} />
-          <input type="hidden" name="branch_id" value={selectedBranch || data.context?.branchId || data.selectedBranchId} />
+          <input type="hidden" name="branch_id" value={selectedBranch} />
 
           <div class="space-y-2 text-left">
             <label class="text-[10px] font-black uppercase tracking-widest text-text-muted ml-1" for="del-pass"

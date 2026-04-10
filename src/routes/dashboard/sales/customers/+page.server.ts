@@ -13,7 +13,13 @@ export const load: PageServerLoad = protectLoad('sales_customers', async ({ loca
     
     try {
         const profile = locals.profile;
-        if (!profile) throw new Error('Perfil no cargado.');
+        if (!profile) {
+            console.error('[CUSTOMERS] Perfil no encontrado en locals. Redirigiendo...');
+            return {
+                status: 302,
+                redirect: '/'
+            };
+        }
 
 		// 1. Obtener todas las sucursales de Supabase
 		let allBranches: any[] = [];
@@ -114,6 +120,9 @@ export const load: PageServerLoad = protectLoad('sales_customers', async ({ loca
             zonas = (zonRes as any)?.data || (zonRes as any)?.items || (Array.isArray(zonRes) ? zonRes : []);
         } catch (e) {}
 
+        // Extraer permisos CRUD del usuario para esta sección
+        const crud = profile.permissions?.['sales_customers'] || { read: true, create: false, update: false, delete: false };
+
         return {
             title: 'Clientes',
             customers: Array.isArray(customers) ? customers : [],
@@ -122,6 +131,7 @@ export const load: PageServerLoad = protectLoad('sales_customers', async ({ loca
             search,
             branches: allowedBranches,
             selectedBranchId: selectedBranch.id,
+            crud,
             context: {
                 branchId: selectedBranch.id,
                 branches: allowedBranches,
@@ -236,53 +246,89 @@ export const actions: Actions = {
         const branchId = formData.get('branch_id') as string;
         const password = formData.get('password') as string;
 
-        console.log(`[DELETE CUSTOMER] Attempting to delete client: ${co_cli} in branch: ${branchId}`);
+        console.log(`[DELETE CUSTOMER] Attempting to delete client: ${co_cli}. Target Branch: ${branchId || 'BROADCAST'}`);
 
         if (!co_cli) return fail(400, { message: 'Código de cliente no proporcionado' });
-        if (!branchId) return fail(400, { message: 'ID de sucursal no proporcionado en el formulario.' });
         if (!password) return fail(400, { message: 'La contraseña es requerida para confirmar la eliminación.' });
 
-        // 1. Verificar contraseña del usuario con Supabase Auth
+        // 1. Verificar contraseña del usuario con su propio cliente de sesión
+        // IMPORTANTE: Usar locals.supabase en vez de supabaseAdmin para no invalidar la sesión actual.
         const email = locals.session?.user?.email;
         if (!email) return fail(401, { message: 'Sesión no válida.' });
 
-        const { error: authErr } = await supabaseAdmin.auth.signInWithPassword({ email, password });
+        const { error: authErr } = await locals.supabase.auth.signInWithPassword({ email, password });
         if (authErr) return fail(401, { message: 'Contraseña de confirmación incorrecta.' });
 
-        // 2. Permisos de sucursal
-		const isAdmin = !profile.allowed_branches || profile.allowed_branches.length === 0;
-		if (!isAdmin) {
-			const allowedBranchIds = (profile.allowed_branches as any[]).map(b => typeof b === 'object' ? b.id : b);
-			if (!allowedBranchIds.includes(branchId)) {
-				return fail(403, { message: 'No tienes permiso para operar en esta sucursal.' });
-			}
-		}
+        // 2. Determinar sucursales a las que se enviará la eliminación
+        // Si hay una sucursal seleccionada, empezamos por esa. 
+        // Si no, o como fallback/broadcast, usamos todas las permitidas.
+        let targetBranches: any[] = [];
+        
+        const profileAllowed = profile.allowed_branches || [];
+        const isAdmin = profileAllowed.length === 0; // En este sistema, perfil sin sucursales explícitas = admin global
 
-        // 3. Obtener datos de la sucursal para el Agente
-        const { data: dbBranch, error: branchErr } = await supabaseAdmin
-            .from('branches')
-            .select('id, name, agent_url, agent_token, profit_branch_codes')
-            .eq('id', branchId)
-            .single();
-
-        if (branchErr || !dbBranch?.agent_url) {
-            console.error(`[DELETE CUSTOMER] Branch lookup failed for ID ${branchId}:`, branchErr?.message || 'No agent URL');
-            return fail(400, { message: 'Sucursal no válida dentro del sistema Central.' });
+        if (isAdmin) {
+            // Si es admin, obtenemos todas las activas de la DB
+            const { data } = await supabaseAdmin.from('branches').select('*').eq('active', true);
+            targetBranches = data || [];
+        } else {
+            targetBranches = profileAllowed;
         }
 
-        const agent = new AgentClient({
-            slug: dbBranch.id,
-            agent_url: dbBranch.agent_url as string,
-            agent_api_key: dbBranch.agent_token
-        }, profile);
-
-        const response = await agent.deleteCustomer(co_cli);
-
-        if (!response.success) {
-            return fail(500, { message: response.message || 'Error al eliminar el cliente' });
+        if (targetBranches.length === 0) {
+            return fail(403, { message: 'No tienes sucursales asignadas para realizar esta operación.' });
         }
 
-        // Auditoría
+        // 3. Ejecución de la eliminación (Broadcast)
+        let successCount = 0;
+        let failCount = 0;
+        let lastErrorMessage = '';
+
+        // Si el usuario especificó una sucursal, la ponemos primero en la lista
+        if (branchId) {
+            const specific = targetBranches.find(b => b.id === branchId);
+            if (specific) {
+                targetBranches = [specific, ...targetBranches.filter(b => b.id !== branchId)];
+            }
+        }
+
+        console.log(`[DELETE BROADCAST] Inicianado eliminación en ${targetBranches.length} sedes...`);
+
+        for (const branch of targetBranches) {
+            if (!branch.agent_url) continue;
+
+            try {
+                const agent = new AgentClient({
+                    slug: branch.id,
+                    agent_url: branch.agent_url,
+                    agent_api_key: branch.agent_token
+                }, profile);
+
+                const response = await agent.deleteCustomer(co_cli);
+                
+                if (response.success) {
+                    successCount++;
+                    console.log(`[DELETE] Exito en sucursal: ${branch.name || branch.id}`);
+                } else {
+                    failCount++;
+                    lastErrorMessage = response.message || 'Error desconocido';
+                    console.warn(`[DELETE] Fallo en sucursal ${branch.name}: ${lastErrorMessage}`);
+                }
+            } catch (err: any) {
+                failCount++;
+                console.error(`[DELETE] Error de conexión con sucursal ${branch.name}:`, err.message);
+            }
+        }
+
+        if (successCount === 0) {
+            return fail(500, { 
+                message: failCount > 0 
+                    ? `No se pudo eliminar el cliente en ninguna sede. Último error: ${lastErrorMessage}` 
+                    : 'No se encontraron sedes activas para procesar la eliminación.' 
+            });
+        }
+
+        // 4. Auditoría (solo un registro general del broadcast)
         try {
             await logAction({
                 uid:        profile.id ?? null,
@@ -290,8 +336,8 @@ export const actions: Actions = {
                 action:     'DELETE',
                 module:     'sales_customers',
                 record_id:  co_cli,
-                branch_id:  branchId,
-                old_data:   { co_cli },
+                branch_id:  branchId || targetBranches[0].id,
+                old_data:   { co_cli, broadcast: true, success_in: successCount, fails: failCount },
                 new_data:   null,
                 source:     'cloud'
             });
@@ -299,6 +345,10 @@ export const actions: Actions = {
             console.error('[AUDIT] Error registrando auditoría de eliminación:', auditErr);
         }
 
-        return { success: true, message: 'Cliente eliminado correctamente.' };
+        const msg = failCount > 0 
+            ? `Eliminado en ${successCount} sedes. Hubo errores en ${failCount} sedes.` 
+            : 'Cliente eliminado correctamente en todas las sedes autorizadas.';
+
+        return { success: true, message: msg };
     })
 };

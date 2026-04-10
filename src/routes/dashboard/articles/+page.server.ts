@@ -219,10 +219,14 @@ export const load: PageServerLoad = protectLoad('sec_articles', async ({ url, lo
 			|| (Array.isArray(resData) ? resData : []);
 		const articles = Array.isArray(rawItems) ? rawItems : [];
 
+		// Extraer permisos CRUD del usuario para esta sección
+		const crud = userProfile?.permissions?.['sec_articles'] || { read: true, create: false, update: false, delete: false };
+
 		return {
 			articles,
 			endpoint,
 			branches: allowedBranches,
+			crud,
 			context: {
 				branchId,
 				warehouseId,

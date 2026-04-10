@@ -63,11 +63,10 @@ export async function getUserProfile(userId: string): Promise<Profile | null> {
 
   try {
     // ── 1. Intento Online (Supabase Cloud) ──
-    const { data, error } = await supabaseAdmin
+    const { data: results, error } = await supabaseAdmin
       .from('profile_complete')
       .select('*')
-      .eq('id', userId)
-      .single();
+      .eq('id', userId);
 
     if (error) {
       if (error.message?.includes('fetch failed') || error.message?.includes('Failed to fetch')) {
@@ -77,7 +76,16 @@ export async function getUserProfile(userId: string): Promise<Profile | null> {
       return null;
     }
     
-    rawData = data;
+    if (!results || results.length === 0) {
+      console.warn(`[AUTH ONLINE] Perfil no encontrado para UID: ${userId}`);
+      return null;
+    }
+
+    if (results.length > 1) {
+      console.error(`[AUTH ONLINE] ¡CRÍTICO! Se encontraron ${results.length} registros para el UID: ${userId}. Usando el primero.`);
+    }
+
+    rawData = results[0];
 
   } catch (err: any) {
     if (err.message !== 'OFFLINE' && !err.message?.includes('fetch failed') && !err.message?.includes('ETIMEDOUT')) {
