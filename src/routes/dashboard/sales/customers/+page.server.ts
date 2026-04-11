@@ -6,7 +6,7 @@ import { supabaseAdmin } from '$lib/server/supabase';
 import { logAction } from '$lib/server/audit';
 import type { Actions, PageServerLoad } from './$types';
 
-export const load: PageServerLoad = protectLoad('sales_customers', async ({ locals, url }) => {
+export const load: PageServerLoad = protectLoad('sales_customers', async ({ locals, url, fetch }) => {
     const page = Number(url.searchParams.get('page')) || 1;
     const search = url.searchParams.get('search') || '';
     const urlBranchId = url.searchParams.get('branch_id');
@@ -94,39 +94,75 @@ export const load: PageServerLoad = protectLoad('sales_customers', async ({ loca
 
         // 3. Inicializar AgentClient con datos de la sucursal
         const agentClient = new AgentClient({
-            slug: selectedBranch.id, // Usamos el ID de la sucursal como slug
+            slug: selectedBranch.id,
             agent_url: selectedBranch.agent_url,
             agent_api_key: selectedBranch.agent_token
-        }, profile);
+        }, profile, fetch);
 
-        // 4. Fetch Customers
-        const params = new URLSearchParams();
-        params.set('page', String(page));
-        params.set('limit', '20');
-        if (search) params.set('descripcion', search);
-        
-        params.set('sede_id', selectedBranch.id);
-        params.set('sede', selectedBranch.profit_branch_code || selectedBranch.id);
-
-        const endpoint = search ? `/clientes/search?${params.toString()}` : `/clientes?${params.toString()}`;
-        const resData = await agentClient.request<any>(endpoint);
-        
-        const customers = resData.data?.items || resData.items || resData.data || (Array.isArray(resData) ? resData : []);
-
-        // 5. Fetch Zonas
+        let customers: any[] = [];
+        let resData: any = { success: true, data: { items: [] }, pagination: { total: 0, page: 1, limit: 20, totalPages: 0 } };
         let zonas: any[] = [];
+
         try {
+            // Solo consultamos al agente si no estamos en un proceso de redirección o similar
+            // Y capturamos errores para no romper el SSR si el agente está offline
+            if (search) {
+                // Mapeo refinado: No enviar todos a la vez para evitar colisiones AND en el agente
+                const cleanSearch = search.trim();
+                const isRIF = /^[VEJGvejg]\d+(-?\d+)?$/i.test(cleanSearch.replace(/[-\s]/g, ''));
+                
+                let filters: any = {};
+                if (isRIF) {
+                    filters.rif = cleanSearch;
+                    filters.co_cli = cleanSearch;
+                } else {
+                    // Si no es RIF, enviamos por múltiples parámetros comunes para asegurar match
+                    filters.cli_des = cleanSearch;
+                    filters.descripcion = cleanSearch;
+                    filters.q = cleanSearch; // Parámetro universal de búsqueda
+                    
+                    // Fallback para DBs case-sensitive: enviar también en mayúsculas
+                    const upper = cleanSearch.toUpperCase();
+                    if (upper !== cleanSearch) {
+                        filters.cli_des_upper = upper;
+                        filters.nombre = upper;
+                    }
+                }
+
+                const res = await agentClient.searchCustomers(filters, page, 20).catch(() => null);
+                if (res && res.success) {
+                    resData = res;
+                    customers = res.data?.items || res.items || res.data || [];
+                }
+            } else {
+                const res = await agentClient.getCustomers(page, 20).catch(() => null);
+                if (res && res.success) {
+                    resData = res;
+                    customers = res.data?.items || res.items || res.data || [];
+                }
+            }
+
+            // También cargar zonas para el modal de cliente
             const zonRes = await agentClient.getZonas().catch(() => null);
-            zonas = (zonRes as any)?.data || (zonRes as any)?.items || (Array.isArray(zonRes) ? zonRes : []);
-        } catch (e) {}
+            if (zonRes && zonRes.success) {
+                zonas = zonRes.data || [];
+            }
+        } catch (err) {
+            console.warn('[CUSTOMERS] Safe SSR Load failed:', err);
+        }
 
         // Extraer permisos CRUD del usuario para esta sección
         const crud = profile.permissions?.['sales_customers'] || { read: true, create: false, update: false, delete: false };
 
         return {
             title: 'Clientes',
-            customers: Array.isArray(customers) ? customers : [],
-            pagination: resData.pagination,
+            customers,
+            pagination: {
+                total: resData.pagination?.total || 0,
+                page: resData.pagination?.currentPage || resData.pagination?.page || page,
+                limit: resData.pagination?.limit || 20,
+                totalPages: resData.pagination?.pages || resData.pagination?.totalPages || 0
+            },
             error: resData.success === false ? resData.message : null,
             search,
             branches: allowedBranches,
@@ -150,7 +186,7 @@ export const load: PageServerLoad = protectLoad('sales_customers', async ({ loca
 });
 
 export const actions: Actions = {
-    saveCustomer: protectAction('sales_customers', async ({ request, locals }) => {
+    saveCustomer: protectAction('sales_customers', async ({ request, locals, fetch }) => {
         const profile = locals.profile;
         if (!profile) return fail(401, { message: 'Sesión expirada' });
 
@@ -188,7 +224,7 @@ export const actions: Actions = {
             slug: dbBranch.id,
             agent_url: dbBranch.agent_url as string,
             agent_api_key: dbBranch.agent_token
-        }, profile);
+        }, profile, fetch);
 
         const customerData = Object.fromEntries(formData);
         const isNew = formData.get('_isNew') === 'true';
@@ -237,7 +273,7 @@ export const actions: Actions = {
         };
     }),
 
-    deleteCustomer: protectAction('sales_customers', async ({ request, locals }) => {
+    deleteCustomer: protectAction('sales_customers', async ({ request, locals, fetch }) => {
         const profile = locals.profile;
         if (!profile) return fail(401, { message: 'Sesión expirada' });
 
@@ -302,7 +338,7 @@ export const actions: Actions = {
                     slug: branch.id,
                     agent_url: branch.agent_url,
                     agent_api_key: branch.agent_token
-                }, profile);
+                }, profile, fetch);
 
                 const response = await agent.deleteCustomer(co_cli);
                 

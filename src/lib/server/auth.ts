@@ -1,4 +1,4 @@
-import { supabaseAdmin } from '$lib/server/supabase';
+import { getSupabaseAdmin } from '$lib/server/supabase';
 
 export type CRUD = {
   read: boolean;
@@ -57,7 +57,8 @@ export function hasPermission(
  * Obtiene el perfil completo del usuario desde la vista profile_complete.
  * Prioriza Supabase (Cloud). Si falla por red, usa PostgreSQL (Local).
  */
-export async function getUserProfile(userId: string): Promise<Profile | null> {
+export async function getUserProfile(userId: string, fetchFn?: typeof fetch): Promise<Profile | null> {
+  const supabaseAdmin = getSupabaseAdmin(fetchFn);
   let isOfflineFallback = false;
   let rawData = null;
 

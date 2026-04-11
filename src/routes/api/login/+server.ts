@@ -41,7 +41,8 @@ export const POST: RequestHandler = async ({ request, locals, cookies }) => {
     }
 
     // Validar perfil Online
-    const { supabaseAdmin } = await import('$lib/server/supabase');
+    const { getSupabaseAdmin } = await import('$lib/server/supabase');
+    const supabaseAdmin = getSupabaseAdmin();
     const { data: profiles, error: profileError } = await supabaseAdmin
       .from('profiles')
       .select('id, active, full_name')
@@ -121,13 +122,17 @@ export const POST: RequestHandler = async ({ request, locals, cookies }) => {
         .setExpirationTime('24h')
         .sign(secret);
 
-      // Establecer cookie offline explícita
-      cookies.set('sync2k_local_session', token, {
-        path: '/',
-        httpOnly: true,
-        secure: false, // Permitir login en red local HTTP
-        maxAge: 60 * 60 * 24 // 24 horas
-      });
+      cookies.set('sync2k_local_session', JSON.stringify({
+          id: localProfile.id,
+          full_name: localProfile.full_name,
+          expires: Date.now() + (30 * 24 * 60 * 60 * 1000)
+        }), {
+          path: '/',
+          httpOnly: true,
+          secure: process.env.NODE_ENV === 'production', // Permite login en IP local vía HTTP
+          sameSite: 'lax',
+          maxAge: 60 * 60 * 24 * 30
+        });
 
       // Limpiamos cookies de Supabase rotas (opcional) para no tener colisiones en hooks
       cookies.delete('sb-rxtxzlzmxsjzicjuwbra-auth-token', { path: '/' });

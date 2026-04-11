@@ -16,9 +16,12 @@
   /* Superficies semánticas */
   --color-surface-base: var(--bg-primary);
   --color-surface-raised: var(--bg-secondary);
+  --color-surface-soft: var(--surface-soft);
+  --color-surface-strong: var(--surface-strong);
   --color-text-base: var(--text-primary);
   --color-text-muted: var(--text-secondary);
   --color-border-subtle: var(--border-color);
+  --color-border-bold: var(--border-bold);
 
   /* Glassmorphism Classes as utility */
   --bg-glass: var(--glass-bg);
@@ -38,6 +41,9 @@
   --text-primary: #ffffff;
   --text-secondary: #94a3b8;
   --border-color: rgba(255, 255, 255, 0.06);
+  --border-bold: rgba(255, 255, 255, 0.12);
+  --surface-soft: rgba(255, 255, 255, 0.04);
+  --surface-strong: rgba(255, 255, 255, 0.08);
   --glass-bg: rgba(15, 15, 17, 0.6);
   --accent-gradient: linear-gradient(135deg, var(--color-brand-500) 0%, var(--color-brand-700) 100%);
   --bg-gradient: radial-gradient(circle at 50% 0%, #111827 0%, #050505 100%);
@@ -49,8 +55,11 @@
   --bg-secondary: #ffffff;
   --text-primary: #0f172a;
   --text-secondary: #64748b;
-  --border-color: rgba(0, 0, 0, 0.05);
-  --glass-bg: rgba(255, 255, 255, 0.65);
+  --border-color: rgba(0, 0, 0, 0.06);
+  --border-bold: rgba(0, 0, 0, 0.12);
+  --surface-soft: rgba(0, 0, 0, 0.03);
+  --surface-strong: rgba(0, 0, 0, 0.06);
+  --glass-bg: rgba(255, 255, 255, 0.7);
   --accent-gradient: linear-gradient(135deg, var(--color-brand-600) 0%, var(--color-brand-400) 100%);
   --bg-gradient: radial-gradient(circle at 50% 0%, #f1f5f9 0%, #f8fafc 100%);
 }

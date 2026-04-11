@@ -8,12 +8,26 @@ import { fail } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
 
 // ─── Load ──────────────────────────────────────────────────────
-export const load: PageServerLoad = protectLoad('sec_branches', async ({ locals }) => {
-  const { data: branches, error } = await supabaseAdmin
+export const load: PageServerLoad = protectLoad('sec_branches', async ({ locals, fetch }) => {
+  // Intentamos obtener todos los campos, incluyendo el nuevo 'default_warehouse'
+  let { data: branches, error } = await supabaseAdmin
     .from('branches')
-    .select('id, name, agent_url, agent_token, profit_branch_codes, sql_config, profit_server_id, local_dns_alias, active, sort_order, updated_at, rif, address, latitude, longitude, logo_url, phone')
+    .select('id, name, agent_url, agent_token, profit_branch_codes, sql_config, profit_server_id, local_dns_alias, active, sort_order, updated_at, rif, address, latitude, longitude, logo_url, phone, default_warehouse')
     .order('sort_order')
     .order('name');
+
+  // Si falla específicamente por la columna default_warehouse (migración no aplicada)
+  if (error && error.message.includes('default_warehouse')) {
+    console.warn('[BRANCHES] La columna default_warehouse no existe. Reintentando sin ella...');
+    const fallback = await supabaseAdmin
+      .from('branches')
+      .select('id, name, agent_url, agent_token, profit_branch_codes, sql_config, profit_server_id, local_dns_alias, active, sort_order, updated_at, rif, address, latitude, longitude, logo_url, phone')
+      .order('sort_order')
+      .order('name');
+    
+    branches = fallback.data;
+    error = fallback.error;
+  }
 
   if (error) {
     console.error('[BRANCHES] Error cargando sucursales:', error.message);
@@ -33,7 +47,8 @@ export const load: PageServerLoad = protectLoad('sec_branches', async ({ locals 
           agent_url:     activeBranch.agent_url!,
           agent_api_key: activeBranch.agent_token
         },
-        locals.profile || undefined
+        locals.profile || undefined,
+        fetch
       );
       const res = await client.getDatabaseConfig();
       const resAny = res as any;
@@ -88,6 +103,7 @@ export const actions: Actions = {
     let logoUrl           = (formData.get('logo_url') as string)?.trim() || null;
     const latitude        = formData.get('latitude') ? parseFloat(formData.get('latitude') as string) : null;
     const longitude       = formData.get('longitude') ? parseFloat(formData.get('longitude') as string) : null;
+    const defaultWarehouse = (formData.get('default_warehouse') as string)?.trim() || null;
 
     // ─── Proceso de Subida de Logo ─────────────────────────────
     if (logoFile && logoFile.size > 0 && logoFile.name) {
@@ -126,6 +142,7 @@ export const actions: Actions = {
       logo_url:            logoUrl,
       latitude,
       longitude,
+      default_warehouse:   defaultWarehouse,
       updated_at:          new Date().toISOString()
     };
 
@@ -140,18 +157,44 @@ export const actions: Actions = {
       const { data: current } = await supabaseAdmin.from('branches').select('*').eq('id', branchId).single();
       oldData = current;
 
-      const { error } = await supabaseAdmin
+      let { error } = await supabaseAdmin
         .from('branches')
         .update(payload)
         .eq('id', branchId);
+
+      // Reintento sin default_warehouse si falla por columna inexistente
+      if (error && error.message.includes('default_warehouse')) {
+        console.warn('[BRANCHES] Reintentando actualización sin default_warehouse...');
+        const { default_warehouse, ...safePayload } = payload;
+        const retry = await supabaseAdmin
+          .from('branches')
+          .update(safePayload)
+          .eq('id', branchId);
+        error = retry.error;
+      }
+
       if (error) return fail(500, { message: error.message });
       savedId = branchId;
     } else {
-      const { data, error } = await supabaseAdmin
+      let { data, error } = await supabaseAdmin
         .from('branches')
         .insert(payload)
         .select('id')
         .single();
+
+      // Reintento sin default_warehouse si falla por columna inexistente
+      if (error && error.message.includes('default_warehouse')) {
+        console.warn('[BRANCHES] Reintentando inserción sin default_warehouse...');
+        const { default_warehouse, ...safePayload } = payload;
+        const retry = await supabaseAdmin
+          .from('branches')
+          .insert(safePayload)
+          .select('id')
+          .single();
+        data = retry.data;
+        error = retry.error;
+      }
+
       if (error) return fail(500, { message: error.message });
       savedId = data.id;
     }

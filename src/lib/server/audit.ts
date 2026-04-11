@@ -1,6 +1,4 @@
-// src/lib/server/audit.ts
-// Migrado de Firestore → Supabase (tabla audit_log via log_action RPC)
-import { supabaseAdmin } from './supabase';
+import { getSupabaseAdmin } from './supabase';
 
 export type AuditAction =
   | 'CREATE'
@@ -25,6 +23,7 @@ export interface AuditLog {
 
 export async function logAction(log: AuditLog) {
   try {
+    const supabaseAdmin = getSupabaseAdmin();
     await supabaseAdmin.rpc('log_action', {
       p_user_id:    log.uid,
       p_user_email: log.user_email,

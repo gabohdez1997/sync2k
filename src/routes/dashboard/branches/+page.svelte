@@ -66,6 +66,7 @@
       logo_url: "",
       latitude: null,
       longitude: null,
+      default_warehouse: ""
     };
     showModal = true;
   }
@@ -447,9 +448,24 @@
                   {/each}
                 </div>
               {/if}
-              <p class="text-[10px] text-text-muted/60 ml-2 mt-2 italic">
-                Marca con una estrella el código que se seleccionará por defecto
-                en los formularios y documentos.
+            </div>
+
+            <div class="space-y-2 lg:col-span-2">
+              <label class="text-xs font-bold text-text-muted ml-1" for="default_warehouse">
+                Almacén por Defecto (Profit)
+              </label>
+              <div class="relative">
+                <Database class="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted opacity-40" size={18} />
+                <input 
+                  type="text" 
+                  name="default_warehouse"
+                  bind:value={editingBranch.default_warehouse}
+                  placeholder="Ej: 01"
+                  class="w-full h-14 bg-white/5 border border-white/10 rounded-2xl pl-12 pr-5 focus:border-brand-500 outline-none transition-all font-mono uppercase"
+                />
+              </div>
+              <p class="text-[10px] text-text-muted/60 ml-2 mt-1 italic">
+                Este almacén se asignará automáticamente a los artículos de servicio (Línea 09).
               </p>
             </div>
 

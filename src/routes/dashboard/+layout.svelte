@@ -240,7 +240,7 @@
       {/if}
       <button
         onclick={() => (sidebarOpen = !sidebarOpen)}
-        class="ml-auto p-1.5 text-text-muted hover:text-text-base rounded-lg hover:bg-white/5 transition"
+        class="ml-auto p-1.5 text-text-muted hover:text-text-base rounded-lg hover:bg-surface-soft transition"
       >
         <ChevronRight size={18} class="transition-transform {sidebarOpen ? 'rotate-180' : ''}" />
       </button>
@@ -256,7 +256,7 @@
         {#if group && !group.subItems}
           <a
             href={group.href}
-            class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all group relative {isActive(group.href) ? 'bg-brand-600 text-white' : 'text-text-muted hover:bg-white/5 hover:text-text-base'}"
+            class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all group relative {isActive(group.href) ? 'bg-brand-600 text-white' : 'text-text-muted hover:bg-surface-soft hover:text-text-base'}"
           >
             <group.icon size={20} class="shrink-0 opacity-80 group-hover:opacity-100" />
             {#if sidebarOpen}
@@ -269,7 +269,7 @@
           >
             <button
               onclick={() => handleGroupClick(group)}
-              class="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all group {(expandedGroups[group.id] && sidebarOpen) || (stickyGroup === group.id && !sidebarOpen) ? 'bg-brand-500/10 text-brand-400' : 'text-text-muted hover:bg-white/5 hover:text-text-base'}"
+              class="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all group {(expandedGroups[group.id] && sidebarOpen) || (stickyGroup === group.id && !sidebarOpen) ? 'bg-brand-500/10 text-brand-400' : 'text-text-muted hover:bg-surface-soft hover:text-text-base'}"
             >
               <group.icon size={20} class="shrink-0 opacity-80 group-hover:opacity-100" />
               {#if sidebarOpen}
@@ -333,7 +333,7 @@
     </nav>
 
     <!-- Footer Profile -->
-    <div class="p-4 border-t border-border-subtle bg-black/20">
+    <div class="p-4 border-t border-border-subtle bg-surface-soft">
       <div class="flex items-center gap-3">
         <div class="h-9 w-9 rounded-full bg-linear-to-tr from-brand-600 to-brand-400 flex items-center justify-center text-white font-bold shrink-0 shadow-lg">
           {profile?.full_name?.[0] ?? 'U'}
@@ -369,7 +369,7 @@
       transition:fade
     >
       <div 
-        class="absolute bottom-0 left-0 right-0 glass flex flex-col p-6 space-y-6 shadow-2xl rounded-t-[32px] border-t border-white/10"
+        class="absolute bottom-0 left-0 right-0 glass flex flex-col p-6 space-y-6 shadow-2xl rounded-t-[32px] border-t border-border-bold"
         onclick={(e) => e.stopPropagation()}
         onkeydown={(e) => e.stopPropagation()}
         role="presentation"
@@ -455,7 +455,7 @@
       </div>
       <button
         onclick={toggleTheme}
-        class="p-2 text-text-muted hover:text-text-base transition-colors rounded-full hover:bg-white/5"
+        class="p-2 text-text-muted hover:text-text-base transition-colors rounded-full hover:bg-surface-soft"
       >
         {#if getTheme() === 'dark'} <Sun size={20} /> {:else} <Moon size={20} /> {/if}
       </button>
@@ -513,7 +513,7 @@
         <span class="text-[10px] font-bold uppercase tracking-tighter">Cuenta</span>
       </button>
     </nav>
-    <footer class="hidden md:flex h-8 items-center px-8 border-t border-border-subtle bg-black/20 text-[10px] text-text-muted">
+    <footer class="hidden md:flex h-8 items-center px-8 border-t border-border-subtle bg-surface-soft text-[10px] text-text-muted">
        {data.systemSettings?.footer_text ?? `© ${new Date().getFullYear()} GalpeApp. Todos los derechos reservados.`}
     </footer>
   </div>

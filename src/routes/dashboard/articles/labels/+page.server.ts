@@ -3,7 +3,7 @@ import { protectLoad } from '$lib/server/permissions';
 import { AgentClient } from '$lib/server/agent';
 import type { PageServerLoad } from './$types';
 
-export const load: PageServerLoad = protectLoad('inv_articles', async ({ url, locals }) => {
+export const load: PageServerLoad = protectLoad('inv_articles', async ({ url, locals, fetch }) => {
 	try {
         const profile = (locals as any).profile;
 		if (!profile) throw new Error('Perfil no cargado.');
@@ -30,7 +30,7 @@ export const load: PageServerLoad = protectLoad('inv_articles', async ({ url, lo
 			slug: selectedBranch.id,
 			agent_url: selectedBranch.agent_url,
 			agent_api_key: selectedBranch.agent_token
-		}, profile);
+		}, profile, fetch);
 
 		// 4. Parámetros de búsqueda
 		const warehouseId = url.searchParams.get('co_alma');

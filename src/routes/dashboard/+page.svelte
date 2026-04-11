@@ -3,6 +3,16 @@
   import type { PageData } from "./$types";
   import { LayoutDashboard } from "lucide-svelte";
   let { data }: { data: PageData } = $props();
+  let tasa_bcv = $state<number | null>(null);
+
+  $effect(() => {
+    fetch('/api/agent/tasa')
+      .then(res => res.json())
+      .then(d => {
+        if (d.success) tasa_bcv = d.tasa;
+      })
+      .catch(e => console.error("Error loading tasa:", e));
+  });
 
   const stats = [
     {
@@ -47,8 +57,8 @@
       </p>
       <div class="flex items-baseline gap-2">
         <span class="text-4xl font-black text-brand-100">
-          {#if data.tasa_bcv}
-            Bs. {Number(data.tasa_bcv).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          {#if tasa_bcv}
+            Bs. {Number(tasa_bcv).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           {:else}
             <span class="text-text-muted/50 text-2xl">Buscando...</span>
           {/if}

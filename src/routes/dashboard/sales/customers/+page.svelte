@@ -28,6 +28,7 @@
     Store,
   } from "lucide-svelte";
   import { goto } from "$app/navigation";
+  import { page } from "$app/stores";
   import { toast } from "svelte-sonner";
   import type { PageData, ActionData } from "./$types";
 
@@ -71,13 +72,30 @@
 
   $effect(() => {
     selectedTenant =
-      data.context?.tenantId ||
-      new URL(window.location.href).searchParams.get("tenant_id") ||
-      "";
-    selectedBranch =
-      data.context?.branchId ||
-      new URL(window.location.href).searchParams.get("branch_id") ||
-      "";
+      data.context?.tenantId || $page.url.searchParams.get("tenant_id") || "";
+
+    // Si solo hay una sucursal, seleccionarla por defecto
+    const branches = data.context?.branches || [];
+    if (branches.length === 1) {
+      selectedBranch = branches[0].id;
+    } else {
+      selectedBranch =
+        data.context?.branchId || $page.url.searchParams.get("branch_id") || "";
+    }
+  });
+
+  let localCustomers = $state(data.customers || []);
+  let localPagination = $state(
+    data.pagination || { total: 0, page: 1, limit: 20, totalPages: 0 },
+  );
+  let loadingCustomers = $state(false);
+
+  // Sincronizar con datos del servidor (navegación estándar)
+  $effect(() => {
+    localCustomers = data.customers || [];
+    localPagination =
+      data.pagination || { total: 0, page: 1, limit: 20, totalPages: 0 };
+    searchQuery = data.search || "";
   });
 
   function handleSearch(e?: Event) {
@@ -135,7 +153,8 @@
     direccion = customer.direc1 || customer.direccion;
     ciudad = customer.ciudad;
     co_zon = customer.co_zon || "";
-    contribuyente = customer.contrib ?? customer.bContrib ?? customer.contribuyente ?? false;
+    contribuyente =
+      customer.contrib ?? customer.bContrib ?? customer.contribuyente ?? false;
     tipo_per = customer.sTipo_Per || customer.tipo_per || "1";
     contribu_e = customer.bContribu_E ?? customer.contribu_e ?? false;
     porc_esp = customer.dePorc_Esp ?? customer.porc_esp ?? 100;
@@ -161,11 +180,12 @@
     customerToDelete = customer;
     deletePassword = "";
     // Asegurar que la sucursal esté seleccionada antes de abrir el modal
-    // Prioridad: 
+    // Prioridad:
     // 1. La sucursal actualmente seleccionada en el estado (que viene del URL)
     // 2. data.selectedBranchId (poblado por el load)
     // 3. data.context?.branchId (fallback)
-    selectedBranch = selectedBranch || data.selectedBranchId || data.context?.branchId || "";
+    selectedBranch =
+      selectedBranch || data.selectedBranchId || data.context?.branchId || "";
     showDeleteModal = true;
   }
 </script>
@@ -181,14 +201,6 @@
       <p class="text-text-muted mt-2 text-lg">
         Consulta y gestiona la cartera de clientes de Profit Plus en tiempo
         real.
-        {#if data.customers}
-          <span
-            class="flex items-center gap-1.5 text-xs text-brand-500/80 font-medium mt-2 bg-brand-500/10 w-fit px-3 py-1.5 rounded-lg border border-brand-500/20"
-          >
-            <Users size={14} />
-            Mostrando {data.customers.length} clientes en esta página
-          </span>
-        {/if}
       </p>
     </div>
 
@@ -206,7 +218,7 @@
   <!-- Search, Filters and Stats -->
   <div class="flex flex-col gap-4">
     <!-- Selection row (Tenant + Branch) -->
-    <div class="flex flex-col lg:flex-row gap-4 items-center">
+    <div class="flex flex-col lg:flex-row gap-4 items-center w-full">
       {#if (data.tenants?.length ?? 0) > 1}
         <div class="relative w-full lg:w-72 shrink-0">
           <Box
@@ -228,7 +240,7 @@
         </div>
       {:else if data.tenants?.length === 1 || data.context?.tenantId}
         <div
-          class="h-14 bg-surface-base border border-white/10 rounded-2xl px-6 flex items-center gap-3 shrink-0"
+          class="h-14 bg-surface-base border border-white/10 rounded-2xl px-6 items-center gap-3 shrink-0 hidden lg:flex"
         >
           <Box class="text-brand-400" size={18} />
           <span class="font-bold text-sm text-brand-100"
@@ -239,45 +251,51 @@
         </div>
       {/if}
 
-      {#if data.context?.branches && data.context.branches.length > 0}
-        <div class="relative w-full lg:w-64 shrink-0">
-          <Store
-            class="absolute left-4 top-1/2 -translate-y-1/2 text-brand-400"
-            size={18}
-          />
-          <select
-            bind:value={selectedBranch}
-            onchange={() => handleSearch()}
-            class="w-full h-14 bg-surface-base pl-11 pr-10 rounded-2xl border border-white/5 focus:border-brand-500/50 outline-none appearance-none font-bold text-sm cursor-pointer hover:bg-white/5 transition-all text-brand-300"
-          >
-            {#each data.context.branches as branch}
-              <option value={branch.id} class="bg-surface-base text-text-base"
-                >{branch.name}</option
-              >
-            {/each}
-          </select>
-        </div>
-      {/if}
+      <!-- Contenedor del Buscador y Sucursal (50% en PC, fluido en tlf) -->
+      <div class="flex flex-row items-center gap-3 w-full lg:w-1/2 ml-auto">
+        {#if data.context?.branches && data.context.branches.length > 1}
+          <div class="relative w-32 sm:w-60 shrink-0">
+            <Store
+              class="absolute left-4 top-1/2 -translate-y-1/2 text-brand-400"
+              size={18}
+            />
+            <select
+              bind:value={selectedBranch}
+              onchange={() => handleSearch()}
+              class="w-full h-14 bg-surface-base pl-11 pr-10 rounded-2xl border border-white/5 focus:border-brand-500/50 outline-none appearance-none font-bold text-sm cursor-pointer hover:bg-white/5 transition-all text-brand-300 pr-8"
+            >
+              {#each data.context.branches as branch}
+                <option value={branch.id} class="bg-surface-base text-text-base"
+                  >{branch.name}</option
+                >
+              {/each}
+            </select>
+            <div class="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-text-muted">
+              <ChevronRight size={14} />
+            </div>
+          </div>
+        {/if}
 
-      <form onsubmit={handleSearch} class="flex-1 relative group w-full">
-        <Search
-          class="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted group-focus-within:text-brand-500 transition-colors"
-          size={20}
-        />
-        <input
-          type="text"
-          placeholder="Buscar por nombre, código o RIF..."
-          bind:value={searchQuery}
-          class="w-full h-14 bg-surface-base pl-12 pr-28 rounded-2xl border border-white/5 focus:border-brand-500/50 outline-none transition-all font-medium"
-        />
-        <button
-          type="submit"
-          disabled={isSearching}
-          class="absolute right-2 top-1/2 -translate-y-1/2 bg-white/5 hover:bg-white/10 disabled:opacity-50 px-5 py-2 rounded-xl text-sm font-bold transition-all"
-        >
-          {isSearching ? "..." : "Buscar"}
-        </button>
-      </form>
+        <form onsubmit={handleSearch} class="flex-1 relative group h-14">
+          <Search
+            class="absolute left-6 top-1/2 -translate-y-1/2 text-brand-500"
+            size={20}
+          />
+          <input
+            type="text"
+            placeholder="Buscar por nombre, código o RIF..."
+            bind:value={searchQuery}
+            class="w-full h-full bg-black pl-14 pr-28 rounded-full border border-white/5 focus:border-brand-500/50 outline-none transition-all font-bold text-lg placeholder:font-normal placeholder:text-text-muted"
+          />
+          <button
+            type="submit"
+            disabled={isSearching}
+            class="absolute right-2 top-2 bottom-2 px-6 bg-white/5 hover:bg-white/10 text-white rounded-full text-sm font-bold transition-all active:scale-95 disabled:opacity-50 border border-white/10"
+          >
+            {isSearching ? "..." : "Buscar"}
+          </button>
+        </form>
+      </div>
     </div>
   </div>
 
@@ -301,24 +319,8 @@
         Reintentar Conexión
       </button>
     </div>
-  {:else if !data.customers || data.customers.length === 0}
-    <div
-      class="glass p-20 rounded-[40px] border border-white/5 flex flex-col items-center justify-center text-center space-y-4"
-    >
-      <div
-        class="h-24 w-24 rounded-[40px] bg-white/5 flex items-center justify-center text-text-muted/20"
-      >
-        <Search size={54} />
-      </div>
-      <h2 class="text-3xl font-black tracking-tight text-text-muted">
-        No se encontraron clientes
-      </h2>
-      <p class="text-text-muted/60 max-w-sm text-lg">
-        Pruebe con otros términos de búsqueda o verifique la sede seleccionada
-        en Profit Plus.
-      </p>
-    </div>
   {:else}
+    <!-- Table -->
     <!-- Table -->
     <div
       class="glass rounded-[40px] border border-white/5 overflow-hidden shadow-2xl"
@@ -346,137 +348,194 @@
             </tr>
           </thead>
           <tbody class="divide-y divide-white/5">
-            {#each data.customers as customer}
-              <tr
-                class="group hover:bg-white/2 transition-colors cursor-pointer"
-              >
-                <td class="px-8 py-6">
-                  <div class="flex items-center gap-4">
+            {#if loadingCustomers}
+              <tr>
+                <td colspan="4" class="px-8 py-20 text-center">
+                  <div class="flex flex-col items-center gap-4">
                     <div
-                      class="h-12 w-12 rounded-2xl bg-brand-500/10 flex items-center justify-center text-brand-500 font-black shadow-inner"
-                    >
-                      {customer.descripcion?.charAt(0) || "?"}
-                    </div>
-                    <div>
-                      <p
-                        class="font-bold text-text-base group-hover:text-brand-400 transition-colors uppercase leading-none mb-1 text-sm"
-                      >
-                        {customer.descripcion}
-                      </p>
-                      <div
-                        class="flex items-center gap-2 text-xs text-text-muted"
-                      >
-                        <Hash size={12} class="opacity-50" />
-                        <span class="font-mono">{customer.co_cli}</span>
-                      </div>
-                    </div>
-                  </div>
-                </td>
-                <td class="px-8 py-6">
-                  <div class="space-y-1.5">
-                    <div class="flex items-center gap-2">
-                      <span
-                        class="text-[10px] font-black uppercase tracking-tighter bg-white/5 px-2 py-0.5 rounded border border-white/10 text-text-muted"
-                        >RIF</span
-                      >
-                      <span class="text-sm font-medium text-text-base"
-                        >{customer.rif || "---"}</span
-                      >
-                    </div>
-                    <div class="flex items-center gap-2">
-                      <MapPin size={12} class="text-indigo-400" />
-                      <span
-                        class="text-[11px] text-text-muted truncate max-w-[200px]"
-                        >{customer.direc1 ||
-                          customer.sede_nombre ||
-                          "Principal"}</span
-                      >
-                    </div>
-                  </div>
-                </td>
-                <td class="px-8 py-6">
-                  <div class="space-y-1.5">
-                    {#if customer.telefonos}
-                      <div class="flex items-center gap-2 text-xs">
-                        <Phone size={12} class="text-green-400" />
-                        <span class="text-text-muted">{customer.telefonos}</span
-                        >
-                      </div>
-                    {/if}
-                    {#if customer.email}
-                      <div class="flex items-center gap-2 text-xs">
-                        <Mail size={12} class="text-blue-400" />
-                        <span class="text-text-muted truncate max-w-[180px]"
-                          >{customer.email}</span
-                        >
-                      </div>
-                    {:else}
-                      <span
-                        class="text-[10px] text-text-muted/40 uppercase italic"
-                        >Sin correo</span
-                      >
-                    {/if}
-                  </div>
-                </td>
-                <td class="px-8 py-6">
-                  <div
-                    class="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity"
-                  >
-                    {#if canUpdate}
-                      <button
-                        onclick={() => openEditModal(customer)}
-                        class="p-2 text-text-muted hover:text-brand-500 hover:bg-brand-500/10 rounded-xl transition-all"
-                        title="Editar"
-                      >
-                        <Edit2 size={18} />
-                      </button>
-                    {/if}
-                    {#if canDelete}
-                      <button
-                        onclick={() => openDeleteModal(customer)}
-                        class="p-2 text-text-muted hover:text-red-500 hover:bg-red-500/10 rounded-xl transition-all"
-                        title="Eliminar"
-                      >
-                        <Trash2 size={18} />
-                      </button>
-                    {/if}
+                      class="w-10 h-10 border-4 border-brand-500/20 border-t-brand-500 rounded-full animate-spin"
+                    ></div>
+                    <p class="text-sm font-bold text-text-muted animate-pulse">
+                      Consultando Profit Plus...
+                    </p>
                   </div>
                 </td>
               </tr>
-            {/each}
+            {:else}
+              {#each localCustomers as customer}
+                <tr
+                  class="group hover:bg-white/2 transition-colors cursor-pointer"
+                >
+                  <td class="px-8 py-6">
+                    <div class="flex items-center gap-4">
+                      <div
+                        class="h-12 w-12 rounded-2xl bg-brand-500/10 flex items-center justify-center text-brand-500 font-black shadow-inner"
+                      >
+                        {customer.descripcion?.charAt(0) || "?"}
+                      </div>
+                      <div>
+                        <p
+                          class="font-bold text-text-base group-hover:text-brand-400 transition-colors uppercase leading-none mb-1 text-sm"
+                        >
+                          {customer.descripcion}
+                        </p>
+                        <div
+                          class="flex items-center gap-2 text-xs text-text-muted"
+                        >
+                          <Hash size={12} class="opacity-50" />
+                          <span class="font-mono">{customer.co_cli}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </td>
+                  <td class="px-8 py-6">
+                    <div class="space-y-1.5">
+                      <div class="flex items-center gap-2">
+                        <span
+                          class="text-[10px] font-black uppercase tracking-tighter bg-white/5 px-2 py-0.5 rounded border border-white/10 text-text-muted"
+                          >RIF</span
+                        >
+                        <span class="text-sm font-medium text-text-base"
+                          >{customer.rif || "---"}</span
+                        >
+                      </div>
+                      <div class="flex items-center gap-2">
+                        <MapPin size={12} class="text-indigo-400" />
+                        <span
+                          class="text-[11px] text-text-muted truncate max-w-[200px]"
+                          >{customer.direc1 ||
+                            customer.sede_nombre ||
+                            "Principal"}</span
+                        >
+                      </div>
+                    </div>
+                  </td>
+                  <td class="px-8 py-6">
+                    <div class="space-y-1.5">
+                      {#if customer.telefonos}
+                        <div class="flex items-center gap-2 text-xs">
+                          <Phone size={12} class="text-green-400" />
+                          <span class="text-text-muted"
+                            >{customer.telefonos}</span
+                          >
+                        </div>
+                      {/if}
+                      {#if customer.email}
+                        <div class="flex items-center gap-2 text-xs">
+                          <Mail size={12} class="text-blue-400" />
+                          <span class="text-text-muted truncate max-w-[180px]"
+                            >{customer.email}</span
+                          >
+                        </div>
+                      {:else}
+                        <span
+                          class="text-[10px] text-text-muted/40 uppercase italic"
+                          >Sin correo</span
+                        >
+                      {/if}
+                    </div>
+                  </td>
+                  <td class="px-8 py-6">
+                    <div
+                      class="flex items-center justify-end gap-2 transition-opacity"
+                    >
+                      {#if canUpdate}
+                        <button
+                          onclick={() => openEditModal(customer)}
+                          class="p-2 text-text-muted hover:text-brand-500 hover:bg-brand-500/10 rounded-xl transition-all"
+                          title="Editar"
+                        >
+                          <Edit2 size={18} />
+                        </button>
+                      {/if}
+                      {#if canDelete}
+                        <button
+                          onclick={() => openDeleteModal(customer)}
+                          class="p-2 text-text-muted hover:text-red-500 hover:bg-red-500/10 rounded-xl transition-all"
+                          title="Eliminar"
+                        >
+                          <Trash2 size={18} />
+                        </button>
+                      {/if}
+                    </div>
+                  </td>
+                </tr>
+              {/each}
+              {#if !loadingCustomers && localCustomers.length === 0}
+                <tr>
+                  <td colspan="4" class="px-8 py-32 text-center bg-white/2">
+                    <div
+                      class="flex flex-col items-center gap-6 max-w-md mx-auto"
+                    >
+                      <div
+                        class="h-24 w-24 rounded-full bg-white/5 flex items-center justify-center text-text-muted/20"
+                      >
+                        <Search size={48} />
+                      </div>
+                      <div>
+                        <h3 class="text-2xl font-black text-text-base mb-2">
+                          No se encontraron clientes
+                        </h3>
+                        <p
+                          class="text-text-muted font-medium text-sm leading-relaxed"
+                        >
+                          Pruebe con otros términos de búsqueda o verifique la
+                          sede seleccionada en Profit Plus.
+                        </p>
+                      </div>
+                    </div>
+                  </td>
+                </tr>
+              {/if}
+            {/if}
           </tbody>
         </table>
       </div>
+      <!-- Closes overflow-x-auto (line 333) -->
 
       <!-- Pagination Footer -->
-      {#if data.pagination && data.pagination.pages > 1}
+      {#if localPagination && localPagination.totalPages > 1}
         <div
           class="px-8 py-6 bg-white/1 border-t border-white/5 flex items-center justify-between"
         >
           <p
             class="text-xs font-bold text-text-muted uppercase tracking-widest"
           >
-            Página <span class="text-text-base"
-              >{data.pagination.currentPage}</span
-            >
-            de <span class="text-text-base">{data.pagination.pages}</span>
-            (Total: {data.pagination.total})
+            Página <span class="text-text-base">{localPagination.page}</span>
+            de <span class="text-text-base">{localPagination.totalPages}</span>
+            (Total: {localPagination.total})
           </p>
 
           <div class="flex gap-2">
             <button
-              onclick={() =>
-                data.pagination && changePage(data.pagination.currentPage - 1)}
-              disabled={!data.pagination || data.pagination.currentPage === 1}
+              onclick={() => {
+                if (localPagination.page > 1) {
+                  const url = new URL(window.location.href);
+                  url.searchParams.set(
+                    "page",
+                    String(localPagination.page - 1),
+                  );
+                  goto(url.toString());
+                }
+              }}
+              disabled={localPagination.page <= 1}
               class="h-10 w-10 flex items-center justify-center rounded-xl bg-white/5 hover:bg-white/10 disabled:opacity-30 transition-all border border-white/5 text-text-muted"
             >
               <ChevronLeft size={20} />
             </button>
+
             <button
-              onclick={() =>
-                data.pagination && changePage(data.pagination.currentPage + 1)}
-              disabled={!data.pagination ||
-                data.pagination.currentPage === data.pagination.pages}
+              onclick={() => {
+                if (localPagination.page < localPagination.totalPages) {
+                  const url = new URL(window.location.href);
+                  url.searchParams.set(
+                    "page",
+                    String(localPagination.page + 1),
+                  );
+                  goto(url.toString());
+                }
+              }}
+              disabled={localPagination.page >= localPagination.totalPages}
               class="h-10 w-10 flex items-center justify-center rounded-xl bg-white/5 hover:bg-white/10 disabled:opacity-30 transition-all border border-white/5 text-text-muted"
             >
               <ChevronRight size={20} />
@@ -485,12 +544,17 @@
         </div>
       {/if}
     </div>
+    <!-- Closes glass (line 330) -->
   {/if}
+  <!-- Closes outer if data.error (line 307) -->
 </div>
+<!-- Closes outer space-y-8 (line 196) -->
 
 <!-- Management Modal -->
 {#if showModal}
-  {@const handleBackdropClose = (e) => { if (e.target === e.currentTarget) showModal = false; }}
+  {@const handleBackdropClose = (e) => {
+    if (e.target === e.currentTarget) showModal = false;
+  }}
   <div
     class="fixed inset-0 bg-black/60 backdrop-blur-md z-50 flex items-center justify-center p-4 text-text-base"
     transition:fade
@@ -883,10 +947,13 @@
         </div>
 
         <div class="space-y-2">
-          <h2 class="text-2xl font-black tracking-tight">Confirmar Eliminación</h2>
+          <h2 class="text-2xl font-black tracking-tight">
+            Confirmar Eliminación
+          </h2>
           <p class="text-text-muted text-sm px-4">
             ¿Estás seguro de que deseas eliminar al cliente <span
-              class="text-text-base font-bold">{customerToDelete?.descripcion}</span
+              class="text-text-base font-bold"
+              >{customerToDelete?.descripcion}</span
             >? Esta acción es irreversible en Profit Plus.
           </p>
         </div>
@@ -913,8 +980,9 @@
           <input type="hidden" name="branch_id" value={selectedBranch} />
 
           <div class="space-y-2 text-left">
-            <label class="text-[10px] font-black uppercase tracking-widest text-text-muted ml-1" for="del-pass"
-              >Contraseña de Confirmación</label
+            <label
+              class="text-[10px] font-black uppercase tracking-widest text-text-muted ml-1"
+              for="del-pass">Contraseña de Confirmación</label
             >
             <div class="relative">
               <Lock

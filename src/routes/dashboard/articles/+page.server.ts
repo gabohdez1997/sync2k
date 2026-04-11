@@ -6,7 +6,7 @@ import { fail } from '@sveltejs/kit';
 import { supabaseAdmin } from '$lib/server/supabase';
 import type { PageServerLoad, Actions } from './$types';
 
-export const load: PageServerLoad = protectLoad('sec_articles', async ({ url, locals }) => {
+export const load: PageServerLoad = protectLoad('sec_articles', async ({ url, locals, fetch }) => {
 	try {
 		const userProfile = (locals as any).profile;
 
@@ -95,7 +95,7 @@ export const load: PageServerLoad = protectLoad('sec_articles', async ({ url, lo
 			slug: selectedBranchObj.id,
 			agent_url: selectedBranchObj.agent_url,
 			agent_api_key: selectedBranchObj.agent_token
-		}, (locals as any).profile || undefined);
+		}, (locals as any).profile || undefined, fetch);
 
 		const pageIndex = parseInt(url.searchParams.get('page') || '1', 10);
 		const limit = 12;
@@ -146,78 +146,11 @@ export const load: PageServerLoad = protectLoad('sec_articles', async ({ url, lo
 			warehouseId = finalWarehouseIds[0];
 		}
 
-		// ─── 5. FETCH ARTICLES ───────────────────────────────────────────────────
-		const searchTerm = url.searchParams.get('search') || '';
-		const lineaId = url.searchParams.get('linea') || '';
-		const categoriaId = url.searchParams.get('categoria') || '';
-		const ubicacionId = url.searchParams.get('co_ubicacion') || '';
+		// --- SEGURIDAD: Ya no consultamos al agente durante el SSR para evitar bloqueos ---
+		const articles: any[] = [];
+		const resData: any = { success: true, pagination: { total: 0, page: 1, limit: 12, totalPages: 0 } };
 
-		let endpoint: string;
-		const params = new URLSearchParams();
-		params.set('page', String(pageIndex));
-		params.set('limit', String(limit));
-		
-		// DEFAULT: only show items in stock unless 'show_all' is specified
-		if (showAll) {
-			params.set('in_stock', 'all');
-		} else {
-			// In our agent, any value that is not 'all' triggers stock filtering if no 'all' is sent.
-			// Actually, the agent's logic is: if (in_stock !== 'all') -> filter stock > 0.
-			params.delete('in_stock'); 
-		}
-
-		if (searchTerm || lineaId || categoriaId || ubicacionId) {
-			if (searchTerm) {
-				const isCode = /^\d/.test(searchTerm.trim());
-				params.set(isCode ? 'co_art' : 'descripcion', searchTerm);
-			}
-			if (lineaId) params.set('linea', lineaId);
-			if (categoriaId) params.set('categoria', categoriaId);
-			if (ubicacionId) params.set('co_ubicacion', ubicacionId);
-			if (branchId) {
-				params.set('sede_id', branchId);
-				params.set('sede', branchId);
-			}
-			if (warehouseId) params.set('co_alma', warehouseId);
-			if (ubicacionId) params.set('co_ubicacion', ubicacionId);
-			endpoint = `/articulos/search?${params.toString()}`;
-		} else {
-			if (branchId) {
-				params.set('sede_id', branchId);
-				params.set('sede', branchId);
-			}
-			if (warehouseId) params.set('co_alma', warehouseId);
-			if (ubicacionId) params.set('co_ubicacion', ubicacionId);
-			endpoint = `/articulos?${params.toString()}`;
-		}
-
-		console.log(`[ARTICLES] Endpoint: ${endpoint}`);
-		const resData = await agentClient.request<any>(endpoint);
-
-		if ((resData as any).success === false) {
-			return {
-				articles: [],
-				branches: allowedBranches,
-				context: {
-					branchId,
-					warehouseId,
-					finalWarehouseIds,
-					lineas,
-					categorias,
-					ubicaciones,
-					ubicacionId,
-					branches: allowedBranches,
-					warehouses: allowedWarehousesForBranch
-				},
-				error: `Error del agente: ${(resData as any).message || 'Desconocido'}`
-			};
-		}
-
-		const rawItems = (resData as any).data?.items
-			|| (resData as any).items
-			|| (resData as any).data
-			|| (Array.isArray(resData) ? resData : []);
-		const articles = Array.isArray(rawItems) ? rawItems : [];
+		console.log(`[ARTICLES] SSR Skip for security. Client-side fetch will follow.`);
 
 		// Extraer permisos CRUD del usuario para esta sección
 		const crud = userProfile?.permissions?.['sec_articles'] || { read: true, create: false, update: false, delete: false };
@@ -252,7 +185,7 @@ export const load: PageServerLoad = protectLoad('sec_articles', async ({ url, lo
 });
 
 export const actions: Actions = {
-	assignLocations: async ({ request, locals }) => {
+	assignLocations: async ({ request, locals, fetch }) => {
 		const data = await request.formData();
 		const co_art = data.get('co_art') as string;
 		const co_ubicacion = (data.get('co_ubicacion') as string) || '';
@@ -309,7 +242,7 @@ export const actions: Actions = {
 				slug: dbBranch.id,
 				agent_url: dbBranch.agent_url as string,
 				agent_api_key: dbBranch.agent_token
-			}, (locals as any).profile || undefined);
+			}, (locals as any).profile || undefined, fetch);
 
 			const payload: any = { 
 				co_alma, 

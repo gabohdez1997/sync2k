@@ -113,10 +113,10 @@
         type="text" 
         placeholder="Buscar por nombre o identificador..."
         bind:value={searchTerm}
-        class="w-full h-full glass pl-12 pr-4 rounded-2xl border border-white/5 focus:border-brand-500/50 outline-hidden transition-all text-lg"
+        class="w-full h-full glass pl-12 pr-4 rounded-2xl border border-border-subtle focus:border-brand-500/50 outline-hidden transition-all text-lg"
       />
     </div>
-    <div class="glass rounded-2xl border border-white/5 p-4 flex items-center gap-4">
+    <div class="glass rounded-2xl border border-border-subtle p-4 flex items-center gap-4">
       <div class="h-10 w-10 rounded-xl bg-brand-500/10 flex items-center justify-center text-brand-400">
         <CheckCircle2 size={24} />
       </div>
@@ -130,7 +130,7 @@
   <!-- Grid de Empresas -->
   <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
     {#each filteredTenants as tenant}
-      <div class="glass relative group rounded-3xl border border-white/5 overflow-hidden p-6 hover:border-brand-500/30 transition-all hover:shadow-2xl hover:shadow-brand-500/5">
+      <div class="glass relative group rounded-3xl border border-border-subtle overflow-hidden p-6 hover:border-brand-500/30 transition-all hover:shadow-2xl hover:shadow-brand-500/5">
         <div class="flex justify-between items-start mb-4">
           <div class="h-12 w-12 rounded-2xl bg-brand-500 flex items-center justify-center text-white shadow-lg shadow-brand-500/30 overflow-hidden">
             {#if tenant.logo}
@@ -142,7 +142,7 @@
           <div class="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
             <button 
               onclick={() => openEditModal(tenant)}
-              class="p-2 hover:bg-white/10 rounded-xl text-text-muted hover:text-text-base transition"
+              class="p-2 hover:bg-surface-soft rounded-xl text-text-muted hover:text-text-base transition"
             >
               <Edit size={18} />
             </button>
@@ -162,7 +162,7 @@
         <div class="flex items-center gap-2 mb-6">
           <p class="text-sm text-brand-400 font-mono">@{tenant.slug}</p>
           {#if tenant.rif}
-            <span class="text-[10px] text-text-muted bg-white/5 px-2 py-0.5 rounded-md border border-white/5 uppercase font-bold tracking-tighter">
+            <span class="text-[10px] text-text-muted bg-surface-soft px-2 py-0.5 rounded-md border border-border-subtle uppercase font-bold tracking-tighter">
               {tenant.rif}
             </span>
           {/if}
@@ -175,7 +175,7 @@
           </div>
         </div>
 
-        <div class="mt-6 pt-6 border-t border-white/5 flex items-center justify-between text-[10px] uppercase font-black tracking-widest text-text-muted/50">
+        <div class="mt-6 pt-6 border-t border-border-subtle flex items-center justify-between text-[10px] uppercase font-black tracking-widest text-text-muted/50">
            <span>EMPRESA ACTIVA</span>
            <div class="flex items-center gap-1 text-green-500">
              <div class="h-1 w-1 rounded-full bg-green-500 animate-pulse"></div>
@@ -199,9 +199,9 @@
     ></div>
     
     <div 
-      class="glass w-full max-w-2xl rounded-[40px] border border-white/10 shadow-2xl relative z-10 overflow-hidden flex flex-col max-h-[90vh]"
+      class="glass w-full max-w-2xl rounded-[40px] border border-border-bold shadow-2xl relative z-10 overflow-hidden flex flex-col max-h-[90vh]"
     >
-      <div class="p-8 border-b border-white/5 flex justify-between items-center bg-brand-500/5">
+      <div class="p-8 border-b border-border-subtle flex justify-between items-center bg-brand-500/5">
         <div>
           <h2 class="text-2xl font-black tracking-tight">{editingTenant.id ? 'Editar Empresa' : 'Nueva Empresa'}</h2>
           <p class="text-text-muted text-sm capitalize">{editingTenant.id ? `ID: ${editingTenant.id}` : 'Configura una nueva instancia de GalpeApp'}</p>
@@ -280,7 +280,7 @@
                 name="name" 
                 bind:value={editingTenant.name}
                 placeholder="Ej. Comercializadora Sync"
-                class="w-full h-14 bg-white/5 border border-white/10 rounded-2xl px-5 focus:border-brand-500 focus:bg-white/10 outline-hidden transition-all font-medium"
+                class="w-full h-14 bg-surface-soft border border-border-bold rounded-2xl px-5 focus:border-brand-500 focus:bg-surface-strong outline-hidden transition-all font-medium"
               />
             </div>
             <div class="space-y-2">
@@ -305,7 +305,7 @@
                   bind:value={editingTenant.slug}
                   readonly={!!editingTenant.id}
                   placeholder="ej-comercializadora"
-                  class="w-full h-14 bg-white/5 border border-white/10 rounded-2xl px-5 focus:border-brand-500 focus:bg-white/10 outline-hidden transition-all font-mono readonly:opacity-50 readonly:cursor-not-allowed"
+                  class="w-full h-14 bg-surface-soft border border-border-bold rounded-2xl px-5 focus:border-brand-500 focus:bg-surface-strong outline-hidden transition-all font-mono readonly:opacity-50 readonly:cursor-not-allowed"
                 />
                 {#if !editingTenant.id}
                   <p class="text-[10px] text-text-muted mt-1 ml-1 lowercase">Se usará como: <b>{editingTenant.slug || '...'}.galpeapp.com</b></p>
@@ -371,7 +371,7 @@
            <button 
              type="button" 
              onclick={() => (showModal = false)}
-             class="flex-1 h-16 rounded-2xl font-bold bg-white/5 hover:bg-white/10 transition-all active:scale-95"
+             class="flex-1 h-16 rounded-2xl font-bold bg-surface-soft hover:bg-surface-strong transition-all active:scale-95"
            >
              Cancelar
            </button>
@@ -455,7 +455,7 @@
               type="button" 
               disabled={isDeleting}
               onclick={() => (showDeleteModal = false)}
-              class="flex-1 h-14 rounded-2xl font-bold bg-white/5 hover:bg-white/10 transition-all text-sm"
+              class="flex-1 h-14 rounded-2xl font-bold bg-surface-soft hover:bg-surface-strong transition-all text-sm"
             >
               Cancelar
             </button>

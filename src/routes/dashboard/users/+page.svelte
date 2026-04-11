@@ -158,7 +158,7 @@
                     <div class="flex flex-wrap gap-1 items-center">
                       {#each user.globalRoles as roleId}
                         {@const role = data.availableRoles.find((r: any) => r.id === roleId)}
-                        <span class="px-2 py-0.5 rounded-md bg-white/5 text-text-muted text-[9px] font-bold border border-white/10 uppercase">
+                        <span class="px-2 py-0.5 rounded-md bg-surface-soft text-text-muted text-[9px] font-bold border border-border-subtle uppercase">
                           {role?.name || roleId}
                         </span>
                       {/each}
@@ -238,7 +238,7 @@
 <!-- Management Modal -->
 {#if showModal}
   <div 
-    class="fixed inset-0 bg-black/60 backdrop-blur-md z-50 flex items-center justify-center p-4"
+    class="fixed inset-0 bg-surface-base/60 backdrop-blur-md z-50 flex items-center justify-center p-4"
     transition:fade
     onclick={() => (showModal = false)}
   >
@@ -258,7 +258,7 @@
         </div>
         <button 
           onclick={() => (showModal = false)}
-          class="p-3 text-text-muted hover:text-text-base hover:bg-white/5 rounded-2xl transition-all"
+          class="p-3 text-text-muted hover:text-text-base hover:bg-surface-soft rounded-2xl transition-all"
         >
           <X size={24} />
         </button>

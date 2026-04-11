@@ -1,5 +1,5 @@
 // src/lib/server/settings.ts
-import { supabaseAdmin } from './supabase';
+import { getSupabaseAdmin } from './supabase';
 
 export interface SystemSettings {
   app_name: string;
@@ -25,7 +25,8 @@ export const DEFAULT_SETTINGS: SystemSettings = {
  * Obtiene la configuración del sistema desde Supabase (tabla system_settings)
  * Si la tabla no existe o falla, devuelve valores por defecto.
  */
-export async function getSystemSettings(): Promise<SystemSettings> {
+export async function getSystemSettings(fetchFn?: typeof fetch): Promise<SystemSettings> {
+  const supabaseAdmin = getSupabaseAdmin(fetchFn);
   try {
     const { data, error } = await supabaseAdmin
       .from('system_settings')

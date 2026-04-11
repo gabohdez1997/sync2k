@@ -50,9 +50,16 @@
       }
 
       // Sesión creada — invalidar y redirigir
-      await invalidateAll();
+      // Intentar refrescar datos pero no bloquear si falla algo menor
+      try {
+        await invalidateAll();
+      } catch (e) {
+        console.warn("Error durante invalidateAll:", e);
+      }
+
       const redirectTo =
         $page.url.searchParams.get("redirectTo") || "/dashboard";
+      
       await goto(redirectTo);
     } catch {
       errorMessage = "Error de conexión. Verifica tu internet.";

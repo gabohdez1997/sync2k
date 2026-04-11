@@ -19,6 +19,7 @@ export interface AgentResponse<T> {
  * Cliente para interactuar con los Agentes Sync2k instalados en los servidores locales.
  */
 export class AgentClient {
+	private customFetch: typeof fetch | null = null;
 	private baseUrl: string;
 	private apiKey: string;
 	private sqlAuth: string | null = null;
@@ -26,8 +27,10 @@ export class AgentClient {
 
 	constructor(
 		company: { slug: string; agent_url?: string; agent_api_key?: string }, 
-		sqlCreds?: { profit_user?: string | null, profit_pass?: string | null }
+		sqlCreds?: { profit_user?: string | null, profit_pass?: string | null },
+		fetchFn?: typeof fetch
 	) {
+		this.customFetch = fetchFn || null;
 		// Priorizar la URL y API Key configuradas en la empresa, 
 		// con fallback al subdominio estándar y la clave privada de .env
 		let rawUrl = company.agent_url || `https://${company.slug}.sync2k.com`;
@@ -67,7 +70,10 @@ export class AgentClient {
 
 		for (let attempt = 1; attempt <= maxRetries; attempt++) {
 			try {
-				const response = await fetch(url, { ...options, headers });
+				const fetchToUse = this.customFetch || fetch;
+				if (!fetchToUse) throw new Error("Fetch method not available");
+
+				const response = await fetchToUse(url, { ...options, headers });
 				
 				if (!response.ok) {
 					const errorData = await response.json().catch(() => ({}));

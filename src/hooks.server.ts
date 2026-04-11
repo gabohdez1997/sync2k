@@ -23,6 +23,7 @@ export const handle: Handle = async ({ event, resolve }) => {
     publicEnv.PUBLIC_SUPABASE_URL || '',
     publicEnv.PUBLIC_SUPABASE_ANON_KEY || '',
     {
+      global: { fetch: event.fetch },
       cookies: {
         getAll:  () => event.cookies.getAll(),
         setAll: (cookiesToSet) => {
@@ -93,7 +94,7 @@ export const handle: Handle = async ({ event, resolve }) => {
     event.locals.session = session;
 
     // Obtiene perfil (automáticamente hace fallback a BD local si Supabase se cae)
-    const profile = await getUserProfile(session.user.id);
+    const profile = await getUserProfile(session.user.id, event.fetch);
 
     if (profile?.active) {
       event.locals.profile = profile;
