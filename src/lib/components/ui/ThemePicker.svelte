@@ -5,18 +5,18 @@
     let config = $derived(getThemeConfig());
 
     const colors = [
-        { name: 'Azul', hue: 217, sat: 91 },
-        { name: 'Índigo', hue: 239, sat: 84 },
-        { name: 'Morado', hue: 271, sat: 91 },
-        { name: 'Rosa', hue: 330, sat: 81 },
-        { name: 'Rojo', hue: 0, sat: 72 },
-        { name: 'Naranja', hue: 24, sat: 95 },
-        { name: 'Ámbar', hue: 38, sat: 92 },
-        { name: 'Amarillo', hue: 45, sat: 93 },
-        { name: 'Verde', hue: 142, sat: 70 },
-        { name: 'Esmeralda', hue: 160, sat: 84 },
-        { name: 'Teal', hue: 174, sat: 70 },
-        { name: 'Cian', hue: 188, sat: 78 }
+        { name: 'Rojo Profundo', hue: 0, sat: 63 },
+        { name: 'Salmón', hue: 0, sat: 81 },
+        { name: 'Naranja', hue: 14, sat: 100 },
+        { name: 'Ámbar', hue: 48, sat: 100 },
+        { name: 'Bosque', hue: 122, sat: 41 },
+        { name: 'Menta', hue: 151, sat: 83 },
+        { name: 'Turquesa', hue: 172, sat: 100 },
+        { name: 'Cian', hue: 187, sat: 100 },
+        { name: 'Azul Real', hue: 217, sat: 85 },
+        { name: 'Púrpura', hue: 291, sat: 47 },
+        { name: 'Borgoña', hue: 328, sat: 81 },
+        { name: 'Rosa Suave', hue: 340, sat: 82 }
     ];
 
     const modes: { id: ThemeMode; label: string; icon: any }[] = [
