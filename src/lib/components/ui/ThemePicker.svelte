@@ -6,7 +6,7 @@
 
     const colors = [
         { name: 'Rojo Profundo', hue: 0, sat: 63 },
-        { name: 'Salmón', hue: 0, sat: 81 },
+        { name: 'Salmón', hue: 8, sat: 81 },
         { name: 'Naranja', hue: 14, sat: 100 },
         { name: 'Ámbar', hue: 48, sat: 100 },
         { name: 'Bosque', hue: 122, sat: 41 },
@@ -16,7 +16,7 @@
         { name: 'Azul Real', hue: 217, sat: 85 },
         { name: 'Púrpura', hue: 291, sat: 47 },
         { name: 'Borgoña', hue: 328, sat: 81 },
-        { name: 'Rosa Suave', hue: 340, sat: 82 }
+        { name: 'Rosa Suave', hue: 340, sat: 50 }
     ];
 
     const modes: { id: ThemeMode; label: string; icon: any }[] = [
@@ -70,7 +70,7 @@
                     style="background-color: hsl({color.hue}, {color.sat}%, 60%);"
                     title={color.name}
                 >
-                    {#if config.accentHue === color.hue}
+                    {#if config.accentHue === color.hue && config.accentSaturation === color.sat}
                         <div class="bg-white/20 backdrop-blur-sm p-1.5 rounded-full ring-2 ring-white/50 animate-in zoom-in duration-300">
                             <Check size={16} class="text-white" strokeWidth={4} />
                         </div>
