@@ -100,6 +100,10 @@ export const load: PageServerLoad = protectLoad('sec_articles', async ({ url, lo
 		const pageIndex = parseInt(url.searchParams.get('page') || '1', 10);
 		const limit = 12;
 		const showAll = url.searchParams.get('show_all') === 'true';
+		const searchTerm = (url.searchParams.get('search') || '').trim();
+		const linea = (url.searchParams.get('linea') || '').trim();
+		const categoria = (url.searchParams.get('categoria') || '').trim();
+		const ubicacionId = (url.searchParams.get('co_ubicacion') || '').trim();
 
 		// ─── 3. LOAD CATALOGS IN PARALLEL ───────────────────────────────────────
 		let warehouseList: any[] = [];
@@ -124,13 +128,10 @@ export const load: PageServerLoad = protectLoad('sec_articles', async ({ url, lo
 		}
 
 		// ─── 4. BUILD WAREHOUSE MAPS ───────────────────────────────────
-		// Build warehouse list filtered by selected branch
-		const allWarehousesForBranch = warehouseList;
-
 		// Filter warehouses by user permissions
 		const allowedWarehousesForBranch = isAdmin || profileWarehouses.length === 0
-			? allWarehousesForBranch
-			: allWarehousesForBranch.filter((a: any) => {
+			? warehouseList
+			: warehouseList.filter((a: any) => {
 				const almaId = a.co_alma || a.id || a.warehouse_id;
 				return profileWarehouses.includes(almaId);
 			  });
@@ -146,18 +147,41 @@ export const load: PageServerLoad = protectLoad('sec_articles', async ({ url, lo
 			warehouseId = finalWarehouseIds[0];
 		}
 
-		// --- SEGURIDAD: Ya no consultamos al agente durante el SSR para evitar bloqueos ---
-		const articles: any[] = [];
-		const resData: any = { success: true, pagination: { total: 0, page: 1, limit: 12, totalPages: 0 } };
+		// ─── 5. BUILD ENDPOINT & FETCH ARTICLES ───────────────────────────────────
+		const params = new URLSearchParams();
+		params.set('page', pageIndex.toString());
+		params.set('limit', limit.toString());
+		if (showAll) params.set('in_stock', 'all');
+		if (warehouseId) params.set('co_alma', warehouseId);
+		if (linea) params.set('linea', linea);
+		if (categoria) params.set('categoria', categoria);
+		if (ubicacionId) params.set('co_ubicacion', ubicacionId);
 
-		console.log(`[ARTICLES] SSR Skip for security. Client-side fetch will follow.`);
+		if (searchTerm) {
+			const isCode = /^\d/.test(searchTerm);
+			params.set(isCode ? 'co_art' : 'descripcion', searchTerm);
+		}
+
+		const endpoint = searchTerm || linea || categoria || ubicacionId
+			? `/articulos/search?${params.toString()}`
+			: `/articulos?${params.toString()}`;
+
+		let articles: any[] = [];
+		let resData: any = { success: true, pagination: { total: 0, page: 1, limit: 12, totalPages: 0 } };
+
+		try {
+			const response = await agentClient.request<any>(endpoint);
+			articles = (response.data?.items || response.items || response.data || (Array.isArray(response) ? response : []));
+			resData = response;
+		} catch (e) {
+			console.error('[ARTICLES] Fetch articles error:', e);
+		}
 
 		// Extraer permisos CRUD del usuario para esta sección
 		const crud = userProfile?.permissions?.['sec_articles'] || { read: true, create: false, update: false, delete: false };
 
 		return {
 			articles,
-			endpoint,
 			branches: allowedBranches,
 			crud,
 			context: {
@@ -172,8 +196,8 @@ export const load: PageServerLoad = protectLoad('sec_articles', async ({ url, lo
 				warehouses: allowedWarehousesForBranch
 			},
 			pagination: {
-				page: (resData as any).pagination?.currentPage || pageIndex,
-				totalPages: (resData as any).pagination?.pages || 1,
+				page: (resData as any).pagination?.currentPage || (resData as any).pagination?.page || pageIndex,
+				totalPages: (resData as any).pagination?.pages || (resData as any).pagination?.totalPages || 1,
 				totalItems: (resData as any).pagination?.total || articles.length
 			}
 		};
