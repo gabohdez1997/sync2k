@@ -39,6 +39,7 @@
   } from "lucide-svelte";
   import { toast } from "svelte-sonner";
   import Combobox from "$lib/components/ui/Combobox.svelte";
+  import BarcodeScanner from "$lib/components/ui/BarcodeScanner.svelte";
   import type { PageData } from "./$types";
 
   let { data }: { data: PageData } = $props();
@@ -1084,48 +1085,58 @@
         <div
           class="glass p-4 rounded-3xl border border-border-subtle shadow-2xl grid grid-cols-2 lg:grid-cols-4 gap-4 items-center relative z-10"
         >
-          <!-- 1. Buscador -->
-          <form onsubmit={handleSearch} class="relative group w-full h-12">
-            <Search
-              class="absolute left-5 top-1/2 -translate-y-1/2 text-brand-500"
-              size={20}
-            />
-            <input
-              type="text"
-              placeholder="Buscar código o descripción..."
-              bind:value={searchTerm}
-              class="w-full h-full bg-surface-base pl-14 pr-24 rounded-full border border-border-subtle focus:border-brand-500/30 outline-none transition-all font-bold text-sm placeholder:font-normal placeholder:text-text-secondary/30"
-            />
-            <button
-              type="submit"
-              class="absolute right-1 top-1 bottom-1 px-4 bg-surface-soft hover:bg-surface-strong text-text-base rounded-full text-xs font-bold transition-all border border-border-subtle"
-            >
-              Buscar
-            </button>
-          </form>
+          <!-- 1. Buscador + Scanner -->
+          <div class="flex items-center gap-2 col-span-2 lg:col-span-1">
+            <form onsubmit={handleSearch} class="relative group flex-1 h-12">
+              <Search
+                class="absolute left-5 top-1/2 -translate-y-1/2 text-brand-500"
+                size={20}
+              />
+              <input
+                type="text"
+                placeholder="Buscar código o descripción..."
+                bind:value={searchTerm}
+                class="w-full h-full bg-surface-base pl-14 pr-24 rounded-full border border-border-subtle focus:border-brand-500/30 outline-none transition-all font-bold text-sm placeholder:font-normal placeholder:text-text-secondary/30"
+              />
+              <button
+                type="submit"
+                class="absolute right-1 top-1 bottom-1 px-4 bg-surface-soft hover:bg-surface-strong text-text-base rounded-full text-xs font-bold transition-all border border-border-subtle"
+              >
+                Buscar
+              </button>
+            </form>
+            <BarcodeScanner onScan={(code) => { 
+                searchTerm = code;
+                handleSearch(new Event('submit') as any);
+            }} />
+          </div>
 
           <!-- 2. Linea -->
-          <Combobox
-            options={(data.context?.lineas || []).map((l: any) => ({ value: l.co_lin, label: l.lin_des }))}
-            bind:value={selectedLinea}
-            placeholder="Líneas (Todas)"
-            allLabel="Líneas (Todas)"
-            onchange={handleSearch}
-            class="w-full h-12"
-          />
+          <div class="col-span-1 lg:col-span-1">
+            <Combobox
+              options={(data.context?.lineas || []).map((l: any) => ({ value: l.co_lin, label: l.lin_des }))}
+              bind:value={selectedLinea}
+              placeholder="Líneas (Todas)"
+              allLabel="Líneas (Todas)"
+              onchange={handleSearch}
+              class="w-full h-12"
+            />
+          </div>
 
           <!-- 3. Categoria -->
-          <Combobox
-            options={(filteredCategorias || []).map((c: any) => ({ value: c.co_cat, label: c.cat_des }))}
-            bind:value={selectedCategoria}
-            placeholder="Categorías (Todas)"
-            allLabel="Categorías (Todas)"
-            onchange={handleSearch}
-            class="w-full h-12"
-          />
+          <div class="col-span-1 lg:col-span-1">
+            <Combobox
+              options={(filteredCategorias || []).map((c: any) => ({ value: c.co_cat, label: c.cat_des }))}
+              bind:value={selectedCategoria}
+              placeholder="Categorías (Todas)"
+              allLabel="Categorías (Todas)"
+              onchange={handleSearch}
+              class="w-full h-12"
+            />
+          </div>
 
           <!-- 4. Acciones (Precio + Moneda) -->
-          <div class="flex items-center gap-2 w-full h-12">
+          <div class="flex items-center gap-2 w-full h-12 col-span-2 lg:col-span-1">
             <button
               type="button"
               onclick={() => {
@@ -1444,7 +1455,7 @@
         <!-- Floating Cart (Mobile Friendly) -->
         {#if cart.length > 0}
           <div
-            class="fixed bottom-8 left-1/2 -translate-x-1/2 z-40 w-[calc(100%-2rem)] max-w-md"
+            class="fixed bottom-28 md:bottom-8 left-1/2 -translate-x-1/2 z-40 w-[calc(100%-2rem)] max-w-md"
             transition:slide
           >
             <div
