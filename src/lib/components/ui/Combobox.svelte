@@ -12,7 +12,7 @@
     options: Option[];
     value?: string;
     placeholder?: string;
-    allLabel?: string;  // Texto de la opción "Todos" al inicio del dropdown
+    allLabel?: string;
     icon?: any;
     onchange?: (value: string) => void;
     class?: string;
@@ -36,12 +36,10 @@
   let containerEl: HTMLDivElement | null = $state(null);
   let activeIndex = $state(-1);
 
-  // Label de la opción actualmente seleccionada
   const selectedLabel = $derived(
     options.find(o => o.value === value)?.label ?? ''
   );
 
-  // Opciones filtradas por el buscador
   const filtered = $derived(
     searchTerm.trim() === ''
       ? options
@@ -78,7 +76,6 @@
 
   function handleKeydown(e: KeyboardEvent) {
     if (!isOpen) return;
-    // Total de opciones en la lista (incluye la fila "Todos" si existe)
     const total = filtered.length + (allLabel ? 1 : 0);
     switch (e.key) {
       case 'ArrowDown':
@@ -92,13 +89,10 @@
       case 'Enter':
         e.preventDefault();
         if (allLabel && activeIndex === 0) {
-          // Primera fila = Todos
           value = ''; onchange?.(''); close();
         } else {
-          const adjustedIndex = allLabel ? activeIndex - 1 : activeIndex;
-          if (adjustedIndex >= 0 && filtered[adjustedIndex]) {
-            select(filtered[adjustedIndex]);
-          }
+          const idx = allLabel ? activeIndex - 1 : activeIndex;
+          if (idx >= 0 && filtered[idx]) select(filtered[idx]);
         }
         break;
       case 'Escape':
@@ -125,7 +119,6 @@
       {isOpen ? 'border-brand-500/50 ring-1 ring-brand-500/20' : 'border-white/5'}
       {value ? 'text-brand-300' : 'text-text-muted'}"
   >
-    <!-- Icon slot -->
     {#if Icon}
       <span class="flex-shrink-0 pl-4 pr-2.5 text-brand-400">
         <Icon size={18} />
@@ -134,12 +127,10 @@
       <span class="pl-4"></span>
     {/if}
 
-    <!-- Selected label or placeholder -->
     <span class="flex-1 truncate">
       {selectedLabel || placeholder}
     </span>
 
-    <!-- Clear button when value is set -->
     {#if value}
       <button
         type="button"
@@ -151,16 +142,15 @@
       </button>
     {/if}
 
-    <!-- Chevron -->
     <span class="flex-shrink-0 text-text-muted transition-transform duration-200 {isOpen ? 'rotate-180' : ''}">
       <ChevronDown size={16} />
     </span>
   </button>
 
-  <!-- Dropdown panel -->
+  <!-- Dropdown panel (position: absolute, elevado con z-[200]) -->
   {#if isOpen}
     <div
-      class="absolute z-50 mt-2 w-full bg-surface-raised border border-white/10 rounded-2xl shadow-2xl shadow-black/40 overflow-hidden"
+      class="absolute z-[200] mt-2 w-full bg-surface-raised border border-white/10 rounded-2xl shadow-2xl shadow-black/40 overflow-hidden"
       style="min-width: 220px;"
     >
       <!-- Search input -->
@@ -169,7 +159,6 @@
         <input
           bind:this={inputEl}
           bind:value={searchTerm}
-          onkeydown={handleKeydown}
           type="text"
           placeholder="Buscar..."
           autocomplete="off"
@@ -179,7 +168,6 @@
 
       <!-- Options list -->
       <ul class="max-h-60 overflow-y-auto py-1 custom-scrollbar">
-        <!-- Opción "Todos" al inicio si se proporciona allLabel -->
         {#if allLabel}
           <li>
             <button
@@ -193,11 +181,7 @@
                     ? 'bg-white/5 text-text-base'
                     : 'text-text-muted hover:bg-white/5 hover:text-text-base'}"
             >
-              {#if !value}
-                <span class="w-1.5 h-1.5 rounded-full bg-brand-400 flex-shrink-0"></span>
-              {:else}
-                <span class="w-1.5 h-1.5 flex-shrink-0"></span>
-              {/if}
+              <span class="w-1.5 h-1.5 rounded-full {!value ? 'bg-brand-400' : ''} flex-shrink-0"></span>
               <span class="truncate italic opacity-80">{allLabel}</span>
             </button>
           </li>
@@ -222,11 +206,7 @@
                       ? 'bg-white/5 text-text-base'
                       : 'text-text-muted hover:bg-white/5 hover:text-text-base'}"
               >
-                {#if value === option.value}
-                  <span class="w-1.5 h-1.5 rounded-full bg-brand-400 flex-shrink-0"></span>
-                {:else}
-                  <span class="w-1.5 h-1.5 flex-shrink-0"></span>
-                {/if}
+                <span class="w-1.5 h-1.5 rounded-full {value === option.value ? 'bg-brand-400' : ''} flex-shrink-0"></span>
                 <span class="truncate">{option.label}</span>
               </button>
             </li>
@@ -234,7 +214,7 @@
         {/if}
       </ul>
 
-      <!-- Count footer -->
+      <!-- Footer -->
       <div class="px-4 py-2 border-t border-white/5 flex items-center justify-between">
         <span class="text-[10px] text-text-muted/50 font-mono">
           {filtered.length} de {options.length} opciones

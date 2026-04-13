@@ -30,6 +30,7 @@
   import { goto } from "$app/navigation";
   import { page } from "$app/stores";
   import { toast } from "svelte-sonner";
+  import Combobox from "$lib/components/ui/Combobox.svelte";
   import type { PageData, ActionData } from "./$types";
 
   let { data, form }: { data: PageData; form: ActionData } = $props();
@@ -220,24 +221,15 @@
     <!-- Selection row (Tenant + Branch) -->
     <div class="flex flex-col lg:flex-row gap-4 items-center w-full">
       {#if (data.tenants?.length ?? 0) > 1}
-        <div class="relative w-full lg:w-72 shrink-0">
-          <Box
-            class="absolute left-4 top-1/2 -translate-y-1/2 text-brand-400"
-            size={18}
-          />
-          <select
+          <Combobox
+            options={(data.tenants || []).map((t: any) => ({ value: t.id, label: t.name }))}
             bind:value={selectedTenant}
+            placeholder="Seleccionar Empresa..."
+            allLabel="Todas las Empresas"
+            icon={Box}
+            class="w-full lg:w-72 shrink-0"
             onchange={() => handleSearch()}
-            class="w-full h-14 bg-surface-base pl-11 pr-10 rounded-2xl border border-white/5 focus:border-brand-500/50 outline-none appearance-none font-bold text-sm cursor-pointer hover:bg-white/5 transition-all text-brand-100"
-          >
-            <option value="">Seleccionar Empresa...</option>
-            {#each data.tenants || [] as t}
-              <option value={t.id} class="bg-surface-base text-text-base"
-                >{t.name}</option
-              >
-            {/each}
-          </select>
-        </div>
+          />
       {:else if data.tenants?.length === 1 || data.context?.tenantId}
         <div
           class="h-14 bg-surface-base border border-white/10 rounded-2xl px-6 items-center gap-3 shrink-0 hidden lg:flex"
@@ -254,26 +246,15 @@
       <!-- Contenedor del Buscador y Sucursal (50% en PC, fluido en tlf) -->
       <div class="flex flex-row items-center gap-3 w-full lg:w-1/2 ml-auto">
         {#if data.context?.branches && data.context.branches.length > 1}
-          <div class="relative w-32 sm:w-60 shrink-0">
-            <Store
-              class="absolute left-4 top-1/2 -translate-y-1/2 text-brand-400"
-              size={18}
-            />
-            <select
+            <Combobox
+              options={(data.context?.branches || []).map((b: any) => ({ value: b.id, label: b.name }))}
               bind:value={selectedBranch}
+              placeholder="Sucursal..."
+              allLabel="Todas las Sucursales"
+              icon={Store}
+              class="w-32 sm:w-60 shrink-0"
               onchange={() => handleSearch()}
-              class="w-full h-14 bg-surface-base pl-11 pr-10 rounded-2xl border border-white/5 focus:border-brand-500/50 outline-none appearance-none font-bold text-sm cursor-pointer hover:bg-white/5 transition-all text-brand-300 pr-8"
-            >
-              {#each data.context.branches as branch}
-                <option value={branch.id} class="bg-surface-base text-text-base"
-                  >{branch.name}</option
-                >
-              {/each}
-            </select>
-            <div class="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-text-muted">
-              <ChevronRight size={14} />
-            </div>
-          </div>
+            />
         {/if}
 
         <form onsubmit={handleSearch} class="flex-1 relative group h-14">
@@ -774,28 +755,15 @@
           <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
             <!-- Zone -->
             <div class="space-y-2">
-              <label
-                for="co_zon"
-                class="text-xs font-bold uppercase tracking-widest text-text-muted ml-1"
-                >Zona Geográfica</label
-              >
-              <div class="relative">
-                <MapPin
-                  size={18}
-                  class="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted opacity-40"
-                />
-                <select
-                  id="co_zon"
-                  name="co_zon"
-                  bind:value={co_zon}
-                  class="w-full bg-surface-base border border-border-subtle rounded-2xl pl-12 pr-5 py-4 focus:outline-none focus:ring-2 focus:ring-brand-500/50 transition-all appearance-none"
-                >
-                  <option value="">Seleccione una zona...</option>
-                  {#each data.context?.zonas || [] as zon}
-                    <option value={zon.co_zon}>{zon.zon_des}</option>
-                  {/each}
-                </select>
-              </div>
+              <label for="co_zon" class="text-xs font-bold uppercase tracking-widest text-text-muted ml-1">Zona Geográfica</label>
+              <input type="hidden" name="co_zon" value={co_zon} />
+              <Combobox
+                options={(data.context?.zonas || []).map((z: any) => ({ value: z.co_zon, label: z.zon_des }))}
+                bind:value={co_zon}
+                placeholder="Seleccione una zona..."
+                allLabel="Sin zona"
+                icon={MapPin}
+              />
             </div>
 
             <!-- Contribuyente Toggle -->
@@ -824,33 +792,23 @@
               class="space-y-6 pt-2 animate-in fade-in slide-in-from-top-2 duration-300"
             >
               <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <!-- Tipo Persona -->
                 <div class="space-y-2">
-                  <label
-                    for="tipo_per"
-                    class="text-xs font-bold uppercase tracking-widest text-text-muted ml-1"
-                    >Tipo de Persona</label
-                  >
-                  <select
-                    id="tipo_per"
-                    name="tipo_per"
+                  <label for="tipo_per" class="text-xs font-bold uppercase tracking-widest text-text-muted ml-1">Tipo de Persona</label>
+                  <input type="hidden" name="tipo_per" value={tipo_per} />
+                  <Combobox
+                    options={[
+                      { value: '1', label: '(PNR) Persona Natural Residente' },
+                      { value: '2', label: '(PNNR) Persona Natural No Residente' },
+                      { value: '3', label: '(PJD) Persona Jurídica Domiciliada' },
+                      { value: '4', label: '(PJND) Persona Jurídica No Domiciliada' },
+                      { value: '5', label: 'Exenta' },
+                      { value: '6', label: 'Tesorería Nacional' },
+                      { value: '7', label: 'Otros 1' },
+                      { value: '8', label: 'Otros 2' }
+                    ]}
                     bind:value={tipo_per}
-                    class="w-full bg-surface-base border border-border-subtle rounded-2xl px-5 py-4 focus:outline-none focus:ring-2 focus:ring-brand-500/50 transition-all appearance-none"
-                  >
-                    <option value="1">(PNR) Persona Natural Residente</option>
-                    <option value="2"
-                      >(PNNR) Persona Natural No Residente</option
-                    >
-                    <option value="3">(PJD) Persona Jurídica Domiciliada</option
-                    >
-                    <option value="4"
-                      >(PJND) Persona Jurídica No Domiciliada</option
-                    >
-                    <option value="5">Exenta</option>
-                    <option value="6">Tesorería Nacional</option>
-                    <option value="7">Otros 1</option>
-                    <option value="8">Otros 2</option>
-                  </select>
+                    placeholder="Tipo de Persona..."
+                  />
                 </div>
 
                 <!-- Contribuyente Especial -->

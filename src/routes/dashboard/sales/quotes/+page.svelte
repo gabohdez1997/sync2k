@@ -335,8 +335,7 @@
       ];
     }
 
-    quantities[co_art] = 1;
-    toast.success(`Agregado: ${article.art_des}`);
+    toast.success(`Agregado: ${article.art_des || article.descripcion}`);
   }
 
   function removeFromCart(index: number) {
@@ -938,29 +937,17 @@
                     </div>
                   </div>
 
-                  <!-- Zona (Select) -->
+                  <!-- Zona (Combobox) -->
                   <div class="space-y-2">
-                    <label
-                      class="text-[10px] font-black uppercase tracking-widest text-text-muted ml-2"
-                      >Zona</label
-                    >
-                    <div class="relative">
-                      <MapPin
-                        class="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted opacity-40"
-                        size={18}
-                      />
-                      <select
-                        name="co_zon"
-                        required
-                        bind:value={newClient.co_zon}
-                        class="w-full h-14 bg-white/5 border border-white/10 rounded-2xl pl-12 pr-10 outline-none focus:border-brand-500/50 appearance-none font-bold"
-                      >
-                        <option value="">Seleccionar zona...</option>
-                        {#each data.context?.zonas || [] as zon}
-                          <option value={zon.co_zon}>{zon.zon_des}</option>
-                        {/each}
-                      </select>
-                    </div>
+                    <label class="text-[10px] font-black uppercase tracking-widest text-text-muted ml-2">Zona</label>
+                    <input type="hidden" name="co_zon" value={newClient.co_zon} />
+                    <Combobox
+                      options={(data.context?.zonas || []).map((z: any) => ({ value: z.co_zon, label: z.zon_des }))}
+                      bind:value={newClient.co_zon}
+                      placeholder="Seleccionar zona..."
+                      allLabel="Sin zona"
+                      icon={MapPin}
+                    />
                   </div>
 
                   <!-- Dirección -->
@@ -1019,22 +1006,19 @@
                       >
                         <!-- Tipo Persona -->
                         <div class="space-y-2">
-                          <label
-                            class="text-[10px] font-black uppercase tracking-widest text-text-muted ml-2"
-                            >Tipo de Persona</label
-                          >
-                          <select
-                            name="tipo_per"
+                          <label class="text-[10px] font-black uppercase tracking-widest text-text-muted ml-2">Tipo de Persona</label>
+                          <input type="hidden" name="tipo_per" value={newClient.tipo_per} />
+                          <Combobox
+                            options={[
+                              { value: '1', label: '(PNR) Nat. Residente' },
+                              { value: '2', label: '(PNNR) Nat. No Residente' },
+                              { value: '3', label: '(PJD) Jur. Domiciliada' },
+                              { value: '4', label: '(PJND) Jur. No Domiciliada' },
+                              { value: '5', label: 'Exenta' }
+                            ]}
                             bind:value={newClient.tipo_per}
-                            class="w-full h-14 bg-surface-soft border border-border-bold rounded-2xl px-5 outline-none focus:border-brand-500/50 appearance-none font-bold text-sm"
-                          >
-                            <option value="1">(PNR) Nat. Residente</option>
-                            <option value="2">(PNNR) Nat. No Residente</option>
-                            <option value="3">(PJD) Jur. Domiciliada</option>
-                            <option value="4">(PJND) Jur. No Domiciliada</option
-                            >
-                            <option value="5">Exenta</option>
-                          </select>
+                            placeholder="Tipo de persona..."
+                          />
                         </div>
 
                         <!-- Retencion (si es especial) -->
@@ -1098,7 +1082,7 @@
       <div in:fade class="space-y-6">
         <!-- Dashboard for filtering (Compact) -->
         <div
-          class="glass p-4 rounded-3xl border border-border-subtle shadow-2xl grid grid-cols-2 lg:grid-cols-4 gap-4 items-center"
+          class="glass p-4 rounded-3xl border border-border-subtle shadow-2xl grid grid-cols-2 lg:grid-cols-4 gap-4 items-center relative z-10"
         >
           <!-- 1. Buscador -->
           <form onsubmit={handleSearch} class="relative group w-full h-12">
@@ -1121,40 +1105,24 @@
           </form>
 
           <!-- 2. Linea -->
-          <div class="relative w-full h-12">
-            <select
-              bind:value={selectedLinea}
-              onchange={handleSearch}
-              class="w-full h-full bg-surface-soft rounded-xl px-4 border border-border-subtle text-xs font-bold outline-none appearance-none cursor-pointer"
-            >
-              <option value="">Líneas (Todas)</option>
-              {#each data.context?.lineas || [] as lin}
-                <option value={lin.co_lin}>{lin.lin_des}</option>
-              {/each}
-            </select>
-            <ChevronDown
-              size={14}
-              class="absolute right-4 top-1/2 -translate-y-1/2 text-text-muted opacity-50 pointer-events-none"
-            />
-          </div>
+          <Combobox
+            options={(data.context?.lineas || []).map((l: any) => ({ value: l.co_lin, label: l.lin_des }))}
+            bind:value={selectedLinea}
+            placeholder="Líneas (Todas)"
+            allLabel="Líneas (Todas)"
+            onchange={handleSearch}
+            class="w-full h-12"
+          />
 
           <!-- 3. Categoria -->
-          <div class="relative w-full h-12">
-            <select
-              bind:value={selectedCategoria}
-              onchange={handleSearch}
-              class="w-full h-full bg-surface-soft rounded-xl px-4 border border-border-subtle text-xs font-bold outline-none appearance-none cursor-pointer"
-            >
-              <option value="">Categorías (Todas)</option>
-              {#each filteredCategorias || [] as cat}
-                <option value={cat.co_cat}>{cat.cat_des}</option>
-              {/each}
-            </select>
-            <ChevronDown
-              size={14}
-              class="absolute right-4 top-1/2 -translate-y-1/2 text-text-muted opacity-50 pointer-events-none"
-            />
-          </div>
+          <Combobox
+            options={(filteredCategorias || []).map((c: any) => ({ value: c.co_cat, label: c.cat_des }))}
+            bind:value={selectedCategoria}
+            placeholder="Categorías (Todas)"
+            allLabel="Categorías (Todas)"
+            onchange={handleSearch}
+            class="w-full h-12"
+          />
 
           <!-- 4. Acciones (Precio + Moneda) -->
           <div class="flex items-center gap-2 w-full h-12">
@@ -1293,6 +1261,7 @@
                           : selPrice?.precio_ves
                         )?.toLocaleString("de-DE", {
                           minimumFractionDigits: 2,
+                          maximumFractionDigits: 2,
                         })}
                         {showUSD ? " $" : " Bs."}
                       </span>
@@ -1500,6 +1469,7 @@
                   <div class="text-sm font-black text-white">
                     $ {totals().total.toLocaleString("de-DE", {
                       minimumFractionDigits: 2,
+                      maximumFractionDigits: 2,
                     })}
                   </div>
                 </div>
@@ -1717,7 +1687,7 @@
                             <option
                               value={idx}
                               class="bg-surface-base text-text-base text-sm"
-                              >{price.des_precio || `Tipo ${idx + 1}`} - $ {price.precio.toLocaleString("de-DE", { minimumFractionDigits: 2 })}</option
+                              >{price.des_precio || `Tipo ${idx + 1}`} - $ {price.precio.toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</option
                             >
                           {/each}
                         </select>
@@ -1735,7 +1705,7 @@
                           (showUSD
                             ? item.price_selected?.precio || item.precios?.[0]?.precio || 0
                             : item.price_selected?.precio_ves || item.precios?.[0]?.precio_ves || 0) * item.qty
-                        ).toLocaleString("de-DE", { minimumFractionDigits: 2 })}
+                        ).toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </div>
                       <div class="text-[10px] text-text-muted font-bold uppercase tracking-widest">
                         Total {totals().symbol}
@@ -1797,7 +1767,7 @@
                   <span>Sub-Total</span>
                   <span class="font-mono text-text-base"
                     >{totals().symbol}
-                    {totals().subtotal.toLocaleString("de-DE", { minimumFractionDigits: 2 })}</span
+                    {totals().subtotal.toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span
                   >
                 </div>
 
@@ -1814,7 +1784,7 @@
                   </div>
                   <span class="font-mono text-brand-400"
                     >{totals().symbol}
-                    {totals().iva.toLocaleString("de-DE", { minimumFractionDigits: 2 })}</span
+                    {totals().iva.toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span
                   >
                 </div>
 
@@ -1824,7 +1794,7 @@
                       <span class="text-[10px] font-black uppercase tracking-[0.2em] text-brand-400/60 block mb-2">Total a Pagar</span>
                       <div class="text-5xl font-black text-text-base drop-shadow-[0_4px_12px_rgba(var(--brand-rgb),0.3)] tracking-tight leading-none">
                         {totals().symbol}
-                        {totals().total.toLocaleString("de-DE", { minimumFractionDigits: 2 })}
+                        {totals().total.toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </div>
                     </div>
                     <div class="text-right pb-1">
@@ -1833,7 +1803,7 @@
                       </div>
                       <div class="text-lg font-black font-mono text-brand-400/80">
                         {showUSD ? "Bs." : "$"}
-                        {(showUSD ? totals().raw.bs.total : totals().raw.usd.total).toLocaleString("de-DE", { minimumFractionDigits: 2 })}
+                        {(showUSD ? totals().raw.bs.total : totals().raw.usd.total).toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </div>
                     </div>
                   </div>
