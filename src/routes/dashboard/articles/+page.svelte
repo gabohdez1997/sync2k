@@ -21,6 +21,7 @@
     Printer,
   } from "lucide-svelte";
   import { toast } from "svelte-sonner";
+  import Combobox from "$lib/components/ui/Combobox.svelte";
   import type { PageData, ActionData } from "./$types";
 
   let { data, form }: { data: PageData; form: any } = $props();
@@ -289,48 +290,25 @@
     <!-- FIRST ROW: BRANCH, WAREHOUSE, SEARCH -->
     <div class="flex flex-col lg:flex-row gap-4 items-center">
       {#if data.branches && data.branches.length > 0}
-        <div class="relative w-full lg:w-64 shrink-0">
-          <Store
-            class="absolute left-4 top-1/2 -translate-y-1/2 text-brand-400"
-            size={18}
-          />
-          <select
-            bind:value={selectedBranch}
-            onchange={() => handleSearch()}
-            class="w-full h-14 bg-surface-base/80 pl-11 pr-10 rounded-2xl border border-white/5 focus:border-brand-500/50 outline-none appearance-none font-bold text-sm cursor-pointer hover:bg-white/5 transition-all text-brand-300"
-          >
-            <option value="">Seleccionar Sucursal</option>
-            {#each data.branches as branch}
-              <option value={branch.id} class="bg-surface-base text-text-base">
-                {branch.name}
-              </option>
-            {/each}
-          </select>
-        </div>
+        <Combobox
+          options={data.branches.map((b: any) => ({ value: b.id, label: b.name }))}
+          bind:value={selectedBranch}
+          placeholder="Seleccionar Sucursal"
+          icon={Store}
+          class="w-full lg:w-64 shrink-0"
+          onchange={() => handleSearch()}
+        />
       {/if}
 
       {#if data.context?.warehouses && data.context.warehouses.length > 0}
-        <div class="relative w-full lg:w-64 shrink-0">
-          <Package
-            class="absolute left-4 top-1/2 -translate-y-1/2 text-brand-400"
-            size={18}
-          />
-          <select
-            bind:value={selectedWarehouse}
-            onchange={() => handleSearch()}
-            class="w-full h-14 bg-surface-base/80 pl-11 pr-10 rounded-2xl border border-white/5 focus:border-brand-500/50 outline-none appearance-none font-bold text-sm cursor-pointer hover:bg-white/5 transition-all text-brand-300"
-          >
-            <option value="">Todos los Almacenes</option>
-            {#each data.context.warehouses as alma}
-              <option
-                value={alma.co_alma || alma.id}
-                class="bg-surface-base text-text-base"
-              >
-                {alma.des_alma || alma.nombre || alma.co_alma || alma.id}
-              </option>
-            {/each}
-          </select>
-        </div>
+        <Combobox
+          options={(data.context.warehouses || []).map((a: any) => ({ value: a.co_alma || a.id, label: a.des_alma || a.nombre || a.co_alma || a.id }))}
+          bind:value={selectedWarehouse}
+          placeholder="Todos los Almacenes"
+          icon={Package}
+          class="w-full lg:w-64 shrink-0"
+          onchange={() => handleSearch()}
+        />
       {/if}
 
       <form class="relative flex-1 w-full lg:w-auto" onsubmit={(e) => { e.preventDefault(); handleSearch(); }}>
@@ -364,64 +342,46 @@
 
     <!-- SECOND ROW: LINEA, CATEGORIA -->
     <div class="flex flex-col md:flex-row gap-4">
-      <!-- UBICACION SELECTOR -->
+      <!-- UBICACION SELECTOR via Combobox -->
       {#if data.context?.ubicaciones && data.context.ubicaciones.length > 0}
-      <div class="relative w-full md:w-80 shrink-0">
-        <MapPin class="absolute left-4 top-1/2 -translate-y-1/2 text-brand-400" size={18} />
-        <select 
+        {@const ubicOptions = [
+          ...((data.context.ubicaciones || []).map((u: any) => ({
+            value: u.id || u.co_ubicacion,
+            label: `${u.co_ubicacion || u.id} - ${u.descripcion || u.name || u.co_ubicacion || u.id}`
+          })))
+        ]}
+        <Combobox
+          options={ubicOptions}
           bind:value={selectedUbicacion}
+          placeholder="Todas las Ubicaciones"
+          icon={MapPin}
+          class="w-full md:w-80 shrink-0"
           onchange={() => handleSearch()}
-          class="w-full h-14 bg-surface-base/80 pl-11 pr-10 rounded-2xl border border-white/5 focus:border-brand-500/50 outline-none appearance-none font-bold text-sm cursor-pointer hover:bg-white/5 transition-all text-brand-300"
-        >
-           <option value="">Todas las Ubicaciones</option>
-           {#each data.context.ubicaciones as ubic}
-             <option value={ubic.id || ubic.co_ubicacion} class="bg-surface-base text-text-base">
-                {ubic.co_ubicacion || ubic.id} - {ubic.descripcion || ubic.name || ubic.co_ubicacion || ubic.id}
-             </option>
-           {/each}
-        </select>
-      </div>
+        />
       {/if}
 
       <!-- LINEA SELECTOR -->
       {#if data.context?.lineas && data.context.lineas.length > 0}
-        <div class="relative w-full md:w-80 shrink-0">
-          <ListFilter class="absolute left-4 top-1/2 -translate-y-1/2 text-brand-400" size={18} />
-          <select
-            bind:value={selectedLinea}
-            onchange={() => {
-              selectedCategoria = "";
-              handleSearch();
-            }}
-            class="w-full h-14 bg-surface-base/80 pl-11 pr-10 rounded-2xl border border-white/5 focus:border-brand-500/50 outline-none appearance-none font-bold text-sm cursor-pointer hover:bg-white/5 transition-all text-brand-300"
-          >
-            <option value="">Todas las Líneas</option>
-            {#each data.context.lineas as linea}
-              <option value={linea.co_lin} class="bg-surface-base text-text-base">
-                {linea.lin_des}
-              </option>
-            {/each}
-          </select>
-        </div>
+        <Combobox
+          options={(data.context.lineas || []).map((l: any) => ({ value: l.co_lin, label: l.lin_des }))}
+          bind:value={selectedLinea}
+          placeholder="Todas las Líneas"
+          icon={ListFilter}
+          class="w-full md:w-80 shrink-0"
+          onchange={() => { selectedCategoria = ''; handleSearch(); }}
+        />
       {/if}
 
       <!-- CATEGORIA SELECTOR -->
       {#if filteredCategorias && filteredCategorias.length > 0}
-        <div class="relative w-full md:w-80 shrink-0">
-          <ListFilter class="absolute left-4 top-1/2 -translate-y-1/2 text-brand-400" size={18} />
-          <select
-            bind:value={selectedCategoria}
-            onchange={() => handleSearch()}
-            class="w-full h-14 bg-surface-base/80 pl-11 pr-10 rounded-2xl border border-white/5 focus:border-brand-500/50 outline-none appearance-none font-bold text-sm cursor-pointer hover:bg-white/5 transition-all text-brand-300"
-          >
-            <option value="">Todas las Categorías</option>
-            {#each filteredCategorias as cat}
-              <option value={cat.co_cat} class="bg-surface-base text-text-base">
-                {cat.cat_des}
-              </option>
-            {/each}
-          </select>
-        </div>
+        <Combobox
+          options={filteredCategorias.map((c: any) => ({ value: c.co_cat, label: c.cat_des }))}
+          bind:value={selectedCategoria}
+          placeholder="Todas las Categorías"
+          icon={ListFilter}
+          class="w-full md:w-80 shrink-0"
+          onchange={() => handleSearch()}
+        />
       {/if}
     </div>
   </div>
@@ -722,87 +682,50 @@
 
         <!-- SELECTOR DE ALMACÉN (OBLIGATORIO) -->
         <div class="space-y-1">
-          <label for="formAlma" class="text-[10px] uppercase font-black tracking-widest text-brand-400 ml-1">Almacén / Depósito Profit</label>
-          <div class="relative">
-            <Package class="absolute left-4 top-1/2 -translate-y-1/2 text-brand-400" size={18} />
-            <select 
-              id="formAlma"
-              bind:value={selectedWarehouse}
-              required
-              class="w-full h-12 bg-surface-raised border border-white/10 rounded-xl pl-12 pr-4 text-sm font-medium focus:border-brand-500 transition-colors cursor-pointer"
-            >
-              <option value="">-- Seleccionar Almacén --</option>
-              {#each data.context?.warehouses || [] as alma}
-                <option value={alma.co_alma || alma.id}>
-                  {alma.des_alma || alma.nombre || alma.id}
-                </option>
-              {/each}
-            </select>
-          </div>
+          <label class="text-[10px] uppercase font-black tracking-widest text-brand-400 ml-1">Almacén / Depósito Profit</label>
+          <Combobox
+            options={(data.context?.warehouses || []).map((a: any) => ({ value: a.co_alma || a.id, label: a.des_alma || a.nombre || a.id }))}
+            bind:value={selectedWarehouse}
+            placeholder="-- Seleccionar Almacén --"
+            icon={Package}
+          />
         </div>
 
         <div class="space-y-4">
           <!-- UBICACION 1 -->
           <div class="space-y-1">
-            <label for="formUbic1" class="text-[10px] uppercase font-black tracking-widest text-text-muted ml-1">Ubicación Principal</label>
-            <div class="flex flex-col gap-1">
-              <input 
-                type="text" 
-                bind:value={searchUbic1} 
-                placeholder="Filtrar ubicaciones..." 
-                class="w-full h-9 bg-white/5 border border-white/5 rounded-xl px-3 text-[11px] outline-none focus:border-brand-500/30 transition-colors"
-              />
-              <select id="formUbic1" name="co_ubicacion" bind:value={formUbic1} class="w-full h-12 bg-surface-raised border border-white/10 rounded-xl px-4 text-sm font-medium focus:border-brand-500 transition-colors cursor-pointer">
-                <option value="">-- Ninguna --</option>
-                {#each filteredUbic1 as ubic}
-                   <option value={ubic.id || ubic.co_ubicacion}>
-                      {ubic.co_ubicacion || ubic.id} - {ubic.descripcion || ubic.name}
-                   </option>
-                {/each}
-              </select>
-            </div>
+            <label class="text-[10px] uppercase font-black tracking-widest text-text-muted ml-1">Ubicación Principal</label>
+            <input type="hidden" name="co_ubicacion" value={formUbic1} />
+            <Combobox
+              options={(data.context?.ubicaciones || []).map((u: any) => ({ value: u.id || u.co_ubicacion, label: `${u.co_ubicacion || u.id} - ${u.descripcion || u.name}` }))}
+              bind:value={formUbic1}
+              placeholder="-- Ninguna --"
+              icon={MapPin}
+            />
           </div>
 
           <!-- UBICACION 2 -->
           <div class="space-y-1">
-            <label for="formUbic2" class="text-[10px] uppercase font-black tracking-widest text-text-muted ml-1">Ubicación Secundaria</label>
-            <div class="flex flex-col gap-1">
-              <input 
-                type="text" 
-                bind:value={searchUbic2} 
-                placeholder="Filtrar ubicaciones..." 
-                class="w-full h-9 bg-white/5 border border-white/5 rounded-xl px-3 text-[11px] outline-none focus:border-brand-500/30 transition-colors"
-              />
-              <select id="formUbic2" name="co_ubicacion2" bind:value={formUbic2} class="w-full h-12 bg-surface-raised border border-white/10 rounded-xl px-4 text-sm font-medium focus:border-brand-500 transition-colors cursor-pointer">
-                <option value="">-- Ninguna --</option>
-                {#each filteredUbic2 as ubic}
-                   <option value={ubic.id || ubic.co_ubicacion}>
-                      {ubic.co_ubicacion || ubic.id} - {ubic.descripcion || ubic.name}
-                   </option>
-                {/each}
-              </select>
-            </div>
+            <label class="text-[10px] uppercase font-black tracking-widest text-text-muted ml-1">Ubicación Secundaria</label>
+            <input type="hidden" name="co_ubicacion2" value={formUbic2} />
+            <Combobox
+              options={(data.context?.ubicaciones || []).map((u: any) => ({ value: u.id || u.co_ubicacion, label: `${u.co_ubicacion || u.id} - ${u.descripcion || u.name}` }))}
+              bind:value={formUbic2}
+              placeholder="-- Ninguna --"
+              icon={MapPin}
+            />
           </div>
 
           <!-- UBICACION 3 -->
           <div class="space-y-1">
-            <label for="formUbic3" class="text-[10px] uppercase font-black tracking-widest text-text-muted ml-1">Ubicación Terciaria</label>
-            <div class="flex flex-col gap-1">
-              <input 
-                type="text" 
-                bind:value={searchUbic3} 
-                placeholder="Filtrar ubicaciones..." 
-                class="w-full h-9 bg-white/5 border border-white/5 rounded-xl px-3 text-[11px] outline-none focus:border-brand-500/30 transition-colors"
-              />
-              <select id="formUbic3" name="co_ubicacion3" bind:value={formUbic3} class="w-full h-12 bg-surface-raised border border-white/10 rounded-xl px-4 text-sm font-medium focus:border-brand-500 transition-colors cursor-pointer">
-                <option value="">-- Ninguna --</option>
-                {#each filteredUbic3 as ubic}
-                   <option value={ubic.id || ubic.co_ubicacion}>
-                      {ubic.co_ubicacion || ubic.id} - {ubic.descripcion || ubic.name}
-                   </option>
-                {/each}
-              </select>
-            </div>
+            <label class="text-[10px] uppercase font-black tracking-widest text-text-muted ml-1">Ubicación Terciaria</label>
+            <input type="hidden" name="co_ubicacion3" value={formUbic3} />
+            <Combobox
+              options={(data.context?.ubicaciones || []).map((u: any) => ({ value: u.id || u.co_ubicacion, label: `${u.co_ubicacion || u.id} - ${u.descripcion || u.name}` }))}
+              bind:value={formUbic3}
+              placeholder="-- Ninguna --"
+              icon={MapPin}
+            />
           </div>
         </div>
 

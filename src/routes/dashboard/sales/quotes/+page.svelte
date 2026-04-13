@@ -38,6 +38,7 @@
     UserCircle,
   } from "lucide-svelte";
   import { toast } from "svelte-sonner";
+  import Combobox from "$lib/components/ui/Combobox.svelte";
   import type { PageData } from "./$types";
 
   let { data }: { data: PageData } = $props();
@@ -551,23 +552,12 @@
             >
               <Store class="text-brand-400" size={24} />
               <div class="flex-1">
-                <p
-                  class="text-[10px] font-black uppercase tracking-widest text-text-muted mb-1"
-                >
-                  Sucursal de Venta
-                </p>
-                <select
+                <p class="text-[10px] font-black uppercase tracking-widest text-text-muted mb-1">Sucursal de Venta</p>
+                <Combobox
+                  options={(data.context?.branches || []).map((b: any) => ({ value: b.id, label: b.name }))}
                   bind:value={selectedBranch}
-                  class="w-full bg-transparent font-bold text-lg outline-none cursor-pointer"
-                >
-                  {#each data.context.branches as branch}
-                    <option
-                      value={branch.id}
-                      class="bg-surface-raised text-text-base"
-                      >{branch.name}</option
-                    >
-                  {/each}
-                </select>
+                  placeholder="Seleccionar sucursal..."
+                />
               </div>
             </div>
           {/if}

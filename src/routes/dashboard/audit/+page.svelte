@@ -23,6 +23,7 @@
     Minus,
     X
   } from "lucide-svelte";
+  import Combobox from "$lib/components/ui/Combobox.svelte";
   import type { PageData } from "./$types";
 
   let { data }: { data: PageData } = $props();
@@ -119,36 +120,28 @@
       />
     </div>
 
-    <!-- Tenant Filter -->
-    <div class="relative">
-      <Building size={18} class="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted" />
-      <select 
-        bind:value={selectedBranch}
-        class="w-full bg-surface-raised border border-border-subtle rounded-2xl pl-12 pr-4 py-3 text-text-base text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/50 transition-all appearance-none cursor-pointer"
-      >
-        <option value={null}>Todas las Sucursales</option>
-        {#each (data as any).branches as branch}
-          <option value={branch.id}>{branch.name}</option>
-        {/each}
-      </select>
-    </div>
+    <!-- Branch Filter -->
+    <Combobox
+      options={[(data as any).branches || []].flat().map((b: any) => ({ value: b.id, label: b.name }))}
+      bind:value={selectedBranch}
+      placeholder="Todas las Sucursales"
+      icon={Building}
+    />
 
     <!-- Action Filter -->
-    <div class="relative">
-      <Tag size={18} class="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted" />
-      <select 
-        bind:value={selectedAction}
-        class="w-full bg-surface-raised border border-border-subtle rounded-2xl pl-12 pr-4 py-3 text-text-base text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/50 transition-all appearance-none cursor-pointer"
-      >
-        <option value={null}>Todas las acciones</option>
-        <option value="CREATE">Creación</option>
-        <option value="UPDATE">Actualización</option>
-        <option value="DELETE">Eliminación</option>
-        <option value="TOGGLE_STATUS">Cambio Estado</option>
-        <option value="LOGIN">Inicio Sesión</option>
-        <option value="LOGOUT">Cierre Sesión</option>
-      </select>
-    </div>
+    <Combobox
+      options={[
+        { value: 'CREATE', label: 'Creación' },
+        { value: 'UPDATE', label: 'Actualización' },
+        { value: 'DELETE', label: 'Eliminación' },
+        { value: 'TOGGLE_STATUS', label: 'Cambio Estado' },
+        { value: 'LOGIN', label: 'Inicio Sesión' },
+        { value: 'LOGOUT', label: 'Cierre Sesión' }
+      ]}
+      bind:value={selectedAction}
+      placeholder="Todas las acciones"
+      icon={Tag}
+    />
   </div>
 
   <!-- Logs Table -->
