@@ -54,7 +54,9 @@
   let selectedWarehouse = $state("");
 
   let selectedBranchConfig = $derived(
-    Array.isArray(data.branches) ? data.branches.find((b: any) => b.id === selectedBranch) : null
+    Array.isArray(data.branches)
+      ? data.branches.find((b: any) => b.id === selectedBranch)
+      : null,
   );
 
   $effect(() => {
@@ -272,7 +274,7 @@
         if (!disp.length) {
           // Fallback to the branch default warehouse even if not in disp list for services
           if (isService && selectedBranchConfig?.default_warehouse) {
-             return selectedBranchConfig.default_warehouse;
+            return selectedBranchConfig.default_warehouse;
           }
           // Ultimate fallback to first available warehouse
           return data.context?.warehouses?.[0]?.co_alma || null;
@@ -349,11 +351,13 @@
       return;
     }
     const item = cart[index];
-    const isService = item.co_lin?.trim() === '09' || (item.co_art || item.codigo || '').startsWith('09');
-    
+    const isService =
+      item.co_lin?.trim() === "09" ||
+      (item.co_art || item.codigo || "").startsWith("09");
+
     if (isService) {
-        cart[index].qty = newQty;
-        return;
+      cart[index].qty = newQty;
+      return;
     }
 
     const available =
@@ -423,7 +427,9 @@
     let ivaBS = 0;
 
     cart.forEach((item) => {
-      const isExempt = (item.co_lin || item.linea_id || "").trim() === "09" || (item.co_art ||item.codigo || '').startsWith('09');
+      const isExempt =
+        (item.co_lin || item.linea_id || "").trim() === "09" ||
+        (item.co_art || item.codigo || "").startsWith("09");
       const rate = isExempt ? 0 : quoteTaxRate;
 
       const pUSD =
@@ -548,13 +554,20 @@
         <div class="max-w-xl mx-auto space-y-6">
           {#if data.context?.branches && data.context.branches.length > 1}
             <div
-            class="glass p-4 rounded-2xl border border-border-subtle flex items-center gap-4"
+              class="glass p-4 rounded-2xl border border-border-subtle flex items-center gap-4"
             >
               <Store class="text-brand-400" size={24} />
               <div class="flex-1">
-                <p class="text-[10px] font-black uppercase tracking-widest text-text-muted mb-1">Sucursal de Venta</p>
+                <p
+                  class="text-[10px] font-black uppercase tracking-widest text-text-muted mb-1"
+                >
+                  Sucursal de Venta
+                </p>
                 <Combobox
-                  options={(data.context?.branches || []).map((b: any) => ({ value: b.id, label: b.name }))}
+                  options={(data.context?.branches || []).map((b: any) => ({
+                    value: b.id,
+                    label: b.name,
+                  }))}
                   bind:value={selectedBranch}
                   placeholder="Seleccionar sucursal..."
                 />
@@ -811,7 +824,9 @@
                   </div>
                 </div>
 
-                <div class="pt-6 border-t border-border-subtle flex justify-end">
+                <div
+                  class="pt-6 border-t border-border-subtle flex justify-end"
+                >
                   <button
                     onclick={nextStep}
                     class="group bg-brand-600 hover:bg-brand-500 text-white px-8 py-4 rounded-2xl font-black uppercase tracking-widest shadow-xl shadow-brand-500/20 flex items-center gap-3 transition-all active:scale-95"
@@ -940,10 +955,20 @@
 
                   <!-- Zona (Combobox) -->
                   <div class="space-y-2">
-                    <label class="text-[10px] font-black uppercase tracking-widest text-text-muted ml-2">Zona</label>
-                    <input type="hidden" name="co_zon" value={newClient.co_zon} />
+                    <label
+                      class="text-[10px] font-black uppercase tracking-widest text-text-muted ml-2"
+                      >Zona</label
+                    >
+                    <input
+                      type="hidden"
+                      name="co_zon"
+                      value={newClient.co_zon}
+                    />
                     <Combobox
-                      options={(data.context?.zonas || []).map((z: any) => ({ value: z.co_zon, label: z.zon_des }))}
+                      options={(data.context?.zonas || []).map((z: any) => ({
+                        value: z.co_zon,
+                        label: z.zon_des,
+                      }))}
                       bind:value={newClient.co_zon}
                       placeholder="Seleccionar zona..."
                       allLabel="Sin zona"
@@ -1007,15 +1032,25 @@
                       >
                         <!-- Tipo Persona -->
                         <div class="space-y-2">
-                          <label class="text-[10px] font-black uppercase tracking-widest text-text-muted ml-2">Tipo de Persona</label>
-                          <input type="hidden" name="tipo_per" value={newClient.tipo_per} />
+                          <label
+                            class="text-[10px] font-black uppercase tracking-widest text-text-muted ml-2"
+                            >Tipo de Persona</label
+                          >
+                          <input
+                            type="hidden"
+                            name="tipo_per"
+                            value={newClient.tipo_per}
+                          />
                           <Combobox
                             options={[
-                              { value: '1', label: '(PNR) Nat. Residente' },
-                              { value: '2', label: '(PNNR) Nat. No Residente' },
-                              { value: '3', label: '(PJD) Jur. Domiciliada' },
-                              { value: '4', label: '(PJND) Jur. No Domiciliada' },
-                              { value: '5', label: 'Exenta' }
+                              { value: "1", label: "(PNR) Nat. Residente" },
+                              { value: "2", label: "(PNNR) Nat. No Residente" },
+                              { value: "3", label: "(PJD) Jur. Domiciliada" },
+                              {
+                                value: "4",
+                                label: "(PJND) Jur. No Domiciliada",
+                              },
+                              { value: "5", label: "Exenta" },
                             ]}
                             bind:value={newClient.tipo_per}
                             placeholder="Tipo de persona..."
@@ -1105,16 +1140,21 @@
                 Buscar
               </button>
             </form>
-            <BarcodeScanner onScan={(code) => { 
+            <BarcodeScanner
+              onScan={(code) => {
                 searchTerm = code;
-                handleSearch(new Event('submit') as any);
-            }} />
+                handleSearch(new Event("submit") as any);
+              }}
+            />
           </div>
 
           <!-- 2. Linea -->
           <div class="col-span-1 lg:col-span-1">
             <Combobox
-              options={(data.context?.lineas || []).map((l: any) => ({ value: l.co_lin, label: l.lin_des }))}
+              options={(data.context?.lineas || []).map((l: any) => ({
+                value: l.co_lin,
+                label: l.lin_des,
+              }))}
               bind:value={selectedLinea}
               placeholder="Líneas (Todas)"
               allLabel="Líneas (Todas)"
@@ -1126,7 +1166,10 @@
           <!-- 3. Categoria -->
           <div class="col-span-1 lg:col-span-1">
             <Combobox
-              options={(filteredCategorias || []).map((c: any) => ({ value: c.co_cat, label: c.cat_des }))}
+              options={(filteredCategorias || []).map((c: any) => ({
+                value: c.co_cat,
+                label: c.cat_des,
+              }))}
               bind:value={selectedCategoria}
               placeholder="Categorías (Todas)"
               allLabel="Categorías (Todas)"
@@ -1136,7 +1179,9 @@
           </div>
 
           <!-- 4. Acciones (Precio + Moneda) -->
-          <div class="flex items-center gap-2 w-full h-12 col-span-2 lg:col-span-1">
+          <div
+            class="flex items-center gap-2 w-full h-12 col-span-2 lg:col-span-1"
+          >
             <button
               type="button"
               onclick={() => {
@@ -1223,14 +1268,18 @@
                 class="glass p-4 rounded-3xl border border-border-subtle hover:border-brand-500/30 transition-all flex flex-col group relative overflow-hidden"
               >
                 <!-- Stock Badge overlay -->
-                <div class="absolute top-4 right-4 z-10 flex flex-col items-end gap-1">
+                <div
+                  class="absolute top-4 right-4 z-10 flex flex-col items-end gap-1"
+                >
                   <span
                     class="px-2 py-1 rounded-md bg-surface-soft backdrop-blur text-[10px] font-black text-brand-400 border border-border-bold uppercase"
                   >
                     {article.co_art || article.codigo}
                   </span>
-                  {#if (article.co_lin || '').trim() === '09' || (article.co_art || article.codigo || '').startsWith('09')}
-                    <span class="px-2 py-0.5 rounded-md bg-green-500/10 text-green-400 text-[8px] font-black uppercase tracking-tighter border border-green-500/20">
+                  {#if (article.co_lin || "").trim() === "09" || (article.co_art || article.codigo || "").startsWith("09")}
+                    <span
+                      class="px-2 py-0.5 rounded-md bg-green-500/10 text-green-400 text-[8px] font-black uppercase tracking-tighter border border-green-500/20"
+                    >
                       Servicio / Exento
                     </span>
                   {/if}
@@ -1254,7 +1303,7 @@
                   class="text-[10px] text-text-muted mt-1 font-bold uppercase tracking-wider"
                 >
                   Unidad: <span class="text-brand-400"
-                    >{article.uni_venta || article.unidad || "UNID"}</span
+                    >{article.unidad || "UNID"}</span
                   >
                 </p>
 
@@ -1313,11 +1362,14 @@
                         >Disponibilidad</span
                       >
                       <span
-                        class="text-sm font-black {article.co_lin?.trim() === '09' || (curAlm?.stock || 0) > 0
+                        class="text-sm font-black {article.co_lin?.trim() ===
+                          '09' || (curAlm?.stock || 0) > 0
                           ? 'text-green-400'
                           : 'text-red-400'}"
                       >
-                        {article.co_lin?.trim() === "09" ? "Stock Ilimitado" : (curAlm?.stock || 0)}
+                        {article.co_lin?.trim() === "09"
+                          ? "Stock Ilimitado"
+                          : curAlm?.stock || 0}
                       </span>
                     </div>
 
@@ -1386,7 +1438,10 @@
                         onclick={() => {
                           const isService = article.co_lin?.trim() === "09";
                           const stock = curAlm?.stock || 0;
-                          if (isService || (quantities[article.co_art] || 1) < stock) {
+                          if (
+                            isService ||
+                            (quantities[article.co_art] || 1) < stock
+                          ) {
                             quantities[article.co_art] =
                               (quantities[article.co_art] || 1) + 1;
                           } else {
@@ -1499,7 +1554,9 @@
       <!-- SECTION 3: CONFIRMACIÓN Y GUARDADO (VERTICAL FULL WIDTH) -->
       <div in:fade class="max-w-4xl mx-auto space-y-8 pb-32 px-4">
         <div class="text-center">
-          <h2 class="text-3xl font-black tracking-tight text-text-base uppercase italic">
+          <h2
+            class="text-3xl font-black tracking-tight text-text-base uppercase italic"
+          >
             Cierre de Cotización
           </h2>
           <p class="text-text-muted mt-2 font-medium">
@@ -1509,13 +1566,21 @@
 
         <div class="flex flex-col gap-8">
           <!-- Bloque 1: Resumen Cliente (Detailed Card) -->
-          <div class="glass p-8 rounded-[40px] border border-border-bold space-y-8 relative overflow-hidden group bg-surface-soft/20">
-            <div class="absolute top-0 right-0 w-64 h-64 bg-brand-500/5 rounded-full blur-[100px] -mr-32 -mt-32"></div>
+          <div
+            class="glass p-8 rounded-[40px] border border-border-bold space-y-8 relative overflow-hidden group bg-surface-soft/20"
+          >
+            <div
+              class="absolute top-0 right-0 w-64 h-64 bg-brand-500/5 rounded-full blur-[100px] -mr-32 -mt-32"
+            ></div>
 
-            <div class="flex items-center justify-between border-b border-border-subtle pb-6 relative z-10">
+            <div
+              class="flex items-center justify-between border-b border-border-subtle pb-6 relative z-10"
+            >
               <div class="flex items-center gap-3">
                 <User size={20} class="text-brand-400" />
-                <h4 class="text-[10px] font-black uppercase tracking-[0.2em] text-text-muted">
+                <h4
+                  class="text-[10px] font-black uppercase tracking-[0.2em] text-text-muted"
+                >
                   Información del Cliente
                 </h4>
               </div>
@@ -1530,17 +1595,24 @@
               <!-- Info Principal -->
               <div class="lg:col-span-2 space-y-6">
                 <div>
-                  <div class="text-[10px] font-black uppercase tracking-widest text-brand-400/60 mb-1">
+                  <div
+                    class="text-[10px] font-black uppercase tracking-widest text-brand-400/60 mb-1"
+                  >
                     Razón Social
                   </div>
-                  <div class="text-3xl font-black text-text-base tracking-tight">
+                  <div
+                    class="text-3xl font-black text-text-base tracking-tight"
+                  >
                     {selectedClient.descripcion || selectedClient.cli_des}
                   </div>
                 </div>
 
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-6 border-b border-border-subtle pb-4">
+                <div
+                  class="grid grid-cols-1 md:grid-cols-2 gap-6 border-b border-border-subtle pb-4"
+                >
                   <div class="space-y-1">
-                    <span class="text-[10px] font-black uppercase tracking-widest text-text-muted block"
+                    <span
+                      class="text-[10px] font-black uppercase tracking-widest text-text-muted block"
                       >R.I.F. / Identificación</span
                     >
                     <span class="font-mono text-sm font-bold text-brand-400"
@@ -1548,7 +1620,8 @@
                     >
                   </div>
                   <div class="space-y-1">
-                    <span class="text-[10px] font-black uppercase tracking-widest text-text-muted block"
+                    <span
+                      class="text-[10px] font-black uppercase tracking-widest text-text-muted block"
                       >Teléfono de Contacto</span
                     >
                     <span class="text-sm font-bold text-text-base"
@@ -1559,7 +1632,8 @@
 
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-6 pt-2">
                   <div class="space-y-1">
-                    <span class="text-[10px] font-black uppercase tracking-widest text-text-muted block"
+                    <span
+                      class="text-[10px] font-black uppercase tracking-widest text-text-muted block"
                       >Correo Electrónico</span
                     >
                     <span class="text-sm font-bold text-text-base lowercase"
@@ -1567,10 +1641,13 @@
                     >
                   </div>
                   <div class="space-y-1">
-                    <span class="text-[10px] font-black uppercase tracking-widest text-text-muted block"
+                    <span
+                      class="text-[10px] font-black uppercase tracking-widest text-text-muted block"
                       >Zona / Región</span
                     >
-                    <span class="text-sm font-bold text-text-base text-brand-400">
+                    <span
+                      class="text-sm font-bold text-text-base text-brand-400"
+                    >
                       {data.context?.zonas?.find(
                         (z) => z.co_zon === selectedClient.co_zon,
                       )?.zon_des ||
@@ -1582,20 +1659,26 @@
               </div>
 
               <!-- Info Lateral / Fiscal -->
-              <div class="space-y-6 p-6 rounded-3xl bg-surface-soft/30 border border-border-subtle">
+              <div
+                class="space-y-6 p-6 rounded-3xl bg-surface-soft/30 border border-border-subtle"
+              >
                 <div class="space-y-4">
                   <div class="flex items-center justify-between">
-                    <span class="text-[10px] font-black uppercase tracking-widest text-text-muted"
+                    <span
+                      class="text-[10px] font-black uppercase tracking-widest text-text-muted"
                       >Estatus</span
                     >
-                    <span class="px-2 py-1 rounded-md bg-brand-500/10 text-brand-400 text-[10px] font-black uppercase tracking-widest border border-brand-500/20">
+                    <span
+                      class="px-2 py-1 rounded-md bg-brand-500/10 text-brand-400 text-[10px] font-black uppercase tracking-widest border border-brand-500/20"
+                    >
                       {selectedClient.contribuyente
                         ? "Contribuyente"
                         : "No Cont."}
                     </span>
                   </div>
                   <div class="flex items-center justify-between">
-                    <span class="text-[10px] font-black uppercase tracking-widest text-text-muted"
+                    <span
+                      class="text-[10px] font-black uppercase tracking-widest text-text-muted"
                       >Vendedor</span
                     >
                     <span class="text-xs font-bold text-text-base">
@@ -1604,10 +1687,13 @@
                   </div>
                 </div>
                 <div class="pt-4 border-t border-border-subtle">
-                  <span class="text-[10px] font-black uppercase tracking-widest text-text-muted block mb-2"
+                  <span
+                    class="text-[10px] font-black uppercase tracking-widest text-text-muted block mb-2"
                     >Dirección Fiscal</span
                   >
-                  <p class="text-sm font-medium text-text-muted leading-relaxed line-clamp-3 italic">
+                  <p
+                    class="text-sm font-medium text-text-muted leading-relaxed line-clamp-3 italic"
+                  >
                     {selectedClient.direc1 || "Sin dirección registrada"}
                   </p>
                 </div>
@@ -1616,11 +1702,17 @@
           </div>
 
           <!-- Bloque 2: Detalle de Renglones (Full Width) -->
-          <div class="glass rounded-[32px] border border-border-subtle overflow-hidden">
-            <div class="p-8 border-b border-border-subtle flex items-center justify-between bg-surface-soft/50">
+          <div
+            class="glass rounded-[32px] border border-border-subtle overflow-hidden"
+          >
+            <div
+              class="p-8 border-b border-border-subtle flex items-center justify-between bg-surface-soft/50"
+            >
               <div class="flex items-center gap-3">
                 <Package size={20} class="text-text-muted" />
-                <h4 class="text-[10px] font-black uppercase tracking-[0.2em] text-text-muted">
+                <h4
+                  class="text-[10px] font-black uppercase tracking-[0.2em] text-text-muted"
+                >
                   Renglones ({cart.length})
                 </h4>
               </div>
@@ -1632,14 +1724,24 @@
             </div>
             <div class="divide-y border-border-subtle">
               {#each cart as item, i}
-                <div class="p-8 flex flex-col lg:flex-row items-start lg:items-center gap-8 transition-all hover:bg-surface-soft group relative border-b border-border-subtle last:border-0">
+                <div
+                  class="p-8 flex flex-col lg:flex-row items-start lg:items-center gap-8 transition-all hover:bg-surface-soft group relative border-b border-border-subtle last:border-0"
+                >
                   <!-- Product Identity & Qty -->
-                  <div class="flex items-center gap-6 shrink-0 w-full lg:w-auto">
-                    <div class="h-16 w-16 rounded-2xl bg-surface-soft flex items-center justify-center text-brand-400 relative group-hover:scale-110 transition-transform duration-500">
-                      <div class="absolute inset-0 bg-brand-500/10 rounded-2xl blur-lg opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                  <div
+                    class="flex items-center gap-6 shrink-0 w-full lg:w-auto"
+                  >
+                    <div
+                      class="h-16 w-16 rounded-2xl bg-surface-soft flex items-center justify-center text-brand-400 relative group-hover:scale-110 transition-transform duration-500"
+                    >
+                      <div
+                        class="absolute inset-0 bg-brand-500/10 rounded-2xl blur-lg opacity-0 group-hover:opacity-100 transition-opacity"
+                      ></div>
                       <Package size={28} />
                     </div>
-                    <div class="flex items-center bg-surface-base/40 rounded-xl border border-border-subtle h-12 overflow-hidden shadow-inner">
+                    <div
+                      class="flex items-center bg-surface-base/40 rounded-xl border border-border-subtle h-12 overflow-hidden shadow-inner"
+                    >
                       <button
                         onclick={() => updateCartQty(i, item.qty - 1)}
                         class="w-10 h-full flex items-center justify-center text-text-muted hover:text-brand-400 hover:bg-surface-soft transition-all"
@@ -1648,7 +1750,8 @@
                       <input
                         type="number"
                         value={item.qty}
-                        oninput={(e) => updateCartQty(i, parseInt(e.currentTarget.value))}
+                        oninput={(e) =>
+                          updateCartQty(i, parseInt(e.currentTarget.value))}
                         class="w-12 text-center text-base font-black bg-transparent outline-none no-arrows text-brand-400"
                       />
                       <button
@@ -1662,20 +1765,33 @@
                   <!-- Item Details & Configuration -->
                   <div class="flex-1 min-w-0 space-y-4 w-full">
                     <div class="space-y-1">
-                      <div class="text-lg font-black text-text-base leading-tight">
+                      <div
+                        class="text-lg font-black text-text-base leading-tight"
+                      >
                         {item.art_des || item.descripcion}
                       </div>
-                      <div class="flex items-center gap-4 text-[11px] font-bold uppercase tracking-[0.15em]">
-                        <span class="text-brand-400 font-mono">{item.co_art}</span>
-                        <span class="h-1 w-1 rounded-full bg-border-subtle"></span>
-                        <span class="text-text-muted">{item.uni_venta || item.unidad || "UNID"}</span>
+                      <div
+                        class="flex items-center gap-4 text-[11px] font-bold uppercase tracking-[0.15em]"
+                      >
+                        <span class="text-brand-400 font-mono"
+                          >{item.co_art}</span
+                        >
+                        <span class="h-1 w-1 rounded-full bg-border-subtle"
+                        ></span>
+                        <span class="text-text-muted"
+                          >{item.uni_venta ||
+                            item.unidad ||
+                            item.co_uni ||
+                            "UNID"}</span
+                        >
                       </div>
                     </div>
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
                       <div class="relative group/sel">
                         <select
                           value={item.co_alma_selected}
-                          onchange={(e) => updateCartWarehouse(i, e.currentTarget.value)}
+                          onchange={(e) =>
+                            updateCartWarehouse(i, e.currentTarget.value)}
                           class="w-full h-11 bg-surface-soft rounded-xl px-4 text-sm font-black outline-none border border-border-subtle appearance-none cursor-pointer focus:border-brand-500/30 transition-all hover:bg-surface-strong"
                         >
                           {#each item.disponibilidad || [] as alm}
@@ -1686,39 +1802,65 @@
                             >
                           {/each}
                         </select>
-                        <ChevronDown size={14} class="absolute right-4 top-1/2 -translate-y-1/2 text-text-muted group-hover/sel:text-brand-400 transition-colors pointer-events-none" />
+                        <ChevronDown
+                          size={14}
+                          class="absolute right-4 top-1/2 -translate-y-1/2 text-text-muted group-hover/sel:text-brand-400 transition-colors pointer-events-none"
+                        />
                       </div>
                       <div class="relative group/sel">
                         <select
                           value={item.price_index_selected}
-                          onchange={(e) => updateCartPrice(i, parseInt(e.currentTarget.value))}
+                          onchange={(e) =>
+                            updateCartPrice(i, parseInt(e.currentTarget.value))}
                           class="w-full h-11 bg-surface-soft rounded-xl px-4 text-sm font-black outline-none border border-border-subtle appearance-none cursor-pointer focus:border-brand-500/30 transition-all hover:bg-surface-strong"
                         >
                           {#each item.precios || [] as price, idx}
                             <option
                               value={idx}
                               class="bg-surface-base text-text-base text-sm"
-                              >{price.des_precio || `Tipo ${idx + 1}`} - $ {price.precio.toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</option
+                              >{price.des_precio || `Tipo ${idx + 1}`} - $ {price.precio.toLocaleString(
+                                "de-DE",
+                                {
+                                  minimumFractionDigits: 2,
+                                  maximumFractionDigits: 2,
+                                },
+                              )}</option
                             >
                           {/each}
                         </select>
-                        <ChevronDown size={14} class="absolute right-4 top-1/2 -translate-y-1/2 text-text-muted group-hover/sel:text-brand-400 transition-colors pointer-events-none" />
+                        <ChevronDown
+                          size={14}
+                          class="absolute right-4 top-1/2 -translate-y-1/2 text-text-muted group-hover/sel:text-brand-400 transition-colors pointer-events-none"
+                        />
                       </div>
                     </div>
                   </div>
 
                   <!-- Financial Detail per Row -->
-                  <div class="flex flex-row lg:flex-col items-center lg:items-end justify-between lg:justify-center w-full lg:w-48 gap-4 border-t lg:border-t-0 border-border-subtle pt-6 lg:pt-0">
+                  <div
+                    class="flex flex-row lg:flex-col items-center lg:items-end justify-between lg:justify-center w-full lg:w-48 gap-4 border-t lg:border-t-0 border-border-subtle pt-6 lg:pt-0"
+                  >
                     <div class="text-right space-y-1">
-                      <div class="text-xl font-black text-brand-400 leading-none">
+                      <div
+                        class="text-xl font-black text-brand-400 leading-none"
+                      >
                         {totals().symbol}
                         {(
                           (showUSD
-                            ? item.price_selected?.precio || item.precios?.[0]?.precio || 0
-                            : item.price_selected?.precio_ves || item.precios?.[0]?.precio_ves || 0) * item.qty
-                        ).toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            ? item.price_selected?.precio ||
+                              item.precios?.[0]?.precio ||
+                              0
+                            : item.price_selected?.precio_ves ||
+                              item.precios?.[0]?.precio_ves ||
+                              0) * item.qty
+                        ).toLocaleString("de-DE", {
+                          minimumFractionDigits: 2,
+                          maximumFractionDigits: 2,
+                        })}
                       </div>
-                      <div class="text-[10px] text-text-muted font-bold uppercase tracking-widest">
+                      <div
+                        class="text-[10px] text-text-muted font-bold uppercase tracking-widest"
+                      >
                         Total {totals().symbol}
                       </div>
                     </div>
@@ -1737,8 +1879,12 @@
           <!-- Bloque 3: Resumen Final Consolidado (Full Width) -->
           <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
             <!-- Col Left: Notas & Comentarios -->
-            <div class="glass p-8 rounded-[32px] border border-border-subtle space-y-6 flex flex-col h-full bg-surface-soft/20">
-              <div class="flex items-center gap-3 text-text-muted border-b border-border-subtle pb-4">
+            <div
+              class="glass p-8 rounded-[32px] border border-border-subtle space-y-6 flex flex-col h-full bg-surface-soft/20"
+            >
+              <div
+                class="flex items-center gap-3 text-text-muted border-b border-border-subtle pb-4"
+              >
                 <FileText size={18} class="text-brand-400" />
                 <h4 class="text-[10px] font-black uppercase tracking-[0.2em]">
                   Descripción Global / Notas
@@ -1752,14 +1898,24 @@
             </div>
 
             <!-- Col Right: Resumen & Acciones -->
-            <div class="glass p-8 rounded-[32px] border border-border-subtle space-y-8 bg-brand-500/[0.03] backdrop-blur-3xl relative overflow-hidden flex flex-col">
-              <div class="absolute -top-12 -right-12 w-48 h-48 bg-brand-500/10 rounded-full blur-[80px]"></div>
+            <div
+              class="glass p-8 rounded-[32px] border border-border-subtle space-y-8 bg-brand-500/[0.03] backdrop-blur-3xl relative overflow-hidden flex flex-col"
+            >
+              <div
+                class="absolute -top-12 -right-12 w-48 h-48 bg-brand-500/10 rounded-full blur-[80px]"
+              ></div>
 
-              <div class="flex items-center justify-between border-b border-border-subtle pb-6 relative z-10">
-                <h4 class="text-[10px] font-black uppercase tracking-[0.2em] text-text-muted">
+              <div
+                class="flex items-center justify-between border-b border-border-subtle pb-6 relative z-10"
+              >
+                <h4
+                  class="text-[10px] font-black uppercase tracking-[0.2em] text-text-muted"
+                >
                   Total Documento
                 </h4>
-                <div class="flex bg-surface-base p-1 rounded-xl border border-border-bold shadow-lg">
+                <div
+                  class="flex bg-surface-base p-1 rounded-xl border border-border-bold shadow-lg"
+                >
                   <button
                     onclick={() => (showUSD = true)}
                     class={`px-5 py-2 rounded-lg text-xs font-black transition-all duration-300 ${showUSD ? "bg-brand-600 text-white shadow-lg scale-105" : "text-text-muted hover:text-text-base"}`}
@@ -1774,47 +1930,85 @@
               </div>
 
               <div class="space-y-6 relative z-10">
-                <div class="flex justify-between items-center text-base font-bold text-text-muted">
+                <div
+                  class="flex justify-between items-center text-base font-bold text-text-muted"
+                >
                   <span>Sub-Total</span>
                   <span class="font-mono text-text-base"
                     >{totals().symbol}
-                    {totals().subtotal.toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span
+                    {totals().subtotal.toLocaleString("de-DE", {
+                      minimumFractionDigits: 2,
+                      maximumFractionDigits: 2,
+                    })}</span
                   >
                 </div>
 
-                <div class="flex justify-between items-center text-base font-bold">
+                <div
+                  class="flex justify-between items-center text-base font-bold"
+                >
                   <div class="flex items-center gap-3">
                     <span class="text-text-muted">I.V.A</span>
                     <select
                       bind:value={quoteTaxRate}
                       class="bg-surface-strong border border-border-bold text-[10px] font-black text-brand-400 cursor-pointer outline-none hover:bg-surface-soft rounded-lg px-3 py-1.5 transition-all shadow-sm"
                     >
-                      <option value={16} class="bg-surface-base font-sans text-sm">Cargar 16%</option>
-                      <option value={0} class="bg-surface-base font-sans text-sm">Exento 0%</option>
+                      <option
+                        value={16}
+                        class="bg-surface-base font-sans text-sm"
+                        >Cargar 16%</option
+                      >
+                      <option
+                        value={0}
+                        class="bg-surface-base font-sans text-sm"
+                        >Exento 0%</option
+                      >
                     </select>
                   </div>
                   <span class="font-mono text-brand-400"
                     >{totals().symbol}
-                    {totals().iva.toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span
+                    {totals().iva.toLocaleString("de-DE", {
+                      minimumFractionDigits: 2,
+                      maximumFractionDigits: 2,
+                    })}</span
                   >
                 </div>
 
-                <div class="pt-8 border-t border-border-bold flex flex-col gap-2">
+                <div
+                  class="pt-8 border-t border-border-bold flex flex-col gap-2"
+                >
                   <div class="flex justify-between items-end">
                     <div>
-                      <span class="text-[10px] font-black uppercase tracking-[0.2em] text-brand-400/60 block mb-2">Total a Pagar</span>
-                      <div class="text-5xl font-black text-text-base drop-shadow-[0_4px_12px_rgba(var(--brand-rgb),0.3)] tracking-tight leading-none">
+                      <span
+                        class="text-[10px] font-black uppercase tracking-[0.2em] text-brand-400/60 block mb-2"
+                        >Total a Pagar</span
+                      >
+                      <div
+                        class="text-5xl font-black text-text-base drop-shadow-[0_4px_12px_rgba(var(--brand-rgb),0.3)] tracking-tight leading-none"
+                      >
                         {totals().symbol}
-                        {totals().total.toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        {totals().total.toLocaleString("de-DE", {
+                          minimumFractionDigits: 2,
+                          maximumFractionDigits: 2,
+                        })}
                       </div>
                     </div>
                     <div class="text-right pb-1">
-                      <div class="text-[10px] font-black uppercase tracking-widest text-text-muted italic mb-1">
+                      <div
+                        class="text-[10px] font-black uppercase tracking-widest text-text-muted italic mb-1"
+                      >
                         Ref. {showUSD ? "Bolívares" : "Dólares"}
                       </div>
-                      <div class="text-lg font-black font-mono text-brand-400/80">
+                      <div
+                        class="text-lg font-black font-mono text-brand-400/80"
+                      >
                         {showUSD ? "Bs." : "$"}
-                        {(showUSD ? totals().raw.bs.total : totals().raw.usd.total).toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        {(showUSD
+                          ? totals().raw.bs.total
+                          : totals().raw.usd.total
+                        ).toLocaleString("de-DE", {
+                          minimumFractionDigits: 2,
+                          maximumFractionDigits: 2,
+                        })}
                       </div>
                     </div>
                   </div>
@@ -1830,33 +2024,60 @@
                     return async ({ result }) => {
                       isSearching = false;
                       if (result.type === "success") {
-                        toast.success((result as any).data?.message || "¡Cotización generada con éxito!");
+                        toast.success(
+                          (result as any).data?.message ||
+                            "¡Cotización generada con éxito!",
+                        );
                         clearQuote();
                         goto("/dashboard/sales/quotes");
                       } else if (result.type === "failure") {
-                        toast.error((result as any).data?.message || "No se pudo guardar la cotización");
+                        const data = (result as any).data;
+                        const mainMsg =
+                          data?.message || "No se pudo guardar la cotización";
+                        const technicalDetails = data?.details
+                          ? `\nDetalles: ${data.details}`
+                          : "";
+                        toast.error(mainMsg + technicalDetails, {
+                          duration: 6000,
+                        });
+                        console.error("Save Quote Error:", data);
                       }
                     };
                   }}
                 >
-                  <input type="hidden" name="branch_id" value={selectedBranch} />
+                  <input
+                    type="hidden"
+                    name="branch_id"
+                    value={selectedBranch}
+                  />
                   <input
                     type="hidden"
                     name="quote_data"
                     value={JSON.stringify({
-                      co_cli: selectedClient.co_cli || selectedClient.rif.replace(/[^a-zA-Z0-9]/g, "").substring(0, 10),
-                      descrip: (quoteDescription ? quoteDescription + " - " : "") + "COTIZACION APP WEB - " + (selectedClient.descripcion || selectedClient.cli_des),
-                      comentario: quoteDescription || "Pedido registrado vía portal web.",
+                      co_cli:
+                        selectedClient.co_cli ||
+                        selectedClient.rif
+                          .replace(/[^a-zA-Z0-9]/g, "")
+                          .substring(0, 10),
+                      descrip: `${quoteDescription || "COTIZACIÓN WEB"} - ${data.systemSettings?.app_name || "GALPE APP"}`,
+                      comentario:
+                        quoteDescription || "Pedido registrado vía portal web.",
+                      showUSD: showUSD,
                       renglones: cart.map((item) => {
-                        const isExempt = (item.co_lin || item.linea_id || "").trim() === "09";
+                        const isExempt =
+                          (item.co_lin || item.linea_id || "").trim() === "09";
                         const rate = isExempt ? 0 : quoteTaxRate;
                         const taxType = rate === 16 ? "1" : "5";
                         return {
                           co_art: item.co_art || item.codigo,
                           art_des: item.art_des || item.descripcion,
                           cantidad: item.qty,
-                          precio: item.price_selected?.precio || item.precios?.[0]?.precio || 0,
+                          precio:
+                            item.price_selected?.precio ||
+                            item.precios?.[0]?.precio ||
+                            0,
                           co_alma: item.co_alma_selected,
+                          co_uni: item.co_uni || item.unidad,
                           tipo_imp: taxType,
                           porc_imp: rate,
                         };
@@ -1869,10 +2090,15 @@
                     class="w-full h-20 bg-brand-600 hover:bg-brand-500 text-white rounded-[24px] font-black text-xl uppercase tracking-[0.2em] shadow-[0_20px_40px_-10px_rgba(var(--brand-rgb),0.3)] active:scale-[0.97] transition-all flex items-center justify-center gap-4 disabled:opacity-50 disabled:grayscale group"
                   >
                     {#if isSearching}
-                      <Loader2 size={32} class="animate-spin text-brand-400/40" />
+                      <Loader2
+                        size={32}
+                        class="animate-spin text-brand-400/40"
+                      />
                       <span class="animate-pulse">Procesando...</span>
                     {:else}
-                      <div class="bg-surface-strong/50 p-2.5 rounded-xl group-hover:scale-110 transition-transform">
+                      <div
+                        class="bg-surface-strong/50 p-2.5 rounded-xl group-hover:scale-110 transition-transform"
+                      >
                         <Check size={28} />
                       </div>
                       Guardar
@@ -1902,7 +2128,6 @@
     {/if}
   </div>
 </div>
-
 
 <style>
   /* Chrome, Safari, Edge, Opera */

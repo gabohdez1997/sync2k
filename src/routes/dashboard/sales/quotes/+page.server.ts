@@ -208,15 +208,28 @@ export const actions: Actions = {
 		const agentClient = new AgentClient(branch, profile, fetch);
 		try {
 			const quoteData = JSON.parse(quoteDataStr);
+			
+			// Vincular Vendedor y Moneda basados en el perfil y la interfaz
+			const enrichedQuoteData = {
+				...quoteData,
+				co_ven: profile.profit_user, // Tomado de PostgreSQL/Supabase
+				isUSD: quoteData.showUSD // Dejar que el Agente decida el código exacto de moneda
+			};
+
 			const res: any = await agentClient.request('/cotizaciones', {
 				method: 'POST',
-				body: JSON.stringify(quoteData)
+				body: JSON.stringify(enrichedQuoteData)
 			});
 
 			if (res.success || (res.results && res.results[0]?.success)) {
 				return { success: true, message: 'Cotización guardada correctamente en Profit Plus' };
 			} else {
-				return fail(400, { message: res.message || 'Error al guardar en Profit' });
+				// Propagar detalles técnicos si existen para diagnóstico
+				const details = res.details ? JSON.stringify(res.details) : null;
+				return fail(400, { 
+					message: res.message || 'Error al guardar en Profit',
+					details 
+				});
 			}
 		} catch (e: any) {
 			return fail(500, { message: e.message });
