@@ -294,6 +294,7 @@
           options={data.branches.map((b: any) => ({ value: b.id, label: b.name }))}
           bind:value={selectedBranch}
           placeholder="Seleccionar Sucursal"
+          allLabel="Todas las Sucursales"
           icon={Store}
           class="w-full lg:w-64 shrink-0"
           onchange={() => handleSearch()}
@@ -305,6 +306,7 @@
           options={(data.context.warehouses || []).map((a: any) => ({ value: a.co_alma || a.id, label: a.des_alma || a.nombre || a.co_alma || a.id }))}
           bind:value={selectedWarehouse}
           placeholder="Todos los Almacenes"
+          allLabel="Todos los Almacenes"
           icon={Package}
           class="w-full lg:w-64 shrink-0"
           onchange={() => handleSearch()}
@@ -354,6 +356,7 @@
           options={ubicOptions}
           bind:value={selectedUbicacion}
           placeholder="Todas las Ubicaciones"
+          allLabel="Todas las Ubicaciones"
           icon={MapPin}
           class="w-full md:w-80 shrink-0"
           onchange={() => handleSearch()}
@@ -366,6 +369,7 @@
           options={(data.context.lineas || []).map((l: any) => ({ value: l.co_lin, label: l.lin_des }))}
           bind:value={selectedLinea}
           placeholder="Todas las Líneas"
+          allLabel="Todas las Líneas"
           icon={ListFilter}
           class="w-full md:w-80 shrink-0"
           onchange={() => { selectedCategoria = ''; handleSearch(); }}
@@ -378,6 +382,7 @@
           options={filteredCategorias.map((c: any) => ({ value: c.co_cat, label: c.cat_des }))}
           bind:value={selectedCategoria}
           placeholder="Todas las Categorías"
+          allLabel="Todas las Categorías"
           icon={ListFilter}
           class="w-full md:w-80 shrink-0"
           onchange={() => handleSearch()}
@@ -687,6 +692,7 @@
             options={(data.context?.warehouses || []).map((a: any) => ({ value: a.co_alma || a.id, label: a.des_alma || a.nombre || a.id }))}
             bind:value={selectedWarehouse}
             placeholder="-- Seleccionar Almacén --"
+            allLabel="-- Sin seleccionar --"
             icon={Package}
           />
         </div>
@@ -700,6 +706,7 @@
               options={(data.context?.ubicaciones || []).map((u: any) => ({ value: u.id || u.co_ubicacion, label: `${u.co_ubicacion || u.id} - ${u.descripcion || u.name}` }))}
               bind:value={formUbic1}
               placeholder="-- Ninguna --"
+              allLabel="-- Ninguna --"
               icon={MapPin}
             />
           </div>
@@ -712,6 +719,7 @@
               options={(data.context?.ubicaciones || []).map((u: any) => ({ value: u.id || u.co_ubicacion, label: `${u.co_ubicacion || u.id} - ${u.descripcion || u.name}` }))}
               bind:value={formUbic2}
               placeholder="-- Ninguna --"
+              allLabel="-- Ninguna --"
               icon={MapPin}
             />
           </div>
@@ -724,6 +732,7 @@
               options={(data.context?.ubicaciones || []).map((u: any) => ({ value: u.id || u.co_ubicacion, label: `${u.co_ubicacion || u.id} - ${u.descripcion || u.name}` }))}
               bind:value={formUbic3}
               placeholder="-- Ninguna --"
+              allLabel="-- Ninguna --"
               icon={MapPin}
             />
           </div>

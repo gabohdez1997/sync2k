@@ -12,6 +12,7 @@
     options: Option[];
     value?: string;
     placeholder?: string;
+    allLabel?: string;  // Texto de la opción "Todos" al inicio del dropdown
     icon?: any;
     onchange?: (value: string) => void;
     class?: string;
@@ -22,6 +23,7 @@
     options = [],
     value = $bindable(''),
     placeholder = 'Seleccionar...',
+    allLabel = '',
     icon: Icon = null,
     onchange,
     class: extraClass = '',
@@ -76,19 +78,27 @@
 
   function handleKeydown(e: KeyboardEvent) {
     if (!isOpen) return;
+    // Total de opciones en la lista (incluye la fila "Todos" si existe)
+    const total = filtered.length + (allLabel ? 1 : 0);
     switch (e.key) {
       case 'ArrowDown':
         e.preventDefault();
-        activeIndex = Math.min(activeIndex + 1, filtered.length - 1);
+        activeIndex = Math.min(activeIndex + 1, total - 1);
         break;
       case 'ArrowUp':
         e.preventDefault();
-        activeIndex = Math.max(activeIndex - 1, 0);
+        activeIndex = Math.max(activeIndex - 1, -1);
         break;
       case 'Enter':
         e.preventDefault();
-        if (activeIndex >= 0 && filtered[activeIndex]) {
-          select(filtered[activeIndex]);
+        if (allLabel && activeIndex === 0) {
+          // Primera fila = Todos
+          value = ''; onchange?.(''); close();
+        } else {
+          const adjustedIndex = allLabel ? activeIndex - 1 : activeIndex;
+          if (adjustedIndex >= 0 && filtered[adjustedIndex]) {
+            select(filtered[adjustedIndex]);
+          }
         }
         break;
       case 'Escape':
@@ -169,21 +179,46 @@
 
       <!-- Options list -->
       <ul class="max-h-60 overflow-y-auto py-1 custom-scrollbar">
+        <!-- Opción "Todos" al inicio si se proporciona allLabel -->
+        {#if allLabel}
+          <li>
+            <button
+              type="button"
+              onclick={() => { value = ''; onchange?.(''); close(); }}
+              onmouseenter={() => (activeIndex = 0)}
+              class="w-full text-left px-4 py-2.5 text-sm transition-colors flex items-center gap-2
+                {!value
+                  ? 'bg-brand-500/20 text-brand-300 font-bold'
+                  : activeIndex === 0
+                    ? 'bg-white/5 text-text-base'
+                    : 'text-text-muted hover:bg-white/5 hover:text-text-base'}"
+            >
+              {#if !value}
+                <span class="w-1.5 h-1.5 rounded-full bg-brand-400 flex-shrink-0"></span>
+              {:else}
+                <span class="w-1.5 h-1.5 flex-shrink-0"></span>
+              {/if}
+              <span class="truncate italic opacity-80">{allLabel}</span>
+            </button>
+          </li>
+        {/if}
+
         {#if filtered.length === 0}
           <li class="px-4 py-3 text-sm text-text-muted/50 italic text-center">
             Sin resultados para "{searchTerm}"
           </li>
         {:else}
           {#each filtered as option, i}
+            {@const rowIndex = allLabel ? i + 1 : i}
             <li>
               <button
                 type="button"
                 onclick={() => select(option)}
-                onmouseenter={() => (activeIndex = i)}
+                onmouseenter={() => (activeIndex = rowIndex)}
                 class="w-full text-left px-4 py-2.5 text-sm transition-colors flex items-center gap-2
                   {value === option.value
                     ? 'bg-brand-500/20 text-brand-300 font-bold'
-                    : activeIndex === i
+                    : activeIndex === rowIndex
                       ? 'bg-white/5 text-text-base'
                       : 'text-text-muted hover:bg-white/5 hover:text-text-base'}"
               >

@@ -125,6 +125,7 @@
       options={[(data as any).branches || []].flat().map((b: any) => ({ value: b.id, label: b.name }))}
       bind:value={selectedBranch}
       placeholder="Todas las Sucursales"
+      allLabel="Todas las Sucursales"
       icon={Building}
     />
 
@@ -140,6 +141,7 @@
       ]}
       bind:value={selectedAction}
       placeholder="Todas las acciones"
+      allLabel="Todas las acciones"
       icon={Tag}
     />
   </div>
