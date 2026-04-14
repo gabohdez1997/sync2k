@@ -2074,12 +2074,12 @@
                           co_art: item.co_art || item.codigo,
                           art_des: item.art_des || item.descripcion,
                           cantidad: item.qty,
-                          precio:
-                            item.price_selected?.precio ||
-                            item.precios?.[0]?.precio ||
-                            0,
+                          precio: showUSD 
+                            ? (item.price_selected?.precio || item.precios?.[0]?.precio || 0)
+                            : (item.price_selected?.precio_ves || item.precios?.[0]?.precio_ves || 0),
                           co_alma: item.co_alma_selected,
                           co_uni: item.co_uni || item.unidad,
+                          co_precio: item.price_selected?.id_precio || "01",
                           tipo_imp: taxType,
                           porc_imp: rate,
                         };
