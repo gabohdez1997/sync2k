@@ -83,7 +83,7 @@
         ),
   );
 
-  let sortOption = $state<"relevance" | "asc" | "desc">(
+  let sortOption = $state<"relevance" | "price_asc" | "price_desc">(
     ($page.url.searchParams.get("sort") as any) || "relevance",
   );
   let showUSD = $state(true);
@@ -1183,27 +1183,31 @@
             class="flex items-center gap-2 w-full h-12 col-span-2 lg:col-span-1"
           >
             <button
-              type="button"
               onclick={() => {
                 const u = new URL($page.url);
-                const cur = u.searchParams.get("sort");
-                const next =
-                  cur === "asc" ? "desc" : cur === "desc" ? "" : "asc";
-                if (next) u.searchParams.set("sort", next);
+                const currentSort = u.searchParams.get("sort");
+                let nextSort = null;
+                
+                if (currentSort === "price_asc") nextSort = "price_desc";
+                else if (currentSort === "price_desc") nextSort = null;
+                else nextSort = "price_asc";
+
+                if (nextSort) u.searchParams.set("sort", nextSort);
                 else u.searchParams.delete("sort");
+                
                 u.searchParams.set("page", "1");
                 goto(u.toString());
               }}
-              class={`flex-1 h-full rounded-xl border transition-all flex items-center justify-center gap-2 font-bold text-[10px] uppercase tracking-wider ${
-                $page.url.searchParams.get("sort")
-                  ? "bg-brand-500/10 border-brand-500/30 text-brand-400"
+              class={`h-full px-5 rounded-2xl border flex items-center gap-2 text-[10px] font-black uppercase tracking-widest transition-all ${
+                $page.url.searchParams.get("sort")?.startsWith("price")
+                  ? "bg-brand-500 border-brand-500 text-white shadow-[0_10px_20px_-5px_rgba(var(--brand-rgb),0.3)]"
                   : "bg-white/5 border-white/5 text-text-muted hover:bg-white/10"
               }`}
             >
-              {#if $page.url.searchParams.get("sort") === "asc"}
+              {#if $page.url.searchParams.get("sort") === "price_asc"}
                 <ArrowUpAZ size={14} />
                 <span>Menor</span>
-              {:else if $page.url.searchParams.get("sort") === "desc"}
+              {:else if $page.url.searchParams.get("sort") === "price_desc"}
                 <ArrowDownAZ size={14} />
                 <span>Mayor</span>
               {:else}
@@ -1302,9 +1306,7 @@
                 <p
                   class="text-[10px] text-text-muted mt-1 font-bold uppercase tracking-wider"
                 >
-                  Unidad: <span class="text-brand-400"
-                    >{article.unidad || "UNID"}</span
-                  >
+                  <span class="text-brand-400">{article.unidad || "UNID"}</span>
                 </p>
 
                 <div class="mt-4 flex flex-col gap-3">
