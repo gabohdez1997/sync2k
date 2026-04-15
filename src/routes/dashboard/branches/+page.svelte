@@ -60,6 +60,7 @@
       profit_branch_codes: [],
       sql_config: { host: "", database: "", user: "", password: "" },
       active: true,
+      business_name: "",
       rif: "",
       address: "",
       phone: "",
@@ -382,7 +383,19 @@
                 name="name"
                 bind:value={editingBranch.name}
                 required
-                placeholder="Ej. Sede Principal"
+                class="w-full h-14 bg-white/5 border border-white/10 rounded-2xl px-5 focus:border-brand-500 focus:bg-white/10 outline-none transition-all font-medium"
+              />
+            </div>
+
+            <div class="space-y-2 lg:col-span-2">
+              <label class="text-xs font-bold text-text-muted ml-1" for="business_name"
+                >Razón Social (Nombre Fiscal)</label
+              >
+              <input
+                type="text"
+                name="business_name"
+                bind:value={editingBranch.business_name}
+                placeholder="Ej. INVERSIONES GALPE C.A."
                 class="w-full h-14 bg-white/5 border border-white/10 rounded-2xl px-5 focus:border-brand-500 focus:bg-white/10 outline-none transition-all font-medium"
               />
             </div>

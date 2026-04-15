@@ -36,8 +36,8 @@
       icon: ShoppingBag,
       options: [
         { id: "sales_customers", label: "Clientes" },
-        { id: "sales_quotes", label: "Cotizaciones" },
-        { id: "sales_orders", label: "Pedidos" },
+        { id: "sales_quotes", label: "Cotizaciones", hasOthers: true },
+        { id: "sales_orders", label: "Pedidos", hasOthers: true },
       ],
     },
     {
@@ -108,7 +108,7 @@
   let rolePermissions = $state<
     Record<
       string,
-      { read: boolean; create: boolean; update: boolean; delete: boolean }
+      { read: boolean; create: boolean; update: boolean; delete: boolean; others: boolean }
     >
   >({});
 
@@ -136,6 +136,7 @@
           create: false,
           update: false,
           delete: false,
+          others: false,
         };
       }),
     );
@@ -205,6 +206,7 @@
           create: role.permissions[optId].create ?? false,
           update: role.permissions[optId].update ?? false,
           delete: role.permissions[optId].delete ?? false,
+          others: role.permissions[optId].others ?? false,
         };
       }
     }
@@ -231,20 +233,25 @@
 
   function toggleAll(optionId: string) {
     const p = rolePermissions[optionId];
-    const anyOff = !p.read || !p.create || !p.update || !p.delete;
+    // Buscamos si el módulo tiene la opción 'others' habilitada estructuralmente
+    const option = navStructure.flatMap(n => n.options).find(o => o.id === optionId);
+    const supportsOthers = (option as any)?.hasOthers || false;
+
+    const anyOff = !p.read || !p.create || !p.update || !p.delete || (supportsOthers && !p.others);
 
     rolePermissions[optionId] = {
       read: anyOff,
       create: anyOff,
       update: anyOff,
       delete: anyOff,
+      others: anyOff,
     };
   }
 
   function handleCheckboxChange(optionId: string, action: string) {
     if (action !== "read") {
       const p = rolePermissions[optionId];
-      if (p.create || p.update || p.delete) {
+      if (p.create || p.update || p.delete || p.others) {
         rolePermissions[optionId].read = true;
       }
     }
@@ -614,6 +621,10 @@
                   class="px-6 py-4 text-xs font-bold uppercase tracking-wider text-text-muted text-center border-b border-border-subtle"
                   >Eliminar</th
                 >
+                <th
+                  class="px-6 py-4 text-xs font-bold uppercase tracking-wider text-text-muted text-center border-b border-border-subtle"
+                  >Terceros</th
+                >
               </tr>
             </thead>
             <tbody>
@@ -624,7 +635,7 @@
                   onclick={() => toggleCategory(category.id)}
                 >
                   <td
-                    colspan="6"
+                    colspan="7"
                     class="px-6 py-3 border-b border-border-subtle sticky left-0 bg-surface-raised/90 backdrop-blur-sm z-10"
                   >
                     <div class="flex items-center justify-between">
@@ -679,11 +690,12 @@
                           ].read &&
                           rolePermissions[opt.id].create &&
                           rolePermissions[opt.id].update &&
-                          rolePermissions[opt.id].delete
+                          rolePermissions[opt.id].delete &&
+                          rolePermissions[opt.id].others
                             ? 'bg-brand-500 border-brand-500'
                             : 'hover:bg-brand-500/10'}"
                         >
-                          {#if rolePermissions[opt.id].read && rolePermissions[opt.id].create && rolePermissions[opt.id].update && rolePermissions[opt.id].delete}
+                          {#if rolePermissions[opt.id].read && rolePermissions[opt.id].create && rolePermissions[opt.id].update && rolePermissions[opt.id].delete && (opt.hasOthers ? rolePermissions[opt.id].others : true)}
                             <div in:fade={{ duration: 100 }}>
                               <Check
                                 size={14}
@@ -695,38 +707,42 @@
                         </button>
                       </td>
 
-                      {#each ["read", "create", "update", "delete"] as action}
+                      {#each ["read", "create", "update", "delete", "others"] as action}
                         <td
                           class="px-6 py-4 text-center border-b border-border-subtle"
                         >
-                          <label
-                            class="relative inline-flex items-center cursor-pointer justify-center"
-                          >
-                            <input
-                              type="checkbox"
-                              bind:checked={
-                                rolePermissions[opt.id][
-                                  action as keyof (typeof rolePermissions)[string]
-                                ]
-                              }
-                              onchange={() =>
-                                handleCheckboxChange(opt.id, action)}
-                              class="sr-only peer"
-                            />
-                            <div
-                              class="w-6 h-6 bg-surface-base border-2 border-border-subtle rounded-lg peer-checked:bg-brand-500 peer-checked:border-brand-500 transition-all flex items-center justify-center shadow-inner group-hover:border-brand-500/30"
+                          {#if action !== 'others' || opt.hasOthers}
+                            <label
+                              class="relative inline-flex items-center cursor-pointer justify-center"
                             >
-                              {#if rolePermissions[opt.id][action as keyof (typeof rolePermissions)[string]]}
-                                <div in:fade={{ duration: 100 }}>
-                                  <Check
-                                    size={14}
-                                    class="text-white"
-                                    strokeWidth={4}
-                                  />
-                                </div>
-                              {/if}
-                            </div>
-                          </label>
+                              <input
+                                type="checkbox"
+                                bind:checked={
+                                  rolePermissions[opt.id][
+                                    action as keyof (typeof rolePermissions)[string]
+                                  ]
+                                }
+                                onchange={() =>
+                                  handleCheckboxChange(opt.id, action)}
+                                class="sr-only peer"
+                              />
+                              <div
+                                class="w-6 h-6 bg-surface-base border-2 border-border-subtle rounded-lg peer-checked:bg-brand-500 peer-checked:border-brand-500 transition-all flex items-center justify-center shadow-inner group-hover:border-brand-500/30"
+                              >
+                                {#if rolePermissions[opt.id][action as keyof (typeof rolePermissions)[string]]}
+                                  <div in:fade={{ duration: 100 }}>
+                                    <Check
+                                      size={14}
+                                      class="text-white"
+                                      strokeWidth={4}
+                                    />
+                                  </div>
+                                {/if}
+                              </div>
+                            </label>
+                          {:else}
+                            <span class="text-[9px] text-text-muted/20">—</span>
+                          {/if}
                         </td>
                       {/each}
                     </tr>

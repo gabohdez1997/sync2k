@@ -12,7 +12,7 @@ export const load: PageServerLoad = protectLoad('sec_branches', async ({ locals,
   // Intentamos obtener todos los campos, incluyendo el nuevo 'default_warehouse'
   let { data: branches, error } = await supabaseAdmin
     .from('branches')
-    .select('id, name, agent_url, agent_token, profit_branch_codes, sql_config, profit_server_id, local_dns_alias, active, sort_order, updated_at, rif, address, latitude, longitude, logo_url, phone, default_warehouse')
+    .select('id, name, business_name, agent_url, agent_token, profit_branch_codes, sql_config, profit_server_id, local_dns_alias, active, sort_order, updated_at, rif, address, latitude, longitude, logo_url, phone, default_warehouse')
     .order('sort_order')
     .order('name');
 
@@ -21,7 +21,7 @@ export const load: PageServerLoad = protectLoad('sec_branches', async ({ locals,
     console.warn('[BRANCHES] La columna default_warehouse no existe. Reintentando sin ella...');
     const fallback = await supabaseAdmin
       .from('branches')
-      .select('id, name, agent_url, agent_token, profit_branch_codes, sql_config, profit_server_id, local_dns_alias, active, sort_order, updated_at, rif, address, latitude, longitude, logo_url, phone')
+      .select('id, name, business_name, agent_url, agent_token, profit_branch_codes, sql_config, profit_server_id, local_dns_alias, active, sort_order, updated_at, rif, address, latitude, longitude, logo_url, phone')
       .order('sort_order')
       .order('name');
     
@@ -72,6 +72,7 @@ export const actions: Actions = {
     const formData        = await request.formData();
     const branchId        = (formData.get('branchId') as string)?.trim() || null;
     const name            = (formData.get('name') as string)?.trim();
+    const business_name   = (formData.get('business_name') as string)?.trim() || null;
     const agentUrl        = (formData.get('agent_url') as string)?.trim() || null;
     const agentToken      = (formData.get('agent_token') as string)?.trim() || null;
     const logoFile        = formData.get('logo_file') as File;
@@ -129,6 +130,7 @@ export const actions: Actions = {
 
     const payload: any = {
       name,
+      business_name,
       agent_url:           agentUrl,
       profit_branch_codes: profitBranchCodes,
       sql_config:          sqlConfig,

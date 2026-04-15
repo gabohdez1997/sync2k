@@ -256,16 +256,27 @@ function buildHtml(articles: any[], companyName: string, companyLogo: string): s
     .toolbar {
       position: fixed; bottom: 2rem; right: 2rem;
       display: flex; gap: 1rem; z-index: 999;
+      pointer-events: auto;
     }
     .btn {
-      border: none; cursor: pointer; border-radius: 14px;
-      font-size: .95rem; font-weight: 800; padding: .85rem 1.8rem;
-      display: flex; align-items: center; gap: .5rem;
+      border: none; cursor: pointer; border-radius: 1rem;
+      padding: 1rem 2rem; display: flex; align-items: center; gap: 0.5rem;
+      color: #fff; transition: all 0.2s;
     }
-    .btn-print { background: #2563eb; color: #fff; box-shadow: 0 6px 24px rgba(37,99,235,.4); }
-    .btn-print:hover { background: #1d4ed8; }
-    .btn-close  { background: rgba(0,0,0,.55); color: #fff; }
-    .btn-close:hover { background: rgba(0,0,0,.75); }
+    .btn:active { transform: scale(0.95); }
+    .btn-print { 
+      background: #2563eb; 
+      font-weight: 900; 
+      box-shadow: 0 25px 50px -12px rgba(37,99,235,0.4); 
+    }
+    .btn-print:hover { background: #3b82f6; }
+    .btn-close { 
+      background: rgba(31, 41, 55, 0.8); 
+      backdrop-filter: blur(12px);
+      font-weight: 700;
+      box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+    }
+    .btn-close:hover { background: rgba(55, 65, 81, 1); }
 
     /* ──── Print ──────────────────────────────────────────── */
     @media print {
@@ -287,8 +298,11 @@ function buildHtml(articles: any[], companyName: string, companyLogo: string): s
     </div>
   </div>
   <div class="toolbar">
-    <button class="btn btn-print" onclick="window.print()">🖨️ IMPRIMIR ETIQUETAS</button>
-    <button class="btn btn-close" onclick="window.close()">✕ CERRAR</button>
+    <button class="btn btn-print" onclick="window.print()">
+      <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect width="12" height="8" x="6" y="14" rx="1"/><path d="M6 8V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v4"/></svg>
+      IMPRIMIR ETIQUETAS
+    </button>
+    <button class="btn btn-close" onclick="window.close()">CERRAR</button>
   </div>
 </body>
 </html>`;

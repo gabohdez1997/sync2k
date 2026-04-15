@@ -5,6 +5,7 @@ export type CRUD = {
   create: boolean;
   update: boolean;
   delete: boolean;
+  others: boolean;
 };
 
 export type Profile = {

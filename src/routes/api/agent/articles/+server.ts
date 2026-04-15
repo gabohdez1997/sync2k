@@ -25,36 +25,158 @@ export const GET: RequestHandler = async ({ url, locals, fetch }) => {
 		const params = new URLSearchParams(url.search);
 		const rawSearch = (params.get('search') || '').trim();
 		const rawLinea = (params.get('linea') || '').trim();
+		const rawCoArt = (params.get('co_art') || '').trim();
+		const rawPage = Number.parseInt(params.get('page') || '1', 10);
+		const rawLimit = Number.parseInt(params.get('limit') || '12', 10);
+		const sort = (params.get('sort') || '').trim();
+		const isPriceSort = sort === 'price_asc' || sort === 'price_desc';
 
 		// Detección de servicios: Línea 09 o búsquedas que empiezan por 09
 		const isServiceSearch = rawLinea === '09' || rawSearch.startsWith('09');
 
-		// Estandarizar parámetros para el agente
-		if (params.has('search')) {
-			const searchTerm = params.get('search');
-			const isCode = /^\d/.test(searchTerm?.trim() || '');
-			params.set(isCode ? 'co_art' : 'descripcion', searchTerm || '');
+		if (isServiceSearch) {
+			params.set('in_stock', 'all'); 
+		}
+
+		// Normalizar query para el endpoint /articulos/search del agente.
+		const agentParams = new URLSearchParams();
+		agentParams.set('page', Number.isFinite(rawPage) && rawPage > 0 ? String(rawPage) : '1');
+		agentParams.set('limit', Number.isFinite(rawLimit) && rawLimit > 0 ? String(rawLimit) : '12');
+
+		// /articulos/search requiere al menos sort o un filtro.
+		agentParams.set('sort', sort || 'default');
+
+		const coAlma = (params.get('co_alma') || '').trim();
+		const linea = (params.get('linea') || '').trim();
+		const categoria = (params.get('categoria') || '').trim();
+		const hasScopedFilters = Boolean(rawSearch || rawCoArt || coAlma || linea || categoria);
+
+		if (coAlma) agentParams.set('co_alma', coAlma);
+		if (linea) agentParams.set('linea', linea);
+		if (categoria) agentParams.set('categoria', categoria);
+
+		// Rehidratación/consulta puntual por código.
+		if (rawCoArt) {
+			agentParams.set('co_art', rawCoArt);
+		}
+
+		// Búsqueda de catálogo desde la UI.
+		// En /articulos/search los filtros se combinan con AND, por lo que
+		// no debemos enviar descripcion y co_art a la vez.
+		if (rawSearch) {
+			const isCodeLike = /^\d/.test(rawSearch);
+			if (isCodeLike) {
+				agentParams.set('co_art', rawSearch);
+			} else {
+				agentParams.set('descripcion', rawSearch);
+			}
 		}
 
 		if (isServiceSearch) {
-			params.set('in_stock', 'all'); // Sincronizado con el Agente
+			agentParams.set('in_stock', 'all');
 		}
 
-		const endpoint = params.has('search') || params.has('linea') || params.has('categoria') || params.has('co_art')
-			? `/articulos/search?${params.toString()}`
-			: `/articulos?${params.toString()}`;
+		// Regla de negocio:
+		// - Con búsqueda/filtro: ordenar por precio sobre TODO el resultado encontrado.
+		// - Sin búsqueda/filtro: ordenar por precio solo sobre los ítems visibles de la página.
+		// Para lograr lo segundo, al agente le pedimos sort=default y ordenamos localmente.
+		if (isPriceSort && !hasScopedFilters) {
+			agentParams.set('sort', 'default');
+		}
+
+		const extractItems = (payload: any): any[] =>
+			(payload?.data?.items || payload?.items || payload?.data || (Array.isArray(payload) ? payload : [])) as any[];
+
+		const getPrice = (item: any): number => {
+			const precioBase = Number(item?.precio_base);
+			if (Number.isFinite(precioBase) && precioBase > 0) return precioBase;
+			const precios = Array.isArray(item?.precios) ? item.precios : [];
+			const base =
+				precios.find((p: any) => String(p?.id_precio || '').trim() === '01') ||
+				precios[0];
+			return Number(base?.precio ?? 0);
+		};
+
+		// branch_id es parámetro interno del web; no se reenvía al agente.
+		const endpoint = `/articulos/search?${agentParams.toString()}`;
 
 		const resData = await agentClient.request<any>(endpoint);
-		const pagination = resData.data?.pagination || resData.pagination || {};
+		const pagination = resData.data?.pagination || resData.pagination || resData;
+		let page = Number(
+			pagination.currentPage ??
+				pagination.page ??
+				resData.page ??
+				rawPage ??
+				1
+		);
+		let limit = Number(
+			pagination.limit ??
+				resData.limit ??
+				rawLimit ??
+				12
+		);
+		let total = Number(
+			pagination.total ??
+				pagination.total_items ??
+				resData.total ??
+				resData.total_items ??
+				0
+		);
+		let totalPages = Number(
+			pagination.pages ??
+				pagination.totalPages ??
+				pagination.total_pages ??
+				resData.total_pages ??
+				Math.ceil((total || 0) / Math.max(limit || 1, 1))
+		);
 		
+		let items = extractItems(resData);
+
+		// Ordenamiento local por precio solo para catálogo sin filtros.
+		if (isPriceSort && !hasScopedFilters && Array.isArray(items)) {
+			items.sort((a, b) => {
+				const diff = getPrice(a) - getPrice(b);
+				return sort === 'price_desc' ? -diff : diff;
+			});
+		}
+
+		// Ordenamiento global por precio para resultados buscados/filtrados:
+		// obtenemos el set completo filtrado, ordenamos localmente y luego paginamos.
+		if (isPriceSort && hasScopedFilters) {
+			const allParams = new URLSearchParams(agentParams);
+			allParams.set('page', '1');
+			allParams.set('limit', '10000');
+			allParams.set('sort', 'default');
+
+			const allEndpoint = `/articulos/search?${allParams.toString()}`;
+			const allResData = await agentClient.request<any>(allEndpoint);
+			const allItems = extractItems(allResData);
+
+			allItems.sort((a, b) => {
+				const diff = getPrice(a) - getPrice(b);
+				return sort === 'price_desc' ? -diff : diff;
+			});
+
+			const safePage = Number.isFinite(page) && page > 0 ? page : 1;
+			const safeLimit = Number.isFinite(limit) && limit > 0 ? limit : 12;
+			const start = (safePage - 1) * safeLimit;
+			const end = safePage * safeLimit;
+
+			items = allItems.slice(start, end);
+			total = allItems.length;
+			totalPages = Math.ceil(total / safeLimit);
+			page = safePage;
+			limit = safeLimit;
+		}
+
 		return json({
 			success: true,
-			data: resData.data?.items || resData.items || resData.data || (Array.isArray(resData) ? resData : []),
+			data: items,
 			pagination: {
-				total: pagination.total || 0,
-				page: pagination.currentPage || pagination.page || 1,
-				limit: pagination.limit || 12,
-				totalPages: pagination.pages || pagination.totalPages || 0
+				total: Number.isFinite(total) ? total : 0,
+				page: Number.isFinite(page) && page > 0 ? page : 1,
+				limit: Number.isFinite(limit) && limit > 0 ? limit : 12,
+				totalPages: Number.isFinite(totalPages) && totalPages > 0 ? totalPages : 0
 			}
 		});
 	} catch (e: any) {

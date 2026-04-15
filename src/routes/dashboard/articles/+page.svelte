@@ -82,6 +82,7 @@
   }
   let showModal = $state(false);
   let selectedArticle = $state<any>(null);
+  let formWarehouse = $state("");
   let formUbic1 = $state("");
   let formUbic2 = $state("");
   let formUbic3 = $state("");
@@ -124,8 +125,8 @@
     const firstLoc = article.ubicaciones?.[0] || article.existencia?.[0];
     if (firstLoc) {
       if (!selectedBranch && firstLoc.sede_id) selectedBranch = firstLoc.sede_id;
-      if (!selectedWarehouse && (firstLoc.co_alma || firstLoc.id)) {
-          selectedWarehouse = firstLoc.co_alma || firstLoc.id;
+      if (!formWarehouse && (firstLoc.co_alma || firstLoc.id)) {
+          formWarehouse = firstLoc.co_alma || firstLoc.id;
       }
     }
 
@@ -139,21 +140,15 @@
   }
   let isSearching = $state(false);
 
-  let selectedWarehouse = $state("");
   let selectedLinea = $state($page.url.searchParams.get("linea") || "");
   let selectedCategoria = $state($page.url.searchParams.get("categoria") || "");
   let selectedUbicacion = $state($page.url.searchParams.get("co_ubicacion") || "");
 
-  let currentWarehouseObj = $derived(
-    data.context?.warehouses?.find(w => 
-      selectedWarehouse ? (w.co_alma === selectedWarehouse || w.id === selectedWarehouse) : true
-    )
-  );
   let currentBranchObj = $derived(
     data.context?.branches?.find(b => b.id === selectedBranch)
   );
   let coSucuToSend = $derived(currentBranchObj?.co_sucu || "");
-  let coAlmaToSend = $derived(selectedWarehouse || currentWarehouseObj?.co_alma || currentWarehouseObj?.id || "01");
+  let coAlmaToSend = $derived(formWarehouse || "01");
 
   const filteredCategorias = $derived(
     !selectedLinea
@@ -166,8 +161,6 @@
   $effect(() => {
     selectedBranch =
       data.context?.branchId || $page.url.searchParams.get("branch_id") || "";
-    selectedWarehouse =
-      data.context?.warehouseId || $page.url.searchParams.get("co_alma") || "";
     selectedLinea = $page.url.searchParams.get("linea") || "";
     selectedCategoria = $page.url.searchParams.get("categoria") || "";
     selectedUbicacion = $page.url.searchParams.get("co_ubicacion") || "";
@@ -194,12 +187,6 @@
       url.searchParams.set("branch_id", selectedBranch);
     } else {
       url.searchParams.delete("branch_id");
-    }
-
-    if (selectedWarehouse) {
-      url.searchParams.set("co_alma", selectedWarehouse);
-    } else {
-      url.searchParams.delete("co_alma");
     }
 
     if (selectedLinea) {
@@ -237,7 +224,7 @@
     // no SvelteKit layout, no dashboard chrome, clean for printing.
     const url = new URL($page.url.origin + "/api/labels");
     if (selectedBranch) url.searchParams.set("branch_id", selectedBranch);
-    if (selectedWarehouse) url.searchParams.set("co_alma", selectedWarehouse);
+    if (selectedBranch) url.searchParams.set("branch_id", selectedBranch);
 
     if (selectedCodes.size > 0) {
       // Print only selected articles — pass codes directly, skip filters
@@ -301,17 +288,7 @@
         />
       {/if}
 
-      {#if data.context?.warehouses && data.context.warehouses.length > 0}
-        <Combobox
-          options={(data.context.warehouses || []).map((a: any) => ({ value: a.co_alma || a.id, label: a.des_alma || a.nombre || a.co_alma || a.id }))}
-          bind:value={selectedWarehouse}
-          placeholder="Todos los Almacenes"
-          allLabel="Todos los Almacenes"
-          icon={Package}
-          class="w-full lg:w-64 shrink-0"
-          onchange={() => handleSearch()}
-        />
-      {/if}
+
 
       <form class="relative flex-1 w-full lg:w-auto" onsubmit={(e) => { e.preventDefault(); handleSearch(); }}>
         <Search class="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted group-focus-within:text-brand-500 transition-colors" size={20} />
@@ -571,7 +548,7 @@
             >
 
             {#if article.disponibilidad && Array.isArray(article.disponibilidad)}
-              {#each article.disponibilidad.filter( (alm: any) => (selectedWarehouse ? alm.co_alma === selectedWarehouse : !data.context?.finalWarehouseIds?.length || data.context.finalWarehouseIds.includes(alm.co_alma)), ) as alm}
+              {#each article.disponibilidad.filter( (alm: any) => (!data.context?.finalWarehouseIds?.length || data.context.finalWarehouseIds.includes(alm.co_alma)) ) as alm}
                 <div
                   class="flex items-center justify-between py-1 bg-surface-base/50 px-2 rounded-md border border-white/5"
                 >
@@ -690,7 +667,7 @@
           <label class="text-[10px] uppercase font-black tracking-widest text-brand-400 ml-1">Almacén / Depósito Profit</label>
           <Combobox
             options={(data.context?.warehouses || []).map((a: any) => ({ value: a.co_alma || a.id, label: a.des_alma || a.nombre || a.id }))}
-            bind:value={selectedWarehouse}
+            bind:value={formWarehouse}
             placeholder="-- Seleccionar Almacén --"
             allLabel="-- Sin seleccionar --"
             icon={Package}

@@ -73,7 +73,9 @@ export class AgentClient {
 				const fetchToUse = this.customFetch || fetch;
 				if (!fetchToUse) throw new Error("Fetch method not available");
 
+				console.log(`[AgentClient] -> ${options.method || 'GET'} ${url}`);
 				const response = await fetchToUse(url, { ...options, headers });
+				console.log(`[AgentClient] <- ${response.status} ${response.statusText}`);
 				
 				if (!response.ok) {
 					const errorData = await response.json().catch(() => ({}));

@@ -1,6 +1,7 @@
 // src/routes/dashboard/sales/customers/+page.server.ts
 import { protectLoad, protectAction } from '$lib/server/permissions';
 import { AgentClient } from '$lib/server/agent';
+import { hasPermission } from '$lib/server/auth';
 import { fail } from '@sveltejs/kit';
 import { supabaseAdmin } from '$lib/server/supabase';
 import { logAction } from '$lib/server/audit';
@@ -20,6 +21,11 @@ export const load: PageServerLoad = protectLoad('sales_customers', async ({ loca
                 redirect: '/'
             };
         }
+
+        // LÓGICA DE PERMISOS
+        const canCreate = hasPermission(profile, 'sales_customers', 'create');
+        const canUpdate = hasPermission(profile, 'sales_customers', 'update');
+        const canDelete = hasPermission(profile, 'sales_customers', 'delete');
 
 		// 1. Obtener todas las sucursales de Supabase
 		let allBranches: any[] = [];
@@ -99,6 +105,21 @@ export const load: PageServerLoad = protectLoad('sales_customers', async ({ loca
             agent_api_key: selectedBranch.agent_token
         }, profile, fetch);
 
+        // LÓGICA DE PRIVACIDAD: Si no puede ver terceros, forzar filtro por su vendedor
+        const canSeeOthers = hasPermission(profile, 'sales_customers', 'others');
+        let co_ven_filter = '';
+        if (!canSeeOthers) {
+            co_ven_filter = (profile.profit_user || '').trim().toUpperCase();
+            if (!co_ven_filter) {
+                return {
+                    title: 'Clientes', customers: [], pagination: { total: 0, page: 1, limit: 20, totalPages: 0 },
+                    error: 'Tu perfil no tiene asociado un código de Vendedor. No puedes visualizar clientes.',
+                    branches: allowedBranches, selectedBranchId: selectedBranch.id,
+                    crud: { read: true, create: canCreate, update: canUpdate, delete: canDelete }
+                };
+            }
+        }
+
         let customers: any[] = [];
         let resData: any = { success: true, data: { items: [] }, pagination: { total: 0, page: 1, limit: 20, totalPages: 0 } };
         let zonas: any[] = [];
@@ -120,14 +141,10 @@ export const load: PageServerLoad = protectLoad('sales_customers', async ({ loca
                     filters.cli_des = cleanSearch;
                     filters.descripcion = cleanSearch;
                     filters.q = cleanSearch; // Parámetro universal de búsqueda
-                    
-                    // Fallback para DBs case-sensitive: enviar también en mayúsculas
-                    const upper = cleanSearch.toUpperCase();
-                    if (upper !== cleanSearch) {
-                        filters.cli_des_upper = upper;
-                        filters.nombre = upper;
-                    }
                 }
+
+                // Inyectamos el filtro de vendedor si existe restricción
+                if (co_ven_filter) filters.co_ven = co_ven_filter;
 
                 const res = await agentClient.searchCustomers(filters, page, 20).catch(() => null);
                 if (res && res.success) {
@@ -135,7 +152,14 @@ export const load: PageServerLoad = protectLoad('sales_customers', async ({ loca
                     customers = res.data?.items || res.items || res.data || [];
                 }
             } else {
-                const res = await agentClient.getCustomers(page, 20).catch(() => null);
+                let filters: any = {};
+                if (co_ven_filter) filters.co_ven = co_ven_filter;
+
+                // getCustomers no soporta filtros directo en el nombre, usamos searchCustomers con co_ven si hay restricción
+                const res = co_ven_filter
+                    ? await agentClient.searchCustomers(filters, page, 20).catch(() => null)
+                    : await agentClient.getCustomers(page, 20).catch(() => null);
+
                 if (res && res.success) {
                     resData = res;
                     customers = res.data?.items || res.items || res.data || [];
@@ -167,7 +191,12 @@ export const load: PageServerLoad = protectLoad('sales_customers', async ({ loca
             search,
             branches: allowedBranches,
             selectedBranchId: selectedBranch.id,
-            crud,
+            crud: {
+                read: true,
+                create: canCreate,
+                update: canUpdate,
+                delete: canDelete
+            },
             context: {
                 branchId: selectedBranch.id,
                 branches: allowedBranches,
@@ -191,6 +220,15 @@ export const actions: Actions = {
         if (!profile) return fail(401, { message: 'Sesión expirada' });
 
         const formData = await request.formData();
+        const isNew = formData.get('_isNew') === 'true';
+
+        // VALIDACIÓN DINÁMICA DE PERMISOS
+        if (isNew && !hasPermission(profile, 'sales_customers', 'create')) {
+          return fail(403, { message: 'No tienes permiso para REGISTRAR nuevos clientes.' });
+        }
+        if (!isNew && !hasPermission(profile, 'sales_customers', 'update')) {
+          return fail(403, { message: 'No tienes permiso para ACTUALIZAR clientes.' });
+        }
         const branchId = formData.get('branch_id') as string;
         
         // Permisos
@@ -227,7 +265,6 @@ export const actions: Actions = {
         }, profile, fetch);
 
         const customerData = Object.fromEntries(formData);
-        const isNew = formData.get('_isNew') === 'true';
 
         const payload = {
             ...customerData,

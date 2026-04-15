@@ -36,9 +36,11 @@
     LayoutGrid,
     ShieldCheck,
     UserCircle,
+    Clock,
   } from "lucide-svelte";
   import { toast } from "svelte-sonner";
   import Combobox from "$lib/components/ui/Combobox.svelte";
+  import SearchBar from "$lib/components/ui/SearchBar.svelte";
   import BarcodeScanner from "$lib/components/ui/BarcodeScanner.svelte";
   import type { PageData } from "./$types";
 
@@ -96,6 +98,238 @@
   let selectedClient = $state<any>(null);
   let showRegistrationForm = $state(false);
 
+  // --- PASO 2: ARTÍCULOS Y CARRITO ---
+  let quantities = $state<Record<string, number>>({});
+  let selectedItemWarehouse = $state<Record<string, string>>({});
+  let selectedItemPriceIndex = $state<Record<string, number>>({});
+  let cart = $state<any[]>([]);
+  let lastLoadedDoc = $state("");
+  let isInitializing = false;
+
+  $effect(() => {
+    const q = data.preloadedQuote;
+    if (q && q.doc_num !== lastLoadedDoc) {
+      if (isInitializing) return;
+      isInitializing = true;
+      activeTab = 2;
+      lastLoadedDoc = q.doc_num;
+      
+      // LIMPIEZA AGRESIVA: Si entramos a editar, borrar cualquier borrador previo
+      localStorage.removeItem("profit_quote_draft");
+
+      console.log("🎁 [INIT] Iniciando precarga prioritaria:", q.doc_num);
+      toast.info(`Editando Cotización ${q.doc_num}`);
+
+      try {
+        // 1. Estados Globales
+        rifInput = String(q.co_cli || "").trim();
+        showUSD = String(q.co_mone || "")
+          .toUpperCase()
+          .includes("US");
+        quoteTaxRate = (Number(q.monto_imp) || 0) === 0 ? 0 : 16;
+        quoteDescription = String(q.descrip || q.comentario || "").trim();
+
+        // 2. Cliente (Campos Críticos)
+        selectedClient = {
+          co_cli: String(q.co_cli || "").trim(),
+          cli_des: String(q.cli_des || "").trim(),
+          rif: String(q.rif || q.co_cli || "").trim(),
+          direc1: String(q.direc1 || q.dir_ent || "").trim(),
+          telefonos: String(q.telefonos || "N/A").trim(),
+          email: String(q.email || "N/A").trim(),
+          co_zon: String(q.co_zon || "").trim(),
+          zon_des: String(q.zon_des || "").trim(),
+          contribu_e: !!q.contribu_e,
+          co_ven: String(q.co_ven || "").trim(),
+          ven_des: String(q.ven_des || "").trim(),
+          co_mone: String(q.co_mone || "BS").trim(),
+        };
+
+        // 3. Renglones
+        if (
+          q.renglones &&
+          Array.isArray(q.renglones) &&
+          q.renglones.length > 0
+        ) {
+          const mappedCart = q.renglones.map((r: any) => {
+            const artId = String(r.co_art || "").trim();
+            const almaId = String(r.co_alma || "").trim();
+
+            // Set individual states
+            quantities[artId] = Number(r.cantidad || 1);
+            selectedItemWarehouse[artId] = almaId;
+            selectedItemPriceIndex[artId] = 0;
+
+            const realAlma = data.context?.warehouses?.find(
+              (w: any) => String(w.co_alma || "").trim() === almaId,
+            );
+
+            return {
+              co_art: artId,
+              art_des: String(r.art_des || "").trim(),
+              qty: Number(r.cantidad || 0),
+              precio_ves: Number(r.precio || 0),
+              precio_usd: Number(r.prec_vta_om || 0),
+              porc_imp: Number(r.porc_imp ?? 16),
+              co_alma_selected: almaId,
+              co_uni: String(r.co_uni || "").trim(),
+              unidad: String(r.unidad || r.co_uni || "UND").trim(),
+              price_selected: {
+                precio: Number(r.prec_vta_om || 0),
+                precio_ves: Number(r.precio || 0),
+              },
+              disponibilidad: [
+                {
+                  co_alma: almaId,
+                  des_alma: String(realAlma?.des_alma || almaId).trim(),
+                  stock: Number(r.cantidad || 0),
+                },
+              ],
+              precios: [
+                {
+                  precio: Number(r.prec_vta_om || 0),
+                  precio_ves: Number(r.precio || 0),
+                  moneda: String(q.co_mone || "BS"),
+                },
+              ],
+            };
+          });
+          cart = mappedCart;
+        }
+
+        console.log("✅ [INIT] Carga completa. Rehidratando...");
+        rehydrateCart();
+      } catch (err: any) {
+        console.error("❌ [INIT] Error mapeando datos:", err);
+        toast.error("Error al procesar datos de la cotización: " + err.message);
+      } finally {
+        isInitializing = false;
+      }
+    }
+  });
+
+  // --- Borradores y Persistencia ---
+  $effect(() => {
+    const draftStr = localStorage.getItem("profit_quote_draft");
+    // Solo cargar borrador si NO estamos en una edición y el estado está virgen
+    if (
+      draftStr &&
+      !data.preloadedQuote &&
+      cart.length === 0 &&
+      !selectedClient &&
+      !isInitializing
+    ) {
+      try {
+        const parsed = JSON.parse(draftStr);
+        if (parsed.cart) cart = parsed.cart;
+        if (parsed.selectedClient !== undefined)
+          selectedClient = parsed.selectedClient;
+        if (parsed.activeTab !== undefined) activeTab = parsed.activeTab;
+        if (parsed.rifInput) rifInput = parsed.rifInput;
+        console.log("📝 [DRAFT] Borrador cargado automáticamente");
+      } catch (e) {
+        console.error("Error loading draft", e);
+      }
+    }
+  });
+
+  $effect(() => {
+    // IMPORTANTE: NO guardar borradores si estamos editando una cotización real
+    // para evitar que se "mezclen" al presionar "Nueva Cotización" después
+    if (data.preloadedQuote || isInitializing || lastLoadedDoc !== "") return;
+
+    const draft = {
+      cart,
+      selectedClient,
+      activeTab,
+      rifInput,
+    };
+    localStorage.setItem("profit_quote_draft", JSON.stringify(draft));
+  });
+
+  async function rehydrateCart() {
+    if (!cart.length) return;
+
+    console.log("💧 Rehidratando existencias y precios del carrito...");
+    const branchId = data.selectedBranchId;
+
+    for (let i = 0; i < cart.length; i++) {
+      const item = cart[i];
+      try {
+        const co = item.co_art.trim();
+        const res = await fetch(
+          `/api/agent/articles?co_art=${encodeURIComponent(co)}&branch_id=${branchId}`,
+        );
+        const d = await res.json();
+
+        console.log(`🔍 Rehidratando ${co}...`, d);
+
+        if (d.success && d.data && d.data.length > 0) {
+          // Buscar el match exacto por si la búsqueda trajo parecidos
+          const fresh =
+            d.data.find((a: any) => a.co_art?.trim() === co) || d.data[0];
+
+          // --- FILTRADO DE ALMACENES POR PERMISO ---
+          const allowedIds = (data.context?.warehouses || []).map((w: any) =>
+            w.co_alma?.trim(),
+          );
+          const filteredDispo = (fresh.disponibilidad || []).filter(
+            (disp: any) => allowedIds.includes(disp.co_alma?.trim()),
+          );
+
+          // --- BUSCAR ÍNDICE DE PRECIO QUE COINCIDA CON LA COTIZACIÓN ---
+          let matchedPriceIndex = 0;
+          if (fresh.precios && fresh.precios.length > 0) {
+            const targetOM = Number(cart[i].price_selected?.precio || 0);
+            const targetVES = Number(cart[i].price_selected?.precio_ves || 0);
+            
+            console.log(`⚖️ Buscando coincidencia para ${co}: OM=${targetOM}, VES=${targetVES}`);
+
+            // Intentar buscar match por cualquiera de las dos monedas (con margen de error de 0.01)
+            const idx = fresh.precios.findIndex((p: any) => {
+              const matchOM = targetOM > 0 && Math.abs(Number(p.precio) - targetOM) < 0.05;
+              const matchVES = targetVES > 0 && Math.abs(Number(p.precio_ves) - targetVES) < 0.05;
+              return matchOM || matchVES;
+            });
+
+            if (idx !== -1) {
+               matchedPriceIndex = idx;
+               console.log(`🎯 Match encontrado en Tipo ${idx + 1} para ${co}`);
+            } else {
+               console.warn(`⚠️ No se encontró match de precio exacto para ${co}. Usando Tipo 1.`);
+            }
+          }
+
+          // Actualizar estados reactivos globales
+          selectedItemPriceIndex[co] = matchedPriceIndex;
+
+          // Actualizar item en el carrito con RE-ASIGNACIÓN para Svelte kit
+          const updatedItem = {
+            ...cart[i],
+            art_des: fresh.descripcion || fresh.art_des || cart[i].art_des,
+            disponibilidad:
+              filteredDispo.length > 0
+                ? filteredDispo
+                : fresh.disponibilidad || cart[i].disponibilidad,
+            precios: fresh.precios || cart[i].precios,
+            unidad: fresh.unidad || cart[i].unidad,
+            porc_imp:
+              fresh.tipo_imp === "7" ? 0 : (fresh.porc_imp ?? cart[i].porc_imp),
+            price_index_selected: matchedPriceIndex,
+            price_selected:
+              fresh.precios?.[matchedPriceIndex] || cart[i].price_selected,
+            co_alma_selected: item.co_alma_selected,
+          };
+
+          cart[i] = updatedItem;
+          console.log(`✅ Artículo ${co} REHIDRATADO exitosamente.`);
+        }
+      } catch (e) {
+        console.error(`❌ Error rehidratando ${item.co_art}:`, e);
+      }
+    }
+  }
+
   // Datos para nuevo cliente
   let newClient = $state({
     rif: "",
@@ -118,12 +352,6 @@
       if (standardized !== rifInput) rifInput = standardized;
     }
   });
-
-  // --- PASO 2: ARTÍCULOS Y CARRITO ---
-  let quantities = $state<Record<string, number>>({});
-  let selectedItemWarehouse = $state<Record<string, string>>({});
-  let selectedItemPriceIndex = $state<Record<string, number>>({});
-  let cart = $state<any[]>([]);
 
   const displayArticles = $derived.by(() => {
     if (!localArticles || localArticles.length === 0) return [];
@@ -205,31 +433,7 @@
     }
   });
 
-  $effect(() => {
-    const draftStr = localStorage.getItem("profit_quote_draft");
-    if (draftStr) {
-      try {
-        const parsed = JSON.parse(draftStr);
-        if (parsed.cart) cart = parsed.cart;
-        if (parsed.selectedClient !== undefined)
-          selectedClient = parsed.selectedClient;
-        if (parsed.activeTab !== undefined) activeTab = parsed.activeTab;
-        if (parsed.rifInput) rifInput = parsed.rifInput;
-      } catch (e) {
-        console.error("Error loading draft", e);
-      }
-    }
-  });
 
-  $effect(() => {
-    const draft = {
-      cart,
-      selectedClient,
-      activeTab,
-      rifInput,
-    };
-    localStorage.setItem("profit_quote_draft", JSON.stringify(draft));
-  });
 
   // --- ACCIONES ---
   function nextStep() {
@@ -244,15 +448,36 @@
     if (activeTab > 0) activeTab--;
   }
 
-  function clearQuote() {
+  function clearQuote(avoidRedirect = false) {
     cart = [];
     selectedClient = null;
     activeTab = 0;
     rifInput = "";
     showRegistrationForm = false;
+    quoteDescription = "";
     localStorage.removeItem("profit_quote_draft");
-    toast.success("Formulario limpiado");
+    lastLoadedDoc = ""; // Resetear rastreador de edición
+    
+    if (!avoidRedirect) {
+      toast.success("Formulario limpiado");
+      // Si estábamos editando, limpiar la URL para que no vuelva a precargar
+      if ($page.url.searchParams.has("doc_num")) {
+        goto("/dashboard/sales/quotes");
+      }
+    }
   }
+
+  // Detectar salida de edición para resetear estado
+  $effect(() => {
+    const docNumInUrl = $page.url.searchParams.get("doc_num");
+    // Solo limpiar si venimos de haber cargado un documento (lastLoadedDoc) y ahora la URL está limpia (doc_num null)
+    if (!docNumInUrl && lastLoadedDoc !== "" && !isInitializing) {
+      console.log("🧹 [STATE] Detectada salida de edición. Limpiando para nueva cotización.");
+      clearQuote(true); 
+      lastLoadedDoc = ""; // Resetear marca de carga
+      activeTab = 0;
+    }
+  });
 
   function addToCart(article: any) {
     const co_art = article.co_art || article.codigo || article.id;
@@ -401,15 +626,24 @@
     isSearching = true;
     const url = new URL($page.url);
 
-    if (searchTerm) url.searchParams.set("search", searchTerm);
+    if (searchTerm?.trim()) url.searchParams.set("search", searchTerm.trim());
     else url.searchParams.delete("search");
 
     if (selectedBranch) url.searchParams.set("branch_id", selectedBranch);
+    else url.searchParams.delete("branch_id");
+
     if (selectedWarehouse) url.searchParams.set("co_alma", selectedWarehouse);
+    else url.searchParams.delete("co_alma");
+
     if (selectedLinea) url.searchParams.set("linea", selectedLinea);
+    else url.searchParams.delete("linea");
+
     if (selectedCategoria) url.searchParams.set("categoria", selectedCategoria);
+    else url.searchParams.delete("categoria");
+    
     if (sortOption && sortOption !== "relevance")
       url.searchParams.set("sort", sortOption);
+    else url.searchParams.delete("sort");
 
     url.searchParams.set("page", "1");
 
@@ -427,10 +661,12 @@
     let ivaBS = 0;
 
     cart.forEach((item) => {
-      const isExempt =
-        (item.co_lin || item.linea_id || "").trim() === "09" ||
-        (item.co_art || item.codigo || "").startsWith("09");
-      const rate = isExempt ? 0 : quoteTaxRate;
+      // Un ítem es estrictamente exento SOLO si es de la línea 09
+      const isStrictlyExempt =
+        (item.co_lin || "").trim() === "09" ||
+        (item.co_art || "").startsWith("09");
+
+      const rate = isStrictlyExempt ? 0 : quoteTaxRate;
 
       const pUSD =
         item.price_selected?.precio || item.precios?.[0]?.precio || 0;
@@ -460,6 +696,32 @@
 </script>
 
 <div class="flex flex-col gap-8 min-h-svh pb-20" in:fade>
+  <!-- Header con botón de Historial -->
+  <div
+    class="w-full max-w-6xl mx-auto px-4 mt-6 flex justify-between items-center"
+  >
+    <div class="flex items-center gap-4">
+      <ShoppingBag size={40} class="text-brand-500" />
+      <div>
+        <h1 class="text-4xl font-black tracking-tight">
+          {data.preloadedQuote ? `Editar Cotización` : "Nueva Cotización"}
+        </h1>
+        <p class="text-text-muted mt-1 text-lg font-medium opacity-80">
+          {data.preloadedQuote
+            ? `Documento Nro: ${data.preloadedQuote.doc_num}`
+            : "Generar nuevo documento"}
+        </p>
+      </div>
+    </div>
+
+    <a
+      href="/dashboard/sales/quotes/history"
+      class="flex items-center gap-2 px-5 py-3 rounded-2xl bg-surface-soft hover:bg-surface-strong text-text-base border border-border-subtle transition-all font-bold active:scale-95 shadow-sm"
+    >
+      <Clock size={18} class="text-brand-500" />
+      Ver Historial
+    </a>
+  </div>
   <!-- Step Progress Indicator -->
   <div class="w-full max-w-4xl mx-auto px-4 mt-2">
     <div class="flex items-center justify-between relative">
@@ -575,9 +837,23 @@
             </div>
           {/if}
 
+          <SearchBar
+            bind:value={rifInput}
+            isSearching={searchingClient}
+            placeholder="V12345678"
+            className="w-full"
+            onsubmit={(e: Event) => {
+              const form = document.querySelector(
+                'form[action="?/searchClient"]',
+              ) as HTMLFormElement;
+              if (form) form.requestSubmit();
+            }}
+          />
+
           <form
             method="POST"
             action="?/searchClient"
+            class="hidden"
             use:enhance={() => {
               if (!selectedBranch) {
                 toast.error("Por favor seleccione una sucursal");
@@ -588,7 +864,7 @@
                 return;
               }
               searchingClient = true;
-              return async ({ result }) => {
+              return async ({ result, update }) => {
                 searchingClient = false;
                 if (result.type === "success") {
                   const payload = (result as any).data;
@@ -618,31 +894,9 @@
                 }
               };
             }}
-            class="relative group h-20"
           >
+            <input type="hidden" name="rif" value={rifInput} />
             <input type="hidden" name="branch_id" value={selectedBranch} />
-            <Search
-              class="absolute left-8 top-1/2 -translate-y-1/2 text-brand-500"
-              size={28}
-            />
-            <input
-              type="text"
-              name="rif"
-              bind:value={rifInput}
-              placeholder="V123456789"
-              class="w-full h-full bg-surface-base pl-20 pr-40 rounded-full border border-border-subtle focus:border-brand-500/50 outline-none transition-all font-black text-2xl uppercase tracking-widest text-text-base placeholder:text-text-secondary/30"
-              autocomplete="off"
-            />
-            <button
-              type="submit"
-              class="absolute right-2 top-2 bottom-2 bg-surface-soft hover:bg-surface-strong border border-border-subtle px-10 rounded-full font-bold text-text-base transition-all active:scale-95"
-            >
-              {#if searchingClient}
-                <Loader2 size={24} class="animate-spin" />
-              {:else}
-                Buscar
-              {/if}
-            </button>
           </form>
         </div>
 
@@ -687,7 +941,7 @@
                   class="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6 mt-2"
                 >
                   <!-- RIF -->
-                  <div class="flex items-center gap-4 text-text-muted">
+                  <!-- <div class="flex items-center gap-4 text-text-muted">
                     <div
                       class="h-10 w-10 rounded-xl bg-surface-soft flex items-center justify-center text-brand-400 shrink-0"
                     >
@@ -702,7 +956,7 @@
                         >{selectedClient.rif || selectedClient.co_cli}</span
                       >
                     </div>
-                  </div>
+                  </div> -->
 
                   <!-- Teléfono -->
                   <div class="flex items-center gap-4 text-text-muted">
@@ -740,24 +994,6 @@
                     </div>
                   </div>
 
-                  <!-- Vendedor -->
-                  <div class="flex items-center gap-4 text-text-muted">
-                    <div
-                      class="h-10 w-10 rounded-xl bg-surface-soft flex items-center justify-center text-brand-400 shrink-0"
-                    >
-                      <UserCircle size={18} />
-                    </div>
-                    <div class="flex flex-col">
-                      <span
-                        class="text-[10px] uppercase font-black tracking-widest opacity-50"
-                        >Vendedor</span
-                      >
-                      <span class="font-bold text-text-base"
-                        >{selectedClient.co_ven || "No asignado"}</span
-                      >
-                    </div>
-                  </div>
-
                   <!-- Zona -->
                   <div class="flex items-center gap-4 text-text-muted">
                     <div
@@ -771,9 +1007,12 @@
                         >Zona / Región</span
                       >
                       <span class="font-bold text-text-base">
-                        {data.context?.zonas?.find(
-                          (z) => z.co_zon === selectedClient.co_zon,
-                        )?.zon_des ||
+                        {selectedClient.zon_des ||
+                          data.context?.zonas?.find(
+                            (z: any) =>
+                              z.co_zon?.trim() ===
+                              selectedClient.co_zon?.trim(),
+                          )?.zon_des ||
                           selectedClient.co_zon ||
                           "Sin zona"}
                       </span>
@@ -795,13 +1034,12 @@
                       <span class="font-bold text-text-base">
                         {selectedClient.contribuyente
                           ? selectedClient.contribu_e
-                            ? "Especial"
-                            : "Contribuyente"
+                            ? "Contribuyente Especial"
+                            : "Contribuyente Ordinario"
                           : "No Contribuyente"}
                       </span>
                     </div>
                   </div>
-
                   <!-- Dirección -->
                   <div
                     class="flex items-start gap-4 text-text-muted md:col-span-2 pt-2"
@@ -821,6 +1059,26 @@
                           "Sin dirección registrada"}</span
                       >
                     </div>
+                  </div>
+                </div>
+
+                <!-- Registrado Por -->
+                <div class="flex items-center gap-4 text-text-muted">
+                  <div
+                    class="h-10 w-10 rounded-xl bg-surface-soft flex items-center justify-center text-brand-400 shrink-0"
+                  >
+                    <UserCircle size={18} />
+                  </div>
+                  <div class="flex flex-col">
+                    <span
+                      class="text-[10px] uppercase font-black tracking-widest opacity-50"
+                      >Registrado Por</span
+                    >
+                    <span class="font-bold text-text-base"
+                      >{selectedClient.ven_des ||
+                        selectedClient.co_ven ||
+                        "No asignado"}</span
+                    >
                   </div>
                 </div>
 
@@ -967,7 +1225,7 @@
                     <Combobox
                       options={(data.context?.zonas || []).map((z: any) => ({
                         value: z.co_zon,
-                        label: z.zon_des,
+                        label: z.zon_des || z.co_zon || "Sin nombre",
                       }))}
                       bind:value={newClient.co_zon}
                       placeholder="Seleccionar zona..."
@@ -1173,28 +1431,29 @@
               bind:value={selectedCategoria}
               placeholder="Categorías (Todas)"
               allLabel="Categorías (Todas)"
-              onchange={handleSearch}
+              onchange={() => handleSearch()}
               class="w-full h-12"
             />
           </div>
 
           <!-- 4. Acciones (Precio + Moneda) -->
           <div
-            class="flex items-center gap-2 w-full h-12 col-span-2 lg:col-span-1"
+            class="flex items-center gap-2 w-full h-12 col-span-2 lg:col-span-1 justify-end"
           >
             <button
               onclick={() => {
                 const u = new URL($page.url);
                 const currentSort = u.searchParams.get("sort");
                 let nextSort = null;
-                
+
                 if (currentSort === "price_asc") nextSort = "price_desc";
                 else if (currentSort === "price_desc") nextSort = null;
                 else nextSort = "price_asc";
 
                 if (nextSort) u.searchParams.set("sort", nextSort);
                 else u.searchParams.delete("sort");
-                
+                sortOption = (nextSort as any) || "relevance";
+
                 u.searchParams.set("page", "1");
                 goto(u.toString());
               }}
@@ -1593,9 +1852,9 @@
               >
             </div>
 
-            <div class="grid grid-cols-1 lg:grid-cols-3 gap-8 relative z-10">
+            <div class="space-y-6 relative z-10 w-full">
               <!-- Info Principal -->
-              <div class="lg:col-span-2 space-y-6">
+              <div class="space-y-6">
                 <div>
                   <div
                     class="text-[10px] font-black uppercase tracking-widest text-brand-400/60 mb-1"
@@ -1650,52 +1909,47 @@
                     <span
                       class="text-sm font-bold text-text-base text-brand-400"
                     >
-                      {data.context?.zonas?.find(
-                        (z) => z.co_zon === selectedClient.co_zon,
-                      )?.zon_des ||
+                      {selectedClient.zon_des ||
+                        data.context?.zonas?.find(
+                          (z: any) =>
+                            z.co_zon?.trim() === selectedClient.co_zon?.trim(),
+                        )?.zon_des ||
                         selectedClient.co_zon ||
                         "Sin zona"}
                     </span>
                   </div>
-                </div>
-              </div>
-
-              <!-- Info Lateral / Fiscal -->
-              <div
-                class="space-y-6 p-6 rounded-3xl bg-surface-soft/30 border border-border-subtle"
-              >
-                <div class="space-y-4">
-                  <div class="flex items-center justify-between">
+                  <div class="space-y-1">
                     <span
-                      class="text-[10px] font-black uppercase tracking-widest text-text-muted"
-                      >Estatus</span
+                      class="text-[10px] font-black uppercase tracking-widest text-text-muted block"
+                      >Estatus Fiscal</span
                     >
-                    <span
-                      class="px-2 py-1 rounded-md bg-brand-500/10 text-brand-400 text-[10px] font-black uppercase tracking-widest border border-brand-500/20"
-                    >
+                    <span class="text-sm font-bold text-text-base">
                       {selectedClient.contribuyente
-                        ? "Contribuyente"
-                        : "No Cont."}
+                        ? selectedClient.contribu_e
+                          ? "Contribuyente Especial"
+                          : "Contribuyente Ordinario"
+                        : "No Contribuyente"}
                     </span>
                   </div>
-                  <div class="flex items-center justify-between">
+                  <div class="space-y-1">
                     <span
-                      class="text-[10px] font-black uppercase tracking-widest text-text-muted"
-                      >Vendedor</span
+                      class="text-[10px] font-black uppercase tracking-widest text-text-muted block"
+                      >Registrado por</span
                     >
-                    <span class="text-xs font-bold text-text-base">
-                      {selectedClient.co_ven || "No asignado"}
-                    </span>
+                    <span class="text-sm font-bold text-text-base"
+                      >{selectedClient.ven_des ||
+                        selectedClient.co_ven ||
+                        "No asignado"}</span
+                    >
                   </div>
                 </div>
-                <div class="pt-4 border-t border-border-subtle">
+
+                <div class="pt-4 border-t border-border-subtle/30">
                   <span
-                    class="text-[10px] font-black uppercase tracking-widest text-text-muted block mb-2"
+                    class="text-[10px] font-black uppercase tracking-widest text-text-muted block mb-1"
                     >Dirección Fiscal</span
                   >
-                  <p
-                    class="text-sm font-medium text-text-muted leading-relaxed line-clamp-3 italic"
-                  >
+                  <p class="text-sm font-medium text-text-base leading-relaxed">
                     {selectedClient.direc1 || "Sin dirección registrada"}
                   </p>
                 </div>
@@ -1778,6 +2032,14 @@
                         <span class="text-brand-400 font-mono"
                           >{item.co_art}</span
                         >
+
+                        {#if (item.co_lin || "").trim() === "09" || (item.co_art || "").startsWith("09")}
+                          <span
+                            class="px-2 py-0.5 rounded-md bg-green-500/10 text-green-500 text-[9px] font-black border border-green-500/20"
+                            >EXENTO</span
+                          >
+                        {/if}
+
                         <span class="h-1 w-1 rounded-full bg-border-subtle"
                         ></span>
                         <span class="text-text-muted"
@@ -2031,7 +2293,7 @@
                             "¡Cotización generada con éxito!",
                         );
                         clearQuote();
-                        goto("/dashboard/sales/quotes");
+                        goto("/dashboard/sales/quotes/history");
                       } else if (result.type === "failure") {
                         const data = (result as any).data;
                         const mainMsg =
@@ -2056,6 +2318,7 @@
                     type="hidden"
                     name="quote_data"
                     value={JSON.stringify({
+                      doc_num: data.preloadedQuote?.doc_num,
                       co_cli:
                         selectedClient.co_cli ||
                         selectedClient.rif
@@ -2066,17 +2329,22 @@
                         quoteDescription || "Pedido registrado vía portal web.",
                       showUSD: showUSD,
                       renglones: cart.map((item) => {
-                        const isExempt =
-                          (item.co_lin || item.linea_id || "").trim() === "09";
-                        const rate = isExempt ? 0 : quoteTaxRate;
+                        const isStrictlyExempt =
+                          (item.co_lin || "").trim() === "09" ||
+                          (item.co_art || "").startsWith("09");
+                        const rate = isStrictlyExempt ? 0 : quoteTaxRate;
                         const taxType = rate === 16 ? "1" : "5";
                         return {
                           co_art: item.co_art || item.codigo,
                           art_des: item.art_des || item.descripcion,
                           cantidad: item.qty,
-                          precio: showUSD 
-                            ? (item.price_selected?.precio || item.precios?.[0]?.precio || 0)
-                            : (item.price_selected?.precio_ves || item.precios?.[0]?.precio_ves || 0),
+                          precio: showUSD
+                            ? item.price_selected?.precio ||
+                              item.precios?.[0]?.precio ||
+                              0
+                            : item.price_selected?.precio_ves ||
+                              item.precios?.[0]?.precio_ves ||
+                              0,
                           co_alma: item.co_alma_selected,
                           co_uni: item.co_uni || item.unidad,
                           co_precio: item.price_selected?.id_precio || "01",
@@ -2110,7 +2378,7 @@
 
                 <div class="grid grid-cols-2 gap-4">
                   <button
-                    onclick={clearQuote}
+                    onclick={() => clearQuote(false)}
                     class="h-14 rounded-2xl text-text-muted hover:bg-red-500/10 hover:text-red-400 transition-all text-xs font-black uppercase tracking-widest border border-border-subtle"
                   >
                     Descartar todo

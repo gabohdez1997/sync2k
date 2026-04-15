@@ -1,5 +1,4 @@
-// src/routes/dashboard/articles/+page.server.ts
-import { protectLoad } from '$lib/server/permissions';
+import { protectLoad, protectAction } from '$lib/server/permissions';
 import { AgentClient } from '$lib/server/agent';
 import { logAction } from '$lib/server/audit';
 import { fail } from '@sveltejs/kit';
@@ -138,21 +137,11 @@ export const load: PageServerLoad = protectLoad('sec_articles', async ({ url, lo
 
 		const finalWarehouseIds = allowedWarehousesForBranch.map((a: any) => a.co_alma || a.id || a.warehouse_id).filter(Boolean);
 
-		let urlWarehouseId = url.searchParams.get('co_alma') || '';
-		let warehouseId = '';
-
-		if (urlWarehouseId && finalWarehouseIds.includes(urlWarehouseId)) {
-			warehouseId = urlWarehouseId;
-		} else if (profileWarehouses.length > 0 && !isAdmin && finalWarehouseIds.length > 0) {
-			warehouseId = finalWarehouseIds[0];
-		}
-
 		// ─── 5. BUILD ENDPOINT & FETCH ARTICLES ───────────────────────────────────
 		const params = new URLSearchParams();
 		params.set('page', pageIndex.toString());
 		params.set('limit', limit.toString());
 		if (showAll) params.set('in_stock', 'all');
-		if (warehouseId) params.set('co_alma', warehouseId);
 		if (linea) params.set('linea', linea);
 		if (categoria) params.set('categoria', categoria);
 		if (ubicacionId) params.set('co_ubicacion', ubicacionId);
@@ -162,9 +151,12 @@ export const load: PageServerLoad = protectLoad('sec_articles', async ({ url, lo
 			params.set(isCode ? 'co_art' : 'descripcion', searchTerm);
 		}
 
-		const endpoint = searchTerm || linea || categoria || ubicacionId
-			? `/articulos/search?${params.toString()}`
-			: `/articulos?${params.toString()}`;
+		// Bypass /articulos endpoint size issue by forcing /search with a sort filter fallback
+		if (!searchTerm && !linea && !categoria && !ubicacionId) {
+			params.set('sort', 'default');
+		}
+
+		const endpoint = `/articulos/search?${params.toString()}`;
 
 		let articles: any[] = [];
 		let resData: any = { success: true, pagination: { total: 0, page: 1, limit: 12, totalPages: 0 } };
@@ -180,13 +172,12 @@ export const load: PageServerLoad = protectLoad('sec_articles', async ({ url, lo
 		// Extraer permisos CRUD del usuario para esta sección
 		const crud = userProfile?.permissions?.['sec_articles'] || { read: true, create: false, update: false, delete: false };
 
-		return {
+		const returnedData = {
 			articles,
 			branches: allowedBranches,
 			crud,
 			context: {
 				branchId,
-				warehouseId,
 				finalWarehouseIds,
 				lineas,
 				categorias,
@@ -196,11 +187,13 @@ export const load: PageServerLoad = protectLoad('sec_articles', async ({ url, lo
 				warehouses: allowedWarehousesForBranch
 			},
 			pagination: {
-				page: (resData as any).pagination?.currentPage || (resData as any).pagination?.page || pageIndex,
-				totalPages: (resData as any).pagination?.pages || (resData as any).pagination?.totalPages || 1,
-				totalItems: (resData as any).pagination?.total || articles.length
+				page: Number((resData as any).pagination?.currentPage || (resData as any).pagination?.page || pageIndex),
+				totalPages: Number((resData as any).pagination?.pages || (resData as any).pagination?.totalPages || 1),
+				totalItems: Number((resData as any).pagination?.total || articles.length)
 			}
 		};
+		console.log('[DEBUG PAGINATION]', JSON.stringify(returnedData.pagination));
+		return returnedData;
 
 	} catch (e: any) {
 		console.error('[ARTICLES] Fatal error:', e);
@@ -209,7 +202,7 @@ export const load: PageServerLoad = protectLoad('sec_articles', async ({ url, lo
 });
 
 export const actions: Actions = {
-	assignLocations: async ({ request, locals, fetch }) => {
+	assignLocations: protectAction('sec_articles', async ({ request, locals, fetch }) => {
 		const data = await request.formData();
 		const co_art = data.get('co_art') as string;
 		const co_ubicacion = (data.get('co_ubicacion') as string) || '';
@@ -339,5 +332,5 @@ export const actions: Actions = {
 			console.error('[ASSIGN LOCATIONS] Error:', err);
 			return fail(500, { error: `Error interno: ${err.message}` });
 		}
-	}
+	})
 };

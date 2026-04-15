@@ -17,7 +17,8 @@ BEGIN
         'read',   bool_or(COALESCE((value->>'read')::boolean,   false)),
         'create', bool_or(COALESCE((value->>'create')::boolean, false)),
         'update', bool_or(COALESCE((value->>'update')::boolean, false)),
-        'delete', bool_or(COALESCE((value->>'delete')::boolean, false))
+        'delete', bool_or(COALESCE((value->>'delete')::boolean, false)),
+        'others', bool_or(COALESCE((value->>'others')::boolean, false))
       ) AS perms
     FROM user_roles ur
     JOIN roles r ON r.id = ur.role_id

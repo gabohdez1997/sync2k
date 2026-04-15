@@ -1,13 +1,25 @@
-// src/routes/dashboard/sales/quotes/+page.server.ts
-import { protectLoad } from '$lib/server/permissions';
+import { protectLoad, protectAction } from '$lib/server/permissions';
 import { AgentClient } from '$lib/server/agent';
+import { hasPermission } from '$lib/server/auth';
+import { redirect, fail, type Actions } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
 
 export const load: PageServerLoad = protectLoad('sales_quotes', async ({ url, locals, fetch }) => {
-	try {
-		const profile = (locals as any).profile;
-		if (!profile) throw new Error('Perfil no cargado.');
+	const profile = (locals as any).profile;
+	if (!profile) throw new Error('Perfil no cargado.');
 
+	// SEGURIDAD:
+	// - Nueva cotización: requiere create
+	// - Edición (doc_num): requiere update
+	const docNumInUrl = url.searchParams.get('doc_num');
+	const canCreate = hasPermission(profile, 'sales_quotes', 'create');
+	const canUpdate = hasPermission(profile, 'sales_quotes', 'update');
+	const canAccess = docNumInUrl ? canUpdate : canCreate;
+	if (!canAccess) {
+		throw redirect(303, '/dashboard/sales/quotes/history');
+	}
+
+	try {
 		// 1. Obtener sucursales autorizadas del perfil
 		const allowedBranches = profile.allowed_branches || [];
 		
@@ -53,14 +65,15 @@ export const load: PageServerLoad = protectLoad('sales_quotes', async ({ url, lo
 			const [almaRes, lineasRes, catsRes, zonRes] = await Promise.all([
 				agentClient.request<any>('/catalogos/almacenes'),
 				agentClient.request<any>('/catalogos/lineas'),
-				agentClient.request<any>('/catalogos/categorias').catch(() => ({ data: [] })),
-				agentClient.getZonas().catch(() => ({ data: [] }))
+				agentClient.request<any>('/catalogos/categorias').catch(e => { console.error('Error cats:', e.message); return { data: [] }; }),
+				agentClient.getZonas().catch(e => { console.error('Error zonas:', e.message); return { data: [] }; })
 			]);
 
 			warehouseList = (almaRes as any).data || (almaRes as any).items || (Array.isArray(almaRes) ? almaRes : []);
 			lineas = (lineasRes as any).data || (lineasRes as any).items || (Array.isArray(lineasRes) ? lineasRes : []);
 			categorias = (catsRes as any).data || (catsRes as any).items || (Array.isArray(catsRes) ? catsRes : []);
 			zonas = (zonRes as any).data || (zonRes as any).items || (Array.isArray(zonRes) ? zonRes : []);
+			console.log(`[QUOTES LOAD] Zonas recuperadas: ${zonas.length}`);
 		} catch (e) {
 			console.error('[QUOTES] Catalog fetch error:', e);
 		}
@@ -88,12 +101,34 @@ export const load: PageServerLoad = protectLoad('sales_quotes', async ({ url, lo
 			? urlWarehouseId
 			: '';
 
+		// 6. Cargar cotización pre-existente si viene en el URL (EDICIÓN)
+		const doc_num = url.searchParams.get('doc_num');
+		let preloadedQuote = null;
+		if (doc_num) {
+			try {
+				const qRes = await agentClient.request<any>(`/cotizaciones/${doc_num}`);
+				if (qRes.success && qRes.data) {
+					const q = Array.isArray(qRes.data) ? qRes.data[0] : qRes.data;
+					const status = String(q?.status ?? '').trim();
+					const isAnulada = !!q?.anulado;
+					if (!isAnulada && status === '0') {
+						preloadedQuote = q;
+					} else {
+						console.warn(`[QUOTES] Bloqueada edición de ${doc_num}. status=${status}, anulado=${isAnulada}`);
+					}
+				}
+			} catch (e) {
+				console.error('[QUOTES] Error loading quote for edit:', e);
+			}
+		}
+
 		// --- SEGURIDAD: Artículos se cargan en el cliente ---
 		return {
 			articles: [],
 			pagination: { total: 0, page: 1, limit: 12, totalPages: 0 },
 			branches: allowedBranches,
 			selectedBranchId: selectedBranch.id,
+			preloadedQuote,
 			context: {
 				branchId: selectedBranch.id,
 				warehouseId,
@@ -208,6 +243,15 @@ export const actions: Actions = {
 		const agentClient = new AgentClient(branch, profile, fetch);
 		try {
 			const quoteData = JSON.parse(quoteDataStr);
+			const isEdit = !!quoteData?.doc_num;
+
+			// Permisos granulares por operación
+			if (isEdit && !hasPermission(profile, 'sales_quotes', 'update')) {
+				return fail(403, { message: 'No tienes permiso para editar cotizaciones.' });
+			}
+			if (!isEdit && !hasPermission(profile, 'sales_quotes', 'create')) {
+				return fail(403, { message: 'No tienes permiso para crear cotizaciones.' });
+			}
 			
 			// Vincular Vendedor y Moneda basados en el perfil y la interfaz
 			const enrichedQuoteData = {
@@ -224,10 +268,16 @@ export const actions: Actions = {
 			if (res.success || (res.results && res.results[0]?.success)) {
 				return { success: true, message: 'Cotización guardada correctamente en Profit Plus' };
 			} else {
-				// Propagar detalles técnicos si existen para diagnóstico
+				let errorMsg = res.message || 'Error al guardar en Profit';
+				
+				// Capturar Conflicto de Vendedor (Llave Foránea)
+				if (errorMsg.includes('FK_saCotizacionCliente_saVendedor')) {
+					errorMsg = "Su usuario no está registrado como Vendedor en Profit Plus para esta sede. Por favor contacte al administrador.";
+				}
+
 				const details = res.details ? JSON.stringify(res.details) : null;
 				return fail(400, { 
-					message: res.message || 'Error al guardar en Profit',
+					message: errorMsg,
 					details 
 				});
 			}
