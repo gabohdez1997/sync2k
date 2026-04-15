@@ -150,9 +150,6 @@ export const load: PageServerLoad = protectLoad('sales_quotes', async ({ url, lo
 	}
 });
 
-import { fail, type Actions } from '@sveltejs/kit';
-import { protectAction } from '$lib/server/permissions';
-
 export const actions: Actions = {
 	searchClient: protectAction('sales_quotes', async ({ request, locals, fetch }) => {
 		const profile = locals.profile;
