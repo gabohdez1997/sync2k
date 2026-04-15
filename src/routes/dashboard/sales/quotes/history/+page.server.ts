@@ -27,6 +27,7 @@ export const load: PageServerLoad = protectLoad('sales_quotes', async ({ url, lo
     const limit = url.searchParams.get('limit') || '20';
     const doc_num = url.searchParams.get('doc_num') || '';
     const co_cli = url.searchParams.get('co_cli') || '';
+    const search = url.searchParams.get('search') || '';
     const fec_d = url.searchParams.get('fec_d') || '';
     const fec_h = url.searchParams.get('fec_h') || '';
     
@@ -60,6 +61,7 @@ export const load: PageServerLoad = protectLoad('sales_quotes', async ({ url, lo
         limit,
         doc_num,
         co_cli,
+        search,
         co_ven: co_ven || '',
         fec_d,
         fec_h
@@ -77,7 +79,7 @@ export const load: PageServerLoad = protectLoad('sales_quotes', async ({ url, lo
             canCreate,
             canUpdate,
             canDelete,
-            filters: { doc_num, co_cli, co_ven, fec_d, fec_h }
+            filters: { doc_num, co_cli, search, co_ven, fec_d, fec_h }
         };
     } catch (e: any) {
         return {

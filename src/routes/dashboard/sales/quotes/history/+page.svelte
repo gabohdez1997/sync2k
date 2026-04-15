@@ -26,13 +26,13 @@
 
     // Filtros locales para el buscador reactivo
     let filterDoc = $state('');
-    let filterCli = $state('');
+    let filterSearch = $state('');
     let filterVen = $state('');
     let filterSede = $state('');
 
     $effect(() => {
         filterDoc = data.filters?.doc_num || '';
-        filterCli = data.filters?.co_cli || '';
+        filterSearch = data.filters?.search || '';
         filterVen = data.filters?.co_ven || '';
         filterSede = data.selectedBranchId || '';
     });
@@ -40,7 +40,7 @@
     function applyFilters() {
         const params = new URLSearchParams($page.url.searchParams);
         if (filterDoc) params.set('doc_num', filterDoc); else params.delete('doc_num');
-        if (filterCli) params.set('co_cli', filterCli); else params.delete('co_cli');
+        if (filterSearch) params.set('search', filterSearch); else params.delete('search');
         if (filterVen) params.set('co_ven', filterVen); else params.delete('co_ven');
         if (filterSede) params.set('branch_id', filterSede);
         params.set('page', '1');
@@ -129,10 +129,10 @@
     <!-- SEARCH ROW -->
     <div class="flex flex-row items-center gap-3 w-full lg:w-1/2 ml-auto">
         <SearchBar 
-            bind:value={filterCli} 
+            bind:value={filterSearch} 
             isSearching={isSearching} 
             onsubmit={applyFilters} 
-            placeholder="Buscar por cliente, RIF o código..."
+            placeholder="Buscar por documento, cliente o RIF..."
             className="flex-1"
         />
     </div>
