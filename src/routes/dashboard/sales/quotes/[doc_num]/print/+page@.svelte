@@ -34,8 +34,39 @@
     >
 </svelte:head>
 
+<!-- FLOATING ACTIONS (NO PRINT) -->
+<div class="no-print fixed bottom-6 left-4 right-4 md:left-auto md:right-8 flex flex-col md:flex-row gap-3 pointer-events-auto z-[99999] select-none touch-manipulation">
+    <button
+        onclick={() => { window.focus(); window.print(); }}
+        class="w-full md:w-auto justify-center bg-blue-600 text-white px-10 py-5 rounded-2xl font-black shadow-2xl shadow-blue-600/40 hover:bg-blue-500 transition-all active:scale-95 flex items-center gap-3 cursor-pointer"
+    >
+        <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="24"
+            height="24"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="3"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+        >
+            <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" />
+            <rect width="12" height="8" x="6" y="14" rx="1" />
+            <path d="M6 8V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v4" />
+        </svg>
+        IMPRIMIR COTIZACIÓN
+    </button>
+    <button
+        onclick={() => window.close()}
+        class="w-full md:w-auto text-center bg-gray-800/80 backdrop-blur-md text-white px-10 py-5 rounded-2xl font-black shadow-xl hover:bg-gray-700 transition-all active:scale-95 cursor-pointer"
+    >
+        CERRAR
+    </button>
+</div>
+
 <!-- El contenedor principal utiliza fondo blanco forzado -->
-<div class="w-full overflow-x-auto pb-40 md:pb-0">
+<div class="w-full overflow-x-auto pb-60 pt-2">
     <div class="print-container">
     <!-- HEADER FISCAL -->
     <div class="header-section">
@@ -223,38 +254,6 @@
         </div>
     </div>
     </div>
-</div>
-
-<!-- FLOATING ACTIONS (NO PRINT) -->
-<div class="no-print fixed bottom-4 md:bottom-8 left-4 right-4 md:left-auto md:right-8 flex flex-col md:flex-row gap-3 md:gap-4 pointer-events-auto z-[9999]">
-    <button
-        onclick={() => window.print()}
-        class="w-full md:w-auto justify-center bg-blue-600 text-white px-5 md:px-8 py-3 md:py-4 rounded-xl md:rounded-2xl font-black shadow-2xl shadow-blue-600/40 hover:bg-blue-500 transition-all active:scale-95 flex items-center gap-2"
-    >
-        <svg
-            xmlns="http://www.w3.org/2000/svg"
-            width="20"
-            height="20"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="3"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            ><path
-                d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"
-            /><rect width="12" height="8" x="6" y="14" rx="1" /><path
-                d="M6 8V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v4"
-            /></svg
-        >
-        IMPRIMIR COTIZACIÓN
-    </button>
-    <button
-        onclick={() => window.close()}
-        class="w-full md:w-auto text-center bg-gray-800/80 backdrop-blur-md text-white px-5 md:px-8 py-3 md:py-4 rounded-xl md:rounded-2xl font-bold shadow-xl hover:bg-gray-700 transition-all active:scale-95"
-    >
-        CERRAR
-    </button>
 </div>
 
 <style>
