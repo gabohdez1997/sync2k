@@ -276,7 +276,7 @@
         width: 21.59cm;
         min-height: 27.94cm;
         margin: 20px auto;
-        padding: 1.5cm;
+        padding: 1cm 1.2cm;
         box-sizing: border-box;
         box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
         display: flex;
@@ -291,6 +291,7 @@
         border-bottom: 2px solid #000;
         padding-bottom: 15px;
         margin-bottom: 20px;
+        page-break-inside: avoid;
     }
 
     .brand-info {
@@ -437,6 +438,9 @@
         text-align: center;
     }
 
+    .items-table tr {
+        page-break-inside: avoid;
+    }
     .items-table tr:nth-child(even) {
         background: #fdfdfd;
     }
@@ -458,6 +462,8 @@
         grid-template-columns: 1fr 280px;
         gap: 30px;
         align-items: flex-start;
+        page-break-inside: avoid;
+        break-inside: avoid;
     }
 
     .remarks-content {
