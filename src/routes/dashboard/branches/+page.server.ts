@@ -9,10 +9,10 @@ import type { Actions, PageServerLoad } from './$types';
 
 // ─── Load ──────────────────────────────────────────────────────
 export const load: PageServerLoad = protectLoad('sec_branches', async ({ locals, fetch }) => {
-  // Intentamos obtener todos los campos, incluyendo el nuevo 'default_warehouse'
+  // Intentamos obtener todos los campos, incluyendo 'default_warehouse' y 'allow_decimals_units'
   let { data: branches, error } = await supabaseAdmin
     .from('branches')
-    .select('id, name, business_name, agent_url, agent_token, profit_branch_codes, sql_config, profit_server_id, local_dns_alias, active, sort_order, updated_at, rif, address, latitude, longitude, logo_url, phone, default_warehouse')
+    .select('id, name, business_name, agent_url, agent_token, profit_branch_codes, sql_config, profit_server_id, local_dns_alias, active, sort_order, updated_at, rif, address, latitude, longitude, logo_url, phone, default_warehouse, allow_decimals_units')
     .order('sort_order')
     .order('name');
 
@@ -21,7 +21,7 @@ export const load: PageServerLoad = protectLoad('sec_branches', async ({ locals,
     console.warn('[BRANCHES] La columna default_warehouse no existe. Reintentando sin ella...');
     const fallback = await supabaseAdmin
       .from('branches')
-      .select('id, name, business_name, agent_url, agent_token, profit_branch_codes, sql_config, profit_server_id, local_dns_alias, active, sort_order, updated_at, rif, address, latitude, longitude, logo_url, phone')
+      .select('id, name, business_name, agent_url, agent_token, profit_branch_codes, sql_config, profit_server_id, local_dns_alias, active, sort_order, updated_at, rif, address, latitude, longitude, logo_url, phone, allow_decimals_units')
       .order('sort_order')
       .order('name');
     
@@ -105,6 +105,7 @@ export const actions: Actions = {
     const latitude        = formData.get('latitude') ? parseFloat(formData.get('latitude') as string) : null;
     const longitude       = formData.get('longitude') ? parseFloat(formData.get('longitude') as string) : null;
     const defaultWarehouse = (formData.get('default_warehouse') as string)?.trim() || null;
+    const allowDecimalsUnits = (formData.get('allow_decimals_units') as string)?.trim() || 'MTS, MTS2, KG';
 
     // ─── Proceso de Subida de Logo ─────────────────────────────
     if (logoFile && logoFile.size > 0 && logoFile.name) {
@@ -145,6 +146,7 @@ export const actions: Actions = {
       latitude,
       longitude,
       default_warehouse:   defaultWarehouse,
+      allow_decimals_units: allowDecimalsUnits,
       updated_at:          new Date().toISOString()
     };
 

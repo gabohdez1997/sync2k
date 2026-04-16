@@ -101,23 +101,23 @@
     {/if}
 
     <!-- TOP HEADER -->
-    <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div class="flex items-center gap-4">
-            <Clock size={40} class="text-brand-500" />
-            <div>
-                <h1 class="text-4xl font-black tracking-tight text-text-base">Historial de Cotizaciones</h1>
-                <p class="text-text-muted mt-2 text-lg font-medium">Consulta y gestiona tus documentos emitidos en tiempo real.</p>
+    <div class="flex flex-col md:flex-row justify-between md:items-center gap-4">
+        <div class="flex items-start md:items-center gap-4 mt-1">
+            <Clock size={40} class="text-brand-500 shrink-0" />
+            <div class="w-full">
+                <h1 class="text-3xl md:text-4xl font-black tracking-tight text-text-base w-full">Historial de Cotizaciones</h1>
+                <p class="text-text-muted mt-1 md:mt-2 text-base md:text-lg font-medium w-full">Consulta y gestiona tus documentos emitidos en tiempo real.</p>
             </div>
         </div>
 
         {#if data.canCreate}
-            <div class="flex items-center gap-3">
+            <div class="flex items-center gap-3 w-full md:w-auto">
                 <button 
                     onclick={() => {
                         localStorage.removeItem('profit_quote_draft');
                         goto('/dashboard/sales/quotes');
                     }}
-                    class="flex items-center justify-center gap-3 bg-brand-600 hover:bg-brand-500 text-white h-14 px-8 rounded-2xl font-black shadow-xl shadow-brand-500/20 transition-all active:scale-95 shrink-0"
+                    class="flex items-center justify-center gap-3 bg-brand-600 hover:bg-brand-500 text-white h-14 px-8 rounded-2xl font-black shadow-xl shadow-brand-500/20 transition-all active:scale-95 shrink-0 w-full md:w-auto"
                 >
                     <Plus size={20} />
                     Nueva Cotización
@@ -190,13 +190,13 @@
                                     <div class="flex flex-col items-end">
                                         <span class="text-sm font-black text-text-base">
                                             {#if quote.co_mone === 'BS'}
-                                                Bs {Number(quote.total_neto).toLocaleString('de-DE', { minimumFractionDigits: 2 })}
+                                                Bs {Number(quote.total_neto).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                             {:else}
-                                                $ {(Number(quote.total_neto) / Number(quote.tasa || 1)).toLocaleString('de-DE', { minimumFractionDigits: 2 })}
+                                                $ {(Number(quote.total_neto) / Number(quote.tasa || 1)).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                             {/if}
                                         </span>
                                         {#if quote.co_mone !== 'BS'}
-                                            <span class="text-[10px] text-text-muted font-bold">Ref. Bs {Number(quote.total_neto).toLocaleString('de-DE', { minimumFractionDigits: 2 })}</span>
+                                            <span class="text-[10px] text-text-muted font-bold">Ref. Bs {Number(quote.total_neto).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                                         {/if}
                                     </div>
                                 </td>
@@ -316,8 +316,8 @@
                             <p class="text-xs text-text-muted">
                                 <span class="font-bold">Monto:</span>
                                 {quoteToDelete.co_mone === 'BS'
-                                    ? `Bs ${Number(quoteToDelete.total_neto || 0).toLocaleString('de-DE', { minimumFractionDigits: 2 })}`
-                                    : `$ ${(Number(quoteToDelete.total_neto || 0) / Number(quoteToDelete.tasa || 1)).toLocaleString('de-DE', { minimumFractionDigits: 2 })}`
+                                    ? `Bs ${Number(quoteToDelete.total_neto || 0).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                                    : `$ ${(Number(quoteToDelete.total_neto || 0) / Number(quoteToDelete.tasa || 1)).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
                                 }
                             </p>
                             <p class="text-xs text-text-muted flex items-center gap-2">

@@ -17,6 +17,7 @@
     function formatCurrency(val: number | string) {
         return Number(val).toLocaleString("de-DE", {
             minimumFractionDigits: 2,
+            maximumFractionDigits: 2,
         });
     }
 
@@ -34,7 +35,8 @@
 </svelte:head>
 
 <!-- El contenedor principal utiliza fondo blanco forzado -->
-<div class="print-container">
+<div class="w-full overflow-x-auto pb-40 md:pb-0">
+    <div class="print-container">
     <!-- HEADER FISCAL -->
     <div class="header-section">
         <div class="brand-info">
@@ -220,19 +222,14 @@
             {/if}
         </div>
     </div>
-
-    <!-- SIGNATURE 
-    <div class="signature-section mt-12">
-        <div class="signature-line"></div>
-        <p>Autorizado por / Sello</p>
-    </div>-->
+    </div>
 </div>
 
 <!-- FLOATING ACTIONS (NO PRINT) -->
-<div class="no-print fixed bottom-8 right-8 flex gap-4 pointer-events-auto">
+<div class="no-print fixed bottom-4 md:bottom-8 left-4 right-4 md:left-auto md:right-8 flex flex-col md:flex-row gap-3 md:gap-4 pointer-events-auto z-[9999]">
     <button
         onclick={() => window.print()}
-        class="bg-blue-600 text-white px-8 py-4 rounded-2xl font-black shadow-2xl shadow-blue-600/40 hover:bg-blue-500 transition-all active:scale-95 flex items-center gap-2"
+        class="w-full md:w-auto justify-center bg-blue-600 text-white px-5 md:px-8 py-3 md:py-4 rounded-xl md:rounded-2xl font-black shadow-2xl shadow-blue-600/40 hover:bg-blue-500 transition-all active:scale-95 flex items-center gap-2"
     >
         <svg
             xmlns="http://www.w3.org/2000/svg"
@@ -254,7 +251,7 @@
     </button>
     <button
         onclick={() => window.close()}
-        class="bg-gray-800/80 backdrop-blur-md text-white px-8 py-4 rounded-2xl font-bold shadow-xl hover:bg-gray-700 transition-all active:scale-95"
+        class="w-full md:w-auto text-center bg-gray-800/80 backdrop-blur-md text-white px-5 md:px-8 py-3 md:py-4 rounded-xl md:rounded-2xl font-bold shadow-xl hover:bg-gray-700 transition-all active:scale-95"
     >
         CERRAR
     </button>
@@ -269,8 +266,7 @@
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
             Helvetica, Arial, sans-serif;
         color: #000;
-        overflow-y: auto !important;
-        height: auto !important;
+        overflow: auto !important;
         -webkit-print-color-adjust: exact;
         print-color-adjust: exact;
     }

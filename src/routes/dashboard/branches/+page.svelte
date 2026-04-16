@@ -67,7 +67,8 @@
       logo_url: "",
       latitude: null,
       longitude: null,
-      default_warehouse: ""
+      default_warehouse: "",
+      allow_decimals_units: "MTS, MTS2, KG"
     };
     showModal = true;
   }
@@ -479,6 +480,25 @@
               </div>
               <p class="text-[10px] text-text-muted/60 ml-2 mt-1 italic">
                 Este almacén se asignará automáticamente a los artículos de servicio (Línea 09).
+              </p>
+            </div>
+
+            <div class="space-y-2 lg:col-span-2">
+              <label class="text-xs font-bold text-text-muted ml-1" for="allow_decimals_units">
+                Unidades que permiten decimales
+              </label>
+              <div class="relative">
+                <Database class="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted opacity-40" size={18} />
+                <input 
+                  type="text" 
+                  name="allow_decimals_units"
+                  bind:value={editingBranch.allow_decimals_units}
+                  placeholder="MTS, MTS2, KG"
+                  class="w-full h-14 bg-white/5 border border-white/10 rounded-2xl pl-12 pr-5 focus:border-brand-500 outline-none transition-all font-mono uppercase"
+                />
+              </div>
+              <p class="text-[10px] text-text-muted/60 ml-2 mt-1 italic">
+                Separadas por coma. Ej: MTS, MTS2, KG. Estas unidades permitirán cantidades con fracción (ej: 1.5).
               </p>
             </div>
 

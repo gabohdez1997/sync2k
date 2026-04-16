@@ -377,8 +377,9 @@
         ) {
           selectedItemWarehouse[co] = art.disponibilidad[0].co_alma;
         }
-        if (quantities[co] === undefined || quantities[co] < 1)
-          quantities[co] = 1;
+        const step = getStep(art);
+        if (quantities[co] === undefined || quantities[co] < step)
+          quantities[co] = step;
       });
     }
   });
@@ -479,9 +480,25 @@
     }
   });
 
+  function isDecimalAllowed(itemOrArticle: any) {
+    const configStr = String(selectedBranchConfig?.allow_decimals_units || 'MTS, MTS2, KG');
+    const allowed = configStr.split(',').map((s: string) => s.trim().toUpperCase());
+    const co_uni = String(itemOrArticle?.co_uni || '').trim().toUpperCase();
+    const unidad = String(itemOrArticle?.unidad || '').trim().toUpperCase();
+    console.log("UNIT CHECK:", { co_uni, unidad, allowed, configStr });
+    
+    // Forzar coincidencia por si acaso hay un sub-string 
+    return allowed.some(a => a && (co_uni.includes(a) || unidad.includes(a)));
+  }
+
+  function getStep(itemOrArticle: any) {
+    return isDecimalAllowed(itemOrArticle) ? 0.5 : 1;
+  }
+
   function addToCart(article: any) {
     const co_art = article.co_art || article.codigo || article.id;
-    const qty = quantities[co_art] || 1;
+    const step = getStep(article);
+    const qty = quantities[co_art] || step;
 
     // Identify if it's a service (Linea 09)
     const isService = article.co_lin?.trim() === "09";
@@ -571,17 +588,23 @@
   }
 
   function updateCartQty(index: number, newQty: number) {
-    if (newQty < 1 || isNaN(newQty)) {
-      cart[index].qty = 1;
+    const item = cart[index];
+    const step = getStep(item);
+
+    if (newQty < step || isNaN(newQty)) {
+      cart[index].qty = step;
       return;
     }
-    const item = cart[index];
+    
+    // Forzar escalón y evitar imprecisiones de coma flotante
+    let roundedQty = Math.round(newQty / step) * step;
+
     const isService =
       item.co_lin?.trim() === "09" ||
       (item.co_art || item.codigo || "").startsWith("09");
 
     if (isService) {
-      cart[index].qty = newQty;
+      cart[index].qty = roundedQty;
       return;
     }
 
@@ -589,11 +612,11 @@
       item.disponibilidad?.find((a: any) => a.co_alma === item.co_alma_selected)
         ?.stock || 0;
 
-    if (newQty > available) {
+    if (roundedQty > available) {
       toast.error(`Stock insuficiente en este almacén. Máximo: ${available}`);
-      cart[index].qty = available || 1;
+      cart[index].qty = Math.floor(available / step) * step || step;
     } else {
-      cart[index].qty = newQty;
+      cart[index].qty = roundedQty;
     }
   }
 
@@ -698,15 +721,15 @@
 <div class="flex flex-col gap-8 min-h-svh pb-20" in:fade>
   <!-- Header con botón de Historial -->
   <div
-    class="w-full max-w-6xl mx-auto px-4 mt-6 flex justify-between items-center"
+    class="w-full max-w-6xl mx-auto px-4 mt-6 flex flex-col md:flex-row justify-between md:items-center gap-4"
   >
-    <div class="flex items-center gap-4">
-      <ShoppingBag size={40} class="text-brand-500" />
-      <div>
-        <h1 class="text-4xl font-black tracking-tight">
+    <div class="flex items-start md:items-center gap-4 mt-1">
+      <ShoppingBag size={40} class="text-brand-500 shrink-0" />
+      <div class="w-full">
+        <h1 class="text-3xl md:text-4xl font-black tracking-tight w-full">
           {data.preloadedQuote ? `Editar Cotización` : "Nueva Cotización"}
         </h1>
-        <p class="text-text-muted mt-1 text-lg font-medium opacity-80">
+        <p class="text-text-muted mt-1 md:mt-2 text-base md:text-lg font-medium opacity-80 w-full">
           {data.preloadedQuote
             ? `Documento Nro: ${data.preloadedQuote.doc_num}`
             : "Generar nuevo documento"}
@@ -716,7 +739,7 @@
 
     <a
       href="/dashboard/sales/quotes/history"
-      class="flex items-center gap-2 px-5 py-3 rounded-2xl bg-surface-soft hover:bg-surface-strong text-text-base border border-border-subtle transition-all font-bold active:scale-95 shadow-sm"
+      class="flex items-center justify-center gap-2 px-5 py-3 h-14 rounded-2xl bg-surface-soft hover:bg-surface-strong text-text-base border border-border-subtle transition-all font-bold active:scale-95 shadow-sm shrink-0 w-full md:w-auto"
     >
       <Clock size={18} class="text-brand-500" />
       Ver Historial
@@ -1666,49 +1689,51 @@
                       class="flex-1 flex items-center bg-surface-soft rounded-xl border border-border-bold h-11 focus-within:border-brand-500/30 transition-all overflow-hidden"
                     >
                       <button
-                        onclick={() =>
-                          (quantities[article.co_art] = Math.max(
-                            1,
-                            (quantities[article.co_art] || 1) - 1,
-                          ))}
+                        onclick={(e) => {
+                          e.stopPropagation();
+                          const step = getStep(article);
+                          quantities[article.co_art] = Math.max(step, (quantities[article.co_art] || step) - step);
+                        }}
                         class="w-10 h-full flex items-center justify-center text-text-muted hover:text-brand-400 transition-colors bg-surface-soft"
                         title="Restar"><Minus size={12} /></button
                       >
                       <input
                         type="number"
-                        min="1"
+                        min={getStep(article)}
+                        step={getStep(article)}
                         bind:value={quantities[article.co_art]}
+                        onclick={(e) => e.stopPropagation()}
                         oninput={(e) => {
-                          const val = parseInt(
-                            (e.target as HTMLInputElement).value,
-                          );
+                          const val = parseFloat((e.target as HTMLInputElement).value);
+                          const step = getStep(article);
                           const stock = curAlm?.stock || 0;
 
-                          if (isNaN(val) || val < 1) {
-                            quantities[article.co_art] = 1;
-                          } else if (val > stock) {
-                            quantities[article.co_art] = stock;
+                          if (!isNaN(val) && val > stock) {
+                            quantities[article.co_art] = Math.floor(stock / step) * step || step;
                             toast.warning(`Máximo disponible: ${stock}`);
-                          } else {
-                            quantities[article.co_art] = val;
                           }
+                        }}
+                        onblur={(e) => {
+                          let val = parseFloat((e.target as HTMLInputElement).value);
+                          const step = getStep(article);
+                          if (isNaN(val) || val < step) val = step;
+                          quantities[article.co_art] = Math.round(val / step) * step;
                         }}
                         class="w-full flex-1 text-center text-base font-black bg-transparent outline-none no-arrows text-brand-400 px-1"
                       />
                       <button
-                        onclick={() => {
+                        onclick={(e) => {
+                          e.stopPropagation();
                           const isService = article.co_lin?.trim() === "09";
                           const stock = curAlm?.stock || 0;
-                          if (
-                            isService ||
-                            (quantities[article.co_art] || 1) < stock
-                          ) {
-                            quantities[article.co_art] =
-                              (quantities[article.co_art] || 1) + 1;
+                          const step = getStep(article);
+                          const currentQty = quantities[article.co_art] || step;
+                          
+                          if (isService || currentQty + step <= stock) {
+                            quantities[article.co_art] = currentQty + step;
                           } else {
-                            toast.error(
-                              "Alcanzó el límite de stock disponible",
-                            );
+                            toast.error("Alcanzó el límite de stock disponible");
+                            quantities[article.co_art] = Math.floor(stock / step) * step || step;
                           }
                         }}
                         class="w-10 h-full flex items-center justify-center text-text-muted hover:text-brand-400 transition-colors bg-surface-soft"
@@ -1999,19 +2024,27 @@
                       class="flex items-center bg-surface-base/40 rounded-xl border border-border-subtle h-12 overflow-hidden shadow-inner"
                     >
                       <button
-                        onclick={() => updateCartQty(i, item.qty - 1)}
+                        onclick={() => updateCartQty(i, item.qty - getStep(item))}
                         class="w-10 h-full flex items-center justify-center text-text-muted hover:text-brand-400 hover:bg-surface-soft transition-all"
                         ><Minus size={14} /></button
                       >
                       <input
                         type="number"
+                        min={getStep(item)}
+                        step={getStep(item)}
                         value={item.qty}
-                        oninput={(e) =>
-                          updateCartQty(i, parseInt(e.currentTarget.value))}
+                        oninput={(e) => {
+                          const v = parseFloat((e.currentTarget as HTMLInputElement).value);
+                          if (!isNaN(v)) updateCartQty(i, v);
+                        }}
+                        onblur={(e) => {
+                          const v = parseFloat((e.currentTarget as HTMLInputElement).value);
+                          updateCartQty(i, isNaN(v) ? getStep(item) : v);
+                        }}
                         class="w-12 text-center text-base font-black bg-transparent outline-none no-arrows text-brand-400"
                       />
                       <button
-                        onclick={() => updateCartQty(i, item.qty + 1)}
+                        onclick={() => updateCartQty(i, item.qty + getStep(item))}
                         class="w-10 h-full flex items-center justify-center text-text-muted hover:text-brand-400 hover:bg-surface-soft transition-all"
                         ><Plus size={14} /></button
                       >
