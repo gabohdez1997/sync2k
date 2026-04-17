@@ -35,9 +35,14 @@
 </svelte:head>
 
 <!-- FLOATING ACTIONS (NO PRINT) -->
-<div class="no-print fixed bottom-6 left-4 right-4 md:left-auto md:right-8 flex flex-col md:flex-row gap-3 pointer-events-auto z-[99999] select-none touch-manipulation">
+<div
+    class="no-print fixed bottom-6 left-4 right-4 md:left-auto md:right-8 flex flex-col md:flex-row gap-3 pointer-events-auto z-[99999] select-none touch-manipulation"
+>
     <button
-        onclick={() => { window.focus(); window.print(); }}
+        onclick={() => {
+            window.focus();
+            window.print();
+        }}
         class="w-full md:w-auto justify-center bg-blue-600 text-white px-10 py-5 rounded-2xl font-black shadow-2xl shadow-blue-600/40 hover:bg-blue-500 transition-all active:scale-95 flex items-center gap-3 cursor-pointer"
     >
         <svg
@@ -51,7 +56,9 @@
             stroke-linecap="round"
             stroke-linejoin="round"
         >
-            <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" />
+            <path
+                d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"
+            />
             <rect width="12" height="8" x="6" y="14" rx="1" />
             <path d="M6 8V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v4" />
         </svg>
@@ -68,191 +75,221 @@
 <!-- El contenedor principal utiliza fondo blanco forzado -->
 <div class="w-full overflow-x-auto pb-60 pt-2">
     <div class="print-container">
-    <!-- HEADER FISCAL -->
-    <div class="header-section">
-        <div class="brand-info">
-            {#if logoUrl}
-                <img src={logoUrl} alt="Logo" class="logo-img" />
-            {/if}
-            <div class="company-details">
-                <h1 class="business-name">
-                    {branch.business_name || branch.name}
-                </h1>
-                <p class="fiscal-id">RIF: {branch.rif || "---"}</p>
-                <p class="address">{branch.address || ""}</p>
-                {#if branch.phone}
-                    <p class="phone">Tel: {branch.phone}</p>
+        <!-- HEADER FISCAL -->
+        <div class="header-section">
+            <div class="brand-info">
+                {#if logoUrl}
+                    <img src={logoUrl} alt="Logo" class="logo-img" />
+                {/if}
+                <div class="company-details">
+                    <h1 class="business-name">
+                        {branch.business_name || branch.name}
+                    </h1>
+                    <p class="fiscal-id">RIF: {branch.rif || "---"}</p>
+                    <p class="address">{branch.address || ""}</p>
+                    {#if branch.phone}
+                        <p class="phone">Tel: {branch.phone}</p>
+                    {/if}
+                </div>
+            </div>
+
+            <div class="doc-info">
+                <div class="doc-badge">
+                    <span class="label">Cotización N°</span>
+                    <span class="number text-red-600">{quote.doc_num}</span>
+                </div>
+                <div class="dates mt-2">
+                    <p>
+                        Emisión: <strong
+                            >{dayjs(quote.fec_emis).format(
+                                "DD/MM/YYYY",
+                            )}</strong
+                        >
+                    </p>
+                    <p>
+                        Vence: <strong
+                            >{dayjs(quote.fec_venc).format(
+                                "DD/MM/YYYY",
+                            )}</strong
+                        >
+                    </p>
+                    <p class="text-[9px] text-slate-400 mt-1 uppercase">
+                        Moneda: <strong
+                            >{isUSD
+                                ? "DÓLARES (USD)"
+                                : "BOLÍVARES (BS.)"}</strong
+                        >
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <!-- CLIENT & LOGISTICS -->
+        <div class="info-grid">
+            <div class="client-box">
+                <h3 class="section-title">Datos del Cliente</h3>
+                <p class="client-name">{quote.cli_des}</p>
+                <p class="client-rif">RIF: {quote.cli_rif || quote.co_cli}</p>
+                <p class="client-address font-medium">
+                    DIRECCIÓN: {quote.cli_dir || "Dirección no registrada"}
+                </p>
+                {#if quote.cli_tel}
+                    <p class="client-phone font-bold mt-1 text-slate-700">
+                        TELÉFONO: {quote.cli_tel}
+                    </p>
+                {/if}
+            </div>
+
+            <div class="logistic-box">
+                <div class="info-row">
+                    <span class="label">Vendedor:</span>
+                    <span class="val">{quote.ven_des || quote.co_ven}</span>
+                </div>
+                <div class="info-row">
+                    <span class="label">Cond. Pago:</span>
+                    <span class="val"
+                        >{quote.cond_des || quote.co_cond || "CONTADO"}</span
+                    >
+                </div>
+            </div>
+        </div>
+
+        <!-- ITEMS TABLE -->
+        <div class="table-container">
+            <table class="items-table">
+                <thead>
+                    <tr>
+                        <th class="col-code">Código</th>
+                        <th class="col-desc">Descripción</th>
+                        <th class="col-qty">Cant.</th>
+                        <th class="col-uni">Uni.</th>
+                        <th class="col-price"
+                            >Precio Unit. ({isUSD ? "$" : "Bs."})</th
+                        >
+                        <th class="col-total">Total ({isUSD ? "$" : "Bs."})</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {#each items as item}
+                        <tr>
+                            <td class="font-mono">{item.co_art}</td>
+                            <td class="font-bold uppercase text-left"
+                                >{item.art_des}</td
+                            >
+                            <td>{item.cantidad}</td>
+                            <td class="font-black"
+                                >{item.unidad || item.co_uni || "UND"}</td
+                            >
+                            <td class="text-right">
+                                {formatCurrency(
+                                    isUSD ? item.prec_vta_om : item.precio,
+                                )}
+                            </td>
+                            <td class="text-right font-bold">
+                                {formatCurrency(
+                                    isUSD
+                                        ? Number(item.cantidad) *
+                                              Number(item.prec_vta_om)
+                                        : item.total_renglon,
+                                )}
+                            </td>
+                        </tr>
+                    {/each}
+                </tbody>
+            </table>
+        </div>
+
+        <!-- SUMMARY & FOOTER -->
+        <div class="footer-grid">
+            <div class="remarks">
+                {#if quote.comentario}
+                    <h4 class="section-title">Observaciones</h4>
+                    <div class="remarks-content">
+                        {quote.comentario}
+                    </div>
+                {/if}
+                <div class="disclaimer mt-4">
+                    <p>
+                        * Esta cotización es referencial. Sujeto a cambios sin
+                        previo aviso según tasa del día.
+                    </p>
+                    <p>
+                        * Tasa referencial del día: <strong
+                            >Bs. {formatCurrency(
+                                quote.tasa_actual || quote.tasa,
+                            )}</strong
+                        > por 1 USD.
+                    </p>
+                </div>
+            </div>
+
+            <div class="totals-box">
+                {#if isUSD}
+                    <!-- MODO USD: Mostramos USD como principal, BS como referencia abajo -->
+                    <div class="total-row">
+                        <span>Subtotal ($)</span>
+                        <span
+                            >{formatCurrency(
+                                Number(quote.total_bruto) /
+                                    Number(quote.tasa || 1),
+                            )}</span
+                        >
+                    </div>
+                    <div class="total-row">
+                        <span>IVA (16%)</span>
+                        <span
+                            >{formatCurrency(
+                                Number(quote.monto_imp) /
+                                    Number(quote.tasa || 1),
+                            )}</span
+                        >
+                    </div>
+                    <div class="grand-total-outline">
+                        <div class="bs-total">
+                            <span class="label">Total General</span>
+                            <span class="val"
+                                >$ {formatCurrency(
+                                    Number(quote.total_neto) /
+                                        Number(quote.tasa || 1),
+                                )}</span
+                            >
+                        </div>
+                    </div>
+                {:else}
+                    <!-- MODO BS: Original -->
+                    <div class="total-row">
+                        <span>Subtotal (Bs.)</span>
+                        <span>{formatCurrency(quote.total_bruto)}</span>
+                    </div>
+                    <div class="total-row">
+                        <span>IVA (16%)</span>
+                        <span>{formatCurrency(quote.monto_imp)}</span>
+                    </div>
+                    <div class="grand-total-outline">
+                        <div class="bs-total">
+                            <span class="label">Total General</span>
+                            <span class="val"
+                                >Bs. {formatCurrency(quote.total_neto)}</span
+                            >
+                        </div>
+                        <div class="usd-reference">
+                            <span>Referencia</span>
+                            <strong
+                                >$ {formatCurrency(
+                                    Number(quote.total_neto) /
+                                        Number(
+                                            quote.tasa_actual &&
+                                                Number(quote.tasa) === 1
+                                                ? quote.tasa_actual
+                                                : quote.tasa || 1,
+                                        ),
+                                )}</strong
+                            >
+                        </div>
+                    </div>
                 {/if}
             </div>
         </div>
-
-        <div class="doc-info">
-            <div class="doc-badge">
-                <span class="label">Cotización N°</span>
-                <span class="number text-red-600">{quote.doc_num}</span>
-            </div>
-            <div class="dates mt-2">
-                <p>
-                    Emisión: <strong
-                        >{dayjs(quote.fec_emis).format("DD/MM/YYYY")}</strong
-                    >
-                </p>
-                <p>
-                    Vence: <strong
-                        >{dayjs(quote.fec_venc).format("DD/MM/YYYY")}</strong
-                    >
-                </p>
-                <p class="text-[9px] text-slate-400 mt-1 uppercase">
-                    Moneda: <strong>{isUSD ? 'DÓLARES (USD)' : 'BOLÍVARES (BS.)'}</strong>
-                </p>
-            </div>
-        </div>
-    </div>
-
-    <!-- CLIENT & LOGISTICS -->
-    <div class="info-grid">
-        <div class="client-box">
-            <h3 class="section-title">Datos del Cliente</h3>
-            <p class="client-name">{quote.cli_des}</p>
-            <p class="client-rif">RIF: {quote.cli_rif || quote.co_cli}</p>
-            <p class="client-address font-medium">
-                DIRECCIÓN: {quote.cli_dir || "Dirección no registrada"}
-            </p>
-            {#if quote.cli_tel}
-                <p class="client-phone font-bold mt-1 text-slate-700">
-                    TELÉFONO: {quote.cli_tel}
-                </p>
-            {/if}
-        </div>
-
-        <div class="logistic-box">
-            <div class="info-row">
-                <span class="label">Vendedor:</span>
-                <span class="val">{quote.ven_des || quote.co_ven}</span>
-            </div>
-            <div class="info-row">
-                <span class="label">Cond. Pago:</span>
-                <span class="val"
-                    >{quote.cond_des || quote.co_cond || "CONTADO"}</span
-                >
-            </div>
-        </div>
-    </div>
-
-    <!-- ITEMS TABLE -->
-    <div class="table-container">
-        <table class="items-table">
-            <thead>
-                <tr>
-                    <th class="col-code">Código</th>
-                    <th class="col-desc">Descripción</th>
-                    <th class="col-qty">Cant.</th>
-                    <th class="col-uni">Uni.</th>
-                    <th class="col-price">Precio Unit. ({isUSD ? '$' : 'Bs.'})</th>
-                    <th class="col-total">Total ({isUSD ? '$' : 'Bs.'})</th>
-                </tr>
-            </thead>
-            <tbody>
-                {#each items as item}
-                    <tr>
-                        <td class="font-mono">{item.co_art}</td>
-                        <td class="font-bold uppercase text-left"
-                            >{item.art_des}</td
-                        >
-                        <td>{item.cantidad}</td>
-                        <td class="font-black"
-                            >{item.unidad || item.co_uni || "UND"}</td
-                        >
-                        <td class="text-right">
-                            {formatCurrency(isUSD ? item.prec_vta_om : item.precio)}
-                        </td>
-                        <td class="text-right font-bold">
-                            {formatCurrency(isUSD 
-                                ? (Number(item.cantidad) * Number(item.prec_vta_om)) 
-                                : item.total_renglon)}
-                        </td>
-                    </tr>
-                {/each}
-            </tbody>
-        </table>
-    </div>
-
-    <!-- SUMMARY & FOOTER -->
-    <div class="footer-grid">
-        <div class="remarks">
-            {#if quote.comentario}
-                <h4 class="section-title">Observaciones</h4>
-                <div class="remarks-content">
-                    {quote.comentario}
-                </div>
-            {/if}
-            <div class="disclaimer mt-4">
-                <p>
-                    * Esta cotización es referencial. Sujeto a cambios sin
-                    previo aviso según tasa del día.
-                </p>
-                <p>
-                    * Tasa referencial del día: <strong
-                        >Bs. {formatCurrency(quote.tasa_actual || quote.tasa)}</strong
-                    > por 1 USD.
-                </p>
-            </div>
-        </div>
-
-        <div class="totals-box">
-            {#if isUSD}
-                <!-- MODO USD: Mostramos USD como principal, BS como referencia abajo -->
-                <div class="total-row">
-                    <span>Subtotal ($)</span>
-                    <span>{formatCurrency(Number(quote.total_bruto) / Number(quote.tasa || 1))}</span>
-                </div>
-                <div class="total-row">
-                    <span>IVA (16%)</span>
-                    <span>{formatCurrency(Number(quote.monto_imp) / Number(quote.tasa || 1))}</span>
-                </div>
-                <div class="grand-total-outline">
-                    <div class="bs-total">
-                        <span class="label">Total General</span>
-                        <span class="val"
-                            >$ {formatCurrency(Number(quote.total_neto) / Number(quote.tasa || 1))}</span
-                        >
-                    </div>
-                    <div class="usd-reference">
-                        <span>Ref. Bolívares</span>
-                        <strong
-                            >Bs. {formatCurrency(quote.total_neto)}</strong
-                        >
-                    </div>
-                </div>
-            {:else}
-                <!-- MODO BS: Original -->
-                <div class="total-row">
-                    <span>Subtotal (Bs.)</span>
-                    <span>{formatCurrency(quote.total_bruto)}</span>
-                </div>
-                <div class="total-row">
-                    <span>IVA (16%)</span>
-                    <span>{formatCurrency(quote.monto_imp)}</span>
-                </div>
-                <div class="grand-total-outline">
-                    <div class="bs-total">
-                        <span class="label">Total General</span>
-                        <span class="val"
-                            >Bs. {formatCurrency(quote.total_neto)}</span
-                        >
-                    </div>
-                    <div class="usd-reference">
-                        <span>Referencia</span>
-                        <strong
-                            >$ {formatCurrency(
-                                Number(quote.total_neto) / Number(quote.tasa_actual && Number(quote.tasa) === 1 ? quote.tasa_actual : (quote.tasa || 1)),
-                            )}</strong
-                        >
-                    </div>
-                </div>
-            {/if}
-        </div>
-    </div>
     </div>
 </div>
 
