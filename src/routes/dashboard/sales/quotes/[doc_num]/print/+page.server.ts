@@ -35,7 +35,17 @@ export const load: PageServerLoad = protectLoad('sales_quotes', async ({ params,
         // El agente devuelve un array (aunque sea uno), tomamos el primero
         const quote = Array.isArray(res.data) ? res.data[0] : res.data;
 
-        // 3. Obtener branding global (backup si la sucursal no tiene logo)
+        // 3. Enriquecer con datos del cliente (especialmente la dirección que no viene en la cotización)
+        if (quote && quote.co_cli) {
+            const clientRes = await agentClient.request(`/clientes/${quote.co_cli.trim()}`);
+            if (clientRes.success && clientRes.data) {
+                const clientData = Array.isArray(clientRes.data) ? clientRes.data[0] : clientRes.data;
+                // Adjuntamos la dirección al objeto quote para que el PDF la consuma
+                quote.cli_dir = clientData.direc1 || clientData.direc2 || quote.cli_dir;
+            }
+        }
+
+        // 4. Obtener branding global (backup si la sucursal no tiene logo)
         const { data: settings } = await supabaseAdmin.from('system_settings').select('*').single();
 
         return {
