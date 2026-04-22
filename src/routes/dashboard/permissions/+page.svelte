@@ -429,7 +429,6 @@
               bind:value={selectedBranchId}
               onchange={() => {
                 branchIds = selectedBranchId ? [selectedBranchId] : [];
-                warehouseIds = [];
                 loadWarehouses(selectedBranchId);
               }}
               class="w-full h-12 bg-surface-base border border-border-subtle rounded-xl px-4 text-sm font-bold focus:outline-none focus:border-brand-500/50 transition-all appearance-none cursor-pointer"
