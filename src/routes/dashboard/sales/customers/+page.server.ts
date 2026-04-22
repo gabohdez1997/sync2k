@@ -229,43 +229,26 @@ export const actions: Actions = {
         if (!isNew && !hasPermission(profile, 'sales_customers', 'update')) {
           return fail(403, { message: 'No tienes permiso para ACTUALIZAR clientes.' });
         }
-        const branchId = formData.get('branch_id') as string;
-        
-        // Permisos
-		const isAdmin = !profile.allowed_branches || profile.allowed_branches.length === 0;
-		if (!isAdmin) {
-			const allowedBranchIds = (profile.allowed_branches as any[]).map(b => typeof b === 'object' ? b.id : b);
-			if (!allowedBranchIds.includes(branchId)) {
-				return fail(403, { message: 'No tienes permiso para operar en esta sucursal.' });
-			}
-		}
+        // 1. Determinar sucursales para Broadcast
+        let targetBranches: any[] = [];
+        const profileAllowed = profile.allowed_branches || [];
+        const isAdmin = !profileAllowed || profileAllowed.length === 0;
 
-        // Fetch branch
-        const { data: dbBranch, error: branchErr } = await supabaseAdmin
-            .from('branches')
-            .select('id, name, agent_url, agent_token, profit_branch_codes')
-            .eq('id', branchId)
-            .single();
-
-        if (branchErr || !dbBranch?.agent_url) {
-            return fail(400, { message: 'Sucursal no válida o sin agente configurado' });
+        if (isAdmin) {
+            const { data } = await supabaseAdmin.from('branches').select('*').eq('active', true);
+            targetBranches = data || [];
+        } else {
+            // Asegurarnos de tener los datos completos de las sucursales (url, token, etc)
+            const allowedIds = profileAllowed.map((b: any) => (typeof b === 'object' ? b.id : b));
+            const { data } = await supabaseAdmin.from('branches').select('*').in('id', allowedIds).eq('active', true);
+            targetBranches = data || [];
         }
 
-        // Parse profit_branch_codes
-        let verifiedCoSucu = '';
-        if (Array.isArray(dbBranch.profit_branch_codes) && dbBranch.profit_branch_codes.length > 0) {
-            const def = dbBranch.profit_branch_codes.find((c: any) => c.is_default);
-            verifiedCoSucu = def ? def.code : dbBranch.profit_branch_codes[0].code;
+        if (targetBranches.length === 0) {
+            return fail(400, { message: 'No se encontraron sucursales activas autorizadas.' });
         }
-
-        const agent = new AgentClient({
-            slug: dbBranch.id,
-            agent_url: dbBranch.agent_url as string,
-            agent_api_key: dbBranch.agent_token
-        }, profile, fetch);
 
         const customerData = Object.fromEntries(formData);
-
         const payload = {
             ...customerData,
             contribuyente: formData.has('contribuyente'),
@@ -273,13 +256,56 @@ export const actions: Actions = {
             porc_esp: parseFloat(formData.get('porc_esp') as string) || 0
         };
 
-        const response = await agent.saveCustomer(payload, isNew, verifiedCoSucu || dbBranch.id);
+        // 2. Ejecución del Broadcast
+        let successCount = 0;
+        let failedBranches: string[] = [];
+        let lastErrorMessage = '';
 
-        if (!response.success) {
-            return fail(500, { message: response.message || 'Error al guardar el cliente' });
+        console.log(`[SAVE BROADCAST] Iniciando ${isNew ? 'creación' : 'actualización'} en ${targetBranches.length} sedes...`);
+
+        for (const branch of targetBranches) {
+            if (!branch.agent_url) {
+                failedBranches.push(`${branch.name || branch.id}: Sin URL de Agente`);
+                continue;
+            }
+
+            try {
+                // Determinar el co_sucu verificado para esta sede
+                let verifiedCoSucu = '';
+                if (Array.isArray(branch.profit_branch_codes) && branch.profit_branch_codes.length > 0) {
+                    const def = branch.profit_branch_codes.find((c: any) => c.is_default);
+                    verifiedCoSucu = def ? def.code : branch.profit_branch_codes[0].code;
+                }
+
+                const agent = new AgentClient({
+                    slug: branch.id,
+                    agent_url: branch.agent_url,
+                    agent_api_key: branch.agent_token
+                }, profile, fetch);
+
+                const response = await agent.saveCustomer(payload, isNew, verifiedCoSucu || branch.id);
+                
+                if (response.success) {
+                    successCount++;
+                } else {
+                    const errorMsg = response.message || 'Error desconocido';
+                    failedBranches.push(`${branch.name}: ${errorMsg}`);
+                    console.warn(`[SAVE] Fallo en sucursal ${branch.name}: ${errorMsg}`);
+                }
+            } catch (err: any) {
+                failedBranches.push(`${branch.name}: Error de conexión (${err.message})`);
+                console.error(`[SAVE] Error de conexión con sucursal ${branch.name}:`, err.message);
+            }
         }
 
-        // Auditoría
+        if (successCount === 0) {
+            const detail = failedBranches.join(' | ');
+            return fail(500, { 
+                message: `No se pudo guardar en ninguna sede. Detalles: ${detail}` 
+            });
+        }
+
+        // 3. Auditoría
         try {
             await logAction({
                 uid:        profile.id ?? null,
@@ -287,16 +313,14 @@ export const actions: Actions = {
                 action:     isNew ? 'CREATE' : 'UPDATE',
                 module:     'sales_customers',
                 record_id:  payload.co_cli as string,
-                branch_id:  branchId,
-                old_data:   isNew ? null : { co_cli: payload.co_cli, note: 'Datos anteriores no capturados' },
+                branch_id:  targetBranches[0].id,
+                old_data:   isNew ? null : { co_cli: payload.co_cli, broadcast: true, success_in: successCount, fails: failedBranches.length },
                 new_data:   {
                     co_cli: payload.co_cli,
                     cli_des: payload.cli_des || payload.descripcion,
-                    rif: payload.rif,
-                    telefonos: payload.telefonos,
-                    email: payload.email,
-                    direc1: payload.direc1,
-                    co_zon: payload.co_zon
+                    broadcast: true,
+                    success_count: successCount,
+                    failures: failedBranches
                 },
                 source: 'cloud'
             });
@@ -304,9 +328,16 @@ export const actions: Actions = {
             console.error('[AUDIT] Error registrando auditoría de cliente:', auditErr);
         }
 
+        let finalMsg = isNew ? 'Cliente creado' : 'Cliente actualizado';
+        if (failedBranches.length > 0) {
+            finalMsg += ` en ${successCount} sedes, pero FALLÓ en: ${failedBranches.join(', ')}.`;
+        } else {
+            finalMsg += ` correctamente en todas las sedes (${successCount}).`;
+        }
+
         return { 
             success: true, 
-            message: isNew ? 'Cliente creado correctamente.' : 'Cliente actualizado correctamente.'
+            message: finalMsg
         };
     }),
 

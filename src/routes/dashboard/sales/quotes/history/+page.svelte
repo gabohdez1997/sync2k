@@ -3,7 +3,7 @@
     import { 
         Hash, DollarSign, Edit2, Trash2, 
         FileDown, ChevronLeft, ChevronRight,
-        Plus, Clock, MoreVertical,
+        Plus, Clock, MoreVertical, Store,
         Printer, Trash, AlertCircle, FileText, Lock, Loader2, Check
     } from 'lucide-svelte';
     import { goto } from '$app/navigation';
@@ -11,6 +11,7 @@
     import { enhance } from '$app/forms';
     import { toast } from 'svelte-sonner';
     import SearchBar from '$lib/components/ui/SearchBar.svelte';
+    import Combobox from '$lib/components/ui/Combobox.svelte';
     import dayjs from 'dayjs';
     import 'dayjs/locale/es';
 
@@ -126,15 +127,31 @@
         {/if}
     </div>
 
-    <!-- SEARCH ROW -->
-    <div class="flex flex-row items-center gap-3 w-full lg:w-1/2 ml-auto">
-        <SearchBar 
-            bind:value={filterSearch} 
-            isSearching={isSearching} 
-            onsubmit={applyFilters} 
-            placeholder="Buscar por documento, cliente o RIF..."
-            className="flex-1"
-        />
+    <!-- SEARCH & FILTERS ROW -->
+    <div class="flex flex-col lg:flex-row items-center gap-4 w-full">
+        <div class="flex flex-row items-center gap-3 w-full lg:w-1/2 ml-auto">
+            {#if data.branches && data.branches.length > 1}
+                <div class="w-48 sm:w-64 shrink-0">
+                    <Combobox
+                        options={data.branches.map((b: any) => ({ value: b.id, label: b.name }))}
+                        bind:value={filterSede}
+                        placeholder="Sucursal..."
+                        allLabel="Todas las Sucursales"
+                        icon={Store}
+                        class="w-full h-14"
+                        onchange={() => applyFilters()}
+                    />
+                </div>
+            {/if}
+
+            <SearchBar 
+                bind:value={filterSearch} 
+                isSearching={isSearching} 
+                onsubmit={applyFilters} 
+                placeholder="Buscar por documento, cliente o RIF..."
+                className="flex-1"
+            />
+        </div>
     </div>
 
     <!-- MAIN LIST -->

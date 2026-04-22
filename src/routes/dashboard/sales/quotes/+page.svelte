@@ -865,7 +865,7 @@
 
         <!-- Search Bar for RIF -->
         <div class="max-w-xl mx-auto space-y-6">
-          {#if data.branches && data.branches.length > 0}
+          {#if data.branches && data.branches.length > 1}
             <div
               class="glass p-4 rounded-2xl border border-border-subtle flex items-center gap-4 relative z-50"
             >
@@ -1448,22 +1448,19 @@
 
           <!-- 1. Buscador + Scanner -->
           <div class="flex items-center gap-2 col-span-2 {data.branches?.length > 1 ? 'lg:col-span-1' : 'lg:col-span-2'}">
-            <form onsubmit={handleSearch} class="relative group flex-1 h-12">
-              <Search
-                class="absolute left-5 top-1/2 -translate-y-1/2 text-brand-500"
-                size={20}
-              />
+            <form onsubmit={handleSearch} class="relative group flex-1 h-14">
               <input
                 type="text"
                 placeholder="Buscar código o descripción..."
                 bind:value={searchTerm}
-                class="w-full h-full bg-surface-base pl-14 pr-24 rounded-full border border-border-subtle focus:border-brand-500/30 outline-none transition-all font-bold text-sm placeholder:font-normal placeholder:text-text-secondary/30"
+                class="w-full h-full bg-surface-base pl-6 pr-14 rounded-2xl border border-border-subtle focus:border-brand-500/30 outline-none transition-all font-bold text-sm placeholder:font-normal placeholder:text-text-secondary/30"
               />
               <button
                 type="submit"
-                class="absolute right-1 top-1 bottom-1 px-4 bg-surface-soft hover:bg-surface-strong text-text-base rounded-full text-xs font-bold transition-all border border-border-subtle"
+                class="absolute right-1 top-1 bottom-1 w-12 flex items-center justify-center bg-surface-soft hover:bg-surface-strong text-brand-400 rounded-xl transition-all border border-border-subtle active:scale-95"
+                title="Buscar Artículos"
               >
-                Buscar
+                <Search size={18} />
               </button>
             </form>
             <BarcodeScanner

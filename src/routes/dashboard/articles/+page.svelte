@@ -31,7 +31,14 @@
 
   $effect(() => {
     if (data.branches) {
-      console.log("[SYNC2K] Available Branches (Client):", data.branches.map((b: any) => ({ id: b.id.slice(0,4), name: b.name, code: b.co_sucu })));
+      console.log(
+        "[SYNC2K] Available Branches (Client):",
+        data.branches.map((b: any) => ({
+          id: b.id.slice(0, 4),
+          name: b.name,
+          code: b.co_sucu,
+        })),
+      );
     }
   });
 
@@ -51,19 +58,25 @@
   let selectedCodes = $state(new Set<string>());
 
   const visibleArticles = $derived(
-    (data.articles || []).filter((a: any, i: number, arr: any[]) =>
-      arr.findIndex((b: any) => (b.co_art || b.codigo) === (a.co_art || a.codigo)) === i
-    )
+    (data.articles || []).filter(
+      (a: any, i: number, arr: any[]) =>
+        arr.findIndex(
+          (b: any) => (b.co_art || b.codigo) === (a.co_art || a.codigo),
+        ) === i,
+    ),
   );
 
   const allVisibleSelected = $derived(
     visibleArticles.length > 0 &&
-    visibleArticles.every((a: any) => selectedCodes.has(a.co_art || a.codigo || a.id))
+      visibleArticles.every((a: any) =>
+        selectedCodes.has(a.co_art || a.codigo || a.id),
+      ),
   );
 
   function toggleArticle(code: string) {
     const next = new Set(selectedCodes);
-    if (next.has(code)) next.delete(code); else next.add(code);
+    if (next.has(code)) next.delete(code);
+    else next.add(code);
     selectedCodes = next;
   }
 
@@ -71,12 +84,16 @@
     if (allVisibleSelected) {
       // deselect all visible
       const next = new Set(selectedCodes);
-      visibleArticles.forEach((a: any) => next.delete(a.co_art || a.codigo || a.id));
+      visibleArticles.forEach((a: any) =>
+        next.delete(a.co_art || a.codigo || a.id),
+      );
       selectedCodes = next;
     } else {
       // select all visible
       const next = new Set(selectedCodes);
-      visibleArticles.forEach((a: any) => next.add(a.co_art || a.codigo || a.id));
+      visibleArticles.forEach((a: any) =>
+        next.add(a.co_art || a.codigo || a.id),
+      );
       selectedCodes = next;
     }
   }
@@ -92,19 +109,25 @@
   let searchUbic3 = $state("");
 
   const filteredUbic1 = $derived(
-    data.context?.ubicaciones?.filter(u => 
-      (`${u.co_ubicacion || u.id} ${u.descripcion || u.name}`).toLowerCase().includes(searchUbic1.toLowerCase())
-    ) || []
+    data.context?.ubicaciones?.filter((u) =>
+      `${u.co_ubicacion || u.id} ${u.descripcion || u.name}`
+        .toLowerCase()
+        .includes(searchUbic1.toLowerCase()),
+    ) || [],
   );
   const filteredUbic2 = $derived(
-    data.context?.ubicaciones?.filter(u => 
-      (`${u.co_ubicacion || u.id} ${u.descripcion || u.name}`).toLowerCase().includes(searchUbic2.toLowerCase())
-    ) || []
+    data.context?.ubicaciones?.filter((u) =>
+      `${u.co_ubicacion || u.id} ${u.descripcion || u.name}`
+        .toLowerCase()
+        .includes(searchUbic2.toLowerCase()),
+    ) || [],
   );
   const filteredUbic3 = $derived(
-    data.context?.ubicaciones?.filter(u => 
-      (`${u.co_ubicacion || u.id} ${u.descripcion || u.name}`).toLowerCase().includes(searchUbic3.toLowerCase())
-    ) || []
+    data.context?.ubicaciones?.filter((u) =>
+      `${u.co_ubicacion || u.id} ${u.descripcion || u.name}`
+        .toLowerCase()
+        .includes(searchUbic3.toLowerCase()),
+    ) || [],
   );
 
   $effect(() => {
@@ -119,14 +142,15 @@
 
   function openLocationModal(article: any) {
     selectedArticle = article;
-    
+
     // Si no hay sede o almacén seleccionados en los filtros principales,
     // intentamos tomarlos de la primera ubicación o existencia del artículo.
     const firstLoc = article.ubicaciones?.[0] || article.existencia?.[0];
     if (firstLoc) {
-      if (!selectedBranch && firstLoc.sede_id) selectedBranch = firstLoc.sede_id;
+      if (!selectedBranch && firstLoc.sede_id)
+        selectedBranch = firstLoc.sede_id;
       if (!formWarehouse && (firstLoc.co_alma || firstLoc.id)) {
-          formWarehouse = firstLoc.co_alma || firstLoc.id;
+        formWarehouse = firstLoc.co_alma || firstLoc.id;
       }
     }
 
@@ -142,10 +166,12 @@
 
   let selectedLinea = $state($page.url.searchParams.get("linea") || "");
   let selectedCategoria = $state($page.url.searchParams.get("categoria") || "");
-  let selectedUbicacion = $state($page.url.searchParams.get("co_ubicacion") || "");
+  let selectedUbicacion = $state(
+    $page.url.searchParams.get("co_ubicacion") || "",
+  );
 
   let currentBranchObj = $derived(
-    data.context?.branches?.find(b => b.id === selectedBranch)
+    data.context?.branches?.find((b) => b.id === selectedBranch),
   );
   let coSucuToSend = $derived(currentBranchObj?.co_sucu || "");
   let coAlmaToSend = $derived(formWarehouse || "01");
@@ -233,8 +259,10 @@
       // No selection → print ALL matching the current filters (up to 500)
       if (searchTerm) url.searchParams.set("search", searchTerm);
       if (selectedLinea) url.searchParams.set("linea", selectedLinea);
-      if (selectedCategoria) url.searchParams.set("categoria", selectedCategoria);
-      if (selectedUbicacion) url.searchParams.set("co_ubicacion", selectedUbicacion);
+      if (selectedCategoria)
+        url.searchParams.set("categoria", selectedCategoria);
+      if (selectedUbicacion)
+        url.searchParams.set("co_ubicacion", selectedUbicacion);
     }
 
     window.open(url.toString(), "_blank");
@@ -249,122 +277,178 @@
         Gestión de Ubicaciones
       </h1>
       <p class="text-text-muted text-lg">
-        Asigna y visualiza las ubicaciones físicas de los artículos en el almacén.
+        Asigna y visualiza las ubicaciones físicas de los artículos en el
+        almacén.
       </p>
-      {#if data.articles?.length}
+      <!-- {#if data.articles?.length}
         <span class="flex items-center gap-1.5 text-xs text-brand-500/80 font-medium mt-1 bg-brand-500/10 w-fit px-3 py-1.5 rounded-lg border border-brand-500/20">
           <Package size={14} />
           Mostrando {data.articles.length} artículos en esta página
         </span>
-      {/if}
+      {/if} -->
     </div>
 
     <button
       onclick={handlePrintLabels}
-      class="h-14 px-8 {selectedCodes.size > 0 ? 'bg-brand-600 hover:bg-brand-500 border-brand-500/50 shadow-lg shadow-brand-600/20 text-white' : 'bg-surface-raised hover:bg-white/5 border-white/5 hover:border-white/10 text-text-base'} border rounded-2xl font-bold transition-all active:scale-95 flex items-center gap-3 shrink-0 group"
-      title={selectedCodes.size > 0 ? `Imprimir ${selectedCodes.size} artículo(s) seleccionado(s)` : 'Imprimir todos los artículos del filtro (hasta 500)'}
+      class="h-14 px-8 {selectedCodes.size > 0
+        ? 'bg-brand-600 hover:bg-brand-500 border-brand-500/50 shadow-lg shadow-brand-600/20 text-white'
+        : 'bg-surface-raised hover:bg-white/5 border-white/5 hover:border-white/10 text-text-base'} border rounded-2xl font-bold transition-all active:scale-95 flex items-center gap-3 shrink-0 group"
+      title={selectedCodes.size > 0
+        ? `Imprimir ${selectedCodes.size} artículo(s) seleccionado(s)`
+        : "Imprimir todos los artículos del filtro (hasta 500)"}
     >
-      <Printer size={20} class={selectedCodes.size > 0 ? 'text-white' : 'text-brand-400 group-hover:text-brand-300'} />
+      <Printer
+        size={20}
+        class={selectedCodes.size > 0
+          ? "text-white"
+          : "text-brand-400 group-hover:text-brand-300"}
+      />
       <span class="hidden sm:inline">Imprimir</span> Etiquetas
       {#if selectedCodes.size > 0}
-        <span class="bg-white/20 text-white text-xs font-black px-2 py-0.5 rounded-full">{selectedCodes.size}</span>
+        <span
+          class="bg-white/20 text-white text-xs font-black px-2 py-0.5 rounded-full"
+          >{selectedCodes.size}</span
+        >
       {/if}
     </button>
   </div>
 
   <!-- SEARCH & FILTERS SECTION -->
-  <div class="flex flex-col gap-4 mb-8">
-    <!-- FIRST ROW: BRANCH, WAREHOUSE, SEARCH -->
-    <div class="flex flex-col lg:flex-row gap-4 items-center">
-      {#if data.branches && data.branches.length > 0}
+  <div
+    class="glass p-4 rounded-3xl border border-white/5 shadow-2xl grid grid-cols-1 md:grid-cols-2 lg:grid-cols-12 gap-4 items-center relative z-10 mb-8"
+  >
+    <!-- 1. Sucursal -->
+    {#if data.branches && data.branches.length > 0}
+      <div class="col-span-1 md:col-span-1 lg:col-span-2">
         <Combobox
-          options={data.branches.map((b: any) => ({ value: b.id, label: b.name }))}
+          options={data.branches.map((b: any) => ({
+            value: b.id,
+            label: b.name,
+          }))}
           bind:value={selectedBranch}
-          placeholder="Seleccionar Sucursal"
+          placeholder="Sucursal..."
           allLabel="Todas las Sucursales"
           icon={Store}
-          class="w-full lg:w-64 shrink-0"
+          class="w-full h-12"
           onchange={() => handleSearch()}
         />
-      {/if}
+      </div>
+    {/if}
 
-
-
-      <form class="relative flex-1 w-full lg:w-auto" onsubmit={(e) => { e.preventDefault(); handleSearch(); }}>
-        <Search class="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted group-focus-within:text-brand-500 transition-colors" size={20} />
+    <!-- 2. Buscador -->
+    <div class="col-span-1 md:col-span-1 lg:col-span-3">
+      <form
+        class="relative group h-14 w-full"
+        onsubmit={(e) => {
+          e.preventDefault();
+          handleSearch();
+        }}
+      >
         <input
           type="text"
           bind:value={searchTerm}
-          placeholder="Buscar articulo por código o descripción..."
-          class="w-full h-14 bg-surface-base pl-12 pr-28 rounded-2xl border border-white/5 focus:border-brand-500/50 outline-hidden font-medium placeholder:text-text-muted transition-all"
+          placeholder="Buscar código o descripción..."
+          class="w-full h-full bg-surface-base pl-6 pr-14 rounded-2xl border border-white/5 focus:border-brand-500/30 outline-none transition-all font-bold text-sm placeholder:font-normal placeholder:text-text-secondary/30"
         />
         <button
           type="submit"
           disabled={isSearching}
-          class="absolute right-2 top-1/2 -translate-y-1/2 bg-white/5 hover:bg-white/10 disabled:opacity-50 px-5 py-2 rounded-xl text-sm font-bold transition-all"
+          class="absolute right-1 top-1 bottom-1 w-12 flex items-center justify-center bg-surface-soft hover:bg-surface-strong text-brand-400 rounded-xl transition-all border border-border-subtle active:scale-95 disabled:opacity-50"
+          title="Buscar"
         >
-          {isSearching ? "..." : "Buscar"}
+          {#if isSearching}
+            <span class="animate-pulse">...</span>
+          {:else}
+            <Search size={18} />
+          {/if}
         </button>
       </form>
-
-      <!-- STOCK TOGGLE -->
-      <button
-        onclick={() => { showAll = !showAll; handleSearch(); }}
-        class="h-14 px-6 bg-surface-base/80 border {showAll ? 'border-brand-500/30 bg-brand-500/5 text-brand-300' : 'border-white/5 text-text-muted'} rounded-2xl flex items-center gap-3 transition-all hover:bg-white/5 font-bold text-sm shrink-0"
-      >
-        <div class="w-10 h-6 rounded-full relative transition-colors {showAll ? 'bg-brand-600' : 'bg-white/10'}">
-          <div class="absolute top-1 left-1 w-4 h-4 bg-white rounded-full transition-transform {showAll ? 'translate-x-4' : 'translate-x-0'}"></div>
-        </div>
-        <span>Mostrar catálogo completo</span>
-      </button>
     </div>
 
-    <!-- SECOND ROW: LINEA, CATEGORIA -->
-    <div class="flex flex-col md:flex-row gap-4">
-      <!-- UBICACION SELECTOR via Combobox -->
-      {#if data.context?.ubicaciones && data.context.ubicaciones.length > 0}
-        {@const ubicOptions = [
-          ...((data.context.ubicaciones || []).map((u: any) => ({
-            value: u.id || u.co_ubicacion,
-            label: `${u.co_ubicacion || u.id} - ${u.descripcion || u.name || u.co_ubicacion || u.id}`
-          })))
-        ]}
+    <!-- 3. Ubicación -->
+    {#if data.context?.ubicaciones && data.context.ubicaciones.length > 0}
+      {@const ubicOptions = [
+        ...(data.context.ubicaciones || []).map((u: any) => ({
+          value: u.id || u.co_ubicacion,
+          label: `${u.co_ubicacion || u.id} - ${u.descripcion || u.name || u.co_ubicacion || u.id}`,
+        })),
+      ]}
+      <div class="col-span-1 md:col-span-1 lg:col-span-2">
         <Combobox
           options={ubicOptions}
           bind:value={selectedUbicacion}
-          placeholder="Todas las Ubicaciones"
+          placeholder="Ubicación..."
           allLabel="Todas las Ubicaciones"
           icon={MapPin}
-          class="w-full md:w-80 shrink-0"
+          class="w-full h-12"
           onchange={() => handleSearch()}
         />
-      {/if}
+      </div>
+    {/if}
 
-      <!-- LINEA SELECTOR -->
-      {#if data.context?.lineas && data.context.lineas.length > 0}
-        <Combobox
-          options={(data.context.lineas || []).map((l: any) => ({ value: l.co_lin, label: l.lin_des }))}
-          bind:value={selectedLinea}
-          placeholder="Todas las Líneas"
-          allLabel="Todas las Líneas"
-          icon={ListFilter}
-          class="w-full md:w-80 shrink-0"
-          onchange={() => { selectedCategoria = ''; handleSearch(); }}
-        />
-      {/if}
+    <!-- 4. Linea -->
+    <div class="col-span-1 md:col-span-1 lg:col-span-2">
+      <Combobox
+        options={(data.context?.lineas || []).map((l: any) => ({
+          value: l.co_lin,
+          label: l.lin_des,
+        }))}
+        bind:value={selectedLinea}
+        placeholder="Línea..."
+        allLabel="Todas las Líneas"
+        icon={ListFilter}
+        class="w-full h-12"
+        onchange={() => {
+          selectedCategoria = "";
+          handleSearch();
+        }}
+      />
+    </div>
 
-      <!-- CATEGORIA SELECTOR -->
-      {#if filteredCategorias && filteredCategorias.length > 0}
-        <Combobox
-          options={filteredCategorias.map((c: any) => ({ value: c.co_cat, label: c.cat_des }))}
-          bind:value={selectedCategoria}
-          placeholder="Todas las Categorías"
-          allLabel="Todas las Categorías"
-          icon={ListFilter}
-          class="w-full md:w-80 shrink-0"
-          onchange={() => handleSearch()}
-        />
-      {/if}
+    <!-- 5. Categoria -->
+    <div class="col-span-1 md:col-span-1 lg:col-span-2">
+      <Combobox
+        options={filteredCategorias.map((c: any) => ({
+          value: c.co_cat,
+          label: c.cat_des,
+        }))}
+        bind:value={selectedCategoria}
+        placeholder="Categoría..."
+        allLabel="Todas las Categorías"
+        icon={ListFilter}
+        class="w-full h-12"
+        onchange={() => handleSearch()}
+      />
+    </div>
+
+    <!-- 6. Toggle Catálogo -->
+    <div
+      class="col-span-1 md:col-span-1 lg:col-span-1 flex justify-center lg:justify-end"
+    >
+      <button
+        onclick={() => {
+          showAll = !showAll;
+          handleSearch();
+        }}
+        class="h-12 w-full lg:w-12 flex items-center justify-center bg-surface-base border {showAll
+          ? 'border-brand-500/30 bg-brand-500/10 text-brand-400'
+          : 'border-white/5 text-text-muted'} rounded-2xl transition-all hover:bg-white/5"
+        title={showAll
+          ? "Mostrando catálogo completo"
+          : "Mostrando solo artículos con stock/movimiento"}
+      >
+        <div
+          class="w-8 h-4 rounded-full relative transition-colors {showAll
+            ? 'bg-brand-600'
+            : 'bg-white/10'}"
+        >
+          <div
+            class="absolute top-0.5 left-0.5 w-3 h-3 bg-white rounded-full transition-transform {showAll
+              ? 'translate-x-4'
+              : 'translate-x-0'}"
+          ></div>
+        </div>
+      </button>
     </div>
   </div>
 
@@ -375,9 +459,12 @@
     >
       <Store size={48} class="text-text-muted/30" />
       <div>
-        <h3 class="text-xl font-bold">Selecciona una Sucursal (Nodo de Datos)</h3>
+        <h3 class="text-xl font-bold">
+          Selecciona una Sucursal (Nodo de Datos)
+        </h3>
         <p class="text-text-muted mt-2">
-          Utiliza el menú desplegable superior para elegir la sucursal de la cual extraeremos el listado de inventario.
+          Utiliza el menú desplegable superior para elegir la sucursal de la
+          cual extraeremos el listado de inventario.
         </p>
       </div>
     </div>
@@ -415,8 +502,8 @@
           onclick={toggleAll}
           class="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-all border
             {allVisibleSelected
-              ? 'bg-brand-500/20 border-brand-500/40 text-brand-300 hover:bg-brand-500/30'
-              : 'bg-surface-raised border-white/5 text-text-muted hover:bg-white/5 hover:text-text-base'}"
+            ? 'bg-brand-500/20 border-brand-500/40 text-brand-300 hover:bg-brand-500/30'
+            : 'bg-surface-raised border-white/5 text-text-muted hover:bg-white/5 hover:text-text-base'}"
         >
           {#if allVisibleSelected}
             <CheckSquare size={16} />
@@ -427,7 +514,9 @@
           {/if}
         </button>
         {#if selectedCodes.size > 0}
-          <span class="text-sm text-brand-400 font-bold">{selectedCodes.size} artículo(s) seleccionado(s)</span>
+          <span class="text-sm text-brand-400 font-bold"
+            >{selectedCodes.size} artículo(s) seleccionado(s)</span
+          >
           <button
             onclick={() => (selectedCodes = new Set())}
             class="text-xs text-text-muted hover:text-red-400 transition-colors flex items-center gap-1"
@@ -447,14 +536,14 @@
       class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"
     >
       {#each visibleArticles as article}
-        {@const artCode = article.co_art || article.codigo || article.id || ''}
+        {@const artCode = article.co_art || article.codigo || article.id || ""}
         {@const isSelected = selectedCodes.has(artCode)}
         <label
           for="select-{artCode}"
           class="glass p-6 rounded-3xl border transition-all hover:shadow-2xl flex flex-col gap-4 cursor-pointer select-none
             {isSelected
-              ? 'border-brand-500/60 shadow-brand-500/10 bg-brand-500/5'
-              : 'border-white/5 hover:border-brand-500/30 hover:shadow-brand-500/5'}"
+            ? 'border-brand-500/60 shadow-brand-500/10 bg-brand-500/5'
+            : 'border-white/5 hover:border-brand-500/30 hover:shadow-brand-500/5'}"
         >
           <input
             id="select-{artCode}"
@@ -466,7 +555,9 @@
           <div class="flex justify-between items-start relative group">
             <div
               class="h-12 w-12 rounded-2xl flex items-center justify-center transition-all
-                {isSelected ? 'bg-brand-500 text-white' : 'bg-brand-500/10 text-brand-500'}"
+                {isSelected
+                ? 'bg-brand-500 text-white'
+                : 'bg-brand-500/10 text-brand-500'}"
             >
               {#if isSelected}
                 <CheckSquare size={22} />
@@ -530,7 +621,11 @@
 
               {#if canUpdate}
                 <button
-                  onclick={(e) => { e.preventDefault(); e.stopPropagation(); openLocationModal(article); }}
+                  onclick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    openLocationModal(article);
+                  }}
                   class="mt-3 w-full py-2 bg-brand-500/10 hover:bg-brand-500/20 text-brand-400 font-bold rounded-xl transition-colors border border-brand-500/20 text-sm"
                 >
                   Modificar Ubicaciones
@@ -548,7 +643,7 @@
             >
 
             {#if article.disponibilidad && Array.isArray(article.disponibilidad)}
-              {#each article.disponibilidad.filter( (alm: any) => (!data.context?.finalWarehouseIds?.length || data.context.finalWarehouseIds.includes(alm.co_alma)) ) as alm}
+              {#each article.disponibilidad.filter((alm: any) => !data.context?.finalWarehouseIds?.length || data.context.finalWarehouseIds.includes(alm.co_alma)) as alm}
                 <div
                   class="flex items-center justify-between py-1 bg-surface-base/50 px-2 rounded-md border border-white/5"
                 >
@@ -644,18 +739,26 @@
         use:enhance
         class="p-6 flex flex-col gap-6"
       >
-        <input type="hidden" name="co_art" value={selectedArticle.co_art || selectedArticle.codigo} />
+        <input
+          type="hidden"
+          name="co_art"
+          value={selectedArticle.co_art || selectedArticle.codigo}
+        />
         <input type="hidden" name="co_alma" value={coAlmaToSend} />
         <input type="hidden" name="branchId" value={selectedBranch} />
 
-        {#if form && typeof form === 'object' && 'error' in form}
-          <div class="p-4 mb-4 bg-red-500/10 border border-red-500/20 rounded-2xl text-red-500 text-sm flex flex-col gap-2">
+        {#if form && typeof form === "object" && "error" in form}
+          <div
+            class="p-4 mb-4 bg-red-500/10 border border-red-500/20 rounded-2xl text-red-500 text-sm flex flex-col gap-2"
+          >
             <div class="flex items-center gap-2 font-bold">
               <Plus class="rotate-45" size={16} />
               {(form as any).error}
             </div>
             {#if (form as any).detail}
-              <div class="text-[10px] font-mono bg-black/20 p-2 rounded-lg opacity-80 break-all max-h-24 overflow-auto">
+              <div
+                class="text-[10px] font-mono bg-black/20 p-2 rounded-lg opacity-80 break-all max-h-24 overflow-auto"
+              >
                 {(form as any).detail}
               </div>
             {/if}
@@ -664,9 +767,15 @@
 
         <!-- SELECTOR DE ALMACÉN (OBLIGATORIO) -->
         <div class="space-y-1">
-          <label class="text-[10px] uppercase font-black tracking-widest text-brand-400 ml-1">Almacén / Depósito Profit</label>
+          <label
+            class="text-[10px] uppercase font-black tracking-widest text-brand-400 ml-1"
+            >Almacén / Depósito Profit</label
+          >
           <Combobox
-            options={(data.context?.warehouses || []).map((a: any) => ({ value: a.co_alma || a.id, label: a.des_alma || a.nombre || a.id }))}
+            options={(data.context?.warehouses || []).map((a: any) => ({
+              value: a.co_alma || a.id,
+              label: a.des_alma || a.nombre || a.id,
+            }))}
             bind:value={formWarehouse}
             placeholder="-- Seleccionar Almacén --"
             allLabel="-- Sin seleccionar --"
@@ -677,10 +786,16 @@
         <div class="space-y-4">
           <!-- UBICACION 1 -->
           <div class="space-y-1">
-            <label class="text-[10px] uppercase font-black tracking-widest text-text-muted ml-1">Ubicación Principal</label>
+            <label
+              class="text-[10px] uppercase font-black tracking-widest text-text-muted ml-1"
+              >Ubicación Principal</label
+            >
             <input type="hidden" name="co_ubicacion" value={formUbic1} />
             <Combobox
-              options={(data.context?.ubicaciones || []).map((u: any) => ({ value: u.id || u.co_ubicacion, label: `${u.co_ubicacion || u.id} - ${u.descripcion || u.name}` }))}
+              options={(data.context?.ubicaciones || []).map((u: any) => ({
+                value: u.id || u.co_ubicacion,
+                label: `${u.co_ubicacion || u.id} - ${u.descripcion || u.name}`,
+              }))}
               bind:value={formUbic1}
               placeholder="-- Ninguna --"
               allLabel="-- Ninguna --"
@@ -690,10 +805,16 @@
 
           <!-- UBICACION 2 -->
           <div class="space-y-1">
-            <label class="text-[10px] uppercase font-black tracking-widest text-text-muted ml-1">Ubicación Secundaria</label>
+            <label
+              class="text-[10px] uppercase font-black tracking-widest text-text-muted ml-1"
+              >Ubicación Secundaria</label
+            >
             <input type="hidden" name="co_ubicacion2" value={formUbic2} />
             <Combobox
-              options={(data.context?.ubicaciones || []).map((u: any) => ({ value: u.id || u.co_ubicacion, label: `${u.co_ubicacion || u.id} - ${u.descripcion || u.name}` }))}
+              options={(data.context?.ubicaciones || []).map((u: any) => ({
+                value: u.id || u.co_ubicacion,
+                label: `${u.co_ubicacion || u.id} - ${u.descripcion || u.name}`,
+              }))}
               bind:value={formUbic2}
               placeholder="-- Ninguna --"
               allLabel="-- Ninguna --"
@@ -703,10 +824,16 @@
 
           <!-- UBICACION 3 -->
           <div class="space-y-1">
-            <label class="text-[10px] uppercase font-black tracking-widest text-text-muted ml-1">Ubicación Terciaria</label>
+            <label
+              class="text-[10px] uppercase font-black tracking-widest text-text-muted ml-1"
+              >Ubicación Terciaria</label
+            >
             <input type="hidden" name="co_ubicacion3" value={formUbic3} />
             <Combobox
-              options={(data.context?.ubicaciones || []).map((u: any) => ({ value: u.id || u.co_ubicacion, label: `${u.co_ubicacion || u.id} - ${u.descripcion || u.name}` }))}
+              options={(data.context?.ubicaciones || []).map((u: any) => ({
+                value: u.id || u.co_ubicacion,
+                label: `${u.co_ubicacion || u.id} - ${u.descripcion || u.name}`,
+              }))}
               bind:value={formUbic3}
               placeholder="-- Ninguna --"
               allLabel="-- Ninguna --"
