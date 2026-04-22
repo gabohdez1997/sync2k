@@ -99,6 +99,7 @@
   let showUSD = $state(true);
   let quoteTaxRate = $state(16); // 16 o 0 (global para items no exentos)
   let quoteDescription = $state("");
+  let masterBranchId = $state(""); // Sede donde se inició la cotización (dueña del cliente)
 
   // --- PASO 1: CLIENTE ---
   let rifInput = $state("");
@@ -446,9 +447,13 @@
 
   // --- ACCIONES ---
   function nextStep() {
-    if (activeTab === 0 && !selectedClient) {
-      toast.error("Seleccione o registre un cliente primero.");
-      return;
+    if (activeTab === 0) {
+      if (!selectedClient) {
+        toast.error("Seleccione o registre un cliente primero.");
+        return;
+      }
+      // Bloquear la sede maestra al avanzar a artículos
+      masterBranchId = selectedBranch;
     }
     if (activeTab < 2) activeTab++;
   }
@@ -464,6 +469,7 @@
     rifInput = "";
     showRegistrationForm = false;
     quoteDescription = "";
+    masterBranchId = "";
     localStorage.removeItem("profit_quote_draft");
     lastLoadedDoc = ""; // Resetear rastreador de edición
     
@@ -1766,14 +1772,24 @@
                       >
                     </div>
 
-                    <!-- Botón Agregar -->
-                    <button
-                      onclick={() => addToCart(article)}
-                      class="h-11 w-14 shrink-0 bg-brand-600 hover:bg-brand-500 text-white rounded-xl shadow-lg shadow-brand-500/20 active:scale-95 transition-all flex items-center justify-center"
-                      title="Agregar al Carrito"
-                    >
-                      <ShoppingCart size={20} />
-                    </button>
+                    {#if masterBranchId && selectedBranch !== masterBranchId}
+                      <div class="px-2 py-1 bg-amber-500/10 border border-amber-500/20 rounded-xl flex items-center gap-2 flex-1">
+                        <Info size={14} class="text-amber-400 shrink-0" />
+                        <p class="text-[8px] font-bold text-amber-200 leading-tight">
+                          Consulta de stock en { (data.branches?.find(b => b.id === selectedBranch))?.name }.
+                          <br/>Regrese a { (data.branches?.find(b => b.id === masterBranchId))?.name } para facturar.
+                        </p>
+                      </div>
+                    {:else}
+                      <!-- Botón Agregar -->
+                      <button
+                        onclick={() => addToCart(article)}
+                        class="h-11 w-14 shrink-0 bg-brand-600 hover:bg-brand-500 text-white rounded-xl shadow-lg shadow-brand-500/20 active:scale-95 transition-all flex items-center justify-center"
+                        title="Agregar al Carrito"
+                      >
+                        <ShoppingCart size={20} />
+                      </button>
+                    {/if}
                   </div>
                 </div>
               </div>
