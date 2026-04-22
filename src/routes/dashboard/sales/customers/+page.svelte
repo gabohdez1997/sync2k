@@ -246,9 +246,9 @@
 
       <!-- Contenedor del Buscador y Sucursal (50% en PC, fluido en tlf) -->
       <div class="flex flex-row items-center gap-3 w-full lg:w-1/2 ml-auto">
-        {#if data.context?.branches && data.context.branches.length > 1}
+        {#if data.branches && data.branches.length > 1}
             <Combobox
-              options={(data.context?.branches || []).map((b: any) => ({ value: b.id, label: b.name }))}
+              options={(data.branches || []).map((b: any) => ({ value: b.id, label: b.name }))}
               bind:value={selectedBranch}
               placeholder="Sucursal..."
               allLabel="Todas las Sucursales"

@@ -837,7 +837,7 @@
 
         <!-- Search Bar for RIF -->
         <div class="max-w-xl mx-auto space-y-6">
-          {#if data.context?.branches && data.context.branches.length > 1}
+          {#if data.branches && data.branches.length > 0}
             <div
               class="glass p-4 rounded-2xl border border-border-subtle flex items-center gap-4"
             >
@@ -849,12 +849,13 @@
                   Sucursal de Venta
                 </p>
                 <Combobox
-                  options={(data.context?.branches || []).map((b: any) => ({
+                  options={(data.branches || []).map((b: any) => ({
                     value: b.id,
                     label: b.name,
                   }))}
                   bind:value={selectedBranch}
                   placeholder="Seleccionar sucursal..."
+                  onchange={() => handleSearch()}
                 />
               </div>
             </div>
@@ -1397,12 +1398,28 @@
     {:else if activeTab === 1}
       <!-- SECTION 2: SELECCIÓN DE ARTÍCULOS -->
       <div in:fade class="space-y-6">
-        <!-- Dashboard for filtering (Compact) -->
         <div
           class="glass p-4 rounded-3xl border border-border-subtle shadow-2xl grid grid-cols-2 lg:grid-cols-4 gap-4 items-center relative z-10"
         >
+          <!-- 0. Sucursal (Nuevo Selector en esta pestaña) -->
+          {#if data.branches && data.branches.length > 1}
+            <div class="col-span-2 lg:col-span-1">
+               <Combobox
+                  options={(data.branches || []).map((b: any) => ({
+                    value: b.id,
+                    label: b.name,
+                  }))}
+                  bind:value={selectedBranch}
+                  placeholder="Sucursal..."
+                  icon={Store}
+                  onchange={() => handleSearch()}
+                  class="w-full h-12"
+                />
+            </div>
+          {/if}
+
           <!-- 1. Buscador + Scanner -->
-          <div class="flex items-center gap-2 col-span-2 lg:col-span-1">
+          <div class="flex items-center gap-2 col-span-2 {data.branches?.length > 1 ? 'lg:col-span-1' : 'lg:col-span-2'}">
             <form onsubmit={handleSearch} class="relative group flex-1 h-12">
               <Search
                 class="absolute left-5 top-1/2 -translate-y-1/2 text-brand-500"
