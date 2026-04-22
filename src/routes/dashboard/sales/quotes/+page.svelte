@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { untrack } from "svelte";
   import { enhance } from "$app/forms";
   import { page } from "$app/stores";
   import { goto } from "$app/navigation";
@@ -219,41 +220,54 @@
 
   // --- Borradores y Persistencia ---
   $effect(() => {
-    const draftStr = localStorage.getItem("profit_quote_draft");
-    // Solo cargar borrador si NO estamos en una edición y el estado está virgen
-    if (
-      draftStr &&
-      !data.preloadedQuote &&
-      cart.length === 0 &&
-      !selectedClient &&
-      !isInitializing
-    ) {
-      try {
-        const parsed = JSON.parse(draftStr);
-        if (parsed.cart) cart = parsed.cart;
-        if (parsed.selectedClient !== undefined)
-          selectedClient = parsed.selectedClient;
-        if (parsed.activeTab !== undefined) activeTab = parsed.activeTab;
-        if (parsed.rifInput) rifInput = parsed.rifInput;
-        console.log("📝 [DRAFT] Borrador cargado automáticamente");
-      } catch (e) {
-        console.error("Error loading draft", e);
+    // Solo intentar cargar borrador si NO estamos inicializando una edición
+    if (isInitializing) return;
+
+    untrack(() => {
+      const draftStr = localStorage.getItem("profit_quote_draft");
+      // Solo cargar borrador si NO estamos en una edición y el estado actual está virgen
+      if (
+        draftStr &&
+        !data.preloadedQuote &&
+        cart.length === 0 &&
+        !selectedClient &&
+        lastLoadedDoc === ""
+      ) {
+        try {
+          const parsed = JSON.parse(draftStr);
+          if (parsed.cart) cart = parsed.cart;
+          if (parsed.selectedClient !== undefined)
+            selectedClient = parsed.selectedClient;
+          if (parsed.activeTab !== undefined) activeTab = parsed.activeTab;
+          if (parsed.rifInput) rifInput = parsed.rifInput;
+          console.log("📝 [DRAFT] Borrador cargado automáticamente");
+        } catch (e) {
+          console.error("Error loading draft", e);
+        }
       }
-    }
+    });
   });
 
   $effect(() => {
-    // IMPORTANTE: NO guardar borradores si estamos editando una cotización real
-    // para evitar que se "mezclen" al presionar "Nueva Cotización" después
+    // Este efecto SÍ debe reaccionar a cambios en cart, selectedClient, etc.
+    // pero debemos evitar que el autoguardado se dispare durante la inicialización
     if (data.preloadedQuote || isInitializing || lastLoadedDoc !== "") return;
 
-    const draft = {
-      cart,
-      selectedClient,
-      activeTab,
-      rifInput,
-    };
-    localStorage.setItem("profit_quote_draft", JSON.stringify(draft));
+    // Accedemos a las variables para que el efecto sea dependiente de ellas
+    const _cart = cart;
+    const _client = selectedClient;
+    const _tab = activeTab;
+    const _rif = rifInput;
+
+    untrack(() => {
+      const draft = {
+        cart: _cart,
+        selectedClient: _client,
+        activeTab: _tab,
+        rifInput: _rif,
+      };
+      localStorage.setItem("profit_quote_draft", JSON.stringify(draft));
+    });
   });
 
   async function rehydrateCart() {
