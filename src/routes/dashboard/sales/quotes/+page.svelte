@@ -74,6 +74,14 @@
     selectedWarehouse =
       data.context?.warehouseId || $page.url.searchParams.get("co_alma") || "";
   });
+
+  // Limpiar cliente al cambiar de sede si estamos en el paso 1
+  $effect(() => {
+    if (activeTab === 0 && selectedBranch) {
+      selectedClient = null;
+      showRegistrationForm = false;
+    }
+  });
   let selectedLinea = $state($page.url.searchParams.get("linea") || "");
   let selectedCategoria = $state($page.url.searchParams.get("categoria") || "");
 
@@ -839,7 +847,7 @@
         <div class="max-w-xl mx-auto space-y-6">
           {#if data.branches && data.branches.length > 0}
             <div
-              class="glass p-4 rounded-2xl border border-border-subtle flex items-center gap-4"
+              class="glass p-4 rounded-2xl border border-border-subtle flex items-center gap-4 relative z-50"
             >
               <Store class="text-brand-400" size={24} />
               <div class="flex-1">
