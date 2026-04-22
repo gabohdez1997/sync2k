@@ -154,19 +154,22 @@
   let filteredWarehouses = $derived(availableWarehouses);
 
   async function loadWarehouses(bid: string) {
+    if (!bid) return;
     contextError = null;
-    if (!bid) {
-      availableWarehouses = [];
-      return;
-    }
     loadingContext = true;
     try {
       const wRes = await fetch(`/api/agent/warehouses?branch_id=${bid}`);
       const wData = await wRes.json();
 
-      if (wData.error) throw new Error(`Almacenes: ${wData.error}`);
+      if (wData.error) throw new Error(`Almacenes (${bid}): ${wData.error}`);
 
-      availableWarehouses = wData.warehouses || [];
+      // Agregamos los nuevos almacenes a la lista de disponibles (evitando duplicados)
+      const newWs = wData.warehouses || [];
+      const currentIds = new Set(availableWarehouses.map(w => w.co_alma || w.id));
+      
+      const filteredNew = newWs.filter((w: any) => !currentIds.has(w.co_alma || w.id));
+      availableWarehouses = [...availableWarehouses, ...filteredNew];
+      
     } catch (e: any) {
       console.error("Error loading context", e);
       contextError = e.message;
@@ -176,7 +179,7 @@
   }
 
   // ── Seleccionar un rol ─────────────────────────────────────────────────────
-  function selectRole(role: {
+  async function selectRole(role: {
     id: string;
     name: string;
     permissions: Record<string, any>;
@@ -186,16 +189,15 @@
   }) {
     selectedRoleId = role.id;
     roleName = role.name;
-    selectedBranchId = role.branch_ids?.[0] || ""; // For the UI selector
     branchIds = role.branch_ids || [];
     warehouseIds = role.warehouse_ids || [];
+    availableWarehouses = []; // Reset list to load fresh for this role
 
-    if (selectedBranchId) {
-      loadWarehouses(selectedBranchId).then(() => {
-        warehouseIds = role.warehouse_ids || [];
-      });
-    } else {
-      availableWarehouses = [];
+    // Cargamos almacenes de todas las sedes del rol
+    if (branchIds.length > 0) {
+      for (const bid of branchIds) {
+        await loadWarehouses(bid);
+      }
     }
 
     const base = buildEmptyPermissions();
@@ -416,55 +418,65 @@
         </div>
 
         <div class="space-y-4 pt-2 border-t border-border-subtle mt-4">
-          <div class="space-y-2">
+          <div class="space-y-3">
             <label
-              for="branchSelector"
               class="text-[10px] font-black uppercase tracking-widest text-brand-400 ml-1 flex items-center gap-1.5"
             >
               <Building size={12} />
-              Sucursal
+              Sucursales Autorizadas
             </label>
-            <select
-              id="branchSelector"
-              bind:value={selectedBranchId}
-              onchange={() => {
-                branchIds = selectedBranchId ? [selectedBranchId] : [];
-                loadWarehouses(selectedBranchId);
-              }}
-              class="w-full h-12 bg-surface-base border border-border-subtle rounded-xl px-4 text-sm font-bold focus:outline-none focus:border-brand-500/50 transition-all appearance-none cursor-pointer"
-            >
-              <option value="">Configuración Global (Sin sucursal)</option>
+            
+            <div class="bg-surface-base border border-border-subtle rounded-xl p-3 space-y-2 max-h-40 overflow-y-auto">
               {#each data.branches as branch}
-                <option value={branch.id}>{branch.name}</option>
+                <label class="flex items-center gap-3 p-2 hover:bg-white/5 rounded-lg cursor-pointer transition-colors">
+                  <input
+                    type="checkbox"
+                    bind:group={branchIds}
+                    value={branch.id}
+                    onchange={(e) => {
+                      if (e.currentTarget.checked) {
+                        loadWarehouses(branch.id);
+                      } else {
+                        // Opcional: filtrar disponibleWarehouses para quitar los de esta sede si no están seleccionados
+                        // Por simplicidad los dejamos ahí, solo se enviarán si están en warehouseIds
+                      }
+                    }}
+                    class="w-4 h-4 rounded border-border-subtle text-brand-500 focus:ring-brand-500 bg-black/20"
+                  />
+                  <div class="flex flex-col">
+                    <span class="text-sm font-bold">{branch.name}</span>
+                    <span class="text-[9px] text-text-muted opacity-60 truncate">{branch.agent_url}</span>
+                  </div>
+                </label>
               {/each}
-            </select>
+            </div>
           </div>
 
-          {#if selectedBranchId}
+          {#if branchIds.length > 0}
             <div class="space-y-3">
               <label
                 for="warehouseIds"
                 class="text-[10px] font-black uppercase tracking-widest text-brand-400 ml-1"
               >
-                Restringir a Almacenes
+                Restringir a Almacenes (Multisede)
               </label>
-              {#if loadingContext}
+              {#if loadingContext && availableWarehouses.length === 0}
                 <div
                   class="h-12 flex items-center px-4 text-text-muted text-sm bg-surface-base rounded-xl border border-border-subtle"
                 >
                   <Loader2 size={16} class="animate-spin mr-2" /> Cargando...
                 </div>
-              {:else if filteredWarehouses.length === 0}
+              {:else if availableWarehouses.length === 0 && !loadingContext}
                 <div
                   class="h-12 flex items-center px-4 text-text-muted text-sm bg-surface-base rounded-xl border border-border-subtle opacity-50"
                 >
-                  Sin almacenes para las sedes elegidas
+                  Marca una sucursal para ver sus almacenes
                 </div>
               {:else}
                 <div
-                  class="bg-surface-base border border-border-subtle rounded-xl p-3 flex flex-col gap-2 max-h-40 overflow-y-auto"
+                  class="bg-surface-base border border-border-subtle rounded-xl p-3 flex flex-col gap-2 max-h-60 overflow-y-auto"
                 >
-                  {#each filteredWarehouses as warehouse}
+                  {#each availableWarehouses as warehouse}
                     {@const wid = warehouse.co_alma || warehouse.id}
                     <label
                       class="flex items-center gap-3 p-2 hover:bg-white/5 rounded-lg cursor-pointer transition-colors"
@@ -475,14 +487,15 @@
                         value={wid}
                         class="w-4 h-4 rounded border-border-subtle text-brand-500 focus:ring-brand-500 bg-black/20"
                       />
-                      <span class="text-sm font-medium"
-                        >{warehouse.des_alma || warehouse.name || wid}
-                        <span class="text-[10px] opacity-40 italic ml-1"
-                          >({wid})</span
-                        ></span
-                      >
+                      <div class="flex flex-col">
+                        <span class="text-sm font-medium">{warehouse.des_alma || warehouse.name || wid}</span>
+                        <span class="text-[9px] opacity-40 font-mono italic">ID: {wid}</span>
+                      </div>
                     </label>
                   {/each}
+                  {#if loadingContext}
+                     <div class="flex items-center justify-center py-2 opacity-50"><Loader2 size={12} class="animate-spin mr-2"/> Actualizando lista...</div>
+                  {/if}
                 </div>
               {/if}
             </div>
