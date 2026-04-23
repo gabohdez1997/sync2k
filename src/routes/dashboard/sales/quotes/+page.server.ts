@@ -203,27 +203,68 @@ export const actions: Actions = {
 	saveCustomer: protectAction('sales_quotes', async ({ request, locals, fetch }) => {
 		const profile = locals.profile;
 		const formData = await request.formData();
-		const branchId = formData.get('branch_id') as string;
-		const branch = profile.allowed_branches?.find(b => b.id === branchId);
-		if (!branch) return fail(404, { message: 'Sucursal no encontrada' });
-
-		const agentClient = new AgentClient(branch, profile, fetch);
 		const data = Object.fromEntries(formData.entries());
+		const payload = {
+			...data,
+			contribuyente: formData.has('contribuyente'),
+			contribu_e: formData.has('contribu_e') || formData.has('contribuu_e'),
+			porc_esp: parseFloat(formData.get('porc_esp') as string) || 0
+		};
 
-		try {
-			const res: any = await agentClient.request('/clientes', {
-				method: 'POST',
-				body: JSON.stringify(data)
-			});
-
-			if (res.success) {
-				return { success: true, client: res.data || res.items?.[0] };
-			} else {
-				return fail(400, { message: res.message || 'Error al crear cliente' });
-			}
-		} catch (e: any) {
-			return fail(500, { message: e.message });
+		const targetBranches = profile.allowed_branches || [];
+		if (targetBranches.length === 0) {
+			return fail(403, { message: 'No tiene sucursales asignadas' });
 		}
+
+		let successCount = 0;
+		let failedBranches: string[] = [];
+		let createdClient = null;
+
+		for (const branch of targetBranches) {
+			if (!branch.agent_url) continue;
+
+			try {
+				let verifiedCoSucu = '';
+				if (Array.isArray(branch.profit_branch_codes) && branch.profit_branch_codes.length > 0) {
+					const def = branch.profit_branch_codes.find((c: any) => c.is_default);
+					verifiedCoSucu = def ? def.code : branch.profit_branch_codes[0].code;
+				}
+
+				const agent = new AgentClient({
+					slug: branch.id,
+					agent_url: branch.agent_url,
+					agent_api_key: branch.agent_token
+				}, profile, fetch);
+
+				const response = await agent.saveCustomer(payload, true, verifiedCoSucu || branch.id);
+				
+				if (response.success) {
+					successCount++;
+					if (!createdClient) createdClient = response.data || response.items?.[0] || payload;
+				} else {
+					failedBranches.push(`${branch.name}: ${response.message || 'Error desconocido'}`);
+				}
+			} catch (err: any) {
+				failedBranches.push(`${branch.name}: Error de conexión (${err.message})`);
+			}
+		}
+
+		if (successCount === 0) {
+			return fail(500, { message: `No se pudo guardar en ninguna sede. Detalles: ${failedBranches.join(' | ')}` });
+		}
+
+		let finalMsg = 'Cliente creado';
+		if (failedBranches.length > 0) {
+			finalMsg += ` en ${successCount} sedes, pero FALLÓ en: ${failedBranches.join(', ')}.`;
+		} else {
+			finalMsg += ` correctamente en todas las sedes (${successCount}).`;
+		}
+
+		return { 
+			success: true, 
+			message: finalMsg,
+			client: createdClient
+		};
 	}),
 
 	saveQuote: protectAction('sales_quotes', async ({ request, locals, fetch }) => {
@@ -254,6 +295,7 @@ export const actions: Actions = {
 			const enrichedQuoteData = {
 				...quoteData,
 				co_ven: profile.profit_user, // Tomado de PostgreSQL/Supabase
+				co_cta_ingr_egr: "", // Forzar vacío para evitar conflictos de FK si el agente usa un default inválido
 				isUSD: quoteData.showUSD // Dejar que el Agente decida el código exacto de moneda
 			};
 
@@ -270,6 +312,11 @@ export const actions: Actions = {
 				// Capturar Conflicto de Vendedor (Llave Foránea)
 				if (errorMsg.includes('FK_saCotizacionCliente_saVendedor')) {
 					errorMsg = "Su usuario no está registrado como Vendedor en Profit Plus para esta sede. Por favor contacte al administrador.";
+				}
+
+				// Capturar Conflicto de Cuenta Ingreso/Egreso
+				if (errorMsg.includes('FK_saCotizacionCliente_saCuentaIngEgr')) {
+					errorMsg = "Error de configuración en Profit: La Cuenta de Ingreso/Egreso no es válida para esta sede. Contacte a soporte técnico.";
 				}
 
 				const details = res.details ? JSON.stringify(res.details) : null;
