@@ -1,9 +1,19 @@
 <script lang="ts">
   import { fade } from "svelte/transition";
-  import { Package, Search, Store, Plus, Edit2, AlertCircle } from "lucide-svelte";
+  import {
+    Package,
+    Search,
+    Store,
+    Plus,
+    Edit2,
+    AlertCircle,
+    ListFilter,
+    ImagePlus,
+  } from "lucide-svelte";
   import { goto } from "$app/navigation";
   import { page } from "$app/stores";
   import Combobox from "$lib/components/ui/Combobox.svelte";
+  import BarcodeScanner from "$lib/components/ui/BarcodeScanner.svelte";
   import type { PageData } from "./$types";
 
   let { data }: { data: PageData } = $props();
@@ -15,6 +25,26 @@
   const canCreate = data.crud?.create ?? false;
   const canUpdate = data.crud?.update ?? false;
 
+  let selectedLinea = $state($page.url.searchParams.get("linea") || "");
+  let selectedCategoria = $state($page.url.searchParams.get("categoria") || "");
+  let showAll = $state($page.url.searchParams.get("show_all") === "true");
+
+  $effect(() => {
+    selectedBranch = $page.url.searchParams.get("branch_id") || "";
+    searchTerm = $page.url.searchParams.get("search") || "";
+    selectedLinea = $page.url.searchParams.get("linea") || "";
+    selectedCategoria = $page.url.searchParams.get("categoria") || "";
+    showAll = $page.url.searchParams.get("show_all") === "true";
+  });
+
+  const filteredCategorias = $derived(
+    !selectedLinea
+      ? data.catalogs?.categorias || []
+      : (data.catalogs?.categorias || []).filter((c: any) =>
+          c.co_cat?.startsWith(parseInt(selectedLinea, 10).toString()),
+        ),
+  );
+
   function handleSearch(e?: Event) {
     if (e) e.preventDefault();
     isSearching = true;
@@ -25,8 +55,24 @@
     if (selectedBranch) url.searchParams.set("branch_id", selectedBranch);
     else url.searchParams.delete("branch_id");
 
+    if (selectedLinea) url.searchParams.set("linea", selectedLinea);
+    else url.searchParams.delete("linea");
+
+    if (selectedCategoria) url.searchParams.set("categoria", selectedCategoria);
+    else url.searchParams.delete("categoria");
+
+    if (showAll) url.searchParams.set("show_all", "true");
+    else url.searchParams.delete("show_all");
+
     url.searchParams.set("page", "1");
-    goto(url.toString(), { keepFocus: true }).finally(() => (isSearching = false));
+    goto(url.toString(), { keepFocus: true, noScroll: true }).finally(
+      () => (isSearching = false),
+    );
+  }
+
+  function toggleShowAll(val: boolean) {
+    showAll = val;
+    handleSearch();
   }
 </script>
 
@@ -53,9 +99,13 @@
     {/if}
   </div>
 
-  <div class="glass p-4 rounded-3xl border border-white/5 shadow-2xl grid grid-cols-1 md:grid-cols-2 lg:grid-cols-12 gap-4 items-center relative z-10">
+  <!-- Filtros -->
+  <div
+    class="glass p-4 rounded-3xl border border-white/5 shadow-2xl grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 items-center relative z-10 mb-8 w-full"
+  >
+    <!-- 1. Sede -->
     {#if data.branches && data.branches.length > 0}
-      <div class="col-span-1 md:col-span-1 lg:col-span-3">
+      <div class="w-full">
         <Combobox
           options={data.branches.map((b: any) => ({
             value: b.id,
@@ -65,24 +115,32 @@
           placeholder="Sucursal..."
           allLabel="Todas las Sucursales"
           icon={Store}
-          class="w-full h-12"
+          class="w-full h-14"
           onchange={() => handleSearch()}
         />
       </div>
     {/if}
 
-    <div class="col-span-1 md:col-span-1 lg:col-span-9">
-      <form class="relative group h-14 w-full" onsubmit={handleSearch}>
+    <!-- 2. Buscador + Scanner -->
+    <div class="w-full flex items-center gap-2">
+      <form
+        class="relative group h-14 flex-1"
+        onsubmit={(e) => {
+          e.preventDefault();
+          handleSearch();
+        }}
+      >
         <input
           type="text"
           bind:value={searchTerm}
-          placeholder="Buscar código o descripción del artículo..."
-          class="w-full h-full bg-surface-base pl-6 pr-14 rounded-2xl border border-white/5 focus:border-brand-500/30 outline-none transition-all font-bold text-sm"
+          placeholder="Buscar código o descripción..."
+          class="w-full h-full bg-surface-base pl-6 pr-14 rounded-2xl border border-white/5 focus:border-brand-500/30 outline-none transition-all font-bold text-sm placeholder:font-normal placeholder:text-text-secondary/30"
         />
         <button
           type="submit"
           disabled={isSearching}
           class="absolute right-1 top-1 bottom-1 w-12 flex items-center justify-center bg-surface-soft hover:bg-surface-strong text-brand-400 rounded-xl transition-all border border-border-subtle active:scale-95 disabled:opacity-50"
+          title="Buscar"
         >
           {#if isSearching}
             <span class="animate-pulse">...</span>
@@ -91,20 +149,87 @@
           {/if}
         </button>
       </form>
+      <BarcodeScanner
+        onScan={(code) => {
+          searchTerm = code;
+          handleSearch();
+        }}
+      />
+    </div>
+
+    <!-- 3. Linea -->
+    <div class="w-full">
+      <Combobox
+        options={(data.catalogs?.lineas || []).map((l: any) => ({
+          value: l.co_lin,
+          label: l.lin_des,
+        }))}
+        bind:value={selectedLinea}
+        placeholder="Línea..."
+        allLabel="Todas las Líneas"
+        icon={ListFilter}
+        class="w-full h-14"
+        onchange={() => {
+          selectedCategoria = "";
+          handleSearch();
+        }}
+      />
+    </div>
+
+    <!-- 4. Categoria -->
+    <div class="w-full">
+      <Combobox
+        options={filteredCategorias.map((c: any) => ({
+          value: c.co_cat,
+          label: c.cat_des,
+        }))}
+        bind:value={selectedCategoria}
+        placeholder="Categoría..."
+        allLabel="Todas las Categorías"
+        icon={ListFilter}
+        class="w-full h-14"
+        onchange={() => handleSearch()}
+      />
+    </div>
+
+    <!-- 5. Switch Stock -->
+    <div class="w-full h-14 flex items-center justify-start xl:justify-center">
+      <div
+        class="flex items-center bg-white/5 border border-white/5 p-1 rounded-xl h-full"
+      >
+        <button
+          onclick={() => toggleShowAll(false)}
+          class={`px-4 h-full rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${!showAll ? "bg-brand-500 text-white shadow-lg shadow-brand-500/20" : "text-text-muted hover:text-white"}`}
+          >Con Stock</button
+        >
+        <button
+          onclick={() => toggleShowAll(true)}
+          class={`px-4 h-full rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${showAll ? "bg-brand-500 text-white shadow-lg shadow-brand-500/20" : "text-text-muted hover:text-white"}`}
+          >Sin Stock</button
+        >
+      </div>
     </div>
   </div>
 
   {#if data.requireBranchSelection}
-    <div class="glass p-12 rounded-3xl border border-white/5 flex flex-col items-center justify-center text-center gap-4 opacity-70">
+    <div
+      class="glass p-12 rounded-3xl border border-white/5 flex flex-col items-center justify-center text-center gap-4 opacity-70"
+    >
       <Store size={48} class="text-text-muted/30" />
       <div>
         <h3 class="text-xl font-bold">Selecciona una Sucursal</h3>
-        <p class="text-text-muted mt-2">Usa el filtro para cargar los artículos de una sede.</p>
+        <p class="text-text-muted mt-2">
+          Usa el filtro para cargar los artículos de una sede.
+        </p>
       </div>
     </div>
   {:else if data.error}
-    <div class="p-8 rounded-3xl border border-red-500/20 bg-red-500/5 flex flex-col items-center justify-center text-center gap-4">
-      <div class="h-16 w-16 bg-red-500/10 text-red-500 flex items-center justify-center rounded-2xl">
+    <div
+      class="p-8 rounded-3xl border border-red-500/20 bg-red-500/5 flex flex-col items-center justify-center text-center gap-4"
+    >
+      <div
+        class="h-16 w-16 bg-red-500/10 text-red-500 flex items-center justify-center rounded-2xl"
+      >
         <AlertCircle size={32} />
       </div>
       <div>
@@ -113,54 +238,110 @@
       </div>
     </div>
   {:else if !data.articles?.length}
-    <div class="glass p-12 rounded-3xl border border-white/5 flex flex-col items-center justify-center text-center gap-4 opacity-70">
+    <div
+      class="glass p-12 rounded-3xl border border-white/5 flex flex-col items-center justify-center text-center gap-4 opacity-70"
+    >
       <Package size={48} class="text-text-muted/30" />
       <div>
         <h3 class="text-xl font-bold">No se encontraron artículos</h3>
-        <p class="text-text-muted mt-2">Verifica los filtros o intenta con otra búsqueda.</p>
+        <p class="text-text-muted mt-2">
+          Verifica los filtros o intenta con otra búsqueda.
+        </p>
       </div>
     </div>
   {:else}
-    <div class="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
+    <div class="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-4 gap-6">
       {#each data.articles as article}
-        <div class="glass p-6 rounded-3xl border border-white/5 transition-all hover:shadow-2xl hover:border-brand-500/30 flex flex-col gap-4">
+        <div
+          class="glass p-6 rounded-3xl border border-white/5 transition-all hover:shadow-2xl hover:border-brand-500/30 flex flex-col gap-4 relative group"
+        >
+          <!-- Top Row: Icon & Code -->
           <div class="flex justify-between items-start">
-            <div class="flex items-center gap-3">
-              <div class="h-12 w-12 rounded-2xl bg-brand-500/10 text-brand-500 flex items-center justify-center shrink-0">
-                <Package size={24} />
-              </div>
-              <div>
-                <span class="px-2 py-0.5 rounded-md bg-surface-base border border-border-subtle text-xs font-mono text-text-muted">
-                  {article.co_art}
-                </span>
-                <h3 class="text-lg font-bold leading-tight mt-1 truncate max-w-[200px]" title={article.art_des}>
-                  {article.art_des}
-                </h3>
-              </div>
+            <div
+              class="h-12 w-12 rounded-2xl bg-brand-500/10 text-brand-500 flex items-center justify-center shrink-0"
+            >
+              <Package size={24} />
             </div>
-            
+            <span
+              class="px-2 py-1 rounded-md bg-surface-base border border-border-subtle text-xs font-mono text-text-muted"
+            >
+              {article.co_art}
+            </span>
+          </div>
+
+          <!-- Image Preview Space -->
+          <div
+            class="w-full aspect-video bg-surface-base/50 rounded-2xl border border-white/5 flex items-center justify-center mt-2 relative overflow-hidden group/img"
+          >
+            {#if article.image_base64 || article.image_url}
+              <img
+                src={article.image_base64 || article.image_url}
+                alt={article.co_art}
+                class="w-full h-full object-cover opacity-80"
+              />
+            {:else}
+              <div class="flex flex-col items-center gap-2 text-text-muted/30">
+                <ImagePlus size={32} />
+                <span class="text-[10px] font-bold uppercase tracking-widest"
+                  >Sin Imagen</span
+                >
+              </div>
+            {/if}
+
             {#if canUpdate}
-              <button 
-                onclick={() => goto(`/dashboard/purchases/articles/editor?id=${encodeURIComponent(article.co_art)}&branch_id=${selectedBranch}`)}
-                class="p-2 bg-surface-base hover:bg-brand-500 hover:text-white text-text-muted border border-border-subtle rounded-xl transition-all"
-                title="Editar Artículo"
+              <button
+                onclick={() =>
+                  goto(
+                    `/dashboard/purchases/articles/editor?id=${encodeURIComponent(article.co_art)}&branch_id=${selectedBranch}`,
+                  )}
+                class="absolute inset-0 bg-brand-500/80 text-white opacity-0 group-hover/img:opacity-100 transition-all flex items-center justify-center gap-2 font-bold backdrop-blur-sm"
               >
-                <Edit2 size={16} />
+                <Edit2 size={20} /> Editar Artículo
               </button>
             {/if}
           </div>
 
-          <div class="grid grid-cols-2 gap-2 mt-2">
-            <div class="bg-surface-base/40 p-3 rounded-xl border border-white/5">
-              <span class="text-[10px] text-text-muted uppercase font-bold block mb-1">Línea</span>
-              <span class="font-bold text-sm text-text-base truncate block" title={article.co_lin}>{article.co_lin || 'N/A'}</span>
-            </div>
-            <div class="bg-surface-base/40 p-3 rounded-xl border border-white/5">
-              <span class="text-[10px] text-text-muted uppercase font-bold block mb-1">Precio Principal</span>
-              <span class="font-bold text-sm text-brand-400">
-                Bs. {Number(article.prec_vta1 || 0).toLocaleString('de-DE', {minimumFractionDigits: 2})}
-              </span>
-            </div>
+          <!-- Description -->
+          <h3
+            class="text-lg font-bold leading-tight mt-2 line-clamp-3"
+            title={article.art_des || article.descripcion}
+          >
+            {article.art_des || article.descripcion || "Sin título"}
+          </h3>
+
+          <!-- Existencia por Almacén -->
+          <div class="mt-auto pt-4 border-t border-white/5 flex flex-col gap-2">
+            <span
+              class="text-[10px] uppercase font-black tracking-widest text-text-muted mb-1"
+              >Existencia por Almacén</span
+            >
+
+            {#if article.disponibilidad && Array.isArray(article.disponibilidad) && article.disponibilidad.length > 0}
+              {#each article.disponibilidad as alm}
+                <div
+                  class="flex items-center justify-between py-1.5 bg-surface-base/50 px-3 rounded-xl border border-white/5"
+                >
+                  <span
+                    class="text-xs text-text-muted truncate max-w-[150px]"
+                    title={alm.des_alma}>{alm.des_alma}</span
+                  >
+                  <span class="font-bold text-brand-400 text-sm"
+                    >{alm.stock ?? alm.cant_stock ?? 0}</span
+                  >
+                </div>
+              {/each}
+            {:else}
+              <div
+                class="flex items-center justify-between py-1.5 bg-surface-base/50 px-3 rounded-xl border border-white/5"
+              >
+                <span class="text-xs text-text-muted">Total (Global)</span>
+                <span class="font-black text-brand-400 text-lg">
+                  {article.stock !== undefined
+                    ? article.stock
+                    : article.s_actual || "0"}
+                </span>
+              </div>
+            {/if}
           </div>
         </div>
       {/each}
@@ -180,7 +361,9 @@
         >
           Anterior
         </button>
-        <span class="px-4 py-2 rounded-xl bg-brand-500/10 text-brand-500 font-bold border border-brand-500/20 text-sm">
+        <span
+          class="px-4 py-2 rounded-xl bg-brand-500/10 text-brand-500 font-bold border border-brand-500/20 text-sm"
+        >
           Pág {data.pagination.page} de {data.pagination.totalPages}
         </span>
         <button

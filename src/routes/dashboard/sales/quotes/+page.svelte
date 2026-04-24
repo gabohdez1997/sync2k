@@ -751,18 +751,16 @@
   <div
     class="w-full max-w-6xl mx-auto px-4 mt-6 flex flex-col md:flex-row justify-between md:items-center gap-4"
   >
-    <div class="flex items-start md:items-center gap-4 mt-1">
-      <ShoppingBag size={40} class="text-brand-500 shrink-0" />
-      <div class="w-full">
-        <h1 class="text-3xl md:text-4xl font-black tracking-tight w-full">
-          {data.preloadedQuote ? `Editar Cotización` : "Nueva Cotización"}
-        </h1>
-        <p class="text-text-muted mt-1 md:mt-2 text-base md:text-lg font-medium opacity-80 w-full">
-          {data.preloadedQuote
-            ? `Documento Nro: ${data.preloadedQuote.doc_num}`
-            : "Generar nuevo documento"}
-        </p>
-      </div>
+    <div class="flex flex-col gap-2">
+      <h1 class="text-4xl font-black tracking-tight flex items-center gap-3">
+        <ShoppingBag size={40} class="text-brand-500" />
+        {data.preloadedQuote ? `Editar Cotización` : "Nueva Cotización"}
+      </h1>
+      <p class="text-text-muted text-lg">
+        {data.preloadedQuote
+          ? `Documento Nro: ${data.preloadedQuote.doc_num}`
+          : "Generar nuevo documento"}
+      </p>
     </div>
 
     <a
@@ -864,43 +862,39 @@
         </div>
 
         <!-- Search Bar for RIF -->
-        <div class="max-w-xl mx-auto space-y-6">
-          {#if data.branches && data.branches.length > 1}
-            <div
-              class="glass p-4 rounded-2xl border border-border-subtle flex items-center gap-4 relative z-50"
-            >
-              <Store class="text-brand-400" size={24} />
-              <div class="flex-1">
-                <p
-                  class="text-[10px] font-black uppercase tracking-widest text-text-muted mb-1"
-                >
-                  Sucursal de Venta
-                </p>
+        <div class="w-full mt-8">
+          <div class="glass p-4 rounded-3xl border border-white/5 shadow-2xl flex flex-col md:flex-row justify-center gap-4 items-center relative z-10 w-full">
+            {#if data.branches && data.branches.length > 1}
+              <div class="w-full md:w-[calc(50%-0.5rem)] xl:w-[25%]">
                 <Combobox
                   options={(data.branches || []).map((b: any) => ({
                     value: b.id,
                     label: b.name,
                   }))}
                   bind:value={selectedBranch}
-                  placeholder="Seleccionar sucursal..."
+                  placeholder="Sucursal de Venta..."
+                  icon={Store}
+                  class="w-full h-14"
                   onchange={() => handleSearch()}
                 />
               </div>
-            </div>
-          {/if}
+            {/if}
 
-          <SearchBar
-            bind:value={rifInput}
-            isSearching={searchingClient}
-            placeholder="V12345678"
-            className="w-full"
-            onsubmit={(e: Event) => {
-              const form = document.querySelector(
-                'form[action="?/searchClient"]',
-              ) as HTMLFormElement;
-              if (form) form.requestSubmit();
-            }}
-          />
+            <div class="w-full md:w-[calc(50%-0.5rem)] xl:w-[25%]">
+              <SearchBar
+                bind:value={rifInput}
+                isSearching={searchingClient}
+                placeholder="V12345678"
+                className="w-full h-14"
+                onsubmit={(e: Event) => {
+                  const form = document.querySelector(
+                    'form[action="?/searchClient"]',
+                  ) as HTMLFormElement;
+                  if (form) form.requestSubmit();
+                }}
+              />
+            </div>
+          </div>
 
           <form
             method="POST"
@@ -955,7 +949,7 @@
         {#if selectedClient}
           <!-- Card Cliente Encontrado -->
           <div
-            class="max-w-2xl mx-auto animate-in fade-in slide-in-from-bottom-4 duration-500"
+            class="w-full animate-in fade-in slide-in-from-bottom-4 duration-500"
             in:scale={{ duration: 400, start: 0.98 }}
           >
             <div
@@ -1154,7 +1148,7 @@
         {:else if showRegistrationForm}
           <!-- Formulario Creación Cliente (Paso 1b) -->
           <div
-            class="max-w-3xl mx-auto animate-in fade-in slide-in-from-bottom-4 duration-500"
+            class="w-full animate-in fade-in slide-in-from-bottom-4 duration-500"
             in:fade
           >
             <div class="glass p-10 rounded-[40px] border border-border-subtle">
@@ -1441,7 +1435,7 @@
                   placeholder="Sucursal..."
                   icon={Store}
                   onchange={() => handleSearch()}
-                  class="w-full h-12"
+                  class="w-full h-14"
                 />
             </div>
           {/if}
@@ -1482,7 +1476,7 @@
               placeholder="Líneas (Todas)"
               allLabel="Líneas (Todas)"
               onchange={handleSearch}
-              class="w-full h-12"
+              class="w-full h-14"
             />
           </div>
 
@@ -1497,13 +1491,13 @@
               placeholder="Categorías (Todas)"
               allLabel="Categorías (Todas)"
               onchange={() => handleSearch()}
-              class="w-full h-12"
+              class="w-full h-14"
             />
           </div>
 
           <!-- 4. Acciones (Precio + Moneda) -->
           <div
-            class="flex items-center gap-2 w-full h-12 col-span-2 lg:col-span-1 justify-end"
+            class="flex items-center gap-2 w-full h-14 col-span-2 lg:col-span-1 justify-end"
           >
             <button
               onclick={() => {

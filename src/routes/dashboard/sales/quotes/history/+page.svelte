@@ -102,13 +102,15 @@
     {/if}
 
     <!-- TOP HEADER -->
-    <div class="flex flex-col md:flex-row justify-between md:items-center gap-4">
-        <div class="flex items-start md:items-center gap-4 mt-1">
-            <Clock size={40} class="text-brand-500 shrink-0" />
-            <div class="w-full">
-                <h1 class="text-3xl md:text-4xl font-black tracking-tight text-text-base w-full">Historial de Cotizaciones</h1>
-                <p class="text-text-muted mt-1 md:mt-2 text-base md:text-lg font-medium w-full">Consulta y gestiona tus documentos emitidos en tiempo real.</p>
-            </div>
+    <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div class="flex flex-col gap-2">
+            <h1 class="text-4xl font-black tracking-tight flex items-center gap-3">
+                <Clock size={40} class="text-brand-500" />
+                Historial de Cotizaciones
+            </h1>
+            <p class="text-text-muted text-lg">
+                Consulta y gestiona tus documentos emitidos en tiempo real.
+            </p>
         </div>
 
         {#if data.canCreate}
@@ -128,28 +130,28 @@
     </div>
 
     <!-- SEARCH & FILTERS ROW -->
-    <div class="flex flex-col lg:flex-row items-center gap-4 w-full">
-        <div class="flex flex-row items-center gap-3 w-full lg:w-1/2 ml-auto">
-            {#if data.branches && data.branches.length > 1}
-                <div class="w-48 sm:w-64 shrink-0">
-                    <Combobox
-                        options={data.branches.map((b: any) => ({ value: b.id, label: b.name }))}
-                        bind:value={filterSede}
-                        placeholder="Sucursal..."
-                        allLabel="Todas las Sucursales"
-                        icon={Store}
-                        class="w-full h-14"
-                        onchange={() => applyFilters()}
-                    />
-                </div>
-            {/if}
+    <div class="glass p-4 rounded-3xl border border-white/5 shadow-2xl grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 items-center relative z-10 mb-8 w-full">
+        {#if data.branches && data.branches.length > 1}
+            <div class="w-full">
+                <Combobox
+                    options={data.branches.map((b: any) => ({ value: b.id, label: b.name }))}
+                    bind:value={filterSede}
+                    placeholder="Sucursal..."
+                    allLabel="Todas las Sucursales"
+                    icon={Store}
+                    class="w-full h-14"
+                    onchange={() => applyFilters()}
+                />
+            </div>
+        {/if}
 
+        <div class="w-full">
             <SearchBar 
                 bind:value={filterSearch} 
                 isSearching={isSearching} 
                 onsubmit={applyFilters} 
                 placeholder="Buscar por documento, cliente o RIF..."
-                className="flex-1"
+                className="w-full h-14"
             />
         </div>
     </div>

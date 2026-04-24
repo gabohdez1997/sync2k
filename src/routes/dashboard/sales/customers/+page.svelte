@@ -218,54 +218,50 @@
   </div>
 
   <!-- Search, Filters and Stats -->
-  <div class="flex flex-col gap-4">
-    <!-- Selection row (Tenant + Branch) -->
-    <div class="flex flex-col lg:flex-row gap-4 items-center w-full">
-      {#if (data.tenants?.length ?? 0) > 1}
-          <Combobox
-            options={(data.tenants || []).map((t: any) => ({ value: t.id, label: t.name }))}
-            bind:value={selectedTenant}
-            placeholder="Seleccionar Empresa..."
-            allLabel="Todas las Empresas"
-            icon={Box}
-            class="w-full lg:w-72 shrink-0"
-            onchange={() => handleSearch()}
-          />
-      {:else if data.tenants?.length === 1 || data.context?.tenantId}
-        <div
-          class="h-14 bg-surface-base border border-white/10 rounded-2xl px-6 items-center gap-3 shrink-0 hidden lg:flex"
-        >
-          <Box class="text-brand-400" size={18} />
-          <span class="font-bold text-sm text-brand-100"
-            >{data.tenants?.[0]?.name ||
-              data.context?.tenantId ||
-              "Empresa"}</span
-          >
-        </div>
-      {/if}
-
-      <!-- Contenedor del Buscador y Sucursal (50% en PC, fluido en tlf) -->
-      <div class="flex flex-row items-center gap-3 w-full lg:w-1/2 ml-auto">
-        {#if data.branches && data.branches.length > 1}
-            <Combobox
-              options={(data.branches || []).map((b: any) => ({ value: b.id, label: b.name }))}
-              bind:value={selectedBranch}
-              placeholder="Sucursal..."
-              allLabel="Todas las Sucursales"
-              icon={Store}
-              class="w-32 sm:w-60 shrink-0"
-              onchange={() => handleSearch()}
-            />
-        {/if}
-
-        <SearchBar 
-          bind:value={searchQuery} 
-          {isSearching} 
-          onsubmit={handleSearch} 
-          placeholder="Buscar por nombre, código o RIF..."
-          className="flex-1"
+  <div class="glass p-4 rounded-3xl border border-white/5 shadow-2xl grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 items-center relative z-10 mb-8 w-full">
+    {#if (data.tenants?.length ?? 0) > 1}
+      <div class="w-full">
+        <Combobox
+          options={(data.tenants || []).map((t: any) => ({ value: t.id, label: t.name }))}
+          bind:value={selectedTenant}
+          placeholder="Seleccionar Empresa..."
+          allLabel="Todas las Empresas"
+          icon={Box}
+          class="w-full h-14"
+          onchange={() => handleSearch()}
         />
       </div>
+    {:else if data.tenants?.length === 1 || data.context?.tenantId}
+      <div class="h-14 bg-surface-base border border-white/10 rounded-2xl px-6 flex items-center gap-3 w-full">
+        <Box class="text-brand-400 shrink-0" size={18} />
+        <span class="font-bold text-sm text-brand-100 truncate">
+          {data.tenants?.[0]?.name || data.context?.tenantId || "Empresa"}
+        </span>
+      </div>
+    {/if}
+
+    {#if data.branches && data.branches.length > 1}
+      <div class="w-full">
+        <Combobox
+          options={(data.branches || []).map((b: any) => ({ value: b.id, label: b.name }))}
+          bind:value={selectedBranch}
+          placeholder="Sucursal..."
+          allLabel="Todas las Sucursales"
+          icon={Store}
+          class="w-full h-14"
+          onchange={() => handleSearch()}
+        />
+      </div>
+    {/if}
+
+    <div class="w-full">
+      <SearchBar 
+        bind:value={searchQuery} 
+        {isSearching} 
+        onsubmit={handleSearch} 
+        placeholder="Buscar por nombre, código o RIF..."
+        className="w-full h-14"
+      />
     </div>
   </div>
 

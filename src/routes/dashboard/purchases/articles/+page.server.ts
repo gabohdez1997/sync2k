@@ -58,15 +58,41 @@ export const load: PageServerLoad = protectLoad('pur_articles', async ({ url, lo
 			agent_api_key: selectedBranchObj.agent_token
 		}, (locals as any).profile || undefined, fetch);
 
+		// ─── 3. LOAD CATALOGS (LINEAS, CATEGORIAS) ───────────────────────────────────
+		let lineas: any[] = [];
+		let categorias: any[] = [];
+
+		try {
+			const [lineasRes, catsRes] = await Promise.all([
+				agentClient.request<any>('/catalogos/lineas').catch(() => ({ data: [] })),
+				agentClient.request<any>('/catalogos/categorias').catch(() => ({ data: [] }))
+			]);
+			lineas = (lineasRes as any).data || (lineasRes as any).items || (Array.isArray(lineasRes) ? lineasRes : []);
+			categorias = (catsRes as any).data || (catsRes as any).items || (Array.isArray(catsRes) ? catsRes : []);
+		} catch (e) {
+			console.error('[PUR_ARTICLES] Catalog fetch error:', e);
+		}
+
+		// ─── 4. BUILD ENDPOINT & FETCH ARTICLES ───────────────────────────────────
 		const pageIndex = parseInt(url.searchParams.get('page') || '1', 10);
-		const limit = 20;
+		const limit = 12;
 		const searchTerm = (url.searchParams.get('search') || '').trim();
 
-		// ─── 3. BUILD ENDPOINT & FETCH ARTICLES ───────────────────────────────────
 		const params = new URLSearchParams();
 		params.set('page', pageIndex.toString());
 		params.set('limit', limit.toString());
 		params.set('sort', 'default');
+		
+		const showAll = url.searchParams.get('show_all') === 'true';
+		if (showAll) {
+			params.set('in_stock', 'all');
+		}
+
+		const linea = (url.searchParams.get('linea') || '').trim();
+		const categoria = (url.searchParams.get('categoria') || '').trim();
+
+		if (linea) params.set('linea', linea);
+		if (categoria) params.set('categoria', categoria);
 
 		if (searchTerm) {
 			const isCode = /^\d/.test(searchTerm);
@@ -91,6 +117,10 @@ export const load: PageServerLoad = protectLoad('pur_articles', async ({ url, lo
 		return {
 			articles,
 			branches: allowedBranches,
+			catalogs: {
+				lineas,
+				categorias
+			},
 			crud,
 			pagination: {
 				page: Number((resData as any).pagination?.currentPage || (resData as any).pagination?.page || pageIndex),

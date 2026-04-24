@@ -22,6 +22,7 @@
   } from "lucide-svelte";
   import { toast } from "svelte-sonner";
   import Combobox from "$lib/components/ui/Combobox.svelte";
+  import BarcodeScanner from "$lib/components/ui/BarcodeScanner.svelte";
   import type { PageData, ActionData } from "./$types";
 
   let { data, form }: { data: PageData; form: any } = $props();
@@ -240,9 +241,14 @@
     }
 
     url.searchParams.set("page", "1");
-    goto(url.toString(), { keepFocus: true }).finally(
+    goto(url.toString(), { keepFocus: true, noScroll: true }).finally(
       () => (isSearching = false),
     );
+  }
+
+  function toggleShowAll(val: boolean) {
+    showAll = val;
+    handleSearch();
   }
 
   function handlePrintLabels() {
@@ -315,11 +321,11 @@
 
   <!-- SEARCH & FILTERS SECTION -->
   <div
-    class="glass p-4 rounded-3xl border border-white/5 shadow-2xl grid grid-cols-1 md:grid-cols-2 lg:grid-cols-12 gap-4 items-center relative z-10 mb-8"
+    class="glass p-4 rounded-3xl border border-white/5 shadow-2xl grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 items-center relative z-10 mb-8 w-full"
   >
-    <!-- 1. Sucursal -->
+    <!-- 1. Sede -->
     {#if data.branches && data.branches.length > 0}
-      <div class="col-span-1 md:col-span-1 lg:col-span-2">
+      <div class="w-full">
         <Combobox
           options={data.branches.map((b: any) => ({
             value: b.id,
@@ -329,16 +335,16 @@
           placeholder="Sucursal..."
           allLabel="Todas las Sucursales"
           icon={Store}
-          class="w-full h-12"
+          class="w-full h-14"
           onchange={() => handleSearch()}
         />
       </div>
     {/if}
 
-    <!-- 2. Buscador -->
-    <div class="col-span-1 md:col-span-1 lg:col-span-3">
+    <!-- 2. Buscador + Scanner -->
+    <div class="w-full flex items-center gap-2">
       <form
-        class="relative group h-14 w-full"
+        class="relative group h-14 flex-1"
         onsubmit={(e) => {
           e.preventDefault();
           handleSearch();
@@ -363,31 +369,16 @@
           {/if}
         </button>
       </form>
+      <BarcodeScanner
+        onScan={(code) => {
+          searchTerm = code;
+          handleSearch();
+        }}
+      />
     </div>
 
-    <!-- 3. Ubicación -->
-    {#if data.context?.ubicaciones && data.context.ubicaciones.length > 0}
-      {@const ubicOptions = [
-        ...(data.context.ubicaciones || []).map((u: any) => ({
-          value: u.id || u.co_ubicacion,
-          label: `${u.co_ubicacion || u.id} - ${u.descripcion || u.name || u.co_ubicacion || u.id}`,
-        })),
-      ]}
-      <div class="col-span-1 md:col-span-1 lg:col-span-2">
-        <Combobox
-          options={ubicOptions}
-          bind:value={selectedUbicacion}
-          placeholder="Ubicación..."
-          allLabel="Todas las Ubicaciones"
-          icon={MapPin}
-          class="w-full h-12"
-          onchange={() => handleSearch()}
-        />
-      </div>
-    {/if}
-
-    <!-- 4. Linea -->
-    <div class="col-span-1 md:col-span-1 lg:col-span-2">
+    <!-- 3. Linea -->
+    <div class="w-full">
       <Combobox
         options={(data.context?.lineas || []).map((l: any) => ({
           value: l.co_lin,
@@ -397,7 +388,7 @@
         placeholder="Línea..."
         allLabel="Todas las Líneas"
         icon={ListFilter}
-        class="w-full h-12"
+        class="w-full h-14"
         onchange={() => {
           selectedCategoria = "";
           handleSearch();
@@ -405,8 +396,8 @@
       />
     </div>
 
-    <!-- 5. Categoria -->
-    <div class="col-span-1 md:col-span-1 lg:col-span-2">
+    <!-- 4. Categoria -->
+    <div class="w-full">
       <Combobox
         options={filteredCategorias.map((c: any) => ({
           value: c.co_cat,
@@ -416,39 +407,48 @@
         placeholder="Categoría..."
         allLabel="Todas las Categorías"
         icon={ListFilter}
-        class="w-full h-12"
+        class="w-full h-14"
         onchange={() => handleSearch()}
       />
     </div>
 
-    <!-- 6. Toggle Catálogo -->
-    <div
-      class="col-span-1 md:col-span-1 lg:col-span-1 flex justify-center lg:justify-end"
-    >
-      <button
-        onclick={() => {
-          showAll = !showAll;
-          handleSearch();
-        }}
-        class="h-12 w-full lg:w-12 flex items-center justify-center bg-surface-base border {showAll
-          ? 'border-brand-500/30 bg-brand-500/10 text-brand-400'
-          : 'border-white/5 text-text-muted'} rounded-2xl transition-all hover:bg-white/5"
-        title={showAll
-          ? "Mostrando catálogo completo"
-          : "Mostrando solo artículos con stock/movimiento"}
+    <!-- 5. Ubicación -->
+    {#if data.context?.ubicaciones && data.context.ubicaciones.length > 0}
+      {@const ubicOptions = [
+        ...(data.context.ubicaciones || []).map((u: any) => ({
+          value: u.id || u.co_ubicacion,
+          label: `${u.co_ubicacion || u.id} - ${u.descripcion || u.name || u.co_ubicacion || u.id}`,
+        })),
+      ]}
+      <div class="w-full">
+        <Combobox
+          options={ubicOptions}
+          bind:value={selectedUbicacion}
+          placeholder="Ubicación..."
+          allLabel="Todas las Ubicaciones"
+          icon={MapPin}
+          class="w-full h-14"
+          onchange={() => handleSearch()}
+        />
+      </div>
+    {/if}
+
+    <!-- 6. Switch Stock (Estilo USD/BS) -->
+    <div class="w-full h-14 flex items-center justify-start xl:justify-center">
+      <div
+        class="flex items-center bg-white/5 border border-white/5 p-1 rounded-xl h-full"
       >
-        <div
-          class="w-8 h-4 rounded-full relative transition-colors {showAll
-            ? 'bg-brand-600'
-            : 'bg-white/10'}"
+        <button
+          onclick={() => toggleShowAll(false)}
+          class={`px-4 h-full rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${!showAll ? "bg-brand-500 text-white shadow-lg shadow-brand-500/20" : "text-text-muted hover:text-white"}`}
+          >Con Stock</button
         >
-          <div
-            class="absolute top-0.5 left-0.5 w-3 h-3 bg-white rounded-full transition-transform {showAll
-              ? 'translate-x-4'
-              : 'translate-x-0'}"
-          ></div>
-        </div>
-      </button>
+        <button
+          onclick={() => toggleShowAll(true)}
+          class={`px-4 h-full rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${showAll ? "bg-brand-500 text-white shadow-lg shadow-brand-500/20" : "text-text-muted hover:text-white"}`}
+          >Sin Stock</button
+        >
+      </div>
     </div>
   </div>
 

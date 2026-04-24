@@ -14,7 +14,10 @@
     DollarSign,
     Percent,
     AlertCircle,
-    CheckCircle2
+    CheckCircle2,
+    Plus,
+    Edit2,
+    Box
   } from "lucide-svelte";
   import { toast } from "svelte-sonner";
   import Combobox from "$lib/components/ui/Combobox.svelte";
