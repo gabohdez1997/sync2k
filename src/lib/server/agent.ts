@@ -172,6 +172,16 @@ export class AgentClient {
 	}
 
 	/**
+	 * Actualiza la tasa cambiaria (BCV) en el sistema local
+	 */
+	async updateTasa(tasa: number) {
+		return this.request<any>('/catalogos/tasa', {
+			method: 'POST',
+			body: JSON.stringify({ tasa })
+		});
+	}
+
+	/**
 	 * Obtiene el catálogo de zonas
 	 */
 	async getZonas() {

@@ -83,6 +83,7 @@
         { id: 'cash_billing', label: 'Facturas / NE', href: '/dashboard/billing', icon: Receipt },
         { id: 'cash_payments', label: 'Cobros', href: '/dashboard/cash/payments', icon: Wallet },
         { id: 'cash_credits', label: 'Devoluciones / NC', href: '/dashboard/cash/credits', icon: RotateCcw },
+        { id: 'cash_exchange', label: 'Tasa Cambiaria', href: '/dashboard/cash/exchange-rate', icon: RefreshCw },
       ]
     },
     {

@@ -48,6 +48,7 @@
         { id: "cash_billing", label: "Facturas / NE" },
         { id: "cash_payments", label: "Cobros" },
         { id: "cash_credits", label: "Devoluciones / NC" },
+        { id: "cash_exchange", label: "Tasa Cambiaria" },
       ],
     },
     {
@@ -694,6 +695,7 @@
                       <td
                         class="px-6 py-4 text-center border-b border-border-subtle"
                       >
+                        {#if opt.id !== 'cash_exchange'}
                         <button
                           type="button"
                           onclick={() => toggleAll(opt.id)}
@@ -717,13 +719,16 @@
                             </div>
                           {/if}
                         </button>
+                        {:else}
+                          <span class="text-[9px] text-text-muted/20">—</span>
+                        {/if}
                       </td>
 
                       {#each ["read", "create", "update", "delete", "others"] as action}
                         <td
                           class="px-6 py-4 text-center border-b border-border-subtle"
                         >
-                          {#if action !== 'others' || opt.hasOthers}
+                          {#if (opt.id !== 'cash_exchange' && (action !== 'others' || opt.hasOthers)) || (opt.id === 'cash_exchange' && action === 'update')}
                             <label
                               class="relative inline-flex items-center cursor-pointer justify-center"
                             >
@@ -734,8 +739,13 @@
                                     action as keyof (typeof rolePermissions)[string]
                                   ]
                                 }
-                                onchange={() =>
-                                  handleCheckboxChange(opt.id, action)}
+                                onchange={() => {
+                                  handleCheckboxChange(opt.id, action);
+                                  // Forzar read=true si es cash_exchange y se marca update
+                                  if (opt.id === 'cash_exchange' && action === 'update' && rolePermissions[opt.id].update) {
+                                    rolePermissions[opt.id].read = true;
+                                  }
+                                }}
                                 class="sr-only peer"
                               />
                               <div
