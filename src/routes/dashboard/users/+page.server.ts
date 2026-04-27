@@ -71,38 +71,60 @@ export const actions: Actions = {
 
       if (userId) {
         // ── Actualizar usuario existente ───────────────────────
+        
+        // 1. Obtener datos actuales para comparar y auditar
+        const { data: current, error: currentErr } = await supabaseAdmin
+          .from('profiles')
+          .select('*')
+          .eq('id', userId)
+          .single();
+        
+        if (currentErr) return fail(500, { message: `Error al obtener usuario: ${currentErr.message}` });
+
         const updateData: any = {
           full_name:   fullName,
+          email:       email, // Incluir email en el perfil
           profit_user: profitUser,
-          profit_pass: profitPass,
           active:      isActive,
           updated_at:  new Date().toISOString()
         };
 
-        if (password) {
-          // Actualizar en Supabase Auth
-          await supabaseAdmin.auth.admin.updateUserById(userId, { password });
-          // Actualizar hash para modo offline
-          updateData.password_hash = await bcrypt.hash(password, 12);
+        // Solo actualizar profit_pass si se proporcionó uno nuevo
+        if (profitPass) {
+          updateData.profit_pass = profitPass;
         }
 
-        // Obtener datos actuales para la auditoría
-        const { data: current } = await supabaseAdmin.from('profiles').select('*').eq('id', userId).single();
-        const oldData = current;
+        // Manejo de cambio de contraseña Web o Email en Auth
+        const authUpdates: any = {};
+        if (password) {
+          authUpdates.password = password;
+          updateData.password_hash = await bcrypt.hash(password, 12);
+        }
+        if (email !== current.email) {
+          authUpdates.email = email;
+        }
 
-        const { error } = await supabaseAdmin
+        if (Object.keys(authUpdates).length > 0) {
+          const { error: authUpdateErr } = await supabaseAdmin.auth.admin.updateUserById(userId, authUpdates);
+          if (authUpdateErr) return fail(500, { message: `Error al actualizar Auth: ${authUpdateErr.message}` });
+        }
+
+        // Actualizar perfil
+        const { error: updateErr } = await supabaseAdmin
           .from('profiles')
           .update(updateData)
           .eq('id', userId);
-        if (error) return fail(500, { message: error.message });
+        
+        if (updateErr) return fail(500, { message: `Error al actualizar perfil: ${updateErr.message}` });
 
+        // Auditoría
         await supabaseAdmin.rpc('log_action', {
           p_user_id:    locals.profile?.id ?? null,
           p_user_email: locals.profile?.email ?? 'system',
           p_action:     'UPDATE',
           p_module:     'sec_users',
           p_record_id:  userId,
-          p_old_data:   JSON.stringify(oldData),
+          p_old_data:   JSON.stringify(current),
           p_new_data:   JSON.stringify(updateData)
         });
 

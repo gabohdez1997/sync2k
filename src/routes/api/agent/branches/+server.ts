@@ -23,7 +23,7 @@ export const GET: RequestHandler = async ({ url, locals }) => {
 
 	try {
 		// Buscamos la sucursal en Supabase
-		const { data: branch, error: dbError } = await supabaseAdmin
+		let { data: branch, error: dbError } = await supabaseAdmin
 			.from('branches')
 			.select('id, name, agent_url, agent_token')
 			.eq('id', branchId)
