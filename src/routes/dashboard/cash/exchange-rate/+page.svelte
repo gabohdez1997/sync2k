@@ -288,17 +288,29 @@
 
               <div class="w-10 h-10 flex items-center justify-center">
                 {#if branch.error}
-                  <div class="text-red-400" title={branch.error}>
+                  <button 
+                    class="text-red-400 hover:scale-110 transition-transform" 
+                    title={branch.error}
+                    onclick={() => invalidateAll()}
+                  >
                     <XCircle size={24} />
-                  </div>
+                  </button>
                 {:else if branch.currentRate === data.bcvRate}
-                  <div class="text-emerald-500" title="Sincronizada">
+                  <button 
+                    class="text-emerald-500 hover:scale-110 transition-transform" 
+                    title="Sincronizada. Clic para refrescar."
+                    onclick={() => invalidateAll()}
+                  >
                     <CheckCircle2 size={24} />
-                  </div>
+                  </button>
                 {:else}
-                  <div class="text-amber-500" title="Desactualizada">
-                    <RefreshCw size={24} class="opacity-50" />
-                  </div>
+                  <button 
+                    class="text-amber-500 hover:scale-110 transition-transform" 
+                    title="Desactualizada o no encontrada. Clic para refrescar."
+                    onclick={() => invalidateAll()}
+                  >
+                    <RefreshCw size={24} class={branch.currentRate === null ? "opacity-100" : "opacity-50"} />
+                  </button>
                 {/if}
               </div>
             </div>
