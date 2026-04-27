@@ -1,136 +1,146 @@
-import { protectLoad } from '$lib/server/permissions';
-import { AgentClient } from '$lib/server/agent';
-import { supabaseAdmin } from '$lib/server/supabase';
+import { error } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
+import { AgentClient } from '$lib/server/agent';
 
-export const load: PageServerLoad = protectLoad('pur_articles', async ({ url, locals, fetch }) => {
+export const load: PageServerLoad = async ({ locals, url, fetch }) => {
 	try {
-		const userProfile = (locals as any).profile;
+		const profile = (locals as any).profile;
+		if (!profile) return error(401, 'No autorizado o perfil no cargado.');
 
-		// ─── 1. LOAD ALL BRANCHES FROM SUPABASE ────────────────────────────────
-		let allBranches: any[] = [];
-		const { data: dbBranches, error } = await supabaseAdmin
-			.from('branches')
-			.select('id, name, agent_url, agent_token, active, sort_order')
-			.eq('active', true)
-			.order('sort_order')
-			.order('name');
-
-		if (error) {
-			console.error('[PUR_ARTICLES] Supabase branches error:', error.message);
-		} else if (dbBranches) {
-			allBranches = dbBranches;
-		}
-
-		// Filter branches by user permissions
-		const profileAllowed = userProfile?.allowed_branches || [];
-		const profileBranchIds: string[] = Array.isArray(profileAllowed) 
-			? profileAllowed.map((b: any) => (typeof b === 'object' ? b.id : b))
-			: [];
-			
-		const isAdmin = profileBranchIds.length === 0;
-
-		const allowedBranches = isAdmin
-			? allBranches
-			: allBranches.filter(b => profileBranchIds.includes(b.id));
-
-		// If no branches allowed/configured, fast return
+		const allowedBranches = profile.allowed_branches || [];
 		if (allowedBranches.length === 0) {
-			return { articles: [], branches: allowedBranches, requireBranchSelection: true };
+			return { articles: [], branches: [], error: 'No tienes sucursales asignadas.' };
 		}
 
-		// Selected branch from URL or default
-		const urlBranchId = url.searchParams.get('branch_id');
-		const branchId = (urlBranchId && allowedBranches.some(b => b.id === urlBranchId))
-			? urlBranchId
-			: (allowedBranches[0]?.id || '');
-
-		let selectedBranchObj = allowedBranches.find(b => b.id === branchId);
-
-		if (!selectedBranchObj?.agent_url) {
-			return { articles: [], branches: allowedBranches, requireBranchSelection: true };
-		}
-
-		// ─── 2. INIT AGENT CLIENT ────────────────────────────────────────────────
-		const agentClient = new AgentClient({
-			slug: selectedBranchObj.id,
-			agent_url: selectedBranchObj.agent_url,
-			agent_api_key: selectedBranchObj.agent_token
-		}, (locals as any).profile || undefined, fetch);
-
-		// ─── 3. LOAD CATALOGS (LINEAS, CATEGORIAS) ───────────────────────────────────
-		let lineas: any[] = [];
-		let categorias: any[] = [];
-
-		try {
-			const [lineasRes, catsRes] = await Promise.all([
-				agentClient.request<any>('/catalogos/lineas').catch(() => ({ data: [] })),
-				agentClient.request<any>('/catalogos/categorias').catch(() => ({ data: [] }))
-			]);
-			lineas = (lineasRes as any).data || (lineasRes as any).items || (Array.isArray(lineasRes) ? lineasRes : []);
-			categorias = (catsRes as any).data || (catsRes as any).items || (Array.isArray(catsRes) ? catsRes : []);
-		} catch (e) {
-			console.error('[PUR_ARTICLES] Catalog fetch error:', e);
-		}
-
-		// ─── 4. BUILD ENDPOINT & FETCH ARTICLES ───────────────────────────────────
-		const pageIndex = parseInt(url.searchParams.get('page') || '1', 10);
-		const limit = 12;
 		const searchTerm = (url.searchParams.get('search') || '').trim();
-
-		const params = new URLSearchParams();
-		params.set('page', pageIndex.toString());
-		params.set('limit', limit.toString());
-		params.set('sort', 'default');
-		
-		const showAll = url.searchParams.get('show_all') === 'true';
-		if (showAll) {
-			params.set('in_stock', 'all');
-		}
-
+		const page = parseInt(url.searchParams.get('page') || '1');
+		const limit = 12;
 		const linea = (url.searchParams.get('linea') || '').trim();
 		const categoria = (url.searchParams.get('categoria') || '').trim();
+		const stockFilter = url.searchParams.get('stock_filter') || 'all';
+		const soloPendientes = url.searchParams.get('solo_pendientes') === 'true';
+		const conCosto = url.searchParams.get('con_costo') || 'all';
 
-		if (linea) params.set('linea', linea);
-		if (categoria) params.set('categoria', categoria);
+		const urlBranchId = url.searchParams.get('branch_id');
+		const isConsolidated = !urlBranchId || urlBranchId === 'Todas';
+		
+		const targetBranches = isConsolidated 
+			? allowedBranches 
+			: allowedBranches.filter(b => b.id === urlBranchId);
 
-		if (searchTerm) {
-			const isCode = /^\d/.test(searchTerm);
-			params.set(isCode ? 'co_art' : 'descripcion', searchTerm);
-		}
+		const fetchFromAgent = async (branch: any) => {
+			try {
+				const client = new AgentClient({
+					slug: branch.id,
+					agent_url: branch.agent_url,
+					agent_api_key: branch.agent_token
+				}, profile, fetch);
 
-		const endpoint = `/articulos/search?${params.toString()}`;
-		let articles: any[] = [];
-		let resData: any = { success: true, pagination: { total: 0, page: 1, limit: 20, totalPages: 0 } };
+				const params = new URLSearchParams();
+				params.set('page', page.toString());
+				params.set('limit', limit.toString());
+				if (searchTerm) params.set('search', searchTerm);
+				if (linea) params.set('linea', linea);
+				if (categoria) params.set('categoria', categoria);
+				params.set('in_stock', stockFilter);
+				if (soloPendientes) params.set('solo_pendientes', 'true');
+				if (conCosto) params.set('con_costo', conCosto);
 
-		try {
-			const response = await agentClient.request<any>(endpoint);
-			articles = (response.data?.items || response.items || response.data || (Array.isArray(response) ? response : []));
-			resData = response;
-		} catch (e) {
-			console.error('[PUR_ARTICLES] Fetch articles error:', e);
-		}
-
-		// Extraer permisos CRUD del usuario para esta sección
-		const crud = userProfile?.permissions?.['pur_articles'] || { read: true, create: false, update: false, delete: false };
-
-		return {
-			articles,
-			branches: allowedBranches,
-			catalogs: {
-				lineas,
-				categorias
-			},
-			crud,
-			pagination: {
-				page: Number((resData as any).pagination?.currentPage || (resData as any).pagination?.page || pageIndex),
-				totalPages: Number((resData as any).pagination?.pages || (resData as any).pagination?.totalPages || 1),
-				totalItems: Number((resData as any).pagination?.total || articles.length)
+				const res = await client.request<any>(`/compras/articulos?${params.toString()}`);
+				return res && res.success ? res : { data: [], pagination: { total: 0 } };
+			} catch (e: any) {
+				return { data: [], pagination: { total: 0 } };
 			}
 		};
 
-	} catch (e: any) {
-		console.error('[PUR_ARTICLES] Fatal error:', e);
-		return { articles: [], error: `Error interno: ${e.message}`, branches: [] };
+		// 1. Cargar catálogos
+		let catalogs = { lineas: [], categorias: [] };
+		const firstBranch = allowedBranches.find(b => b.agent_url);
+		if (firstBranch) {
+			try {
+				const client = new AgentClient({
+					slug: firstBranch.id,
+					agent_url: firstBranch.agent_url,
+					agent_api_key: firstBranch.agent_token
+				}, profile, fetch);
+				const [lineasRes, catsRes] = await Promise.all([
+					client.request<any>('/catalogos/lineas').catch(() => ({ data: [] })),
+					client.request<any>('/catalogos/categorias').catch(() => ({ data: [] }))
+				]);
+				catalogs.lineas = (lineasRes as any).data || (lineasRes as any).items || (Array.isArray(lineasRes) ? lineasRes : []);
+				catalogs.categorias = (catsRes as any).data || (catsRes as any).items || (Array.isArray(catsRes) ? catsRes : []);
+			} catch (e) {}
+		}
+
+		// 2. Ejecutar peticiones
+		const responses = await Promise.all(targetBranches.map(fetchFromAgent));
+
+		// 3. Consolidar con inicialización de todas las sedes en CERO
+		const consolidatedMap = new Map();
+		let maxTotal = 0;
+
+		responses.forEach((resp, index) => {
+			const branchName = targetBranches[index].name;
+			if ((resp.pagination?.total || 0) > maxTotal) maxTotal = resp.pagination.total;
+			
+			(resp.data || []).forEach((item: any) => {
+				const stockDeEstaSede = item.total_stock || 0;
+				
+				if (!consolidatedMap.has(item.co_art)) {
+					// INICIALIZACIÓN: Creamos el array con TODAS las sedes en cero
+					const existenciaInicial = targetBranches.map(b => ({
+						sede: b.name,
+						stock: 0
+					}));
+					
+					// Actualizamos el stock de la sede que sí respondió
+					const entry = existenciaInicial.find(e => e.sede === branchName);
+					if (entry) entry.stock = stockDeEstaSede;
+
+					consolidatedMap.set(item.co_art, { 
+						...item, 
+						existencia_por_sede: existenciaInicial
+					});
+				} else {
+					const existing = consolidatedMap.get(item.co_art);
+					// Buscamos la entrada de esta sede en el array ya inicializado
+					const entry = existing.existencia_por_sede.find((e: any) => e.sede === branchName);
+					if (entry) {
+						entry.stock = stockDeEstaSede;
+					} else {
+						// Por si acaso la sede no estaba en la lista inicial (ej. cambio de filtros)
+						existing.existencia_por_sede.push({ sede: branchName, stock: stockDeEstaSede });
+					}
+					
+					existing.total_stock = (existing.total_stock || 0) + stockDeEstaSede;
+					existing.cantidad_por_llegar = (existing.cantidad_por_llegar || 0) + (item.cantidad_por_llegar || 0);
+					if (item.fecha_ultima_compra && (!existing.fecha_ultima_compra || new Date(item.fecha_ultima_compra) > new Date(existing.fecha_ultima_compra))) {
+						existing.fecha_ultima_compra = item.fecha_ultima_compra;
+						existing.ultimo_costo = item.ultimo_costo;
+						existing.ultimo_costo_om = item.ultimo_costo_om;
+					}
+				}
+			});
+		});
+
+		let articles = Array.from(consolidatedMap.values());
+		articles.sort((a, b) => a.descripcion.localeCompare(b.descripcion));
+
+		return {
+			articles,
+			pagination: { total: maxTotal, page, limit, totalPages: Math.ceil(maxTotal / limit) },
+			branches: allowedBranches,
+			catalogs,
+			searchTerm,
+			selectedBranch: urlBranchId || '',
+			crud: { 
+				create: profile.permissions?.pur_articles?.create ?? true, 
+				update: profile.permissions?.pur_articles?.update ?? true, 
+				delete: false 
+			}
+		};
+	} catch (err: any) {
+		console.error('Error loading purchases articles:', err);
+		return { articles: [], branches: [], error: err.message };
 	}
-});
+};

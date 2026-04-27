@@ -9,6 +9,9 @@
     AlertCircle,
     ListFilter,
     ImagePlus,
+    Calendar,
+    DollarSign,
+    Truck,
   } from "lucide-svelte";
   import { goto } from "$app/navigation";
   import { page } from "$app/stores";
@@ -27,7 +30,10 @@
 
   let selectedLinea = $state($page.url.searchParams.get("linea") || "");
   let selectedCategoria = $state($page.url.searchParams.get("categoria") || "");
-  let showAll = $state($page.url.searchParams.get("show_all") === "true");
+  let showAll = $state($page.url.searchParams.get("show_all") === "true"); // Backward compatibility
+  let stockFilter = $state($page.url.searchParams.get("stock_filter") || "true");
+  let soloPendientes = $state($page.url.searchParams.get("solo_pendientes") === "true");
+  let conCosto = $state($page.url.searchParams.get("con_costo") || ""); // "", "true", "false"
 
   $effect(() => {
     selectedBranch = $page.url.searchParams.get("branch_id") || "";
@@ -35,6 +41,9 @@
     selectedLinea = $page.url.searchParams.get("linea") || "";
     selectedCategoria = $page.url.searchParams.get("categoria") || "";
     showAll = $page.url.searchParams.get("show_all") === "true";
+    stockFilter = $page.url.searchParams.get("stock_filter") || "true";
+    soloPendientes = $page.url.searchParams.get("solo_pendientes") === "true";
+    conCosto = $page.url.searchParams.get("con_costo") || "";
   });
 
   const filteredCategorias = $derived(
@@ -61,8 +70,14 @@
     if (selectedCategoria) url.searchParams.set("categoria", selectedCategoria);
     else url.searchParams.delete("categoria");
 
-    if (showAll) url.searchParams.set("show_all", "true");
-    else url.searchParams.delete("show_all");
+    if (stockFilter) url.searchParams.set("stock_filter", stockFilter);
+    else url.searchParams.delete("stock_filter");
+
+    if (soloPendientes) url.searchParams.set("solo_pendientes", "true");
+    else url.searchParams.delete("solo_pendientes");
+
+    if (conCosto) url.searchParams.set("con_costo", conCosto);
+    else url.searchParams.delete("con_costo");
 
     url.searchParams.set("page", "1");
     goto(url.toString(), { keepFocus: true, noScroll: true }).finally(
@@ -192,21 +207,50 @@
       />
     </div>
 
-    <!-- 5. Switch Stock -->
-    <div class="w-full h-14 flex items-center justify-start xl:justify-center">
-      <div
-        class="flex items-center bg-white/5 border border-white/5 p-1 rounded-xl h-full"
-      >
+    <!-- 5. Filtros Switch -->
+    <div class="xl:col-span-4 grid grid-cols-1 md:grid-cols-3 gap-4 pt-2 border-t border-white/5 mt-2">
+      <!-- Stock -->
+      <div class="flex items-center bg-white/5 border border-white/5 p-1 rounded-xl h-12">
         <button
-          onclick={() => toggleShowAll(false)}
-          class={`px-4 h-full rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${!showAll ? "bg-brand-500 text-white shadow-lg shadow-brand-500/20" : "text-text-muted hover:text-white"}`}
-          >Con Stock</button
-        >
+          onclick={() => { stockFilter = "true"; handleSearch(); }}
+          class={`flex-1 h-full rounded-lg text-[9px] font-black uppercase tracking-widest transition-all ${stockFilter === "true" ? "bg-brand-500 text-white shadow-lg" : "text-text-muted hover:text-white"}`}
+        >Con Stock</button>
         <button
-          onclick={() => toggleShowAll(true)}
-          class={`px-4 h-full rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${showAll ? "bg-brand-500 text-white shadow-lg shadow-brand-500/20" : "text-text-muted hover:text-white"}`}
-          >Sin Stock</button
-        >
+          onclick={() => { stockFilter = "false"; handleSearch(); }}
+          class={`flex-1 h-full rounded-lg text-[9px] font-black uppercase tracking-widest transition-all ${stockFilter === "false" ? "bg-red-500 text-white shadow-lg" : "text-text-muted hover:text-white"}`}
+        >Sin Stock</button>
+        <button
+          onclick={() => { stockFilter = "all"; handleSearch(); }}
+          class={`flex-1 h-full rounded-lg text-[9px] font-black uppercase tracking-widest transition-all ${stockFilter === "all" ? "bg-surface-soft text-white shadow-lg" : "text-text-muted hover:text-white"}`}
+        >Todos</button>
+      </div>
+
+      <!-- Pendientes -->
+      <div class="flex items-center bg-white/5 border border-white/5 p-1 rounded-xl h-12">
+        <button
+          onclick={() => { soloPendientes = true; handleSearch(); }}
+          class={`flex-1 h-full rounded-lg text-[9px] font-black uppercase tracking-widest transition-all ${soloPendientes ? "bg-amber-500 text-white shadow-lg" : "text-text-muted hover:text-white"}`}
+        >Solo por Llegar</button>
+        <button
+          onclick={() => { soloPendientes = false; handleSearch(); }}
+          class={`flex-1 h-full rounded-lg text-[9px] font-black uppercase tracking-widest transition-all ${!soloPendientes ? "bg-surface-soft text-white" : "text-text-muted hover:text-white"}`}
+        >Todos</button>
+      </div>
+
+      <!-- Costo -->
+      <div class="flex items-center bg-white/5 border border-white/5 p-1 rounded-xl h-12">
+        <button
+          onclick={() => { conCosto = "true"; handleSearch(); }}
+          class={`flex-1 h-full rounded-lg text-[9px] font-black uppercase tracking-widest transition-all ${conCosto === "true" ? "bg-emerald-500 text-white shadow-lg" : "text-text-muted hover:text-white"}`}
+        >Con Costo</button>
+        <button
+          onclick={() => { conCosto = "false"; handleSearch(); }}
+          class={`flex-1 h-full rounded-lg text-[9px] font-black uppercase tracking-widest transition-all ${conCosto === "false" ? "bg-red-500 text-white shadow-lg" : "text-text-muted hover:text-white"}`}
+        >Sin Costo</button>
+        <button
+          onclick={() => { conCosto = ""; handleSearch(); }}
+          class={`flex-1 h-full rounded-lg text-[9px] font-black uppercase tracking-widest transition-all ${conCosto === "" ? "bg-surface-soft text-white" : "text-text-muted hover:text-white"}`}
+        >Todos</button>
       </div>
     </div>
   </div>
@@ -309,39 +353,89 @@
             {article.art_des || article.descripcion || "Sin título"}
           </h3>
 
-          <!-- Existencia por Almacén -->
+          <!-- Existencia por Sucursal -->
           <div class="mt-auto pt-4 border-t border-white/5 flex flex-col gap-2">
-            <span
-              class="text-[10px] uppercase font-black tracking-widest text-text-muted mb-1"
-              >Existencia por Almacén</span
-            >
+            <span class="text-[10px] uppercase font-black tracking-widest text-text-muted mb-1">Existencia por Sucursal</span>
 
-            {#if article.disponibilidad && Array.isArray(article.disponibilidad) && article.disponibilidad.length > 0}
-              {#each article.disponibilidad as alm}
-                <div
-                  class="flex items-center justify-between py-1.5 bg-surface-base/50 px-3 rounded-xl border border-white/5"
-                >
-                  <span
-                    class="text-xs text-text-muted truncate max-w-[150px]"
-                    title={alm.des_alma}>{alm.des_alma}</span
-                  >
-                  <span class="font-bold text-brand-400 text-sm"
-                    >{alm.stock ?? alm.cant_stock ?? 0}</span
-                  >
-                </div>
+            {#if article.existencia_por_sede && article.existencia_por_sede.length > 0}
+              {#each article.existencia_por_sede as s}
+                {#if s.stock > 0 || stockFilter === 'all'}
+                  <div class="flex items-center justify-between py-1.5 bg-surface-base/50 px-3 rounded-xl border border-white/5">
+                    <span class="text-xs text-text-muted truncate max-w-[150px] uppercase">{s.sede}</span>
+                    <span class="font-bold {s.stock > 0 ? 'text-brand-400' : 'text-text-muted/30'} text-sm">{s.stock}</span>
+                  </div>
+                {/if}
               {/each}
             {:else}
-              <div
-                class="flex items-center justify-between py-1.5 bg-surface-base/50 px-3 rounded-xl border border-white/5"
-              >
+              <div class="flex items-center justify-between py-1.5 bg-surface-base/50 px-3 rounded-xl border border-white/5 opacity-50">
                 <span class="text-xs text-text-muted">Total (Global)</span>
-                <span class="font-black text-brand-400 text-lg">
-                  {article.stock !== undefined
-                    ? article.stock
-                    : article.s_actual || "0"}
-                </span>
+                <span class="font-black text-brand-400 text-lg">0</span>
               </div>
             {/if}
+          </div>
+
+          <!-- Logística -->
+          <div class="flex flex-col gap-2 pt-4 border-t border-white/5">
+            <span
+              class="text-[10px] uppercase font-black tracking-widest text-text-muted mb-1"
+              >Logística de Compras</span
+            >
+
+            <div class="grid grid-cols-2 gap-2">
+              <div
+                class="bg-surface-base/30 p-2 rounded-xl border border-white/5 flex flex-col gap-1"
+              >
+                <div class="flex items-center gap-1.5 text-text-muted">
+                  <Calendar size={12} class="text-brand-400" />
+                  <span class="text-[9px] font-bold uppercase tracking-tighter"
+                    >Última Compra</span
+                  >
+                </div>
+                <span class="text-xs font-bold">
+                  {article.fecha_ultima_compra
+                    ? new Date(article.fecha_ultima_compra).toLocaleDateString(
+                        "es-VE",
+                        { day: "2-digit", month: "2-digit", year: "numeric" },
+                      )
+                    : "---"}
+                </span>
+              </div>
+
+              <div
+                class="bg-surface-base/30 p-2 rounded-xl border border-white/5 flex flex-col gap-1"
+              >
+                <div class="flex items-center gap-1.5 text-text-muted">
+                  <DollarSign size={12} class="text-emerald-400" />
+                  <span class="text-[9px] font-bold uppercase tracking-tighter"
+                    >Costo (OM)</span
+                  >
+                </div>
+                <span class="text-xs font-bold text-emerald-400">
+                  {article.ultimo_costo_om ? `${Number(article.ultimo_costo_om).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '---'}
+                </span>
+              </div>
+            </div>
+
+            <div
+              class="bg-surface-base/30 p-2 rounded-xl border border-white/5 flex items-center justify-between"
+            >
+              <div class="flex items-center gap-2 text-text-muted">
+                <Truck
+                  size={14}
+                  class={article.cantidad_por_llegar > 0
+                    ? "text-amber-400"
+                    : "text-text-muted/30"}
+                />
+                <span class="text-[10px] font-bold uppercase tracking-tight"
+                  >Cantidad por Llegar</span
+                >
+              </div>
+              <span
+                class={`text-sm font-black ${article.cantidad_por_llegar > 0 ? "text-amber-400" : "text-text-muted/30"}`}
+              >
+                {article.cantidad_por_llegar || 0}
+              </span>
+            </div>
           </div>
         </div>
       {/each}
