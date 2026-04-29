@@ -318,7 +318,7 @@ export const actions: Actions = {
 				uid:          locals.profile?.id ?? null,
 				user_email:   locals.profile?.email ?? 'system',
 				action:       'UPDATE',
-				module:       'sec_articles',
+				module:       'UBICACIONES',
 				record_id:    co_art,
 				branch_id:    branchId,
 				old_data:     oldData,

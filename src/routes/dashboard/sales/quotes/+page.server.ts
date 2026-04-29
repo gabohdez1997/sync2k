@@ -1,6 +1,7 @@
 import { protectLoad, protectAction } from '$lib/server/permissions';
 import { AgentClient } from '$lib/server/agent';
 import { hasPermission } from '$lib/server/auth';
+import { logAction } from '$lib/server/audit';
 import { redirect, fail, type Actions } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
 
@@ -8,9 +9,6 @@ export const load: PageServerLoad = protectLoad('sales_quotes', async ({ url, lo
 	const profile = (locals as any).profile;
 	if (!profile) throw new Error('Perfil no cargado.');
 
-	// SEGURIDAD:
-	// - Nueva cotización: requiere create
-	// - Edición (doc_num): requiere update
 	const docNumInUrl = url.searchParams.get('doc_num');
 	const canCreate = hasPermission(profile, 'sales_quotes', 'create');
 	const canUpdate = hasPermission(profile, 'sales_quotes', 'update');
@@ -20,42 +18,18 @@ export const load: PageServerLoad = protectLoad('sales_quotes', async ({ url, lo
 	}
 
 	try {
-		// 1. Obtener sucursales autorizadas del perfil
 		const allowedBranches = profile.allowed_branches || [];
-		
-		if (allowedBranches.length === 0) {
-			return {
-				articles: [],
-				branches: [],
-				error: 'No tienes sucursales asignadas.'
-			};
-		}
+		if (allowedBranches.length === 0) return { articles: [], branches: [], error: 'No tienes sucursales asignadas.' };
 
-		// 2. Seleccionar sucursal activa
 		const urlBranchId = url.searchParams.get('branch_id');
-		const selectedBranch = urlBranchId 
-			? allowedBranches.find(b => b.id === urlBranchId)
-			: allowedBranches[0];
+		const selectedBranch = urlBranchId ? allowedBranches.find(b => b.id === urlBranchId) : allowedBranches[0];
 
-		if (!selectedBranch || !selectedBranch.agent_url) {
-			return {
-				articles: [],
-				branches: allowedBranches,
-				error: 'Sucursal no configurada correctamente.'
-			};
-		}
+		if (!selectedBranch || !selectedBranch.agent_url) return { articles: [], branches: allowedBranches, error: 'Sucursal no configurada.' };
 
-		// 3. Inicializar AgentClient
 		const agentClient = new AgentClient({
-			slug: selectedBranch.id,
-			agent_url: selectedBranch.agent_url,
-			agent_api_key: selectedBranch.agent_token
+			slug: selectedBranch.id, agent_url: selectedBranch.agent_url, agent_api_key: selectedBranch.agent_token
 		}, profile, fetch);
 
-		const pageIndex = parseInt(url.searchParams.get('page') || '1', 10);
-		const limit = 12;
-
-		// 4. Cargar catálogos (Almacenes, Líneas, Categorías, Zonas)
 		let warehouseList: any[] = [];
 		let lineas: any[] = [];
 		let categorias: any[] = [];
@@ -65,43 +39,28 @@ export const load: PageServerLoad = protectLoad('sales_quotes', async ({ url, lo
 			const [almaRes, lineasRes, catsRes, zonRes] = await Promise.all([
 				agentClient.request<any>('/catalogos/almacenes'),
 				agentClient.request<any>('/catalogos/lineas'),
-				agentClient.request<any>('/catalogos/categorias').catch(e => { console.error('Error cats:', e.message); return { data: [] }; }),
-				agentClient.getZonas().catch(e => { console.error('Error zonas:', e.message); return { data: [] }; })
+				agentClient.request<any>('/catalogos/categorias').catch(() => ({ data: [] })),
+				agentClient.getZonas().catch(() => ({ data: [] }))
 			]);
-
 			warehouseList = (almaRes as any).data || (almaRes as any).items || (Array.isArray(almaRes) ? almaRes : []);
 			lineas = (lineasRes as any).data || (lineasRes as any).items || (Array.isArray(lineasRes) ? lineasRes : []);
 			categorias = (catsRes as any).data || (catsRes as any).items || (Array.isArray(catsRes) ? catsRes : []);
 			zonas = (zonRes as any).data || (zonRes as any).items || (Array.isArray(zonRes) ? zonRes : []);
-			console.log(`[QUOTES LOAD] Zonas recuperadas: ${zonas.length}`);
-		} catch (e) {
-			console.error('[QUOTES] Catalog fetch error:', e);
-		}
+		} catch (e) { console.error('[QUOTES] Catalog fetch error:', e); }
 
-		// 5. Filtrar almacenes por permisos
 		const profileWarehouses: string[] = profile.allowed_warehouses || [];
 		const isAdmin = profileWarehouses.length === 0;
-
 		const branchWarehouseList = warehouseList.filter((a: any) => {
 			const co_sucu = a.co_sucu || a.co_sucur || a.sede_id || a.co_sede;
 			return co_sucu === selectedBranch.profit_branch_code || !co_sucu;
 		});
 
-		const allowedWarehousesForBranch = isAdmin
-			? branchWarehouseList
-			: branchWarehouseList.filter((a: any) => {
-				const almaId = a.co_alma || a.id || a.warehouse_id;
-				return profileWarehouses.includes(almaId);
-			  });
+		const allowedWarehousesForBranch = isAdmin ? branchWarehouseList : branchWarehouseList.filter((a: any) => {
+			const almaId = a.co_alma || a.id || a.warehouse_id;
+			return profileWarehouses.includes(almaId);
+		});
 
 		const finalWarehouseIds = allowedWarehousesForBranch.map((a: any) => a.co_alma || a.id || a.warehouse_id).filter(Boolean);
-
-		const urlWarehouseId = url.searchParams.get('co_alma');
-		const warehouseId = (urlWarehouseId && finalWarehouseIds.includes(urlWarehouseId))
-			? urlWarehouseId
-			: '';
-
-		// 6. Cargar cotización pre-existente si viene en el URL (EDICIÓN)
 		const doc_num = url.searchParams.get('doc_num');
 		let preloadedQuote = null;
 		if (doc_num) {
@@ -109,44 +68,18 @@ export const load: PageServerLoad = protectLoad('sales_quotes', async ({ url, lo
 				const qRes = await agentClient.request<any>(`/cotizaciones/${doc_num}`);
 				if (qRes.success && qRes.data) {
 					const q = Array.isArray(qRes.data) ? qRes.data[0] : qRes.data;
-					const status = String(q?.status ?? '').trim();
-					const isAnulada = !!q?.anulado;
-					if (!isAnulada && status === '0') {
-						preloadedQuote = q;
-					} else {
-						console.warn(`[QUOTES] Bloqueada edición de ${doc_num}. status=${status}, anulado=${isAnulada}`);
-					}
+					if (!q?.anulado && String(q?.status ?? '').trim() === '0') preloadedQuote = q;
 				}
-			} catch (e) {
-				console.error('[QUOTES] Error loading quote for edit:', e);
-			}
+			} catch (e) { console.error('[QUOTES] Error loading quote for edit:', e); }
 		}
 
-		// --- SEGURIDAD: Artículos se cargan en el cliente ---
 		return {
-			articles: [],
-			pagination: { total: 0, page: 1, limit: 12, totalPages: 0 },
-			branches: allowedBranches,
-			selectedBranchId: selectedBranch.id,
-			preloadedQuote,
-			context: {
-				branchId: selectedBranch.id,
-				warehouseId,
-				finalWarehouseIds,
-				lineas,
-				categorias,
-				zonas,
-				warehouses: allowedWarehousesForBranch
-			}
+			articles: [], pagination: { total: 0, page: 1, limit: 12, totalPages: 0 },
+			branches: allowedBranches, selectedBranchId: selectedBranch.id, preloadedQuote,
+			context: { branchId: selectedBranch.id, warehouseId: '', finalWarehouseIds, lineas, categorias, zonas, warehouses: allowedWarehousesForBranch }
 		};
 	} catch (err: any) {
-		console.error('[QUOTES] Load error:', err);
-		return {
-			articles: [],
-			pagination: { total: 0, page: 1, limit: 12, totalPages: 1 },
-			error: 'Error al conectar con la sucursal: ' + err.message,
-			context: { branches: [] }
-		};
+		return { articles: [], pagination: { total: 0, page: 1, limit: 12, totalPages: 1 }, error: 'Error: ' + err.message, context: { branches: [] } };
 	}
 });
 
@@ -154,117 +87,74 @@ export const actions: Actions = {
 	searchClient: protectAction('sales_quotes', async ({ request, locals, fetch }) => {
 		const profile = locals.profile;
 		if (!profile) return fail(401, { message: 'Sesión expirada' });
-
 		const formData = await request.formData();
-		// Estandarizar RIF: Mayúsculas y sin guiones
-		const rifRaw = formData.get('rif') as string;
-		const rif = rifRaw?.trim().toUpperCase().replace(/[-\s]/g, '');
+		const rif = (formData.get('rif') as string)?.trim().toUpperCase().replace(/[-\s]/g, '');
 		const branchId = formData.get('branch_id') as string;
-
 		if (!rif) return fail(400, { message: 'El RIF es requerido' });
-
 		const branch = profile.allowed_branches?.find(b => b.id === branchId);
 		if (!branch) return fail(404, { message: 'Sucursal no encontrada' });
-
 		const agentClient = new AgentClient(branch, profile, fetch);
 		try {
-			// Buscar por código (co_cli) ya que RIF = Código
 			const res = await agentClient.request<any>(`/clientes/${rif}`);
-			
 			if (res.success && res.data) {
-				// El agente devuelve un array de resultados por sede
 				const clientData = Array.isArray(res.data) ? res.data.find(c => !c.error) : res.data;
-				if (clientData) {
-					return { success: true, client: clientData };
-				}
+				if (clientData) return { success: true, client: clientData };
 			}
-
-			// Fallback: búsqueda general si falla el directo
 			const searchRes = await agentClient.request<any>(`/clientes/search?rif=${rif}`);
 			const items = Array.isArray(searchRes.data) ? searchRes.data : (searchRes.data?.items || searchRes.items || []);
-			
-			const client = items.find((c: any) => 
-				c.rif?.toUpperCase().replace(/[-\s]/g, '') === rif || 
-				c.co_cli?.toUpperCase().replace(/[-\s]/g, '') === rif
-			);
-
-			if (!client) {
-				return { success: true, client: null, message: 'Cliente no encontrado. Proceda a crearlo.' };
-			}
-
-			return { success: true, client };
+			const client = items.find((c: any) => c.rif?.toUpperCase().replace(/[-\s]/g, '') === rif || c.co_cli?.toUpperCase().replace(/[-\s]/g, '') === rif);
+			return { success: true, client: client || null, message: client ? '' : 'Cliente no encontrado.' };
 		} catch (e: any) {
-			// Si es 404 de la API directa, retornar null para que el front ofrezca registro
 			if (e.status === 404) return { success: true, client: null };
-			return fail(500, { message: 'Error en búsqueda: ' + e.message });
+			return fail(500, { message: 'Error: ' + e.message });
 		}
 	}),
 
 	saveCustomer: protectAction('sales_quotes', async ({ request, locals, fetch }) => {
 		const profile = locals.profile;
 		const formData = await request.formData();
-		const data = Object.fromEntries(formData.entries());
-		const payload = {
-			...data,
-			contribuyente: formData.has('contribuyente'),
-			contribu_e: formData.has('contribu_e') || formData.has('contribuu_e'),
-			porc_esp: parseFloat(formData.get('porc_esp') as string) || 0
-		};
-
+		const payload = { ...Object.fromEntries(formData), contribuyente: formData.has('contribuyente'), contribu_e: formData.has('contribu_e') || formData.has('contribuu_e'), porc_esp: parseFloat(formData.get('porc_esp') as string) || 0 };
 		const targetBranches = profile.allowed_branches || [];
-		if (targetBranches.length === 0) {
-			return fail(403, { message: 'No tiene sucursales asignadas' });
-		}
-
-		let successCount = 0;
-		let failedBranches: string[] = [];
-		let createdClient = null;
-
+		if (targetBranches.length === 0) return fail(403, { message: 'Sin sucursales' });
+		let successCount = 0; let failedBranches = []; let createdClient = null;
 		for (const branch of targetBranches) {
-			if (!branch.agent_url) continue;
-
 			try {
 				let verifiedCoSucu = '';
 				if (Array.isArray(branch.profit_branch_codes) && branch.profit_branch_codes.length > 0) {
 					const def = branch.profit_branch_codes.find((c: any) => c.is_default);
 					verifiedCoSucu = def ? def.code : branch.profit_branch_codes[0].code;
 				}
-
-				const agent = new AgentClient({
-					slug: branch.id,
-					agent_url: branch.agent_url,
-					agent_api_key: branch.agent_token
-				}, profile, fetch);
-
+				const agent = new AgentClient(branch, profile, fetch);
 				const response = await agent.saveCustomer(payload, true, verifiedCoSucu || branch.id);
-				
-				if (response.success) {
-					successCount++;
-					if (!createdClient) createdClient = response.data || response.items?.[0] || payload;
-				} else {
-					failedBranches.push(`${branch.name}: ${response.message || 'Error desconocido'}`);
-				}
-			} catch (err: any) {
-				failedBranches.push(`${branch.name}: Error de conexión (${err.message})`);
+				if (response.success) { successCount++; if (!createdClient) createdClient = response.data || payload; }
+				else failedBranches.push(`${branch.name}: ${response.message}`);
+			} catch (err: any) { failedBranches.push(`${branch.name}: ${err.message}`); }
+		}
+		if (successCount > 0) {
+			try {
+				await logAction({
+					uid:        profile.id ?? null,
+					user_email: profile.email ?? 'system',
+					action:     'CREATE',
+					module:     'CLIENTES',
+					record_id:  payload.co_cli as string,
+					branch_id:  targetBranches[0].id,
+					old_data:   null,
+					new_data:   {
+						co_cli: payload.co_cli,
+						cli_des: payload.cli_des || payload.descripcion,
+						broadcast: true,
+						success_count: successCount,
+						failures: failedBranches,
+						source: 'quotes_module'
+					},
+					source: 'cloud'
+				});
+			} catch (auditErr) {
+				console.error('[AUDIT] Error registrando auditoría de cliente:', auditErr);
 			}
 		}
-
-		if (successCount === 0) {
-			return fail(500, { message: `No se pudo guardar en ninguna sede. Detalles: ${failedBranches.join(' | ')}` });
-		}
-
-		let finalMsg = 'Cliente creado';
-		if (failedBranches.length > 0) {
-			finalMsg += ` en ${successCount} sedes, pero FALLÓ en: ${failedBranches.join(', ')}.`;
-		} else {
-			finalMsg += ` correctamente en todas las sedes (${successCount}).`;
-		}
-
-		return { 
-			success: true, 
-			message: finalMsg,
-			client: createdClient
-		};
+		return successCount === 0 ? fail(500, { message: 'Error: ' + failedBranches.join(' | ') }) : { success: true, message: 'Cliente creado', client: createdClient };
 	}),
 
 	saveQuote: protectAction('sales_quotes', async ({ request, locals, fetch }) => {
@@ -272,61 +162,43 @@ export const actions: Actions = {
 		const formData = await request.formData();
 		const branchId = formData.get('branch_id') as string;
 		const quoteDataStr = formData.get('quote_data') as string;
-		
-		if (!quoteDataStr) return fail(400, { message: 'Datos de cotización no recibidos' });
-
+		if (!quoteDataStr) return fail(400, { message: 'Faltan datos' });
 		const branch = profile.allowed_branches?.find(b => b.id === branchId);
 		if (!branch) return fail(404, { message: 'Sucursal no encontrada' });
-
 		const agentClient = new AgentClient(branch, profile, fetch);
 		try {
 			const quoteData = JSON.parse(quoteDataStr);
 			const isEdit = !!quoteData?.doc_num;
-
-			// Permisos granulares por operación
-			if (isEdit && !hasPermission(profile, 'sales_quotes', 'update')) {
-				return fail(403, { message: 'No tienes permiso para editar cotizaciones.' });
-			}
-			if (!isEdit && !hasPermission(profile, 'sales_quotes', 'create')) {
-				return fail(403, { message: 'No tienes permiso para crear cotizaciones.' });
-			}
-			
-			// Vincular Vendedor y Moneda basados en el perfil y la interfaz
-			const enrichedQuoteData = {
-				...quoteData,
-				co_ven: profile.profit_user, // Tomado de PostgreSQL/Supabase
-				co_cta_ingr_egr: "", // Forzar vacío para evitar conflictos de FK si el agente usa un default inválido
-				isUSD: quoteData.showUSD // Dejar que el Agente decida el código exacto de moneda
-			};
-
-			const res: any = await agentClient.request('/cotizaciones', {
-				method: 'POST',
-				body: JSON.stringify(enrichedQuoteData)
-			});
-
+			if (isEdit && !hasPermission(profile, 'sales_quotes', 'update')) return fail(403, { message: 'Sin permiso update' });
+			if (!isEdit && !hasPermission(profile, 'sales_quotes', 'create')) return fail(403, { message: 'Sin permiso create' });
+			const enrichedQuoteData = { ...quoteData, co_ven: profile.profit_user, co_cta_ingr_egr: "", isUSD: quoteData.showUSD };
+			const res: any = await agentClient.request('/cotizaciones', { method: 'POST', body: JSON.stringify(enrichedQuoteData) });
 			if (res.success || (res.results && res.results[0]?.success)) {
-				return { success: true, message: 'Cotización guardada correctamente en Profit Plus' };
-			} else {
-				let errorMsg = res.message || 'Error al guardar en Profit';
-				
-				// Capturar Conflicto de Vendedor (Llave Foránea)
-				if (errorMsg.includes('FK_saCotizacionCliente_saVendedor')) {
-					errorMsg = "Su usuario no está registrado como Vendedor en Profit Plus para esta sede. Por favor contacte al administrador.";
+				const finalDocNum = res.data?.doc_num || res.results?.[0]?.data?.doc_num || quoteData.doc_num;
+				try {
+					await logAction({
+						uid:        profile.id ?? null,
+						user_email: profile.email ?? 'system',
+						action:     isEdit ? 'UPDATE' : 'CREATE',
+						module:     'COTIZACIONES',
+						record_id:  String(finalDocNum),
+						branch_id:  branchId,
+						old_data:   isEdit ? { doc_num: quoteData.doc_num } : null,
+						new_data:   { 
+							doc_num: String(finalDocNum),
+							co_cli: enrichedQuoteData.co_cli,
+							total: quoteData.total_neto, 
+							items: quoteData.renglones?.length,
+							isUSD: enrichedQuoteData.isUSD 
+						},
+						source: 'cloud'
+					});
+				} catch (auditErr) {
+					console.error('[AUDIT] Error registrando auditoría de cotización:', auditErr);
 				}
-
-				// Capturar Conflicto de Cuenta Ingreso/Egreso
-				if (errorMsg.includes('FK_saCotizacionCliente_saCuentaIngEgr')) {
-					errorMsg = "Error de configuración en Profit: La Cuenta de Ingreso/Egreso no es válida para esta sede. Contacte a soporte técnico.";
-				}
-
-				const details = res.details ? JSON.stringify(res.details) : null;
-				return fail(400, { 
-					message: errorMsg,
-					details 
-				});
+				return { success: true, message: 'Cotización guardada' };
 			}
-		} catch (e: any) {
-			return fail(500, { message: e.message });
-		}
+			return fail(400, { message: res.message || 'Error en Profit' });
+		} catch (e: any) { return fail(500, { message: e.message }); }
 	})
 };
