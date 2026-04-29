@@ -174,7 +174,20 @@ export const actions: Actions = {
 			const enrichedQuoteData = { ...quoteData, co_ven: profile.profit_user, co_cta_ingr_egr: "", isUSD: quoteData.showUSD };
 			const res: any = await agentClient.request('/cotizaciones', { method: 'POST', body: JSON.stringify(enrichedQuoteData) });
 			if (res.success || (res.results && res.results[0]?.success)) {
-				const finalDocNum = res.data?.doc_num || res.results?.[0]?.data?.doc_num || quoteData.doc_num;
+				// Extraer el doc_num desde cualquiera de las posibles respuestas del Agente
+				const finalDocNum = res.doc_num || res.data?.doc_num || res.results?.[0]?.doc_num || res.results?.[0]?.data?.doc_num || quoteData.doc_num;
+				
+				// Calcular el total_neto desde los renglones (ya que no se envía desde la web por seguridad)
+				let calculatedTotal = 0;
+				if (quoteData.renglones && Array.isArray(quoteData.renglones)) {
+					calculatedTotal = quoteData.renglones.reduce((sum: number, r: any) => {
+						const qty = Number(r.cantidad || 0);
+						const price = Number(r.precio || 0);
+						const taxRate = Number(r.porc_imp || 0) / 100;
+						return sum + (qty * price * (1 + taxRate));
+					}, 0);
+				}
+
 				try {
 					await logAction({
 						uid:        profile.id ?? null,
@@ -187,7 +200,7 @@ export const actions: Actions = {
 						new_data:   { 
 							doc_num: String(finalDocNum),
 							co_cli: enrichedQuoteData.co_cli,
-							total: quoteData.total_neto, 
+							total: calculatedTotal, 
 							items: quoteData.renglones?.length,
 							isUSD: enrichedQuoteData.isUSD 
 						},
