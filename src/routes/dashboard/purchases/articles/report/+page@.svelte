@@ -68,7 +68,7 @@
     const totalCols = 6 + (hasAnyFactura ? 1 : 0) + (showPorLlegar ? 1 : 0);
 
     // --- LÓGICA DE PAGINACIÓN ---
-    const LIMIT_PER_PAGE = 56; 
+    const LIMIT_PER_PAGE = 50; 
 
     function paginate(items: any[]) {
         let pages: any[] = [];
