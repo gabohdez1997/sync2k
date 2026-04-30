@@ -97,9 +97,6 @@
     // Siempre enviar branch_id para que el reporte sepa qué sucursal consultar
     if (selectedBranch) {
       url.searchParams.set("branch_id", selectedBranch);
-    } else if (data.branches?.length > 0) {
-      // Si está en 'Todas', usar la primera sucursal para el reporte
-      url.searchParams.set("branch_id", data.branches[0].id);
     }
     if (searchTerm) url.searchParams.set("search", searchTerm);
     if (selectedLinea) url.searchParams.set("linea", selectedLinea);

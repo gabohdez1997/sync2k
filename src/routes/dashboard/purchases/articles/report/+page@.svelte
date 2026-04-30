@@ -64,8 +64,11 @@
     // Mostrar columna "Por Llegar" si el filtro está activo
     const showPorLlegar = filters.solo_pendientes === 'true';
 
+    // Mostrar columna "Sucursal" si es Todas las Sucursales
+    const isAllBranches = data.isAllBranches === true;
+
     // Calcular colspan dinámico
-    const totalCols = 6 + (hasAnyFactura ? 1 : 0) + (showPorLlegar ? 1 : 0);
+    const totalCols = 6 + (hasAnyFactura ? 1 : 0) + (showPorLlegar ? 1 : 0) + (isAllBranches ? 1 : 0);
 
     // --- LÓGICA DE PAGINACIÓN ---
     const LIMIT_PER_PAGE = 50; 
@@ -157,6 +160,9 @@
                                 <tr>
                                     <th class="col-code">Código</th>
                                     <th class="col-desc">Descripción</th>
+                                    {#if isAllBranches}
+                                        <th class="col-sucu">Sucursal</th>
+                                    {/if}
                                     <th class="col-num">Precio 2 ($)</th>
                                     <th class="col-num">Margen 2</th>
                                     <th class="col-num">Costo ($)</th>
@@ -173,7 +179,10 @@
                                 {#each page.items as item}
                                     <tr>
                                         <td class="font-mono text-left">{item.co_art}</td>
-                                        <td class="text-left desc-cell">{item.descripcion}</td>
+                                        <td class="text-left desc-cell truncate-desc">{item.descripcion}</td>
+                                        {#if isAllBranches}
+                                            <td class="text-center font-bold" style="font-size: 6.5px;">{item._branch_name}</td>
+                                        {/if}
                                         <td class="text-right">{formatCurrency(item.prec2 || 0)}</td>
                                         <td class="text-right">{Number(item.margen2 || 0).toFixed(2)}%</td>
                                         <td class="text-right">{formatCurrency(item.ultimo_costo_om || item.costo_estimado || 0)}</td>
@@ -287,7 +296,8 @@
     
     .col-code { width: 12%; text-align: left; }
     .col-desc { width: auto; text-align: left; }
-    .col-num { width: 10%; text-align: right; }
+    .col-sucu { width: 10%; text-align: center; }
+    .col-num { width: 9%; text-align: right; }
     .col-fact { width: 10%; text-align: center; }
     .col-stock { width: 7%; text-align: center; }
 
@@ -297,6 +307,7 @@
     .font-mono { font-family: monospace; font-size: 7px; }
     .font-black { font-weight: 900; }
     .desc-cell { font-weight: 700; text-transform: uppercase; font-size: 7.5px; }
+    .truncate-desc { max-width: 150px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .stock-positive { color: #2563eb; }
     .stock-zero { color: #94a3b8; }
     .por-llegar { color: #d97706; }

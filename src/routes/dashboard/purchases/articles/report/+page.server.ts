@@ -29,17 +29,17 @@ export const load: PageServerLoad = protectLoad('pur_articles', async ({ url, lo
 
         if (allowedBranches.length === 0) return { articles: [], error: 'No tienes sucursales autorizadas.' };
 
-        const urlBranchId = url.searchParams.get('branch_id');
-        const branchId = (urlBranchId && allowedBranches.some(b => b.id === urlBranchId)) ? urlBranchId : (allowedBranches[0]?.id || '');
-        const selectedBranchObj = allowedBranches.find(b => b.id === branchId);
+        const urlBranchId = url.searchParams.get('branch_id') || '';
+        const isAllBranches = !urlBranchId;
 
-        if (!selectedBranchObj?.agent_url) return { articles: [], branch: selectedBranchObj, error: 'Sucursal sin Agente.' };
+        // Determinar qué sucursales consultar
+        const branchesToQuery = isAllBranches 
+            ? allowedBranches.filter(b => b.agent_url)
+            : [allowedBranches.find(b => b.id === urlBranchId)].filter(b => b?.agent_url);
 
-        const agentClient = new AgentClient({
-            slug: selectedBranchObj.id,
-            agent_url: selectedBranchObj.agent_url,
-            agent_api_key: selectedBranchObj.agent_token
-        }, userProfile || undefined, fetch);
+        if (branchesToQuery.length === 0) {
+            return { articles: [], branch: null, error: 'Sucursal sin Agente o no encontrada.' };
+        }
 
         // 3. PARÁMETROS
         const search = (url.searchParams.get('search') || '').trim();
@@ -63,25 +63,51 @@ export const load: PageServerLoad = protectLoad('pur_articles', async ({ url, lo
         let categorias: any[] = [];
 
         try {
-            const [artRes, linRes, catRes] = await Promise.all([
-                agentClient.request<any>(`/compras/articulos?${params.toString()}`),
-                agentClient.request<any>('/catalogos/lineas').catch(() => ({ data: [] })),
-                agentClient.request<any>('/catalogos/categorias').catch(() => ({ data: [] }))
-            ]);
+            // Consultar catálogos del primer agente disponible
+            const firstAgent = new AgentClient({
+                slug: branchesToQuery[0].id,
+                agent_url: branchesToQuery[0].agent_url,
+                agent_api_key: branchesToQuery[0].agent_token
+            }, userProfile || undefined, fetch);
 
-            articles = artRes.data || [];
-            
-            // CONSOLIDAR STOCK POR SUCURSAL
-            articles = articles.map(art => {
-                const totalSede = (art.disponibilidad || []).reduce((acc: number, alm: any) => acc + (Number(alm.stock) || 0), 0);
-                return {
-                    ...art,
-                    stock_sede: totalSede
-                };
-            });
+            const [linRes, catRes] = await Promise.all([
+                firstAgent.request<any>('/catalogos/lineas').catch(() => ({ data: [] })),
+                firstAgent.request<any>('/catalogos/categorias').catch(() => ({ data: [] }))
+            ]);
 
             lineas = (linRes as any).data || (linRes as any).items || (Array.isArray(linRes) ? linRes : []);
             categorias = (catRes as any).data || (catRes as any).items || (Array.isArray(catRes) ? catRes : []);
+
+            // Consultar artículos de cada sucursal en paralelo
+            const branchResults = await Promise.all(
+                branchesToQuery.map(async (br) => {
+                    try {
+                        const agent = new AgentClient({
+                            slug: br.id,
+                            agent_url: br.agent_url,
+                            agent_api_key: br.agent_token
+                        }, userProfile || undefined, fetch);
+
+                        const artRes = await agent.request<any>(`/compras/articulos?${params.toString()}`);
+                        const arts = (artRes.data || []).map((art: any) => {
+                            const totalSede = (art.disponibilidad || []).reduce((acc: number, alm: any) => acc + (Number(alm.stock) || 0), 0);
+                            return {
+                                ...art,
+                                _branch_id: br.id,
+                                _branch_name: br.name,
+                                stock_sede: totalSede
+                            };
+                        });
+                        return arts;
+                    } catch (e) {
+                        console.error(`[ARTICLES REPORT] Error fetching from ${br.name}:`, e);
+                        return [];
+                    }
+                })
+            );
+
+            // Concatenar artículos (si es una sucursal será un solo array, si son varias se juntan)
+            articles = branchResults.flat();
 
         } catch (e) {
             console.error('[PURCHASES ARTICLES REPORT] Fetch error:', e);
@@ -91,7 +117,8 @@ export const load: PageServerLoad = protectLoad('pur_articles', async ({ url, lo
 
         return {
             articles,
-            branch: selectedBranchObj,
+            branch: isAllBranches ? { name: 'Todas las Sucursales' } : branchesToQuery[0],
+            isAllBranches,
             catalogs: { lineas, categorias },
             filters: { search, linea, categoria, cost_type, in_stock, solo_pendientes, ids },
             settings: settingsData || {}
