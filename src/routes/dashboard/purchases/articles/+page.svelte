@@ -18,6 +18,9 @@
     Eye,
     Edit,
     Trash2,
+    CheckSquare,
+    Square,
+    Printer,
     ChevronLeft,
     ChevronRight,
   } from "lucide-svelte";
@@ -32,7 +35,7 @@
   const canEdit = data.crud?.update ?? true;
   const canDelete = data.crud?.delete ?? true;
 
-  let selectedBranch = $state($page.url.searchParams.get("branch_id") || "");
+  let selectedBranch = $state($page.url.searchParams.get("branch_id") || (data.branches?.[0]?.id || ""));
   let searchTerm = $state($page.url.searchParams.get("search") || "");
   let selectedLinea = $state($page.url.searchParams.get("linea") || "");
   let selectedCategoria = $state($page.url.searchParams.get("categoria") || "");
@@ -41,6 +44,55 @@
   let pendingFilter = $state($page.url.searchParams.get("solo_pendientes") || "all");
 
   let isSearching = $state(false);
+
+  // ── ARTICLE SELECTION ──────────────────────────────────────────────────────
+  let selectedCodes = $state(new Set<string>());
+
+  const visibleArticles = $derived(
+    (data.articles || []).filter(
+      (a: any, i: number, arr: any[]) =>
+        arr.findIndex((b: any) => b.co_art === a.co_art) === i,
+    ),
+  );
+
+  const allVisibleSelected = $derived(
+    visibleArticles.length > 0 &&
+      visibleArticles.every((a: any) => selectedCodes.has(a.co_art)),
+  );
+
+  function toggleArticle(code: string) {
+    const next = new Set(selectedCodes);
+    if (next.has(code)) next.delete(code);
+    else next.add(code);
+    selectedCodes = next;
+  }
+
+  function toggleAll() {
+    const next = new Set(selectedCodes);
+    if (allVisibleSelected) {
+      visibleArticles.forEach((a: any) => next.delete(a.co_art));
+    } else {
+      visibleArticles.forEach((a: any) => next.add(a.co_art));
+    }
+    selectedCodes = next;
+  }
+
+  function openReport() {
+    const url = new URL("/dashboard/purchases/articles/report", window.location.origin);
+    // Siempre enviar branch_id para que el reporte sepa qué sucursal consultar
+    const activeBranch = selectedBranch || data.branches?.[0]?.id || '';
+    if (activeBranch) url.searchParams.set("branch_id", activeBranch);
+    if (searchTerm) url.searchParams.set("search", searchTerm);
+    if (selectedLinea) url.searchParams.set("linea", selectedLinea);
+    if (selectedCategoria) url.searchParams.set("categoria", selectedCategoria);
+    if (costFilter !== 'all') url.searchParams.set("cost_type", costFilter);
+    if (stockFilter !== 'all') url.searchParams.set("in_stock", stockFilter);
+    if (pendingFilter !== 'all') url.searchParams.set("solo_pendientes", pendingFilter);
+    if (selectedCodes.size > 0) {
+      url.searchParams.set("ids", Array.from(selectedCodes).join(","));
+    }
+    window.open(url.toString(), "_blank");
+  }
 
   function handleSearch() {
     isSearching = true;
@@ -122,7 +174,6 @@
         options={(data.branches || []).map((b: any) => ({ value: b.id, label: b.name }))} 
         bind:value={selectedBranch} 
         placeholder="Sucursal..." 
-        allLabel="Todas las Sucursales" 
         icon={Store} 
         class="w-full h-14" 
         onchange={handleSearch} 
@@ -181,6 +232,16 @@
         <button onclick={() => updateFilter("cost_type", "none")} class="px-4 h-full rounded-lg text-[10px] font-black uppercase tracking-widest transition-all {costFilter === 'none' ? 'bg-brand-500 text-white shadow-lg' : 'text-text-muted hover:text-white'}">Sin Costo</button>
         <button onclick={() => updateFilter("cost_type", "all")} class="px-4 h-full rounded-lg text-[10px] font-black uppercase tracking-widest transition-all {costFilter === 'all' ? 'bg-brand-500 text-white shadow-lg' : 'text-text-muted hover:text-white'}">Todos</button>
       </div>
+
+      <div class="flex items-center gap-2 ml-auto">
+        <button onclick={toggleAll} class="h-11 px-4 bg-white/5 border border-white/5 rounded-xl hover:bg-white/10 transition-all flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-text-muted">
+          {#if allVisibleSelected}<CheckSquare size={16} class="text-brand-400" />{:else}<Square size={16} />{/if}
+          <span class="hidden sm:inline">{allVisibleSelected ? 'Desmarcar Todos' : 'Marcar Todos'}</span>
+        </button>
+        <button onclick={openReport} class="h-11 px-6 bg-brand-600 hover:bg-brand-500 text-white font-black uppercase tracking-widest text-[10px] rounded-xl border border-brand-500/50 shadow-lg flex items-center gap-2 transition-all">
+          <Printer size={16} /> <span class="hidden sm:inline">Imprimir Reporte</span>
+        </button>
+      </div>
     </div>
   </div>
 
@@ -189,8 +250,17 @@
     {#each data.articles as article}
       <div class="glass p-6 rounded-[2.5rem] border border-white/5 hover:border-brand-500/30 transition-all group flex flex-col gap-4 shadow-xl hover:shadow-brand-500/5">
         <div class="flex justify-between items-start">
-          <div class="h-12 w-12 rounded-2xl bg-brand-500/10 text-brand-500 flex items-center justify-center group-hover:bg-brand-500 group-hover:text-white transition-all">
-            <Package size={24} />
+          <div class="flex items-center gap-3">
+            <button onclick={() => toggleArticle(article.co_art)} class="h-12 w-12 rounded-2xl bg-surface-base/50 border border-white/5 flex items-center justify-center hover:bg-white/5 transition-all">
+              {#if selectedCodes.has(article.co_art)}
+                <CheckSquare size={24} class="text-brand-500" />
+              {:else}
+                <Square size={24} class="text-text-muted" />
+              {/if}
+            </button>
+            <div class="h-12 w-12 rounded-2xl bg-brand-500/10 text-brand-500 flex items-center justify-center group-hover:bg-brand-500 group-hover:text-white transition-all">
+              <Package size={24} />
+            </div>
           </div>
           <span class="px-3 py-1 rounded-full bg-surface-base border border-white/5 text-[10px] font-mono text-text-muted uppercase tracking-wider">{article.co_art}</span>
         </div>
