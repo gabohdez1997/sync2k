@@ -1,7 +1,9 @@
-import { protectLoad } from '$lib/server/permissions';
+import { protectLoad, protectAction } from '$lib/server/permissions';
 import { AgentClient } from '$lib/server/agent';
 import { supabaseAdmin } from '$lib/server/supabase';
-import type { PageServerLoad } from './$types';
+import { fail } from '@sveltejs/kit';
+import { logAction } from '$lib/server/audit';
+import type { PageServerLoad, Actions } from './$types';
 
 export const load: PageServerLoad = protectLoad('sec_articles', async ({ url, locals, fetch }) => {
     try {
@@ -98,11 +100,65 @@ export const load: PageServerLoad = protectLoad('sec_articles', async ({ url, lo
             branches: allowedBranches,
             catalogs: { lineas, categorias },
             pagination,
-            crud: userProfile?.permissions?.['sec_articles'] || { read: true },
+            crud: userProfile?.permissions?.pur_articles || { create: true, update: true, delete: true },
             selectedBranchId: branchId
         };
 
     } catch (e: any) {
-        return { articles: [], branches: [], error: `Error: ${e.message}` };
+        return { error: `Error interno: ${e.message}`, articles: [], branches: [] };
     }
 });
+
+export const actions: Actions = {
+    deleteArticle: protectAction('pur_articles', async ({ request, locals, fetch }) => {
+        const formData = await request.formData();
+        const co_art = formData.get('co_art')?.toString();
+        
+        if (!co_art) return fail(400, { deleteError: 'Artículo no especificado' });
+
+        const { data: dbBranches } = await supabaseAdmin.from('branches').select('*').eq('active', true);
+        if (!dbBranches || dbBranches.length === 0) return fail(500, { deleteError: 'Error cargando sucursales' });
+
+        const userProfile = (locals as any).profile;
+        let errors: string[] = [];
+        let successCount = 0;
+
+        for (const branch of dbBranches) {
+            if (!branch.agent_url) continue;
+            
+            const agentClient = new AgentClient({
+                slug: branch.id,
+                agent_url: branch.agent_url,
+                agent_api_key: branch.agent_token
+            }, userProfile || undefined, fetch);
+
+            try {
+                const res = await agentClient.request(`/articulos/${encodeURIComponent(co_art)}`, { method: 'DELETE' });
+                if ((res as any).success === false) {
+                    errors.push(`[${branch.name}] ${(res as any).message || 'Error'}`);
+                } else {
+                    successCount++;
+                }
+            } catch (err: any) {
+                errors.push(`[${branch.name}] Fallo: ${err.message}`);
+            }
+        }
+
+        if (successCount === 0) {
+            return fail(500, { deleteError: 'Fallo al eliminar en todas las sedes:\n' + errors.join('\n') });
+        }
+
+        await logAction({
+            uid: userProfile?.id ?? null,
+            user_email: userProfile?.email ?? 'system',
+            action: 'DELETE',
+            module: 'pur_articles',
+            record_id: co_art,
+            branch_id: 'BROADCAST',
+            new_data: { co_art },
+            source: 'cloud'
+        });
+
+        return { success: true, message: 'Artículo eliminado exitosamente de todas las sedes.' };
+    })
+};

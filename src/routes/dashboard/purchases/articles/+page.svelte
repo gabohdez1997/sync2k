@@ -16,9 +16,12 @@
     TrendingUp,
     Percent,
     Eye,
+    Edit,
+    Trash2,
     ChevronLeft,
     ChevronRight,
   } from "lucide-svelte";
+  import { enhance } from "$app/forms";
   import Combobox from "$lib/components/ui/Combobox.svelte";
   import BarcodeScanner from "$lib/components/ui/BarcodeScanner.svelte";
   import type { PageData } from "./$types";
@@ -26,6 +29,8 @@
   let { data }: { data: PageData } = $props();
 
   const canCreate = data.crud?.create ?? true;
+  const canEdit = data.crud?.update ?? true;
+  const canDelete = data.crud?.delete ?? true;
 
   let selectedBranch = $state($page.url.searchParams.get("branch_id") || "");
   let searchTerm = $state($page.url.searchParams.get("search") || "");
@@ -91,12 +96,21 @@
     {/if}
   </div>
 
-  {#if data.error}
+  {#if data.error || (data.form && data.form.deleteError)}
     <div class="bg-red-500/10 border border-red-500/20 p-6 rounded-3xl flex items-center gap-4 text-red-400">
       <AlertCircle size={32} />
       <div class="flex flex-col">
         <span class="font-black uppercase tracking-widest text-[10px]">Error de Sistema</span>
-        <p class="font-bold">{data.error}</p>
+        <p class="font-bold">{data.error || data.form?.deleteError}</p>
+      </div>
+    </div>
+  {/if}
+
+  {#if data.form && data.form.success}
+    <div class="bg-emerald-500/10 border border-emerald-500/20 p-6 rounded-3xl flex items-center gap-4 text-emerald-400">
+      <div class="flex flex-col">
+        <span class="font-black uppercase tracking-widest text-[10px]">Éxito</span>
+        <p class="font-bold">{data.form.message}</p>
       </div>
     </div>
   {/if}
@@ -246,9 +260,31 @@
           </div>
         {/if}
 
-        <button onclick={() => goto(`/dashboard/purchases/articles/editor?id=${article.co_art}`)} class="mt-2 w-full h-11 bg-white/5 hover:bg-brand-500/20 text-white font-bold rounded-xl border border-white/5 hover:border-brand-500/30 transition-all flex items-center justify-center gap-2 text-sm">
-          <Eye size={16} /> Ver Detalles
-        </button>
+        <div class="mt-2 flex items-center gap-2">
+          {#if canEdit}
+            <button onclick={() => goto(`/dashboard/purchases/articles/editor?id=${article.co_art}`)} class="flex-1 h-11 bg-white/5 hover:bg-brand-500/20 text-white font-bold rounded-xl border border-white/5 hover:border-brand-500/30 transition-all flex items-center justify-center gap-2 text-sm">
+              <Edit size={16} /> Editar
+            </button>
+          {/if}
+          {#if canDelete}
+            <form action="?/deleteArticle" method="POST" use:enhance={() => {
+              return async ({ result, update }) => {
+                if (result.type === 'failure') {
+                  alert(result.data?.deleteError || 'Error al eliminar');
+                } else if (result.type === 'success') {
+                  alert('Artículo eliminado exitosamente.');
+                  handleSearch(); // Recargar datos
+                }
+                update();
+              };
+            }}>
+              <input type="hidden" name="co_art" value={article.co_art} />
+              <button type="submit" onclick={(e) => { if (!confirm(`¿Estás seguro de que deseas eliminar el artículo ${article.co_art}? Esta acción no se puede deshacer y fallará si el artículo tiene movimientos en Profit Plus.`)) e.preventDefault(); }} class="h-11 px-4 bg-white/5 hover:bg-red-500/20 text-red-400 font-bold rounded-xl border border-white/5 hover:border-red-500/30 transition-all flex items-center justify-center gap-2 text-sm" title="Eliminar artículo">
+                <Trash2 size={16} />
+              </button>
+            </form>
+          {/if}
+        </div>
       </div>
     {:else}
       <div class="col-span-full py-20 flex flex-col items-center justify-center text-center gap-4 opacity-50">
