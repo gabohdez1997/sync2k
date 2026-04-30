@@ -33,17 +33,8 @@ export const load: PageServerLoad = protectLoad('sec_articles', async ({ url, lo
 
         if (allowedBranches.length === 0) return { articles: [], branches: [], error: 'No tienes sucursales autorizadas.' };
 
-        const urlBranchId = url.searchParams.get('branch_id');
-        const branchId = (urlBranchId && allowedBranches.some(b => b.id === urlBranchId)) ? urlBranchId : (allowedBranches[0]?.id || '');
-        const selectedBranchObj = allowedBranches.find(b => b.id === branchId);
-
-        if (!selectedBranchObj?.agent_url) return { articles: [], branches: allowedBranches, error: 'Sucursal sin Agente.' };
-
-        const agentClient = new AgentClient({
-            slug: selectedBranchObj.id,
-            agent_url: selectedBranchObj.agent_url,
-            agent_api_key: selectedBranchObj.agent_token
-        }, userProfile || undefined, fetch);
+        const urlBranchId = url.searchParams.get('branch_id') || '';
+        const isAllBranches = !urlBranchId;
 
         // 3. PARÁMETROS
         const page = parseInt(url.searchParams.get('page') || '1', 10);
@@ -60,36 +51,74 @@ export const load: PageServerLoad = protectLoad('sec_articles', async ({ url, lo
             search, linea, categoria, cost_type, in_stock, solo_pendientes
         });
 
-        // 4. CARGA PARALELA
         let articles: any[] = [];
         let pagination = { total: 0, page, limit: 12, totalPages: 0 };
         let lineas: any[] = [];
         let categorias: any[] = [];
 
+        // Determinar qué sucursales consultar
+        const branchesToQuery = isAllBranches 
+            ? allowedBranches.filter(b => b.agent_url)
+            : [allowedBranches.find(b => b.id === urlBranchId)].filter(b => b?.agent_url);
+
+        if (branchesToQuery.length === 0) {
+            return { articles: [], branches: allowedBranches, error: 'Sucursal sin Agente.' };
+        }
+
         try {
-            const [artRes, linRes, catRes] = await Promise.all([
-                agentClient.request<any>(`/compras/articulos?${params.toString()}`),
-                agentClient.request<any>('/catalogos/lineas').catch(() => ({ data: [] })),
-                agentClient.request<any>('/catalogos/categorias').catch(() => ({ data: [] }))
+            // Consultar catálogos del primer agente disponible
+            const firstAgent = new AgentClient({
+                slug: branchesToQuery[0].id,
+                agent_url: branchesToQuery[0].agent_url,
+                agent_api_key: branchesToQuery[0].agent_token
+            }, userProfile || undefined, fetch);
+
+            const [linRes, catRes] = await Promise.all([
+                firstAgent.request<any>('/catalogos/lineas').catch(() => ({ data: [] })),
+                firstAgent.request<any>('/catalogos/categorias').catch(() => ({ data: [] }))
             ]);
-
-            articles = artRes.data || [];
-            pagination = artRes.pagination || { total: articles.length, page, limit: 12, totalPages: 1 };
-            
-            // CONSOLIDAR STOCK POR SUCURSAL
-            articles = articles.map(art => {
-                const totalSede = (art.disponibilidad || []).reduce((acc: number, alm: any) => acc + (Number(alm.stock) || 0), 0);
-                return {
-                    ...art,
-                    // Reemplazamos la lista de almacenes por una lista de sucursales consolidadas
-                    existencia_consolidada: [
-                        { nombre: selectedBranchObj.name, stock: totalSede }
-                    ]
-                };
-            });
-
             lineas = (linRes as any).data || (linRes as any).items || (Array.isArray(linRes) ? linRes : []);
             categorias = (catRes as any).data || (catRes as any).items || (Array.isArray(catRes) ? catRes : []);
+
+            // Consultar artículos de cada sucursal en paralelo
+            const branchResults = await Promise.all(
+                branchesToQuery.map(async (br) => {
+                    try {
+                        const agent = new AgentClient({
+                            slug: br.id,
+                            agent_url: br.agent_url,
+                            agent_api_key: br.agent_token
+                        }, userProfile || undefined, fetch);
+
+                        const artRes = await agent.request<any>(`/compras/articulos?${params.toString()}`);
+                        const arts = (artRes.data || []).map((art: any) => {
+                            const totalSede = (art.disponibilidad || []).reduce((acc: number, alm: any) => acc + (Number(alm.stock) || 0), 0);
+                            return {
+                                ...art,
+                                _branch_id: br.id,
+                                _branch_name: br.name,
+                                existencia_consolidada: [{ nombre: br.name, stock: totalSede }]
+                            };
+                        });
+                        return { arts, pagination: artRes.pagination };
+                    } catch (e) {
+                        console.error(`[ARTICLES] Error fetching from ${br.name}:`, e);
+                        return { arts: [], pagination: null };
+                    }
+                })
+            );
+
+            if (isAllBranches) {
+                // Multi-sucursal: una card por artículo+sucursal
+                articles = branchResults.flatMap(r => r.arts);
+                // Paginación local: total = suma, pero como el agente ya pagina, solo concatenamos
+                const totalAll = branchResults.reduce((s, r) => s + (r.pagination?.total || 0), 0);
+                pagination = { total: totalAll, page, limit: 12 * branchesToQuery.length, totalPages: Math.max(...branchResults.map(r => r.pagination?.totalPages || 1)) };
+            } else {
+                // Sucursal única (comportamiento original)
+                articles = branchResults[0]?.arts || [];
+                pagination = branchResults[0]?.pagination || { total: articles.length, page, limit: 12, totalPages: 1 };
+            }
 
         } catch (e) {
             console.error('[PURCHASES ARTICLES] Fetch error:', e);
@@ -101,7 +130,8 @@ export const load: PageServerLoad = protectLoad('sec_articles', async ({ url, lo
             catalogs: { lineas, categorias },
             pagination,
             crud: userProfile?.permissions?.pur_articles || { create: true, update: true, delete: true },
-            selectedBranchId: branchId
+            selectedBranchId: urlBranchId,
+            isAllBranches
         };
 
     } catch (e: any) {
