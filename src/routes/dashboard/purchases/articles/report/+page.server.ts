@@ -52,7 +52,7 @@ export const load: PageServerLoad = protectLoad('pur_articles', async ({ url, lo
 
         const params = new URLSearchParams({
             page: '1',
-            limit: '5000',
+            limit: '10000',
             search, linea, categoria, cost_type, in_stock, solo_pendientes
         });
         // Solo enviar ids si hay selección real
