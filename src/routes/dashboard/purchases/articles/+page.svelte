@@ -21,6 +21,7 @@
     CheckSquare,
     Square,
     Printer,
+    X,
     ChevronLeft,
     ChevronRight,
   } from "lucide-svelte";
@@ -131,7 +132,7 @@
     <div class="flex flex-col gap-2">
       <h1 class="text-4xl font-black tracking-tight flex items-center gap-3">
         <Package size={40} class="text-brand-500" />
-        Maestro de Artículos
+        Gestión de Artículos
         {#if data.pagination?.total > 0}
           <span class="text-sm font-black bg-brand-500/10 text-brand-500 px-3 py-1 rounded-full border border-brand-500/20">
             {data.pagination.total}
@@ -141,11 +142,34 @@
       <p class="text-text-muted text-lg">Consulta y gestiona el catálogo de productos de Profit Plus.</p>
     </div>
 
-    {#if canCreate}
-      <button onclick={() => goto("/dashboard/purchases/articles/editor")} class="h-14 px-8 bg-brand-600 hover:bg-brand-500 border-brand-500/50 shadow-lg shadow-brand-600/20 text-white border rounded-2xl font-bold transition-all active:scale-95 flex items-center gap-3 shrink-0">
-        <Plus size={20} /> Crear Artículo
+    <div class="flex items-center gap-3 shrink-0">
+      {#if canCreate}
+        <button onclick={() => goto("/dashboard/purchases/articles/editor")} class="h-14 px-8 bg-surface-raised hover:bg-white/5 border-white/5 hover:border-white/10 text-text-base border rounded-2xl font-bold transition-all active:scale-95 flex items-center gap-3">
+          <Plus size={20} /> Crear Artículo
+        </button>
+      {/if}
+
+      <button
+        onclick={openReport}
+        class="h-14 px-8 {selectedCodes.size > 0
+          ? 'bg-brand-600 hover:bg-brand-500 border-brand-500/50 shadow-lg shadow-brand-600/20 text-white'
+          : 'bg-surface-raised hover:bg-white/5 border-white/5 hover:border-white/10 text-text-base'} border rounded-2xl font-bold transition-all active:scale-95 flex items-center gap-3 group"
+        title={selectedCodes.size > 0
+          ? `Imprimir ${selectedCodes.size} artículo(s) seleccionado(s)`
+          : "Imprimir todos los artículos del filtro"}
+      >
+        <Printer
+          size={20}
+          class={selectedCodes.size > 0
+            ? 'text-white'
+            : 'text-brand-400 group-hover:text-brand-300'}
+        />
+        <span class="hidden sm:inline">Imprimir</span> Reporte
+        {#if selectedCodes.size > 0}
+          <span class="bg-white/20 text-white text-xs font-black px-2 py-0.5 rounded-full">{selectedCodes.size}</span>
+        {/if}
       </button>
-    {/if}
+    </div>
   </div>
 
   {#if data.error || (data.form && data.form.deleteError)}
@@ -232,37 +256,76 @@
         <button onclick={() => updateFilter("cost_type", "none")} class="px-4 h-full rounded-lg text-[10px] font-black uppercase tracking-widest transition-all {costFilter === 'none' ? 'bg-brand-500 text-white shadow-lg' : 'text-text-muted hover:text-white'}">Sin Costo</button>
         <button onclick={() => updateFilter("cost_type", "all")} class="px-4 h-full rounded-lg text-[10px] font-black uppercase tracking-widest transition-all {costFilter === 'all' ? 'bg-brand-500 text-white shadow-lg' : 'text-text-muted hover:text-white'}">Todos</button>
       </div>
-
-      <div class="flex items-center gap-2 ml-auto">
-        <button onclick={toggleAll} class="h-11 px-4 bg-white/5 border border-white/5 rounded-xl hover:bg-white/10 transition-all flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-text-muted">
-          {#if allVisibleSelected}<CheckSquare size={16} class="text-brand-400" />{:else}<Square size={16} />{/if}
-          <span class="hidden sm:inline">{allVisibleSelected ? 'Desmarcar Todos' : 'Marcar Todos'}</span>
-        </button>
-        <button onclick={openReport} class="h-11 px-6 bg-brand-600 hover:bg-brand-500 text-white font-black uppercase tracking-widest text-[10px] rounded-xl border border-brand-500/50 shadow-lg flex items-center gap-2 transition-all">
-          <Printer size={16} /> <span class="hidden sm:inline">Imprimir Reporte</span>
-        </button>
-      </div>
     </div>
+  </div>
+
+  <!-- BARRA DE SELECCIÓN (Estilo Ubicaciones) -->
+  <div class="flex items-center justify-between gap-4 mb-2">
+    <div class="flex items-center gap-3">
+      <button
+        onclick={toggleAll}
+        class="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-all border
+          {allVisibleSelected
+          ? 'bg-brand-500/20 border-brand-500/40 text-brand-300 hover:bg-brand-500/30'
+          : 'bg-surface-raised border-white/5 text-text-muted hover:bg-white/5 hover:text-text-base'}"
+      >
+        {#if allVisibleSelected}
+          <CheckSquare size={16} />
+          Deseleccionar todo
+        {:else}
+          <Square size={16} />
+          Seleccionar todo
+        {/if}
+      </button>
+      {#if selectedCodes.size > 0}
+        <span class="text-sm text-brand-400 font-bold">{selectedCodes.size} artículo(s) seleccionado(s)</span>
+        <button
+          onclick={() => (selectedCodes = new Set())}
+          class="text-xs text-text-muted hover:text-red-400 transition-colors flex items-center gap-1"
+        >
+          <X size={12} /> Limpiar
+        </button>
+      {/if}
+    </div>
+    {#if selectedCodes.size === 0}
+      <span class="text-xs text-text-muted italic">
+        Sin selección → imprime todos los del filtro
+      </span>
+    {/if}
   </div>
 
   <!-- GRID DE TARJETAS (ESTILO UBICACIONES) -->
   <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
     {#each data.articles as article}
-      <div class="glass p-6 rounded-[2.5rem] border border-white/5 hover:border-brand-500/30 transition-all group flex flex-col gap-4 shadow-xl hover:shadow-brand-500/5">
+      {@const isSelected = selectedCodes.has(article.co_art)}
+      <label
+        for="select-{article.co_art}"
+        class="glass p-6 rounded-3xl border transition-all hover:shadow-2xl flex flex-col gap-4 cursor-pointer select-none
+          {isSelected
+          ? 'border-brand-500/60 shadow-brand-500/10 bg-brand-500/5'
+          : 'border-white/5 hover:border-brand-500/30 hover:shadow-brand-500/5'}"
+      >
+        <input
+          id="select-{article.co_art}"
+          type="checkbox"
+          class="sr-only"
+          checked={isSelected}
+          onchange={() => toggleArticle(article.co_art)}
+        />
         <div class="flex justify-between items-start">
-          <div class="flex items-center gap-3">
-            <button onclick={() => toggleArticle(article.co_art)} class="h-12 w-12 rounded-2xl bg-surface-base/50 border border-white/5 flex items-center justify-center hover:bg-white/5 transition-all">
-              {#if selectedCodes.has(article.co_art)}
-                <CheckSquare size={24} class="text-brand-500" />
-              {:else}
-                <Square size={24} class="text-text-muted" />
-              {/if}
-            </button>
-            <div class="h-12 w-12 rounded-2xl bg-brand-500/10 text-brand-500 flex items-center justify-center group-hover:bg-brand-500 group-hover:text-white transition-all">
+          <div
+            class="h-12 w-12 rounded-2xl flex items-center justify-center transition-all
+              {isSelected
+              ? 'bg-brand-500 text-white'
+              : 'bg-brand-500/10 text-brand-500'}"
+          >
+            {#if isSelected}
+              <CheckSquare size={22} />
+            {:else}
               <Package size={24} />
-            </div>
+            {/if}
           </div>
-          <span class="px-3 py-1 rounded-full bg-surface-base border border-white/5 text-[10px] font-mono text-text-muted uppercase tracking-wider">{article.co_art}</span>
+          <span class="px-2 py-1 rounded-md bg-surface-base border border-border-subtle text-xs font-mono text-text-muted">{article.co_art}</span>
         </div>
 
         <div class="flex flex-col gap-1">
@@ -330,9 +393,10 @@
           </div>
         {/if}
 
-        <div class="mt-2 flex items-center gap-2">
+        <!-- svelte-ignore a11y_no_static_element_interactions -->
+        <div class="mt-2 flex items-center gap-2" onclick={(e) => e.stopPropagation()}>
           {#if canEdit}
-            <button onclick={() => goto(`/dashboard/purchases/articles/editor?id=${article.co_art}`)} class="flex-1 h-11 bg-white/5 hover:bg-brand-500/20 text-white font-bold rounded-xl border border-white/5 hover:border-brand-500/30 transition-all flex items-center justify-center gap-2 text-sm">
+            <button onclick={(e) => { e.preventDefault(); goto(`/dashboard/purchases/articles/editor?id=${article.co_art}`); }} class="flex-1 h-11 bg-white/5 hover:bg-brand-500/20 text-white font-bold rounded-xl border border-white/5 hover:border-brand-500/30 transition-all flex items-center justify-center gap-2 text-sm">
               <Edit size={16} /> Editar
             </button>
           {/if}
@@ -343,19 +407,19 @@
                   alert(result.data?.deleteError || 'Error al eliminar');
                 } else if (result.type === 'success') {
                   alert('Artículo eliminado exitosamente.');
-                  handleSearch(); // Recargar datos
+                  handleSearch();
                 }
                 update();
               };
             }}>
               <input type="hidden" name="co_art" value={article.co_art} />
-              <button type="submit" onclick={(e) => { if (!confirm(`¿Estás seguro de que deseas eliminar el artículo ${article.co_art}? Esta acción no se puede deshacer y fallará si el artículo tiene movimientos en Profit Plus.`)) e.preventDefault(); }} class="h-11 px-4 bg-white/5 hover:bg-red-500/20 text-red-400 font-bold rounded-xl border border-white/5 hover:border-red-500/30 transition-all flex items-center justify-center gap-2 text-sm" title="Eliminar artículo">
+              <button type="submit" onclick={(e) => { e.stopPropagation(); if (!confirm(`¿Estás seguro de que deseas eliminar el artículo ${article.co_art}? Esta acción no se puede deshacer y fallará si el artículo tiene movimientos en Profit Plus.`)) e.preventDefault(); }} class="h-11 px-4 bg-white/5 hover:bg-red-500/20 text-red-400 font-bold rounded-xl border border-white/5 hover:border-red-500/30 transition-all flex items-center justify-center gap-2 text-sm" title="Eliminar artículo">
                 <Trash2 size={16} />
               </button>
             </form>
           {/if}
         </div>
-      </div>
+      </label>
     {:else}
       <div class="col-span-full py-20 flex flex-col items-center justify-center text-center gap-4 opacity-50">
         <Package size={64} />

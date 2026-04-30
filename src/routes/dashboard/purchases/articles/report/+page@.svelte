@@ -61,8 +61,14 @@
     // Detectar si algún artículo tiene factura
     const hasAnyFactura = articles.some((a: any) => a.fact_doc_num);
 
+    // Mostrar columna "Por Llegar" si el filtro está activo
+    const showPorLlegar = filters.solo_pendientes === 'true';
+
+    // Calcular colspan dinámico
+    const totalCols = 6 + (hasAnyFactura ? 1 : 0) + (showPorLlegar ? 1 : 0);
+
     // --- LÓGICA DE PAGINACIÓN ---
-    const LIMIT_PER_PAGE = 48; 
+    const LIMIT_PER_PAGE = 56; 
 
     function paginate(items: any[]) {
         let pages: any[] = [];
@@ -158,6 +164,9 @@
                                         <th class="col-fact">Factura</th>
                                     {/if}
                                     <th class="col-stock">Exist.</th>
+                                    {#if showPorLlegar}
+                                        <th class="col-stock">Por Llegar</th>
+                                    {/if}
                                 </tr>
                             </thead>
                             <tbody>
@@ -172,11 +181,14 @@
                                             <td class="font-mono text-center">{item.fact_doc_num || '—'}</td>
                                         {/if}
                                         <td class="text-center font-black {item.stock_sede > 0 ? 'stock-positive' : 'stock-zero'}">{item.stock_sede || 0}</td>
+                                        {#if showPorLlegar}
+                                            <td class="text-center font-black por-llegar">{item.cantidad_por_llegar || 0}</td>
+                                        {/if}
                                     </tr>
                                 {/each}
                                 {#if page.items.length < page.expectedRows}
                                     {#each Array(page.expectedRows - page.items.length) as _}
-                                        <tr class="empty-row"><td colspan="{hasAnyFactura ? 7 : 6}">&nbsp;</td></tr>
+                                        <tr class="empty-row"><td colspan="{totalCols}">&nbsp;</td></tr>
                                     {/each}
                                 {/if}
                             </tbody>
@@ -287,6 +299,7 @@
     .desc-cell { font-weight: 700; text-transform: uppercase; font-size: 7.5px; }
     .stock-positive { color: #2563eb; }
     .stock-zero { color: #94a3b8; }
+    .por-llegar { color: #d97706; }
 
     .page-footer { position: absolute; bottom: 0.3cm; left: 0; right: 0; text-align: center; font-size: 7px; font-weight: bold; color: #999; border-top: 1px solid #eee; padding-top: 2px; margin: 0 0.7cm; }
 
