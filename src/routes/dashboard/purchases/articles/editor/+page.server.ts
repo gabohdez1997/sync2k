@@ -36,14 +36,18 @@ export const load: PageServerLoad = protectLoad('pur_articles', async ({ url, lo
         let categorias: any[] = [];
         let unidades: any[] = [];
         let ubicaciones: any[] = [];
+        let procedencias: any[] = [];
+        let colores: any[] = [];
 
         try {
-            const [linRes, subRes, catRes, uniRes, ubiRes] = await Promise.all([
+            const [linRes, subRes, catRes, uniRes, ubiRes, procRes, colRes] = await Promise.all([
                 agentClient.request<any>('/catalogos/lineas').catch(() => ({ data: [] })),
                 agentClient.request<any>('/catalogos/sublineas').catch(() => ({ data: [] })),
                 agentClient.request<any>('/catalogos/categorias').catch(() => ({ data: [] })),
                 agentClient.request<any>('/catalogos/unidades').catch(() => ({ data: [] })),
-                agentClient.request<any>('/ubicaciones').catch(() => ({ data: [] }))
+                agentClient.request<any>('/ubicaciones').catch(() => ({ data: [] })),
+                agentClient.request<any>('/catalogos/procedencias').catch(() => ({ data: [] })),
+                agentClient.request<any>('/catalogos/colores').catch(() => ({ data: [] }))
             ]);
 
             lineas = (linRes as any).data || (linRes as any).items || (Array.isArray(linRes) ? linRes : []);
@@ -51,6 +55,8 @@ export const load: PageServerLoad = protectLoad('pur_articles', async ({ url, lo
             categorias = (catRes as any).data || (catRes as any).items || (Array.isArray(catRes) ? catRes : []);
             unidades = (uniRes as any).data || (uniRes as any).items || (Array.isArray(uniRes) ? uniRes : []);
             ubicaciones = (ubiRes as any).data || (ubiRes as any).items || (Array.isArray(ubiRes) ? ubiRes : []);
+            procedencias = (procRes as any).data || (procRes as any).items || (Array.isArray(procRes) ? procRes : []);
+            colores = (colRes as any).data || (colRes as any).items || (Array.isArray(colRes) ? colRes : []);
         } catch (e) {
             console.error('[PUR_ARTICLES_EDITOR] Catalog fetch error:', e);
         }
@@ -71,7 +77,9 @@ export const load: PageServerLoad = protectLoad('pur_articles', async ({ url, lo
                 sublineas,
                 categorias,
                 unidades,
-                ubicaciones
+                ubicaciones,
+                procedencias,
+                colores
             }
         };
 
@@ -100,13 +108,16 @@ export const actions: Actions = {
             ref: formData.get('ref')?.toString() || null,
             
             // Datos Adicionales
-            uni_venta: formData.get('co_uni')?.toString() || null,
+            co_uni: formData.get('co_uni')?.toString() || null,
             sSco_Uni: formData.get('sCo_Uni_Sec')?.toString() || null,
             bManeja_Serial: formData.get('bManeja_Serial') === 'on',
             bManeja_Lote: formData.get('bManeja_Lote') === 'on',
             tipo_imp: formData.get('tipo_imp')?.toString() || '1',
             peso: Number(formData.get('peso')) || 0,
             volumen: Number(formData.get('volumen')) || 0,
+            stock_min: Number(formData.get('stock_min')) || 0,
+            stock_max: Number(formData.get('stock_max')) || 0,
+            garantia: formData.get('garantia')?.toString() || '0',
             
             // Comentarios
             comentario: formData.get('comentario')?.toString() || null,
