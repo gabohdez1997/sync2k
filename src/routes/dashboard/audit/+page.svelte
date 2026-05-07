@@ -21,7 +21,8 @@
     Store,
     Key,
     Minus,
-    X
+    X,
+    DollarSign
   } from "lucide-svelte";
   import Combobox from "$lib/components/ui/Combobox.svelte";
   import type { PageData } from "./$types";
@@ -41,6 +42,7 @@
     'sec_branches':  { label: 'Sucursales', icon: Store, color: 'text-blue-400' },
     'sec_articles':  { label: 'Artículos', icon: Package, color: 'text-emerald-400' },
     'pur_articles':  { label: 'Artículos', icon: Package, color: 'text-emerald-400' },
+    'cash_exchange': { label: 'Tasa de Cambio', icon: DollarSign, color: 'text-yellow-400' },
     'sec_users':     { label: 'Usuarios', icon: UserCog, color: 'text-indigo-400' },
     'sec_roles':     { label: 'Permisos y Roles', icon: Key, color: 'text-orange-400' },
     'sec_audit':     { label: 'Auditoría', icon: ClipboardList, color: 'text-zinc-400' },

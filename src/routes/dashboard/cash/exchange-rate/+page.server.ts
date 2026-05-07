@@ -1,5 +1,6 @@
 import { error, fail } from '@sveltejs/kit';
 import { AgentClient } from '$lib/server/agent';
+import { logAction } from '$lib/server/audit';
 import type { PageServerLoad, Actions } from './$types';
 
 /**
@@ -107,6 +108,18 @@ export const actions: Actions = {
                     }, profile, fetch);
                     
                     const res = await agent.updateTasa(rate);
+                    if (res.success) {
+                        await logAction({
+                            uid: profile.id ?? null,
+                            user_email: profile.email ?? 'system',
+                            action: 'UPDATE',
+                            module: 'cash_exchange',
+                            record_id: 'BCV_RATE',
+                            branch_id: branch.id,
+                            new_data: { tasa: rate },
+                            source: 'cloud'
+                        });
+                    }
                     return { branch: branch.name, success: res.success, message: res.message || (res.success ? 'Sincronizado' : 'Error') };
                 } catch (e: any) {
                     return { branch: branch.name, success: false, message: e.message };
