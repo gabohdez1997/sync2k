@@ -61,12 +61,31 @@ export const load: PageServerLoad = protectLoad('pur_articles', async ({ url, lo
             console.error('[PUR_ARTICLES_EDITOR] Catalog fetch error:', e);
         }
 
-        // ─── 3. LOAD ARTICLE IF EDITING ────────────────────────────────
         let article = null;
         if (articleId) {
             const artRes = await agentClient.request<any>(`/articulos/${encodeURIComponent(articleId)}`);
             if (artRes.success !== false) {
-                article = (artRes as any).data || artRes;
+                const articleData = (artRes as any).data || artRes;
+                let rawArticle = null;
+                if (Array.isArray(articleData) && articleData.length > 0) {
+                    rawArticle = articleData[0];
+                } else if (!Array.isArray(articleData)) {
+                    rawArticle = articleData;
+                }
+
+                if (rawArticle) {
+                    // Mapear los campos del Agente a los esperados por Svelte
+                    article = {
+                        ...rawArticle,
+                        art_des: rawArticle.descripcion || rawArticle.art_des,
+                        tipo: rawArticle.tipo_articulo || rawArticle.tipo,
+                        uni_venta: rawArticle.co_uni || rawArticle.uni_venta,
+                        // Para los demás campos, mantener compatibilidad
+                    };
+                }
+                console.log("[EDITOR LOAD] Fetched mapped article:", article);
+            } else {
+                console.warn("[EDITOR LOAD] Fetch failed:", artRes);
             }
         }
 
@@ -103,7 +122,7 @@ export const actions: Actions = {
             co_cat: formData.get('co_cat')?.toString() || null,
             co_color: formData.get('co_color')?.toString() || null,
             co_ubicacion: formData.get('co_ubicacion')?.toString() || null,
-            procedencia: formData.get('procedencia')?.toString() || 'N',
+            cod_proc: formData.get('cod_proc')?.toString() || null,
             modelo: formData.get('modelo')?.toString() || null,
             ref: formData.get('ref')?.toString() || null,
             
@@ -126,15 +145,11 @@ export const actions: Actions = {
             image_base64: formData.get('imageBase64')?.toString() || null,
         };
 
-        // Extraer Márgenes
-        payload.margenes = [];
+        // Extraer Márgenes dinámicos y enviarlos como margen_1, margen_2, etc.
         for (let i = 1; i <= 5; i++) {
             const margenVal = formData.get(`margen_${i}`);
-            if (margenVal !== null) {
-                payload.margenes.push({
-                    tipo_precio: i.toString(),
-                    porcentaje: Number(margenVal) || 0
-                });
+            if (margenVal !== null && margenVal !== '') {
+                payload[`margen_${i}`] = Number(margenVal) || 0;
             }
         }
 
@@ -153,7 +168,7 @@ export const actions: Actions = {
         }
 
         const userProfile = locals.profile;
-        const isNew = true; // Por ahora forzamos POST/PUT en el agente según exista o no
+        const isNew = formData.get('is_new') === 'true';
         
         const errors: string[] = [];
         let successCount = 0;
@@ -180,6 +195,16 @@ export const actions: Actions = {
                     errors.push(`[${branch.name}] ${(res as any).message || 'Error'}`);
                 } else {
                     successCount++;
+                    await logAction({
+                        uid:          userProfile?.id ?? null,
+                        user_email:   userProfile?.email ?? 'system',
+                        action:       isNew ? 'CREATE' : 'UPDATE',
+                        module:       'pur_articles',
+                        record_id:    payload.co_art,
+                        branch_id:    branch.id,
+                        new_data:     payload,
+                        source:       'cloud'
+                    });
                 }
             } catch (err: any) {
                 errors.push(`[${branch.name}] Fallo de conexión: ${err.message}`);
@@ -190,22 +215,14 @@ export const actions: Actions = {
             return fail(500, { error: 'Fallo al guardar en todas las sedes:\n' + errors.join('\n') });
         }
 
-        // Auditoría
-        await logAction({
-            uid:          userProfile?.id ?? null,
-            user_email:   userProfile?.email ?? 'system',
-            action:       'UPSERT',
-            module:       'pur_articles',
-            record_id:    payload.co_art,
-            branch_id:    'BROADCAST',
-            new_data:     payload,
-            source:       'cloud'
-        });
+
+
+
 
         // Advertir si hubo fallos parciales
         if (errors.length > 0) {
             console.warn('[PUR_ARTICLES_BROADCAST] Fallos parciales:', errors);
-            // Podríamos retornar un warning, pero SvelteKit form actions prefiere fail o éxito.
+            return { success: true, co_art: payload.co_art, warning: 'Guardado con advertencias en algunas sedes:\n' + errors.join('\n') };
         }
 
         return { success: true, co_art: payload.co_art };

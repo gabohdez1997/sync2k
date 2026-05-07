@@ -40,6 +40,7 @@
   const moduleInfo: Record<string, { label: string, icon: any, color: string }> = {
     'sec_branches':  { label: 'Sucursales', icon: Store, color: 'text-blue-400' },
     'sec_articles':  { label: 'Artículos', icon: Package, color: 'text-emerald-400' },
+    'pur_articles':  { label: 'Artículos', icon: Package, color: 'text-emerald-400' },
     'sec_users':     { label: 'Usuarios', icon: UserCog, color: 'text-indigo-400' },
     'sec_roles':     { label: 'Permisos y Roles', icon: Key, color: 'text-orange-400' },
     'sec_audit':     { label: 'Auditoría', icon: ClipboardList, color: 'text-zinc-400' },

@@ -25,6 +25,8 @@
     X,
     ChevronLeft,
     ChevronRight,
+    Lock,
+    Loader2,
   } from "lucide-svelte";
   import { enhance } from "$app/forms";
   import Combobox from "$lib/components/ui/Combobox.svelte";
@@ -48,6 +50,18 @@
   );
 
   let isSearching = $state(false);
+
+  // ── DELETE MODAL ───────────────────────────────────────────────────────────
+  let showDeleteModal = $state(false);
+  let articleToDelete = $state<any>(null);
+  let deletePassword = $state("");
+  let isDeleting = $state(false);
+
+  function openDeleteModal(article: any) {
+    articleToDelete = article;
+    deletePassword = "";
+    showDeleteModal = true;
+  }
 
   // ── ARTICLE SELECTION ──────────────────────────────────────────────────────
   let selectedCodes = $state(new Set<string>());
@@ -630,39 +644,18 @@
             </button>
           {/if}
           {#if canDelete}
-            <form
-              action="?/deleteArticle"
-              method="POST"
-              use:enhance={() => {
-                return async ({ result, update }) => {
-                  if (result.type === "failure") {
-                    alert(result.data?.deleteError || "Error al eliminar");
-                  } else if (result.type === "success") {
-                    alert("Artículo eliminado exitosamente.");
-                    handleSearch();
-                  }
-                  update();
-                };
+            <button
+              type="button"
+              onclick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                openDeleteModal(article);
               }}
+              class="h-11 px-4 bg-white/5 hover:bg-red-500/20 text-red-400 font-bold rounded-xl border border-white/5 hover:border-red-500/30 transition-all flex items-center justify-center gap-2 text-sm"
+              title="Eliminar artículo"
             >
-              <input type="hidden" name="co_art" value={article.co_art} />
-              <button
-                type="submit"
-                onclick={(e) => {
-                  e.stopPropagation();
-                  if (
-                    !confirm(
-                      `¿Estás seguro de que deseas eliminar el artículo ${article.co_art}? Esta acción no se puede deshacer y fallará si el artículo tiene movimientos en Profit Plus.`,
-                    )
-                  )
-                    e.preventDefault();
-                }}
-                class="h-11 px-4 bg-white/5 hover:bg-red-500/20 text-red-400 font-bold rounded-xl border border-white/5 hover:border-red-500/30 transition-all flex items-center justify-center gap-2 text-sm"
-                title="Eliminar artículo"
-              >
-                <Trash2 size={16} />
-              </button>
-            </form>
+              <Trash2 size={16} />
+            </button>
           {/if}
         </div>
       </label>
@@ -709,3 +702,138 @@
     </div>
   {/if}
 </div>
+
+{#if showDeleteModal}
+  <div class="fixed inset-0 z-[60] flex items-center justify-center p-4">
+    <div
+      class="absolute inset-0 bg-black/90 backdrop-blur-md"
+      onclick={() => !isDeleting && (showDeleteModal = false)}
+      onkeydown={(e) =>
+        e.key === "Escape" && !isDeleting && (showDeleteModal = false)}
+      role="button"
+      tabindex="-1"
+    ></div>
+
+    <div
+      class="glass w-full max-w-md rounded-[40px] border border-white/10 shadow-2xl relative z-10 overflow-hidden"
+      transition:fade
+    >
+      <div class="p-8 text-center space-y-6">
+        <div
+          class="h-20 w-20 rounded-3xl bg-red-500/20 text-red-500 flex items-center justify-center mx-auto shadow-lg shadow-red-500/10"
+        >
+          <Trash2 size={40} />
+        </div>
+
+        <div class="space-y-2">
+          <h2 class="text-2xl font-black tracking-tight">
+            Confirmar Eliminación
+          </h2>
+          <p class="text-text-muted text-sm px-4">
+            ¿Estás seguro de que deseas eliminar el artículo
+            <span class="text-text-base font-bold">{articleToDelete?.co_art}</span
+            >? Esta acción es irreversible en Profit Plus.
+          </p>
+          {#if articleToDelete}
+            <div
+              class="text-left p-4 rounded-2xl bg-white/5 border border-white/10 space-y-2 mt-4"
+            >
+              <p class="text-xs text-text-muted"><span class="font-bold text-text-base">Descripción:</span> {articleToDelete.descripcion}</p>
+              <p class="text-xs text-text-muted"><span class="font-bold text-text-base">Categoría:</span> {articleToDelete.linea} / {articleToDelete.categoria}</p>
+              <p class="text-xs text-text-muted">
+                  <span class="font-bold text-text-base">Costo:</span>
+                  ${Number(articleToDelete.ultimo_costo_om || articleToDelete.costo_estimado || 0).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </p>
+              <p class="text-xs text-text-muted flex items-center gap-2">
+                  <span class="font-bold text-text-base">Stock Total:</span>
+                  <span class="px-2 py-0.5 rounded-full border text-[10px] font-black tracking-widest bg-brand-500/10 text-brand-400 border-brand-500/20">
+                      {articleToDelete.existencia_consolidada?.reduce((acc: number, s: any) => acc + s.stock, 0) || 0}
+                  </span>
+              </p>
+            </div>
+          {/if}
+        </div>
+
+        <form
+          method="POST"
+          action="?/deleteArticle"
+          use:enhance={() => {
+            isDeleting = true;
+            return async ({ result, update }) => {
+              await update();
+              isDeleting = false;
+
+              if (result.type === "success") {
+                showDeleteModal = false;
+                toast.success(
+                  (result as any).data?.message ||
+                    "Artículo eliminado con éxito",
+                );
+                handleSearch(); // Recargar datos
+              } else if (result.type === "failure") {
+                toast.error(
+                  (result as any).data?.deleteError ||
+                    "Error al eliminar el artículo",
+                );
+              } else {
+                toast.error("Error inesperado al eliminar el artículo");
+              }
+            };
+          }}
+          class="space-y-4 pt-4"
+        >
+          <input
+            type="hidden"
+            name="co_art"
+            value={articleToDelete?.co_art}
+          />
+
+          <div class="space-y-2 text-left">
+            <label
+              class="text-[10px] font-black uppercase tracking-widest text-text-muted ml-1"
+              for="del-pass">Contraseña de Confirmación</label
+            >
+            <div class="relative">
+              <Lock
+                size={18}
+                class="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted opacity-40"
+              />
+              <input
+                id="del-pass"
+                type="password"
+                name="password"
+                bind:value={deletePassword}
+                required
+                placeholder="Introduzca su contraseña"
+                class="w-full h-14 bg-white/5 border border-white/10 rounded-2xl pl-12 pr-5 focus:border-red-500/50 outline-none transition-all"
+              />
+            </div>
+          </div>
+
+          <div class="flex gap-3 pt-4">
+            <button
+              type="button"
+              onclick={() => (showDeleteModal = false)}
+              disabled={isDeleting}
+              class="flex-1 h-14 rounded-2xl font-bold bg-white/5 hover:bg-white/10 transition-all text-text-muted disabled:opacity-50"
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              disabled={isDeleting || !deletePassword}
+              class="flex-1 h-14 rounded-2xl font-bold bg-red-600 hover:bg-red-500 text-white shadow-lg shadow-red-500/20 transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2"
+            >
+              {#if isDeleting}
+                <Loader2 size={18} class="animate-spin" />
+              {:else}
+                <Trash2 size={18} />
+                Eliminar
+              {/if}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+{/if}

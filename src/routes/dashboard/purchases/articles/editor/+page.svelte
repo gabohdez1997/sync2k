@@ -5,7 +5,7 @@
   import {
     ArrowLeft, Save, ImagePlus, X, Package, Tag, ListFilter,
     MapPin, DollarSign, Percent, AlertCircle, Plus, Edit2, Box,
-    Check, Settings, ChevronRight
+    Check, Settings, ChevronRight, Lock, Trash2
   } from "lucide-svelte";
   import { toast } from "svelte-sonner";
   import Combobox from "$lib/components/ui/Combobox.svelte";
@@ -30,7 +30,7 @@
   let referencia = $state(data.article?.ref || "");
 
   // ── Adicional ──
-  let co_uni = $state(data.article?.uni_venta || "");
+  let co_uni = $state(data.article?.uni_venta || data.article?.co_uni || "");
   let sCo_Uni_Sec = $state(data.article?.sSco_Uni || "");
   let bManeja_Serial = $state(data.article?.bManeja_Serial ?? false);
   let bManeja_Lote = $state(data.article?.bManeja_Lote ?? false);
@@ -42,15 +42,30 @@
   let garantia = $state(data.article?.garantia || "0");
   let comentario = $state(data.article?.comentario || "");
 
-  // ── Precios ──
+  // ── Precios / Márgenes Dinámicos ──
   let costo_act = $state(data.article?.costo_act || 0);
-  let priceMargins = $state([
-    { tipo: "1", margen: 0, precio: 0 },
-    { tipo: "2", margen: 0, precio: 0 },
-    { tipo: "3", margen: 0, precio: 0 },
-    { tipo: "4", margen: 0, precio: 0 },
-    { tipo: "5", margen: 0, precio: 0 }
-  ]);
+  let priceEntries = $state<Array<{tipo: string, margen: number}>>(
+    (data.article?.precios || [])
+      .filter((p: any) => (p.margen || 0) > 0)
+      .map((p: any) => ({
+        tipo: String(parseInt(p.id_precio)),
+        margen: p.margen || 0
+      }))
+  );
+
+  const usedPriceTypes = $derived(priceEntries.map(e => e.tipo));
+  const availablePriceTypes = $derived(
+    ['1','2','3','4','5'].filter(t => !usedPriceTypes.includes(t))
+  );
+
+  function addPriceEntry() {
+    if (availablePriceTypes.length === 0) return;
+    priceEntries = [...priceEntries, { tipo: availablePriceTypes[0], margen: 0 }];
+  }
+
+  function removePriceEntry(index: number) {
+    priceEntries = priceEntries.filter((_, i) => i !== index);
+  }
 
   // ── Imagen ──
   let imageBase64 = $state(data.article?.image_base64 || "");
@@ -138,7 +153,11 @@
 
   $effect(() => {
     if (form?.success) {
-      toast.success(isEditing ? "Artículo actualizado" : "Artículo creado exitosamente");
+      if (form.warning) {
+        toast.warning(form.warning as string, { duration: 10000 });
+      } else {
+        toast.success(isEditing ? "Artículo actualizado" : "Artículo creado exitosamente");
+      }
       goto("/dashboard/purchases/articles");
     } else if (form?.error) {
       toast.error(form.error as string);
@@ -228,14 +247,19 @@
     <div class="col-span-1 lg:col-span-9">
       <div class="glass rounded-3xl border border-white/5 shadow-xl flex flex-col h-full">
         <form id="articleForm" method="POST" use:enhance class="p-6 flex-1 bg-surface-base/20 rounded-3xl" onsubmit={() => loading = true}>
+          <input type="hidden" name="co_art_ori" value={data.article?.co_art || ""} />
+          <input type="hidden" name="is_new" value={isEditing ? 'false' : 'true'} />
           <input type="hidden" name="imageBase64" value={imageBase64} />
 
           <!-- TAB 0: GENERAL -->
           <div class:hidden={activeTab !== 0}>
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               <div class="space-y-2 lg:col-span-1">
-                <label class="text-xs uppercase font-black tracking-widest text-text-muted flex gap-1">Código <span class="text-brand-500">*</span></label>
-                <input type="text" name="co_art" bind:value={co_art} readonly={isEditing} required maxlength="30" class="w-full bg-surface-base h-12 px-4 rounded-xl border border-border-subtle focus:border-brand-500 outline-none font-mono text-sm transition-all uppercase {isEditing ? 'opacity-50 cursor-not-allowed' : ''}" placeholder="Ej: 0101001001" />
+                <label class="text-xs uppercase font-black tracking-widest text-text-muted flex gap-1">Código <span class="text-brand-500">*</span>{#if isEditing}<Lock size={10} class="text-text-muted/40 ml-1" />{/if}</label>
+                <div class="relative">
+                  <input type="text" name="co_art" bind:value={co_art} readonly={isEditing} required maxlength="30" class="w-full bg-surface-base h-12 px-4 {isEditing ? 'pr-10' : ''} rounded-xl border border-border-subtle outline-none font-mono text-sm transition-all uppercase {isEditing ? 'opacity-60 cursor-not-allowed bg-surface-raised !border-white/5 select-none' : 'focus:border-brand-500'}" placeholder="Ej: 0101001001" />
+                  {#if isEditing}<Lock size={16} class="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted/40" />{/if}
+                </div>
               </div>
               <div class="space-y-2 lg:col-span-2">
                 <label class="text-xs uppercase font-black tracking-widest text-text-muted flex gap-1">Descripción <span class="text-brand-500">*</span></label>
@@ -352,41 +376,46 @@
                 </div>
               </div>
 
-              <div class="flex items-center gap-4 bg-brand-500/10 border border-brand-500/20 p-4 rounded-2xl">
-                <AlertCircle class="text-brand-500" size={24} />
-                <div>
-                  <h4 class="text-brand-400 font-bold text-sm">Costo Base: Bs. {Number(costo_act).toLocaleString('de-DE', {minimumFractionDigits: 2})}</h4>
-                  <p class="text-xs text-brand-500/70">El precio se calcula en base al margen que establezcas.</p>
+              <!-- Márgenes Dinámicos -->
+              <div class="space-y-4">
+                <div class="flex items-center justify-between">
+                  <h3 class="text-xs uppercase font-black tracking-widest text-text-muted">Márgenes de Precio</h3>
+                  {#if availablePriceTypes.length > 0}
+                    <button type="button" onclick={addPriceEntry} class="h-9 px-4 bg-brand-600 hover:bg-brand-500 text-white text-xs font-bold rounded-lg flex items-center gap-2 transition-all active:scale-95 shadow-md shadow-brand-600/20">
+                      <Plus size={14} /> Agregar Margen
+                    </button>
+                  {/if}
                 </div>
-              </div>
 
-              <div class="border border-border-subtle rounded-2xl overflow-hidden bg-surface-base/50">
-                <table class="w-full text-left border-collapse">
-                  <thead>
-                    <tr class="bg-surface-raised border-b border-border-subtle text-xs uppercase font-black tracking-widest text-text-muted">
-                      <th class="p-4">Tipo de Precio</th>
-                      <th class="p-4 w-40 text-right">% Margen</th>
-                      <th class="p-4 w-48 text-right">Precio Sugerido (Bs)</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {#each priceMargins as pm}
-                      <tr class="border-b border-border-subtle/50 hover:bg-surface-soft/50 transition-colors">
-                        <td class="p-4 font-bold">Precio {pm.tipo}</td>
-                        <td class="p-3">
-                          <div class="relative">
-                            <input type="number" step="0.01" min="0" max="1000" bind:value={pm.margen} class="w-full bg-surface-base h-10 px-3 pr-8 rounded-lg border border-border-subtle focus:border-brand-500 outline-none text-sm font-mono text-right transition-all" />
-                            <Percent size={14} class="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted" />
-                          </div>
-                          <input type="hidden" name="margen_{pm.tipo}" value={pm.margen} />
-                        </td>
-                        <td class="p-4 text-right font-mono font-bold text-brand-400">
-                          Bs. {Number(costo_act + (costo_act * (pm.margen / 100))).toLocaleString('de-DE', {minimumFractionDigits: 2})}
-                        </td>
-                      </tr>
+                {#if priceEntries.length === 0}
+                  <div class="text-center py-10 border border-dashed border-white/10 rounded-2xl bg-surface-base/30">
+                    <DollarSign size={36} class="mx-auto mb-3 text-text-muted/30" />
+                    <p class="text-sm text-text-muted/60 font-medium">Sin márgenes configurados</p>
+                    <p class="text-xs text-text-muted/40 mt-1">Presiona "Agregar Margen" para establecer precios de venta.</p>
+                  </div>
+                {:else}
+                  <div class="flex flex-col gap-3">
+                    {#each priceEntries as entry, i}
+                      <div class="flex items-center gap-3 bg-surface-base/60 border border-border-subtle rounded-xl p-3 group hover:border-brand-500/30 transition-all" in:fade={{duration: 150}}>
+                        <select bind:value={entry.tipo} class="bg-surface-raised h-10 px-3 rounded-lg border border-border-subtle focus:border-brand-500 outline-none text-sm font-bold transition-all min-w-[140px]">
+                          {#each ['1','2','3','4','5'] as t}
+                            {#if t === entry.tipo || !usedPriceTypes.includes(t)}
+                              <option value={t}>Precio {t}</option>
+                            {/if}
+                          {/each}
+                        </select>
+                        <div class="relative flex-1">
+                          <input type="number" step="0.01" min="0" max="1000" bind:value={entry.margen} class="w-full bg-surface-base h-10 px-3 pr-8 rounded-lg border border-border-subtle focus:border-brand-500 outline-none text-sm font-mono text-right transition-all" placeholder="0" />
+                          <Percent size={14} class="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted/50" />
+                        </div>
+                        <button type="button" onclick={() => removePriceEntry(i)} class="h-10 w-10 flex items-center justify-center rounded-lg text-text-muted/40 hover:text-red-400 hover:bg-red-500/10 border border-transparent hover:border-red-500/20 transition-all">
+                          <Trash2 size={16} />
+                        </button>
+                        <input type="hidden" name={`margen_${entry.tipo}`} value={entry.margen} />
+                      </div>
                     {/each}
-                  </tbody>
-                </table>
+                  </div>
+                {/if}
               </div>
 
               <div class="flex justify-between mt-2">

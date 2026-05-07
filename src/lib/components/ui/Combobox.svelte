@@ -17,6 +17,7 @@
     onchange?: (value: string) => void;
     class?: string;
     id?: string;
+    name?: string;
   }
 
   let {
@@ -27,7 +28,8 @@
     icon: Icon = null,
     onchange,
     class: extraClass = '',
-    id = ''
+    id = '',
+    name = ''
   }: Props = $props();
 
   let isOpen = $state(false);
@@ -111,6 +113,7 @@
 <svelte:window onclick={handleClickOutside} />
 
 <div bind:this={containerEl} class="relative {extraClass}" {id}>
+  {#if name}<input type="hidden" {name} {value} />{/if}
   <!-- Trigger button -->
   <button
     type="button"

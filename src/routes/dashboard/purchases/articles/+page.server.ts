@@ -143,8 +143,17 @@ export const actions: Actions = {
     deleteArticle: protectAction('pur_articles', async ({ request, locals, fetch }) => {
         const formData = await request.formData();
         const co_art = formData.get('co_art')?.toString();
+        const password = String(formData.get('password') || '');
         
         if (!co_art) return fail(400, { deleteError: 'Artículo no especificado' });
+        if (!password) return fail(400, { deleteError: 'La contraseña es requerida para confirmar la eliminación.' });
+
+        const email = locals.session?.user?.email;
+        if (!email) return fail(401, { deleteError: 'Sesión no válida.' });
+
+        // Confirmación de seguridad: validar contraseña actual del usuario.
+        const { error: authErr } = await locals.supabase.auth.signInWithPassword({ email, password });
+        if (authErr) return fail(401, { deleteError: 'Contraseña de confirmación incorrecta.' });
 
         const { data: dbBranches } = await supabaseAdmin.from('branches').select('*').eq('active', true);
         if (!dbBranches || dbBranches.length === 0) return fail(500, { deleteError: 'Error cargando sucursales' });
@@ -168,6 +177,16 @@ export const actions: Actions = {
                     errors.push(`[${branch.name}] ${(res as any).message || 'Error'}`);
                 } else {
                     successCount++;
+                    await logAction({
+                        uid: userProfile?.id ?? null,
+                        user_email: userProfile?.email ?? 'system',
+                        action: 'DELETE',
+                        module: 'pur_articles',
+                        record_id: co_art,
+                        branch_id: branch.id,
+                        new_data: { co_art },
+                        source: 'cloud'
+                    });
                 }
             } catch (err: any) {
                 errors.push(`[${branch.name}] Fallo: ${err.message}`);
@@ -178,16 +197,7 @@ export const actions: Actions = {
             return fail(500, { deleteError: 'Fallo al eliminar en todas las sedes:\n' + errors.join('\n') });
         }
 
-        await logAction({
-            uid: userProfile?.id ?? null,
-            user_email: userProfile?.email ?? 'system',
-            action: 'DELETE',
-            module: 'pur_articles',
-            record_id: co_art,
-            branch_id: 'BROADCAST',
-            new_data: { co_art },
-            source: 'cloud'
-        });
+
 
         return { success: true, message: 'Artículo eliminado exitosamente de todas las sedes.' };
     })
