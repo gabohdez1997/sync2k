@@ -22,7 +22,8 @@
     Key,
     Minus,
     X,
-    DollarSign
+    DollarSign,
+    MapPin
   } from "lucide-svelte";
   import Combobox from "$lib/components/ui/Combobox.svelte";
   import type { PageData } from "./$types";
@@ -40,7 +41,7 @@
 
   const moduleInfo: Record<string, { label: string, icon: any, color: string }> = {
     'sec_branches':  { label: 'Sucursales', icon: Store, color: 'text-blue-400' },
-    'sec_articles':  { label: 'Artículos', icon: Package, color: 'text-emerald-400' },
+    'sec_articles':  { label: 'Ubicaciones', icon: MapPin, color: 'text-purple-400' },
     'pur_articles':  { label: 'Artículos', icon: Package, color: 'text-emerald-400' },
     'cash_exchange': { label: 'Tasa de Cambio', icon: DollarSign, color: 'text-yellow-400' },
     'sec_users':     { label: 'Usuarios', icon: UserCog, color: 'text-indigo-400' },

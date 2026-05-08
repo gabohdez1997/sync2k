@@ -5,7 +5,7 @@ import { fail } from '@sveltejs/kit';
 import { logAction } from '$lib/server/audit';
 import type { PageServerLoad, Actions } from './$types';
 
-export const load: PageServerLoad = protectLoad('sec_articles', async ({ url, locals, fetch }) => {
+export const load: PageServerLoad = protectLoad('pur_articles', async ({ url, locals, fetch }) => {
     try {
         const userProfile = (locals as any).profile;
 
