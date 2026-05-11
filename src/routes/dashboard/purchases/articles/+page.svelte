@@ -182,7 +182,7 @@
       {#if canCreate}
         <button
           onclick={() => goto("/dashboard/purchases/articles/editor")}
-          class="h-14 px-8 bg-surface-raised hover:bg-white/5 border-white/5 hover:border-white/10 text-text-base border rounded-2xl font-bold transition-all active:scale-95 flex items-center gap-3"
+          class="h-14 px-8 bg-brand-600 hover:bg-brand-500 border-brand-500/50 shadow-lg shadow-brand-600/20 text-white rounded-2xl font-bold transition-all active:scale-95 flex items-center gap-3"
         >
           <Plus size={20} /> Crear Artículo
         </button>
@@ -494,7 +494,7 @@
 
         <div class="flex flex-col gap-1">
           <h3
-            class="text-lg font-black leading-tight text-white line-clamp-none"
+            class="text-lg font-black leading-tight text-text-base line-clamp-none"
           >
             {article.descripcion}
           </h3>
@@ -558,7 +558,7 @@
             {/if}
           </div>
           <div class="flex items-baseline gap-2">
-            <span class="text-2xl font-black text-white"
+            <span class="text-2xl font-black text-text-base"
               >${Number(
                 article.ultimo_costo_om || article.costo_estimado || 0,
               ).toFixed(2)}</span
@@ -638,7 +638,7 @@
                   `/dashboard/purchases/articles/editor?id=${article.co_art}`,
                 );
               }}
-              class="flex-1 h-11 bg-white/5 hover:bg-brand-500/20 text-white font-bold rounded-xl border border-white/5 hover:border-brand-500/30 transition-all flex items-center justify-center gap-2 text-sm"
+              class="flex-1 h-11 bg-brand-500/10 hover:bg-brand-500/20 text-brand-500 font-bold rounded-xl border border-brand-500/10 hover:border-brand-500/30 transition-all flex items-center justify-center gap-2 text-sm"
             >
               <Edit size={16} /> Editar
             </button>
