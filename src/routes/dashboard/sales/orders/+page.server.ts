@@ -1,71 +1,265 @@
 import { protectLoad, protectAction } from '$lib/server/permissions';
 import { AgentClient } from '$lib/server/agent';
 import { hasPermission } from '$lib/server/auth';
+import { logAction } from '$lib/server/audit';
+import { redirect, fail, type Actions } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
 
 export const load: PageServerLoad = protectLoad('sales_orders', async ({ url, locals, fetch }) => {
-    const profile = (locals as any).profile;
-    const allowedBranches = profile.allowed_branches || [];
-    
-    if (allowedBranches.length === 0) {
-        return { orders: [], branches: [], error: 'No tienes sucursales asignadas.' };
-    }
+	const profile = (locals as any).profile;
+	if (!profile) throw new Error('Perfil no cargado.');
 
-    const urlBranchId = url.searchParams.get('branch_id');
-    const selectedBranch = urlBranchId 
-        ? allowedBranches.find(b => b.id === urlBranchId)
-        : allowedBranches[0];
+	const docNumInUrl = url.searchParams.get('doc_num');
+	const canCreate = hasPermission(profile, 'sales_orders', 'create');
+	const canUpdate = hasPermission(profile, 'sales_orders', 'update');
+	const canAccess = docNumInUrl ? canUpdate : canCreate;
+	if (!canAccess) {
+		throw redirect(303, '/dashboard/sales/orders/history');
+	}
 
-    if (!selectedBranch || !selectedBranch.agent_url) {
-        return { orders: [], branches: allowedBranches, error: 'Sucursal no configurada.' };
-    }
+	try {
+		const allowedBranches = profile.allowed_branches || [];
+		if (allowedBranches.length === 0) return { articles: [], branches: [], error: 'No tienes sucursales asignadas.' };
 
-    const agentClient = new AgentClient(selectedBranch, profile, fetch);
-    
-    const page = url.searchParams.get('page') || '1';
-    const limit = url.searchParams.get('limit') || '20';
-    const doc_num = url.searchParams.get('doc_num') || '';
-    const co_cli = url.searchParams.get('co_cli') || '';
-    
-    // LÓGICA DE PRIVACIDAD
-    const canSeeOthers = hasPermission(profile, 'sales_orders', 'others');
-    const canCreate = hasPermission(profile, 'sales_orders', 'create');
-    const canUpdate = hasPermission(profile, 'sales_orders', 'update');
-    const canDelete = hasPermission(profile, 'sales_orders', 'delete');
+		const urlBranchId = url.searchParams.get('branch_id');
+		const selectedBranch = urlBranchId ? allowedBranches.find(b => b.id === urlBranchId) : allowedBranches[0];
 
-    let co_ven = url.searchParams.get('co_ven') || '';
+		if (!selectedBranch || !selectedBranch.agent_url) return { articles: [], branches: allowedBranches, error: 'Sucursal no configurada.' };
 
-    if (!canSeeOthers) {
-        const sellerCode = (profile.profit_user || '').trim().toUpperCase();
-        if (!sellerCode) {
-            return {
-                orders: [], branches: allowedBranches,
-                error: 'Tu perfil no tiene asociado un código de Vendedor. No puedes visualizar pedidos.',
-                canSeeOthers, canCreate, canUpdate, canDelete
-            };
-        }
-        co_ven = sellerCode;
-    }
+		const agentClient = new AgentClient({
+			slug: selectedBranch.id, agent_url: selectedBranch.agent_url, agent_api_key: selectedBranch.agent_token
+		}, profile, fetch);
 
-    const queryParams = new URLSearchParams({
-        page, limit, doc_num, co_cli, co_ven: co_ven || ''
-    });
+		let warehouseList: any[] = [];
+		let lineas: any[] = [];
+		let categorias: any[] = [];
+		let zonas: any[] = [];
 
-    try {
-        const res = await agentClient.request<any>(`/pedidos?${queryParams.toString()}`);
-        
-        return {
-            orders: res.data || [],
-            pagination: res.pagination || { total: 0, pages: 1, currentPage: 1, limit: 20 },
-            branches: allowedBranches,
-            selectedBranchId: selectedBranch.id,
-            canSeeOthers, canCreate, canUpdate, canDelete,
-            filters: { doc_num, co_cli, co_ven }
-        };
-    } catch (e: any) {
-        return {
-            orders: [], branches: allowedBranches,
-            error: 'Error al conectar con el Agente: ' + e.message
-        };
-    }
+		try {
+			const [almaRes, lineasRes, catsRes, zonRes] = await Promise.all([
+				agentClient.request<any>('/catalogos/almacenes'),
+				agentClient.request<any>('/catalogos/lineas'),
+				agentClient.request<any>('/catalogos/categorias').catch(() => ({ data: [] })),
+				agentClient.getZonas().catch(() => ({ data: [] }))
+			]);
+			warehouseList = (almaRes as any).data || (almaRes as any).items || (Array.isArray(almaRes) ? almaRes : []);
+			lineas = (lineasRes as any).data || (lineasRes as any).items || (Array.isArray(lineasRes) ? lineasRes : []);
+			categorias = (catsRes as any).data || (catsRes as any).items || (Array.isArray(catsRes) ? catsRes : []);
+			zonas = (zonRes as any).data || (zonRes as any).items || (Array.isArray(zonRes) ? zonRes : []);
+		} catch (e) { console.error('[ORDERS] Catalog fetch error:', e); }
+
+		const profileWarehouses: string[] = profile.allowed_warehouses || [];
+		const isAdmin = profileWarehouses.length === 0;
+		const branchWarehouseList = warehouseList.filter((a: any) => {
+			const co_sucu = a.co_sucu || a.co_sucur || a.sede_id || a.co_sede;
+			return co_sucu === selectedBranch.profit_branch_code || !co_sucu;
+		});
+
+		const allowedWarehousesForBranch = isAdmin ? branchWarehouseList : branchWarehouseList.filter((a: any) => {
+			const almaId = a.co_alma || a.id || a.warehouse_id;
+			return profileWarehouses.includes(almaId);
+		});
+
+		const finalWarehouseIds = allowedWarehousesForBranch.map((a: any) => a.co_alma || a.id || a.warehouse_id).filter(Boolean);
+		const doc_num = url.searchParams.get('doc_num');
+		let preloadedOrder = null;
+		if (doc_num) {
+			try {
+				const qRes = await agentClient.request<any>(`/pedidos/${doc_num}`);
+				if (qRes.success && qRes.data) {
+					const q = Array.isArray(qRes.data) ? qRes.data[0] : qRes.data;
+					if (!q?.anulado && String(q?.status ?? '').trim() === '0') preloadedOrder = q;
+				}
+			} catch (e) { console.error('[ORDERS] Error loading order for edit:', e); }
+		}
+
+		return {
+			articles: [], pagination: { total: 0, page: 1, limit: 12, totalPages: 0 },
+			branches: allowedBranches, selectedBranchId: selectedBranch.id, preloadedOrder,
+			context: { branchId: selectedBranch.id, warehouseId: '', finalWarehouseIds, lineas, categorias, zonas, warehouses: allowedWarehousesForBranch }
+		};
+	} catch (err: any) {
+		return { articles: [], pagination: { total: 0, page: 1, limit: 12, totalPages: 1 }, error: 'Error: ' + err.message, context: { branches: [] } };
+	}
 });
+
+export const actions: Actions = {
+	searchClient: protectAction('sales_orders', async ({ request, locals, fetch }) => {
+		const profile = locals.profile;
+		if (!profile) return fail(401, { message: 'Sesión expirada' });
+		const formData = await request.formData();
+		const rif = (formData.get('rif') as string)?.trim().toUpperCase().replace(/[-\s]/g, '');
+		const branchId = formData.get('branch_id') as string;
+		if (!rif) return fail(400, { message: 'El RIF es requerido' });
+		const branch = profile.allowed_branches?.find(b => b.id === branchId);
+		if (!branch) return fail(404, { message: 'Sucursal no encontrada' });
+		const agentClient = new AgentClient(branch, profile, fetch);
+		try {
+			const res = await agentClient.request<any>(`/clientes/${rif}`);
+			if (res.success && res.data) {
+				const clientData = Array.isArray(res.data) ? res.data.find(c => !c.error) : res.data;
+				if (clientData) return { success: true, client: clientData };
+			}
+			const searchRes = await agentClient.request<any>(`/clientes/search?rif=${rif}`);
+			const items = Array.isArray(searchRes.data) ? searchRes.data : (searchRes.data?.items || searchRes.items || []);
+			const client = items.find((c: any) => c.rif?.toUpperCase().replace(/[-\s]/g, '') === rif || c.co_cli?.toUpperCase().replace(/[-\s]/g, '') === rif);
+			return { success: true, client: client || null, message: client ? '' : 'Cliente no encontrado.' };
+		} catch (e: any) {
+			if (e.status === 404) return { success: true, client: null };
+			return fail(500, { message: 'Error: ' + e.message });
+		}
+	}),
+
+	saveCustomer: protectAction('sales_orders', async ({ request, locals, fetch }) => {
+		const profile = locals.profile;
+		const formData = await request.formData();
+		const payload = { ...Object.fromEntries(formData), contribuyente: formData.has('contribuyente'), contribu_e: formData.has('contribu_e') || formData.has('contribuu_e'), porc_esp: parseFloat(formData.get('porc_esp') as string) || 0 };
+		const targetBranches = profile.allowed_branches || [];
+		if (targetBranches.length === 0) return fail(403, { message: 'Sin sucursales' });
+		let successCount = 0; let failedBranches = []; let createdClient = null;
+		for (const branch of targetBranches) {
+			try {
+				let verifiedCoSucu = '';
+				if (Array.isArray(branch.profit_branch_codes) && branch.profit_branch_codes.length > 0) {
+					const def = branch.profit_branch_codes.find((c: any) => c.is_default);
+					verifiedCoSucu = def ? def.code : branch.profit_branch_codes[0].code;
+				}
+				const agent = new AgentClient(branch, profile, fetch);
+				const response = await agent.saveCustomer(payload, true, verifiedCoSucu || branch.id);
+				if (response.success) { successCount++; if (!createdClient) createdClient = response.data || payload; }
+				else failedBranches.push(`${branch.name}: ${response.message}`);
+			} catch (err: any) { failedBranches.push(`${branch.name}: ${err.message}`); }
+		}
+		if (successCount > 0) {
+			try {
+				await logAction({
+					uid:        profile.id ?? null,
+					user_email: profile.email ?? 'system',
+					action:     'CREATE',
+					module:     'CLIENTES',
+					record_id:  payload.co_cli as string,
+					branch_id:  targetBranches[0].id,
+					old_data:   null,
+					new_data:   {
+						co_cli: payload.co_cli,
+						cli_des: payload.cli_des || payload.descripcion,
+						broadcast: true,
+						success_count: successCount,
+						failures: failedBranches,
+						source: 'orders_module'
+					},
+					source: 'cloud'
+				});
+			} catch (auditErr) {
+				console.error('[AUDIT] Error registrando auditoría de cliente:', auditErr);
+			}
+		}
+		return successCount === 0 ? fail(500, { message: 'Error: ' + failedBranches.join(' | ') }) : { success: true, message: 'Cliente creado', client: createdClient };
+	}),
+
+	saveOrder: protectAction('sales_orders', async ({ request, locals, fetch }) => {
+		const profile = locals.profile;
+		const formData = await request.formData();
+		const branchId = formData.get('branch_id') as string;
+		const orderDataStr = formData.get('order_data') as string;
+		if (!orderDataStr) return fail(400, { message: 'Faltan datos' });
+		const branch = profile.allowed_branches?.find(b => b.id === branchId);
+		if (!branch) return fail(404, { message: 'Sucursal no encontrada' });
+		const agentClient = new AgentClient(branch, profile, fetch);
+		try {
+			const orderData = JSON.parse(orderDataStr);
+			const isEdit = !!orderData?.doc_num;
+			if (isEdit && !hasPermission(profile, 'sales_orders', 'update')) return fail(403, { message: 'Sin permiso update' });
+			if (!isEdit && !hasPermission(profile, 'sales_orders', 'create')) return fail(403, { message: 'Sin permiso create' });
+			const enrichedorderData = { ...orderData, co_ven: profile.profit_user, co_cta_ingr_egr: "", isUSD: orderData.showUSD };
+			const res: any = await agentClient.request('/pedidos', { method: 'POST', body: JSON.stringify(enrichedorderData) });
+			if (res.success || (res.results && res.results[0]?.success)) {
+				// Extraer el doc_num desde cualquiera de las posibles respuestas del Agente
+				const finalDocNum = res.doc_num || res.data?.doc_num || res.results?.[0]?.doc_num || res.results?.[0]?.data?.doc_num || orderData.doc_num;
+				
+				// Calcular el total_neto desde los renglones (ya que no se envía desde la web por seguridad)
+				let calculatedTotal = 0;
+				if (orderData.renglones && Array.isArray(orderData.renglones)) {
+					calculatedTotal = orderData.renglones.reduce((sum: number, r: any) => {
+						const qty = Number(r.cantidad || 0);
+						const price = Number(r.precio || 0);
+						const taxRate = Number(r.porc_imp || 0) / 100;
+						return sum + (qty * price * (1 + taxRate));
+					}, 0);
+				}
+
+				try {
+					await logAction({
+						uid:        profile.id ?? null,
+						user_email: profile.email ?? 'system',
+						action:     isEdit ? 'UPDATE' : 'CREATE',
+						module:     'PEDIDOS',
+						record_id:  String(finalDocNum),
+						branch_id:  branchId,
+						old_data:   isEdit ? { doc_num: orderData.doc_num } : null,
+						new_data:   { 
+							doc_num: String(finalDocNum),
+							co_cli: enrichedorderData.co_cli,
+							total: calculatedTotal, 
+							items: orderData.renglones?.length,
+							isUSD: enrichedorderData.isUSD 
+						},
+						source: 'cloud'
+					});
+				} catch (auditErr) {
+					console.error('[AUDIT] Error registrando auditoría de pedido:', auditErr);
+				}
+				return { success: true, message: 'Pedido guardado' };
+			}
+			return fail(400, { message: res.message || 'Error en Profit' });
+		} catch (e: any) { return fail(500, { message: e.message }); }
+	}),
+
+	searchQuotes: protectAction('sales_orders', async ({ request, locals, fetch }) => {
+		const profile = locals.profile;
+		const formData = await request.formData();
+		const branchId = formData.get('branch_id') as string;
+		const search = formData.get('search') as string;
+		
+		const branch = profile.allowed_branches?.find(b => b.id === branchId);
+		if (!branch) return fail(404, { message: 'Sucursal no encontrada' });
+
+		const canSeeOthers = hasPermission(profile, 'sales_quotes', 'others') || hasPermission(profile, 'sales_orders', 'others');
+		let url = `/cotizaciones?limit=50`;
+		if (search) url += `&search=${encodeURIComponent(search)}`;
+		if (!canSeeOthers) url += `&co_ven=${encodeURIComponent(profile.profit_user)}`;
+		
+		// IMPORTANTE: Enviar el UUID de la sede para que el agente filtre correctamente los targets
+		url += `&sede=${encodeURIComponent(branchId)}`;
+
+		const agentClient = new AgentClient(branch, profile, fetch);
+		try {
+			const res = await agentClient.request<any>(url);
+			return { success: true, quotes: res.data || [] };
+		} catch (e: any) {
+			return fail(500, { message: e.message });
+		}
+	}),
+
+	getQuoteDetail: protectAction('sales_orders', async ({ request, locals, fetch }) => {
+		const profile = locals.profile;
+		const formData = await request.formData();
+		const branchId = formData.get('branch_id') as string;
+		const doc_num = formData.get('doc_num') as string;
+
+		const branch = profile.allowed_branches?.find(b => b.id === branchId);
+		if (!branch) return fail(404, { message: 'Sucursal no encontrada' });
+
+		const agentClient = new AgentClient(branch, profile, fetch);
+		try {
+			const res = await agentClient.request<any>(`/cotizaciones/${doc_num}?sede=${encodeURIComponent(branchId)}`);
+			// El agente devuelve un array en data para el detalle (multi-sede)
+			const quote = Array.isArray(res.data) ? res.data[0] : res.data;
+			return { success: true, quote: quote || null };
+		} catch (e: any) {
+			return fail(500, { message: e.message });
+		}
+	})
+};
+
+
