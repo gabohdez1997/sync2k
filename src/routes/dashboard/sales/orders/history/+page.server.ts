@@ -1,6 +1,7 @@
 import { protectLoad, protectAction } from '$lib/server/permissions';
 import { AgentClient } from '$lib/server/agent';
 import { hasPermission } from '$lib/server/auth';
+import { logAction } from '$lib/server/audit';
 import { fail } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
 
@@ -159,6 +160,27 @@ export const actions = {
 
         if (!res?.success) {
             return fail(500, { success: false, message: res?.message || 'No se pudo eliminar el pedido.' });
+        }
+
+        // Auditoría
+        try {
+            await logAction({
+                uid: profile.id ?? null,
+                user_email: profile.email ?? 'system',
+                action: 'DELETE',
+                module: 'PEDIDOS',
+                record_id: doc_num,
+                branch_id: branch_id,
+                old_data: { 
+                    doc_num, 
+                    co_cli: order?.co_cli, 
+                    total: order?.total_neto,
+                    status: rawStatus 
+                },
+                source: 'cloud'
+            });
+        } catch (auditErr) {
+            console.error('[AUDIT] Error registrando auditoría de eliminación:', auditErr);
         }
 
         return { success: true, message: res?.message || 'Pedido eliminado correctamente.' };

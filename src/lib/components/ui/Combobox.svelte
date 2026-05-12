@@ -118,9 +118,9 @@
   <button
     type="button"
     onclick={() => (isOpen ? close() : open())}
-    class="w-full h-14 bg-surface-base/80 rounded-2xl border transition-all font-bold text-sm cursor-pointer hover:bg-white/5 flex items-center gap-0 pr-4 text-left
-      {isOpen ? 'border-brand-500/50 ring-1 ring-brand-500/20' : 'border-white/5'}
-      {value ? 'text-brand-300' : 'text-text-muted'}"
+    class="w-full h-14 bg-surface-base/80 rounded-2xl border transition-all font-bold text-sm cursor-pointer hover:bg-surface-soft flex items-center gap-0 pr-4 text-left
+      {isOpen ? 'border-brand-500/50 ring-1 ring-brand-500/20' : 'border-border-subtle'}
+      {value ? 'text-brand-500' : 'text-text-muted'}"
   >
     {#if Icon}
       <span class="flex-shrink-0 pl-4 pr-2.5 text-brand-400">
@@ -153,11 +153,11 @@
   <!-- Dropdown panel (position: absolute, elevado con z-[200]) -->
   {#if isOpen}
     <div
-      class="absolute z-[200] mt-2 w-full bg-surface-raised border border-white/10 rounded-2xl shadow-2xl shadow-black/40 overflow-hidden"
+      class="absolute z-[200] mt-2 w-full bg-surface-raised border border-border-subtle rounded-2xl shadow-2xl shadow-black/40 overflow-hidden"
       style="min-width: 220px;"
     >
       <!-- Search input -->
-      <div class="p-2 border-b border-white/5 relative">
+      <div class="p-2 border-b border-border-subtle relative">
         <Search size={14} class="absolute left-5 top-1/2 -translate-y-1/2 text-text-muted" />
         <input
           bind:this={inputEl}
@@ -165,7 +165,7 @@
           type="text"
           placeholder="Buscar..."
           autocomplete="off"
-          class="w-full h-9 bg-white/5 border border-white/5 rounded-xl pl-8 pr-3 text-sm outline-none focus:border-brand-500/40 transition-colors placeholder:text-text-muted/50"
+          class="w-full h-9 bg-surface-soft border border-border-subtle rounded-xl pl-8 pr-3 text-sm outline-none focus:border-brand-500/40 transition-colors placeholder:text-text-muted/50 text-text-base"
         />
       </div>
 
@@ -204,10 +204,10 @@
                 onmouseenter={() => (activeIndex = rowIndex)}
                 class="w-full text-left px-4 py-2.5 text-sm transition-colors flex items-center gap-2
                   {value === option.value
-                    ? 'bg-brand-500/20 text-brand-300 font-bold'
+                    ? 'bg-brand-500/20 text-brand-500 font-bold'
                     : activeIndex === rowIndex
-                      ? 'bg-white/5 text-text-base'
-                      : 'text-text-muted hover:bg-white/5 hover:text-text-base'}"
+                      ? 'bg-surface-soft text-text-base'
+                      : 'text-text-muted hover:bg-surface-soft hover:text-text-base'}"
               >
                 <span class="w-1.5 h-1.5 rounded-full {value === option.value ? 'bg-brand-400' : ''} flex-shrink-0"></span>
                 <span class="truncate">{option.label}</span>
@@ -218,7 +218,7 @@
       </ul>
 
       <!-- Footer -->
-      <div class="px-4 py-2 border-t border-white/5 flex items-center justify-between">
+      <div class="px-4 py-2 border-t border-border-subtle flex items-center justify-between">
         <span class="text-[10px] text-text-muted/50 font-mono">
           {filtered.length} de {options.length} opciones
         </span>
