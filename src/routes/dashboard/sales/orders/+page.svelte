@@ -682,11 +682,11 @@
     const step = getStep(article);
     const qty = quantities[co_art] || step;
 
-    // Identify if it's a service (Linea 09)
-    const isService = article.co_lin?.trim() === "09";
+    // Identify if it's a service (Linea 09 or code starts with 09)
+    const isService = article.co_lin?.trim() === "09" || (co_art || "").startsWith("09");
 
     // Obtener almacén seleccionado
-    const almId =
+    let almId =
       selectedItemWarehouse[co_art] ||
       (() => {
         // First try the branch default warehouse
@@ -714,6 +714,11 @@
         }
         return maxAlm.co_alma;
       })();
+
+    // For services, if still no warehouse, force first one available in context
+    if (isService && !almId) {
+      almId = data.context?.warehouses?.[0]?.co_alma || "01";
+    }
 
     if (!almId) {
       toast.error("Sin disponibilidad en ningún almacén.");
