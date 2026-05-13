@@ -263,7 +263,7 @@
               </div>
               <div class="space-y-2 lg:col-span-2">
                 <label class="text-xs uppercase font-black tracking-widest text-text-muted flex gap-1">Descripción <span class="text-brand-500">*</span></label>
-                <input type="text" name="art_des" bind:value={art_des} required maxlength="60" class="w-full bg-surface-base h-12 px-4 rounded-xl border border-border-subtle focus:border-brand-500 outline-none text-sm transition-all uppercase" placeholder="Nombre del artículo" />
+                <input type="text" name="art_des" bind:value={art_des} required maxlength="60" class="w-full bg-surface-base h-12 px-4 rounded-xl border border-border-subtle focus:border-brand-500 outline-none text-sm transition-all" placeholder="Nombre del artículo" />
               </div>
               <div class="space-y-2">
                 <label class="text-xs uppercase font-black tracking-widest text-text-muted">Tipo</label>
@@ -304,11 +304,11 @@
               <!-- Modelo / Ref -->
               <div class="space-y-2">
                 <label class="text-xs uppercase font-black tracking-widest text-text-muted">Modelo</label>
-                <input type="text" name="modelo" bind:value={modelo} maxlength="20" class="w-full bg-surface-base h-12 px-4 rounded-xl border border-border-subtle focus:border-brand-500 outline-none text-sm transition-all uppercase" placeholder="Modelo..." />
+                <input type="text" name="modelo" bind:value={modelo} maxlength="20" class="w-full bg-surface-base h-12 px-4 rounded-xl border border-border-subtle focus:border-brand-500 outline-none text-sm transition-all" placeholder="Modelo..." />
               </div>
               <div class="space-y-2">
                 <label class="text-xs uppercase font-black tracking-widest text-text-muted">Referencia</label>
-                <input type="text" name="ref" bind:value={referencia} maxlength="20" class="w-full bg-surface-base h-12 px-4 rounded-xl border border-border-subtle focus:border-brand-500 outline-none text-sm transition-all uppercase" placeholder="Referencia..." />
+                <input type="text" name="ref" bind:value={referencia} maxlength="20" class="w-full bg-surface-base h-12 px-4 rounded-xl border border-border-subtle focus:border-brand-500 outline-none text-sm transition-all" placeholder="Referencia..." />
               </div>
             </div>
 
