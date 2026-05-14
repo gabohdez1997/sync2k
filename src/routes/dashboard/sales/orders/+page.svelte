@@ -222,35 +222,48 @@
 
           // 3. Cargar Renglones al Carrito
           if (q.renglones && Array.isArray(q.renglones)) {
-            cart = q.renglones.map((r: any) => ({
-              co_art: String(r.co_art || "").trim(),
-              art_des: String(r.art_des || r.des_art || "").trim(),
-              qty: Number(r.cantidad || 0),
-              cantidad: Number(r.cantidad || 0),
-              co_uni: String(r.co_uni || "").trim(),
-              co_alma_selected: String(r.co_alma || "").trim(),
-              porc_imp: Number(r.porc_imp || 0),
-              tipo_imp: String(r.tipo_imp || "1"),
-              co_lin: String(r.co_lin || "").trim(),
-              // Mapear precios
-              price_selected: {
-                precio: showUSD
-                  ? Number(r.prec_vta_om || 0)
-                  : Number(r.precio || 0) / Number(q.tasa || 1),
-                precio_ves: Number(r.precio || 0),
-                id_precio: String(r.co_precio || "01").trim()
-              },
-              precios: [
-                {
+            cart = q.renglones.map((r: any) => {
+              const artId = String(r.co_art || "").trim();
+              const almaId = String(r.co_alma || "").trim();
+
+              // Inicializar estados individuales para que el UI responda correctamente
+              quantities[artId] = Number(r.cantidad || 0);
+              selectedItemWarehouse[artId] = almaId;
+              selectedItemPriceIndex[artId] = 0;
+
+              return {
+                co_art: artId,
+                art_des: String(r.art_des || r.des_art || "").trim(),
+                qty: Number(r.cantidad || 0),
+                cantidad: Number(r.cantidad || 0),
+                co_uni: String(r.co_uni || "").trim(),
+                co_alma_selected: almaId,
+                porc_imp: Number(r.porc_imp || 0),
+                tipo_imp: String(r.tipo_imp || "1"),
+                co_lin: String(r.co_lin || "").trim(),
+                // Mapear precios
+                price_selected: {
                   precio: showUSD
                     ? Number(r.prec_vta_om || 0)
                     : Number(r.precio || 0) / Number(q.tasa || 1),
                   precio_ves: Number(r.precio || 0),
-                  des_tipo: "Precio Cotización",
-                  id_precio: String(r.co_precio || "01").trim()
+                  id_precio: String(r.co_precio || "01").trim(),
                 },
-              ],
-            }));
+                precios: [
+                  {
+                    precio: showUSD
+                      ? Number(r.prec_vta_om || 0)
+                      : Number(r.precio || 0) / Number(q.tasa || 1),
+                    precio_ves: Number(r.precio || 0),
+                    des_tipo: "Precio Cotización",
+                    id_precio: String(r.co_precio || "01").trim(),
+                  },
+                ],
+              };
+            });
+
+            // Disparar rehidratación para traer existencias reales y precios actuales
+            rehydrateCart();
           }
 
           showImportModal = false;
@@ -428,7 +441,7 @@
     if (!cart.length) return;
 
     console.log("ðŸ’§ Rehidratando existencias y precios del carrito...");
-    const branchId = data.selectedBranchId;
+    const branchId = selectedBranch;
 
     for (let i = 0; i < cart.length; i++) {
       const item = cart[i];
