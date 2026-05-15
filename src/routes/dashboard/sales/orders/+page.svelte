@@ -4,6 +4,7 @@
   import { page } from "$app/stores";
   import { goto } from "$app/navigation";
   import { onMount } from "svelte";
+  import { browser } from "$app/environment";
   import { fade, slide, scale } from "svelte/transition";
   import {
     Package,
@@ -375,7 +376,7 @@
         }
 
         console.log("âœ… [INIT] Carga completa. Rehidratando...");
-        rehydrateCart();
+        if (browser) rehydrateCart();
       } catch (err: any) {
         console.error("âŒ [INIT] Error mapeando datos:", err);
         toast.error("Error al procesar datos del pedido: " + err.message);
@@ -436,9 +437,8 @@
       localStorage.setItem("profit_order_draft", JSON.stringify(draft));
     });
   });
-
   async function rehydrateCart() {
-    if (!cart.length) return;
+    if (!browser || !cart.length) return;
 
     console.log("ðŸ’§ Rehidratando existencias y precios del carrito...");
     const branchId = selectedBranch;
@@ -619,7 +619,7 @@
     const currentPath = $page.url.pathname;
 
     // Solo disparar si estamos en la pestaña de artículos y seguimos en la ruta de cotizaciones
-    if (activeTab === 1 && currentPath.includes("/sales/orders")) {
+    if (browser && activeTab === 1 && currentPath.includes("/sales/orders")) {
       fetchArticles(branch, params);
     }
   });

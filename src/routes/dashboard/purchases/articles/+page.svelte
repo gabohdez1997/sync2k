@@ -635,7 +635,7 @@
               onclick={(e) => {
                 e.preventDefault();
                 goto(
-                  `/dashboard/purchases/articles/editor?id=${article.co_art}`,
+                  `/dashboard/purchases/articles/editor?id=${article.co_art}&branch_id=${article._branch_id}`,
                 );
               }}
               class="flex-1 h-11 bg-brand-500/10 hover:bg-brand-500/20 text-brand-500 font-bold rounded-xl border border-brand-500/10 hover:border-brand-500/30 transition-all flex items-center justify-center gap-2 text-sm"

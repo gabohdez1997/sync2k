@@ -57,6 +57,7 @@ export async function updateSystemSettings(settings: Partial<SystemSettings>) {
 
   // Intentamos un upsert basado en una fila única (usando id 1 o similar si prefieres)
   // Para simplificar, asumimos que siempre hay una fila con id fijo o simplemente insertamos/actualizamos la primera
+  const supabaseAdmin = getSupabaseAdmin();
   const { error } = await supabaseAdmin
     .from('system_settings')
     .upsert({ id: 1, ...payload });

@@ -27,9 +27,14 @@ export const handle: Handle = async ({ event, resolve }) => {
       cookies: {
         getAll:  () => event.cookies.getAll(),
         setAll: (cookiesToSet) => {
-          cookiesToSet.forEach(({ name, value, options }) =>
-            event.cookies.set(name, value, { ...options, path: '/' })
-          );
+          const isHttps = event.url.protocol === 'https:';
+          cookiesToSet.forEach(({ name, value, options }) => {
+            event.cookies.set(name, value, { 
+              ...options, 
+              path: '/',
+              secure: isHttps ? (options.secure ?? true) : false 
+            });
+          });
         }
       }
     }

@@ -2,7 +2,7 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 
-export const POST: RequestHandler = async ({ request, locals, cookies }) => {
+export const POST: RequestHandler = async ({ request, locals, cookies, fetch }) => {
   const { email, password } = await request.json();
 
   if (!email || !password) {
@@ -42,7 +42,7 @@ export const POST: RequestHandler = async ({ request, locals, cookies }) => {
 
     // Validar perfil Online
     const { getSupabaseAdmin } = await import('$lib/server/supabase');
-    const supabaseAdmin = getSupabaseAdmin();
+    const supabaseAdmin = getSupabaseAdmin(fetch);
     const { data: profiles, error: profileError } = await supabaseAdmin
       .from('profiles')
       .select('id, active, full_name')
@@ -122,6 +122,8 @@ export const POST: RequestHandler = async ({ request, locals, cookies }) => {
         .setExpirationTime('24h')
         .sign(secret);
 
+      const isHttps = new URL(request.url).protocol === 'https:';
+
       cookies.set('sync2k_local_session', JSON.stringify({
           id: localProfile.id,
           full_name: localProfile.full_name,
@@ -129,7 +131,7 @@ export const POST: RequestHandler = async ({ request, locals, cookies }) => {
         }), {
           path: '/',
           httpOnly: true,
-          secure: process.env.NODE_ENV === 'production', // Permite login en IP local vía HTTP
+          secure: isHttps, // Solo seguro si es HTTPS real
           sameSite: 'lax',
           maxAge: 60 * 60 * 24 * 30
         });

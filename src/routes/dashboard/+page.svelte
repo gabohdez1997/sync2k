@@ -1,17 +1,20 @@
 <!-- src/routes/dashboard/+page.svelte -->
 <script lang="ts">
   import type { PageData } from "./$types";
+  import { browser } from "$app/environment";
   import { LayoutDashboard } from "lucide-svelte";
   let { data }: { data: PageData } = $props();
   let tasa_bcv = $state<number | null>(null);
 
   $effect(() => {
-    fetch('/api/agent/tasa')
-      .then(res => res.json())
-      .then(d => {
-        if (d.success) tasa_bcv = d.tasa;
-      })
-      .catch(e => console.error("Error loading tasa:", e));
+    if (browser) {
+      fetch('/api/agent/tasa')
+        .then(res => res.json())
+        .then(d => {
+          if (d.success) tasa_bcv = d.tasa;
+        })
+        .catch(e => console.error("Error loading tasa:", e));
+    }
   });
 
   const stats = [

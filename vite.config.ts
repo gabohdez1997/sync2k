@@ -5,6 +5,7 @@ import { defineConfig } from 'vite';
 export default defineConfig({
 	plugins: [tailwindcss(), sveltekit()],
 	server: {
-		allowedHosts: true // Permite subdominios en localhost
+		host: true,
+		allowedHosts: true
 	}
 });
