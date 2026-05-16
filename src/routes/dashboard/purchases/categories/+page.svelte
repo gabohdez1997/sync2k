@@ -48,12 +48,35 @@
     sublines.filter((s: any) => s.co_lin?.trim() === modalLine)
   );
 
+  let prefix = $derived.by(() => {
+    if (!modalLine || !modalSubline) return '';
+    const lin = parseInt(modalLine, 10).toString();
+    const subl = modalSubline.slice(-2);
+    return `${lin}${subl}`;
+  });
+
+  // Auto-calcular el correlativo al seleccionar línea y sublínea
+  $effect(() => {
+    if (isNew && prefix) {
+      const matchingCats = categories
+        .filter((c: any) => c.co_cat?.trim().startsWith(prefix))
+        .map((c: any) => parseInt(c.co_cat?.trim().slice(prefix.length) || '0', 10));
+
+      if (matchingCats.length > 0) {
+        const maxCat = Math.max(...matchingCats);
+        modalCorrelativo = (maxCat + 1).toString().padStart(3, '0');
+      } else {
+        modalCorrelativo = '001';
+      }
+    } else if (isNew) {
+      modalCorrelativo = '';
+    }
+  });
+
   let generatedCode = $derived.by(() => {
     if (!isNew) return modalCode;
-    if (!modalLine || !modalSubline || !modalCorrelativo) return '';
-    const lin = parseInt(modalLine, 10).toString(); // remove leading zero
-    const subl = modalSubline.slice(-2); // last 2 digits
-    return `${lin}${subl}${modalCorrelativo}`;
+    if (!prefix || !modalCorrelativo) return '';
+    return `${prefix}${modalCorrelativo}`;
   });
 
   // Si cambia la línea, resetear la sublínea
@@ -290,19 +313,17 @@
                 </div>
               </div>
 
-              <!-- Correlativo -->
               <div class="space-y-2">
                 <label for="correlativo" class="text-[10px] font-black uppercase tracking-widest text-text-muted ml-1">
-                  Correlativo (3 dígitos)
+                  Correlativo (Auto-calculado)
                 </label>
                 <input
                   id="correlativo"
                   type="text"
                   bind:value={modalCorrelativo}
-                  maxlength="3"
-                  required
-                  placeholder="Ej: 001"
-                  class="w-full h-12 bg-surface-base border border-border-subtle rounded-xl px-4 text-sm font-bold focus:outline-none focus:border-brand-500/50 transition-all placeholder:text-text-muted/40 font-mono tracking-wider"
+                  disabled
+                  placeholder="..."
+                  class="w-full h-12 bg-surface-base border border-border-subtle rounded-xl px-4 text-sm font-bold focus:outline-none focus:border-brand-500/50 transition-all placeholder:text-text-muted/40 font-mono tracking-wider disabled:opacity-50 disabled:cursor-not-allowed"
                 />
               </div>
             </div>
