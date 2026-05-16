@@ -16,11 +16,11 @@ export const load: PageServerLoad = protectLoad('pur_categories', async ({ local
             .order('sort_order');
 
         if (!dbBranches || dbBranches.length === 0) {
-            return { categories: [], error: 'No hay sucursales configuradas.' };
+            return { categories: [], lines: [], sublines: [], error: 'No hay sucursales configuradas.' };
         }
 
         const firstBranch = dbBranches.find(b => b.agent_url);
-        if (!firstBranch) return { categories: [], error: 'No hay agentes disponibles.' };
+        if (!firstBranch) return { categories: [], lines: [], sublines: [], error: 'No hay agentes disponibles.' };
 
         const agent = new AgentClient({
             slug: firstBranch.id,
@@ -28,15 +28,24 @@ export const load: PageServerLoad = protectLoad('pur_categories', async ({ local
             agent_api_key: firstBranch.agent_token
         }, userProfile || undefined, fetch);
 
-        const res = await agent.request<any>('/catalogos/categorias').catch(() => ({ data: [] }));
-        const categories = (res as any).data || [];
+        const [catRes, linRes, subRes] = await Promise.all([
+            agent.request<any>('/catalogos/categorias').catch(() => ({ data: [] })),
+            agent.request<any>('/catalogos/lineas').catch(() => ({ data: [] })),
+            agent.request<any>('/catalogos/sublineas').catch(() => ({ data: [] }))
+        ]);
+
+        const categories = (catRes as any).data || [];
+        const lines = (linRes as any).data || [];
+        const sublines = (subRes as any).data || [];
 
         return {
             categories,
+            lines,
+            sublines,
             crud: userProfile?.permissions?.pur_categories || { create: false, update: false, delete: false, read: true }
         };
     } catch (e: any) {
-        return { categories: [], error: `Error: ${e.message}` };
+        return { categories: [], lines: [], sublines: [], error: `Error: ${e.message}` };
     }
 });
 

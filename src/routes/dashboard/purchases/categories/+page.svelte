@@ -12,13 +12,17 @@
     Loader2,
     Hash,
     Type,
-    AlertTriangle
+    AlertTriangle,
+    Layers,
+    GitBranch
   } from 'lucide-svelte';
   import type { PageData, ActionData } from './$types';
 
   let { data, form }: { data: PageData, form: ActionData } = $props();
 
   let categories = $derived((data as any).categories ?? []);
+  let lines = $derived((data as any).lines ?? []);
+  let sublines = $derived((data as any).sublines ?? []);
   let crud = $derived((data as any).crud ?? { create: false, update: false });
 
   // ── Search ──
@@ -35,11 +39,36 @@
   let isNew = $state(true);
   let modalCode = $state('');
   let modalDesc = $state('');
+  let modalLine = $state('');
+  let modalSubline = $state('');
+  let modalCorrelativo = $state('');
   let saving = $state(false);
+
+  let availableSublines = $derived(
+    sublines.filter((s: any) => s.co_lin?.trim() === modalLine)
+  );
+
+  let generatedCode = $derived.by(() => {
+    if (!isNew) return modalCode;
+    if (!modalLine || !modalSubline || !modalCorrelativo) return '';
+    const lin = parseInt(modalLine, 10).toString(); // remove leading zero
+    const subl = modalSubline.slice(-2); // last 2 digits
+    return `${lin}${subl}${modalCorrelativo}`;
+  });
+
+  // Si cambia la línea, resetear la sublínea
+  $effect(() => {
+    if (modalLine && isNew) {
+      modalSubline = '';
+    }
+  });
 
   function openCreate() {
     isNew = true;
     modalCode = '';
+    modalLine = lines.length > 0 ? lines[0].co_lin?.trim() : '';
+    modalSubline = '';
+    modalCorrelativo = '';
     modalDesc = '';
     showModal = true;
   }
@@ -206,27 +235,93 @@
           };
         }}
       >
-        <input type="hidden" name="is_new" value={isNew ? 'true' : 'false'} />
+        <input type="hidden" name="co_cat" value={isNew ? generatedCode : modalCode} />
 
         <div class="p-8 space-y-6">
-          <!-- Código -->
-          <div class="space-y-2">
-            <label for="co_cat" class="text-[10px] font-black uppercase tracking-widest text-text-muted ml-1 flex items-center gap-1.5">
-              <Hash size={12} />
-              Código de Categoría
-            </label>
-            <input
-              id="co_cat"
-              name="co_cat"
-              type="text"
-              bind:value={modalCode}
-              maxlength="6"
-              required
-              disabled={!isNew}
-              placeholder="Ej: 101001"
-              class="w-full h-14 bg-surface-base border border-border-subtle rounded-2xl px-5 text-sm font-bold focus:outline-none focus:border-brand-500/50 transition-all placeholder:text-text-muted/40 disabled:opacity-50 disabled:cursor-not-allowed font-mono tracking-wider uppercase"
-            />
-          </div>
+          {#if isNew}
+            <!-- Construcción del Código -->
+            <div class="space-y-4 bg-brand-500/5 p-4 rounded-2xl border border-brand-500/10">
+              <div class="flex items-center justify-between mb-2">
+                <label class="text-[10px] font-black uppercase tracking-widest text-text-muted flex items-center gap-1.5">
+                  <Hash size={12} />
+                  Construcción de Código
+                </label>
+                <div class="text-sm font-mono font-bold text-amber-400 bg-amber-500/10 px-3 py-1 rounded-lg">
+                  {generatedCode || '------'}
+                </div>
+              </div>
+
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <!-- Línea -->
+                <div class="space-y-2">
+                  <label for="co_lin" class="text-[10px] font-black uppercase tracking-widest text-text-muted ml-1 flex items-center gap-1.5">
+                    <Layers size={12} /> Línea
+                  </label>
+                  <select
+                    id="co_lin"
+                    bind:value={modalLine}
+                    required
+                    class="w-full h-12 bg-surface-base border border-border-subtle rounded-xl px-4 text-sm font-bold focus:outline-none focus:border-brand-500/50 transition-all appearance-none cursor-pointer"
+                  >
+                    <option value="" disabled>Selecciona línea</option>
+                    {#each lines as line}
+                      <option value={line.co_lin?.trim()}>{line.co_lin?.trim()} — {line.lin_des?.trim()}</option>
+                    {/each}
+                  </select>
+                </div>
+
+                <!-- Sub-Línea -->
+                <div class="space-y-2">
+                  <label for="co_subl" class="text-[10px] font-black uppercase tracking-widest text-text-muted ml-1 flex items-center gap-1.5">
+                    <GitBranch size={12} /> Sub-Línea
+                  </label>
+                  <select
+                    id="co_subl"
+                    bind:value={modalSubline}
+                    required
+                    disabled={!modalLine || availableSublines.length === 0}
+                    class="w-full h-12 bg-surface-base border border-border-subtle rounded-xl px-4 text-sm font-bold focus:outline-none focus:border-brand-500/50 transition-all appearance-none cursor-pointer disabled:opacity-50"
+                  >
+                    <option value="" disabled>Selecciona sub-línea</option>
+                    {#each availableSublines as sub}
+                      <option value={sub.co_subl?.trim()}>{sub.co_subl?.trim()} — {sub.subl_des?.trim()}</option>
+                    {/each}
+                  </select>
+                </div>
+              </div>
+
+              <!-- Correlativo -->
+              <div class="space-y-2">
+                <label for="correlativo" class="text-[10px] font-black uppercase tracking-widest text-text-muted ml-1">
+                  Correlativo (3 dígitos)
+                </label>
+                <input
+                  id="correlativo"
+                  type="text"
+                  bind:value={modalCorrelativo}
+                  maxlength="3"
+                  required
+                  placeholder="Ej: 001"
+                  class="w-full h-12 bg-surface-base border border-border-subtle rounded-xl px-4 text-sm font-bold focus:outline-none focus:border-brand-500/50 transition-all placeholder:text-text-muted/40 font-mono tracking-wider"
+                />
+              </div>
+            </div>
+          {:else}
+            <!-- Código (Solo lectura) -->
+            <div class="space-y-2">
+              <label for="co_cat" class="text-[10px] font-black uppercase tracking-widest text-text-muted ml-1 flex items-center gap-1.5">
+                <Hash size={12} />
+                Código de Categoría
+              </label>
+              <input
+                id="co_cat"
+                type="text"
+                value={modalCode}
+                disabled
+                class="w-full h-14 bg-surface-base border border-border-subtle rounded-2xl px-5 text-sm font-bold focus:outline-none focus:border-brand-500/50 transition-all disabled:opacity-50 disabled:cursor-not-allowed font-mono tracking-wider uppercase"
+              />
+            </div>
+          {/if}
 
           <!-- Descripción -->
           <div class="space-y-2">
@@ -267,7 +362,7 @@
           </button>
           <button
             type="submit"
-            disabled={saving || !modalCode || !modalDesc}
+            disabled={saving || (isNew ? !generatedCode : !modalCode) || !modalDesc || (isNew && generatedCode.length !== 6)}
             class="flex items-center gap-2 bg-brand-600 hover:bg-brand-500 text-white px-6 py-3 rounded-xl font-bold hover:shadow-lg hover:shadow-brand-500/30 transition-all active:scale-95 disabled:opacity-60"
           >
             {#if saving}
