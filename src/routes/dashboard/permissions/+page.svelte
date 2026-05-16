@@ -67,6 +67,9 @@
       icon: ShoppingCart,
       options: [
         { id: "pur_articles", label: "Artículos" },
+        { id: "pur_lines", label: "Líneas" },
+        { id: "pur_sublines", label: "Sub-Líneas" },
+        { id: "pur_categories", label: "Categorías" },
         { id: "pur_quotes", label: "Cotizaciones" },
         { id: "pur_orders", label: "Orden de compra" },
         { id: "pur_invoices", label: "Facturas" },

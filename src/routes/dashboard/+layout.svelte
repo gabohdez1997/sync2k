@@ -32,7 +32,10 @@
     User,
     Building,
     Store,
-    MapPin
+    MapPin,
+    Layers,
+    GitBranch,
+    Tag
   } from 'lucide-svelte';
   import { slide, fade } from 'svelte/transition';
 
@@ -102,6 +105,9 @@
       icon: ShoppingCart,
       subItems: [
         { id: 'pur_articles', label: 'Artículos', href: '/dashboard/purchases/articles', icon: Package },
+        { id: 'pur_lines', label: 'Líneas', href: '/dashboard/purchases/lines', icon: Layers },
+        { id: 'pur_sublines', label: 'Sub-Líneas', href: '/dashboard/purchases/sublines', icon: GitBranch },
+        { id: 'pur_categories', label: 'Categorías', href: '/dashboard/purchases/categories', icon: Tag },
         { id: 'pur_quotes', label: 'Cotizaciones', href: '/dashboard/purchases/quotes', icon: FileText },
         { id: 'pur_orders', label: 'Orden de compra', href: '/dashboard/purchases/orders', icon: ClipboardList },
         { id: 'pur_invoices', label: 'Facturas', href: '/dashboard/purchases/invoices', icon: Receipt },
