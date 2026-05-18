@@ -14,6 +14,10 @@
 
     const isUSD = (order.co_mone || "").toUpperCase().includes("US");
 
+    // Si el documento fue editado, tomamos la fecha de modificación (fec_us_mo) para emisión y vencimiento
+    const displayFecEmis = order.fec_us_mo ? order.fec_us_mo : order.fec_emis;
+    const displayFecVenc = order.fec_us_mo ? order.fec_us_mo : order.fec_venc;
+
     function formatCurrency(val: number | string) {
         return Number(val).toLocaleString("de-DE", {
             minimumFractionDigits: 2,
@@ -107,8 +111,8 @@
                             <span class="number text-red-600">{order.doc_num}</span>
                         </div>
                         <div class="dates mt-2">
-                            <p>Emisión: <strong>{dayjs(order.fec_emis).format("DD/MM/YYYY")}</strong></p>
-                            <p>Vence: <strong>{dayjs(order.fec_venc).format("DD/MM/YYYY")}</strong></p>
+                            <p>Emisión: <strong>{dayjs(displayFecEmis).format("DD/MM/YYYY")}</strong></p>
+                            <p>Vence: <strong>{dayjs(displayFecVenc).format("DD/MM/YYYY")}</strong></p>
                             <p class="text-[9px] text-slate-400 mt-1 uppercase">
                                 Moneda: <strong>{isUSD ? "DÓLARES (USD)" : "BOLÍVARES (BS.)"}</strong>
                             </p>

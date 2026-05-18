@@ -14,6 +14,10 @@
 
     const isUSD = (quote.co_mone || "").toUpperCase().includes("US");
 
+    // Si el documento fue editado, tomamos la fecha de modificación (fec_us_mo) para emisión y vencimiento
+    const displayFecEmis = quote.fec_us_mo ? quote.fec_us_mo : quote.fec_emis;
+    const displayFecVenc = quote.fec_us_mo ? quote.fec_us_mo : quote.fec_venc;
+
     function formatCurrency(val: number | string) {
         return Number(val).toLocaleString("de-DE", {
             minimumFractionDigits: 2,
@@ -108,8 +112,8 @@
                             <span class="number text-red-600">{quote.doc_num}</span>
                         </div>
                         <div class="dates mt-2">
-                            <p>Emisión: <strong>{dayjs(quote.fec_emis).format("DD/MM/YYYY")}</strong></p>
-                            <p>Vence: <strong>{dayjs(quote.fec_venc).format("DD/MM/YYYY")}</strong></p>
+                            <p>Emisión: <strong>{dayjs(displayFecEmis).format("DD/MM/YYYY")}</strong></p>
+                            <p>Vence: <strong>{dayjs(displayFecVenc).format("DD/MM/YYYY")}</strong></p>
                             <p class="text-[9px] text-slate-400 mt-1 uppercase">
                                 Moneda: <strong>{isUSD ? "DÓLARES (USD)" : "BOLÍVARES (BS.)"}</strong>
                             </p>
