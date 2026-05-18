@@ -57,6 +57,7 @@
 
   // ── ARTICLE SELECTION ──────────────────────────────────────────────────────
   let selectedCodes = $state(new Set<string>());
+  let selectedPrintFormat = $state("standard");
 
   const visibleArticles = $derived(
     (data.articles || []).filter(
@@ -251,9 +252,9 @@
     handleSearch();
   }
 
-  function handlePrintLabels(isSmall = false) {
+  function handlePrintLabels(format: string = "standard") {
     // Points to printable standalone HTML endpoints
-    const endpoint = isSmall ? "/api/labels/small" : "/api/labels";
+    const endpoint = format === "small" ? "/api/labels/small" : "/api/labels";
     const url = new URL($page.url.origin + endpoint);
     if (selectedBranch) url.searchParams.set("branch_id", selectedBranch);
 
@@ -287,49 +288,32 @@
       </p>
     </div>
 
-    <div class="flex flex-wrap items-center gap-3 md:gap-4 shrink-0">
-      <!-- Standard Large Labels Button -->
-      <button
-        onclick={() => handlePrintLabels(false)}
-        class="h-14 px-6 md:px-8 {selectedCodes.size > 0
-          ? 'bg-brand-600 hover:bg-brand-500 border-brand-500/50 shadow-lg shadow-brand-600/20 text-white'
-          : 'bg-surface-raised hover:bg-white/5 border-white/5 hover:border-white/10 text-text-base'} border rounded-2xl font-bold transition-all active:scale-95 flex items-center gap-3 group"
-        title={selectedCodes.size > 0
-          ? `Imprimir ${selectedCodes.size} artículo(s) seleccionado(s)`
-          : "Imprimir todos los artículos del filtro (hasta 500)"}
-      >
-        <Printer
-          size={20}
-          class={selectedCodes.size > 0
-            ? "text-white"
-            : "text-brand-400 group-hover:text-brand-300"}
-        />
-        <span>Etiquetas Estándar</span>
-        {#if selectedCodes.size > 0}
-          <span
-            class="bg-white/20 text-white text-xs font-black px-2 py-0.5 rounded-full"
-            >{selectedCodes.size}</span
-          >
-        {/if}
-      </button>
+    <div class="flex items-center gap-3 shrink-0 bg-surface-raised/40 backdrop-blur-xl border border-white/5 rounded-2xl p-1.5 shadow-2xl">
+      <!-- Premium Dropdown Selector -->
+      <div class="relative flex items-center">
+        <select
+          bind:value={selectedPrintFormat}
+          class="bg-transparent text-text-base text-sm font-black pl-4 pr-10 h-11 rounded-xl outline-none cursor-pointer appearance-none relative min-w-[210px] hover:text-brand-400 transition-colors"
+          style="background-image: url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%23a1a1aa%22%20d%3D%22M287%2069.4a17.6%2017.6%200%200%200-13-5.4H18.4c-5%200-9.3%201.8-12.9%205.4A17.6%2017.6%200%200%200%200%2082.2c0%205%201.8%209.3%205.4%2012.9l128%20127.9c3.6%203.6%207.8%205.4%2012.8%205.4s9.2-1.8%2012.8-5.4L287%2095c3.5-3.5%205.4-7.8%205.4-12.8%200-5-1.9-9.2-5.5-12.8z%22%2F%3E%3C%2Fsvg%3E'); background-repeat: no-repeat; background-position: right 14px top 50%; background-size: 10px auto;"
+        >
+          <option value="standard" class="bg-[#18181b] text-text-base font-bold py-2">Etiquetas Estándar</option>
+          <option value="small" class="bg-[#18181b] text-text-base font-bold py-2">Etiquetas Pequeñas (6x3)</option>
+        </select>
+      </div>
 
-      <!-- New Small 6x3cm Labels Button -->
+      <!-- Single Primary Action Button with Printer Icon -->
       <button
-        onclick={() => handlePrintLabels(true)}
-        class="h-14 px-6 md:px-8 {selectedCodes.size > 0
-          ? 'bg-amber-600 hover:bg-amber-500 border-amber-500/50 shadow-lg shadow-amber-600/20 text-white'
-          : 'bg-surface-raised hover:bg-white/5 border-white/5 hover:border-white/10 text-text-base'} border rounded-2xl font-bold transition-all active:scale-95 flex items-center gap-3 group"
+        onclick={() => handlePrintLabels(selectedPrintFormat)}
+        class="h-11 px-6 bg-brand-600 hover:bg-brand-500 border border-brand-500/30 text-white rounded-xl font-bold transition-all active:scale-95 flex items-center gap-2.5 shadow-lg shadow-brand-600/25 group"
         title={selectedCodes.size > 0
-          ? `Imprimir ${selectedCodes.size} etiqueta(s) pequeña(s) (6x3)`
-          : "Imprimir todas las etiquetas pequeñas del filtro (hasta 500)"}
+          ? `Imprimir ${selectedCodes.size} etiqueta(s) seleccionada(s)`
+          : "Imprimir todas las etiquetas filtradas (hasta 500)"}
       >
         <Printer
-          size={20}
-          class={selectedCodes.size > 0
-            ? "text-white"
-            : "text-amber-400 group-hover:text-amber-300"}
+          size={18}
+          class="text-white group-hover:scale-110 transition-transform"
         />
-        <span>Etiquetas Pequeñas (6x3)</span>
+        <span>Imprimir</span>
         {#if selectedCodes.size > 0}
           <span
             class="bg-white/20 text-white text-xs font-black px-2 py-0.5 rounded-full"
