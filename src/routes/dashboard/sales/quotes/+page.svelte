@@ -38,6 +38,8 @@
     ShieldCheck,
     UserCircle,
     Clock,
+    Users,
+    X,
   } from "lucide-svelte";
   import { toast } from "svelte-sonner";
   import Combobox from "$lib/components/ui/Combobox.svelte";
@@ -107,6 +109,8 @@
   let searchingClient = $state(false);
   let selectedClient = $state<any>(null);
   let showRegistrationForm = $state(false);
+  let matchingClients = $state<any[]>([]);
+  let showClientSelectionModal = $state(false);
 
   // --- PASO 2: ARTÍCULOS Y CARRITO ---
   let quantities = $state<Record<string, number>>({});
@@ -926,6 +930,9 @@
                       "Cliente encontrado: " +
                         (selectedClient.descripcion || selectedClient.cli_des),
                     );
+                  } else if (payload.clients && payload.clients.length > 1) {
+                    matchingClients = payload.clients;
+                    showClientSelectionModal = true;
                   } else {
                     selectedClient = null;
                     showRegistrationForm = true;
@@ -2504,3 +2511,73 @@
     scrollbar-width: none;
   }
 </style>
+
+{#if showClientSelectionModal}
+  <div
+    class="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+    in:fade={{ duration: 200 }}
+    out:fade={{ duration: 200 }}
+  >
+    <div
+      class="bg-surface-base w-full max-w-2xl rounded-3xl border border-border-subtle shadow-2xl overflow-hidden flex flex-col max-h-[80vh]"
+      in:scale={{ duration: 300, start: 0.95 }}
+    >
+      <div
+        class="flex items-center justify-between p-6 border-b border-border-subtle bg-surface-soft"
+      >
+        <div>
+          <h2 class="text-2xl font-black tracking-tight flex items-center gap-2">
+            <Users size={24} class="text-brand-500" />
+            Múltiples Clientes Encontrados
+          </h2>
+          <p class="text-text-muted mt-1 text-sm">
+            Seleccione el cliente correcto de la lista ({matchingClients.length} resultados)
+          </p>
+        </div>
+        <button
+          onclick={() => (showClientSelectionModal = false)}
+          class="p-2 hover:bg-white/10 rounded-xl transition-colors text-text-muted hover:text-white"
+        >
+          <X size={20} />
+        </button>
+      </div>
+
+      <div class="overflow-y-auto p-4 custom-scrollbar space-y-2 flex-1">
+        {#each matchingClients as client}
+          <button
+            class="w-full text-left p-4 rounded-2xl border border-border-subtle bg-surface-soft hover:bg-surface-strong hover:border-brand-500/50 transition-all flex flex-col gap-1 group relative overflow-hidden"
+            onclick={() => {
+              selectedClient = client;
+              rifInput = client.rif || client.co_cli;
+              showRegistrationForm = false;
+              showClientSelectionModal = false;
+              toast.success("Cliente seleccionado: " + (client.descripcion || client.cli_des));
+            }}
+          >
+            <div class="absolute inset-0 bg-brand-500/5 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+            <div class="relative z-10 flex items-start justify-between w-full">
+              <div>
+                <h3 class="font-bold text-lg">{client.descripcion || client.cli_des}</h3>
+                <div class="flex items-center gap-3 mt-2 text-sm text-text-muted">
+                  <span class="flex items-center gap-1">
+                    <User size={14} class="text-brand-400" />
+                    {client.rif || client.co_cli}
+                  </span>
+                  {#if client.email}
+                    <span class="flex items-center gap-1">
+                      <Mail size={14} class="text-brand-400" />
+                      {client.email}
+                    </span>
+                  {/if}
+                </div>
+              </div>
+              <div class="h-8 w-8 rounded-full bg-brand-500/20 text-brand-400 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity -translate-x-4 group-hover:translate-x-0">
+                <ChevronRight size={18} />
+              </div>
+            </div>
+          </button>
+        {/each}
+      </div>
+    </div>
+  </div>
+{/if}

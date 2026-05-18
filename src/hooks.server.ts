@@ -108,6 +108,7 @@ export const handle: Handle = async ({ event, resolve }) => {
     }
   }
 
+
   // ── 5. Protección de rutas privadas ────────────────────────────────
   const path = event.url.pathname;
   const isPublic = PUBLIC_ROUTES.some(r =>

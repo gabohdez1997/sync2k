@@ -88,24 +88,35 @@ export const actions: Actions = {
 		const profile = locals.profile;
 		if (!profile) return fail(401, { message: 'Sesión expirada' });
 		const formData = await request.formData();
-		const rif = (formData.get('rif') as string)?.trim().toUpperCase().replace(/[-\s]/g, '');
+		const rawInput = (formData.get('rif') as string)?.trim() || '';
+		const isCodeLike = /^[VJEGPCvjegpc]?[\d]+$/.test(rawInput.replace(/[-\s]/g, ''));
+		const searchTerm = isCodeLike ? rawInput.toUpperCase().replace(/[-\s]/g, '') : rawInput;
 		const branchId = formData.get('branch_id') as string;
-		if (!rif) return fail(400, { message: 'El RIF es requerido' });
+		if (!searchTerm) return fail(400, { message: 'El término de búsqueda es requerido' });
 		const branch = profile.allowed_branches?.find(b => b.id === branchId);
 		if (!branch) return fail(404, { message: 'Sucursal no encontrada' });
 		const agentClient = new AgentClient(branch, profile, fetch);
 		try {
-			const res = await agentClient.request<any>(`/clientes/${rif}`);
-			if (res.success && res.data) {
-				const clientData = Array.isArray(res.data) ? res.data.find(c => !c.error) : res.data;
-				if (clientData) return { success: true, client: clientData };
+			if (isCodeLike) {
+				const res = await agentClient.request<any>(`/clientes/${searchTerm}`);
+				if (res.success && res.data) {
+					const clientData = Array.isArray(res.data) ? res.data.find(c => !c.error) : res.data;
+					if (clientData) return { success: true, client: clientData, clients: [clientData] };
+				}
+				const searchRes = await agentClient.request<any>(`/clientes/search?rif=${searchTerm}`);
+				const items = Array.isArray(searchRes.data) ? searchRes.data : (searchRes.data?.items || searchRes.items || []);
+				const client = items.find((c: any) => c.rif?.toUpperCase().replace(/[-\s]/g, '') === searchTerm || c.co_cli?.toUpperCase().replace(/[-\s]/g, '') === searchTerm);
+				if (client) return { success: true, client: client, clients: [client] };
+				return { success: true, client: null, clients: [], message: 'Cliente no encontrado.' };
+			} else {
+				const searchRes = await agentClient.request<any>(`/clientes/search?descripcion=${encodeURIComponent(searchTerm)}`);
+				const items = Array.isArray(searchRes.data) ? searchRes.data : (searchRes.data?.items || searchRes.items || []);
+				if (items.length === 1) return { success: true, client: items[0], clients: items };
+				if (items.length > 1) return { success: true, client: null, clients: items };
+				return { success: true, client: null, clients: [], message: 'Cliente no encontrado.' };
 			}
-			const searchRes = await agentClient.request<any>(`/clientes/search?rif=${rif}`);
-			const items = Array.isArray(searchRes.data) ? searchRes.data : (searchRes.data?.items || searchRes.items || []);
-			const client = items.find((c: any) => c.rif?.toUpperCase().replace(/[-\s]/g, '') === rif || c.co_cli?.toUpperCase().replace(/[-\s]/g, '') === rif);
-			return { success: true, client: client || null, message: client ? '' : 'Cliente no encontrado.' };
 		} catch (e: any) {
-			if (e.status === 404) return { success: true, client: null };
+			if (e.status === 404) return { success: true, client: null, clients: [] };
 			return fail(500, { message: 'Error: ' + e.message });
 		}
 	}),
