@@ -2593,7 +2593,7 @@
                         selectedClient.rif
                           .replace(/[^a-zA-Z0-9]/g, "")
                           .substring(0, 10),
-                      descrip: `${quoteDescription || "PEDIDO WEB"} - ${data.systemSettings?.app_name || "GALPE APP"}`,
+                      descrip: quoteDescription || "PEDIDO WEB",
                       comentario:
                         quoteDescription || "Pedido registrado vía portal web.",
                       showUSD: showUSD,

@@ -60,16 +60,9 @@ export const GET: RequestHandler = async ({ url, locals, fetch }) => {
 			agentParams.set('co_art', rawCoArt);
 		}
 
-		// Búsqueda de catálogo desde la UI.
-		// En /articulos/search los filtros se combinan con AND, por lo que
-		// no debemos enviar descripcion y co_art a la vez.
+		// Búsqueda global (código, descripción, modelo, referencia)
 		if (rawSearch) {
-			const isCodeLike = /^\d/.test(rawSearch);
-			if (isCodeLike) {
-				agentParams.set('co_art', rawSearch);
-			} else {
-				agentParams.set('descripcion', rawSearch);
-			}
+			agentParams.set('search', rawSearch);
 		}
 
 		if (isServiceSearch) {
