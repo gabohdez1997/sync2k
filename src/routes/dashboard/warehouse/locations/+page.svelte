@@ -251,11 +251,10 @@
     handleSearch();
   }
 
-  function handlePrintLabels() {
-    // Points to /api/labels which returns a pure standalone HTML page —
-    // no SvelteKit layout, no dashboard chrome, clean for printing.
-    const url = new URL($page.url.origin + "/api/labels");
-    if (selectedBranch) url.searchParams.set("branch_id", selectedBranch);
+  function handlePrintLabels(isSmall = false) {
+    // Points to printable standalone HTML endpoints
+    const endpoint = isSmall ? "/api/labels/small" : "/api/labels";
+    const url = new URL($page.url.origin + endpoint);
     if (selectedBranch) url.searchParams.set("branch_id", selectedBranch);
 
     if (selectedCodes.size > 0) {
@@ -276,7 +275,7 @@
 </script>
 
 <div class="flex flex-col gap-8" in:fade>
-  <div class="flex flex-col md:flex-row md:items-center justify-between gap-6">
+  <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
     <div class="flex flex-col gap-2">
       <h1 class="text-4xl font-black tracking-tight flex items-center gap-3">
         <MapPin size={40} class="text-brand-500" />
@@ -286,37 +285,59 @@
         Asigna y visualiza las ubicaciones físicas de los artículos en el
         almacén.
       </p>
-      <!-- {#if data.articles?.length}
-        <span class="flex items-center gap-1.5 text-xs text-brand-500/80 font-medium mt-1 bg-brand-500/10 w-fit px-3 py-1.5 rounded-lg border border-brand-500/20">
-          <Package size={14} />
-          Mostrando {data.articles.length} artículos en esta página
-        </span>
-      {/if} -->
     </div>
 
-    <button
-      onclick={handlePrintLabels}
-      class="h-14 px-8 {selectedCodes.size > 0
-        ? 'bg-brand-600 hover:bg-brand-500 border-brand-500/50 shadow-lg shadow-brand-600/20 text-white'
-        : 'bg-surface-raised hover:bg-white/5 border-white/5 hover:border-white/10 text-text-base'} border rounded-2xl font-bold transition-all active:scale-95 flex items-center gap-3 shrink-0 group"
-      title={selectedCodes.size > 0
-        ? `Imprimir ${selectedCodes.size} artículo(s) seleccionado(s)`
-        : "Imprimir todos los artículos del filtro (hasta 500)"}
-    >
-      <Printer
-        size={20}
-        class={selectedCodes.size > 0
-          ? "text-white"
-          : "text-brand-400 group-hover:text-brand-300"}
-      />
-      <span class="hidden sm:inline">Imprimir</span> Etiquetas
-      {#if selectedCodes.size > 0}
-        <span
-          class="bg-white/20 text-white text-xs font-black px-2 py-0.5 rounded-full"
-          >{selectedCodes.size}</span
-        >
-      {/if}
-    </button>
+    <div class="flex flex-wrap items-center gap-3 md:gap-4 shrink-0">
+      <!-- Standard Large Labels Button -->
+      <button
+        onclick={() => handlePrintLabels(false)}
+        class="h-14 px-6 md:px-8 {selectedCodes.size > 0
+          ? 'bg-brand-600 hover:bg-brand-500 border-brand-500/50 shadow-lg shadow-brand-600/20 text-white'
+          : 'bg-surface-raised hover:bg-white/5 border-white/5 hover:border-white/10 text-text-base'} border rounded-2xl font-bold transition-all active:scale-95 flex items-center gap-3 group"
+        title={selectedCodes.size > 0
+          ? `Imprimir ${selectedCodes.size} artículo(s) seleccionado(s)`
+          : "Imprimir todos los artículos del filtro (hasta 500)"}
+      >
+        <Printer
+          size={20}
+          class={selectedCodes.size > 0
+            ? "text-white"
+            : "text-brand-400 group-hover:text-brand-300"}
+        />
+        <span>Etiquetas Estándar</span>
+        {#if selectedCodes.size > 0}
+          <span
+            class="bg-white/20 text-white text-xs font-black px-2 py-0.5 rounded-full"
+            >{selectedCodes.size}</span
+          >
+        {/if}
+      </button>
+
+      <!-- New Small 6x3cm Labels Button -->
+      <button
+        onclick={() => handlePrintLabels(true)}
+        class="h-14 px-6 md:px-8 {selectedCodes.size > 0
+          ? 'bg-amber-600 hover:bg-amber-500 border-amber-500/50 shadow-lg shadow-amber-600/20 text-white'
+          : 'bg-surface-raised hover:bg-white/5 border-white/5 hover:border-white/10 text-text-base'} border rounded-2xl font-bold transition-all active:scale-95 flex items-center gap-3 group"
+        title={selectedCodes.size > 0
+          ? `Imprimir ${selectedCodes.size} etiqueta(s) pequeña(s) (6x3)`
+          : "Imprimir todas las etiquetas pequeñas del filtro (hasta 500)"}
+      >
+        <Printer
+          size={20}
+          class={selectedCodes.size > 0
+            ? "text-white"
+            : "text-amber-400 group-hover:text-amber-300"}
+        />
+        <span>Etiquetas Pequeñas (6x3)</span>
+        {#if selectedCodes.size > 0}
+          <span
+            class="bg-white/20 text-white text-xs font-black px-2 py-0.5 rounded-full"
+            >{selectedCodes.size}</span
+          >
+        {/if}
+      </button>
+    </div>
   </div>
 
   <!-- SEARCH & FILTERS SECTION -->
