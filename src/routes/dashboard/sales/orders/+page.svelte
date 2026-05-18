@@ -47,7 +47,11 @@
   import Combobox from "$lib/components/ui/Combobox.svelte";
   import SearchBar from "$lib/components/ui/SearchBar.svelte";
   import BarcodeScanner from "$lib/components/ui/BarcodeScanner.svelte";
+  import dayjs from "dayjs";
+  import "dayjs/locale/es";
   import type { PageData } from "./$types";
+
+  dayjs.locale("es");
 
   let { data }: { data: PageData } = $props();
 
@@ -937,6 +941,25 @@
           ? `Documento Nro: ${data.preloadedOrder.doc_num}`
           : "Generar nuevo documento"}
       </p>
+      {#if data.preloadedOrder}
+        <div class="flex flex-col sm:flex-row sm:items-center gap-2 mt-2">
+          <div class="flex items-center gap-2 bg-brand-500/10 border border-brand-500/20 px-3 py-1.5 rounded-xl text-xs font-bold text-brand-400">
+            <span class="font-black uppercase tracking-wider opacity-60">Creación:</span>
+            <span>{dayjs(data.preloadedOrder.fec_reg || data.preloadedOrder.fec_emis).format('DD/MM/YYYY hh:mm A')}</span>
+          </div>
+          {#if data.preloadedOrder.fec_us_mo}
+            <div class="flex items-center gap-2 bg-amber-500/10 border border-amber-500/20 px-3 py-1.5 rounded-xl text-xs font-bold text-amber-400">
+              <span class="font-black uppercase tracking-wider opacity-60">Última Edición:</span>
+              <span>{dayjs(data.preloadedOrder.fec_us_mo).format('DD/MM/YYYY hh:mm A')}</span>
+            </div>
+          {:else}
+            <div class="flex items-center gap-2 bg-white/5 border border-white/10 px-3 py-1.5 rounded-xl text-xs font-bold text-text-muted opacity-60">
+              <span class="font-black uppercase tracking-wider opacity-60">Última Edición:</span>
+              <span>Sin modificar</span>
+            </div>
+          {/if}
+        </div>
+      {/if}
     </div>
 
     <div class="flex flex-col md:flex-row items-center gap-3 w-full md:w-auto">

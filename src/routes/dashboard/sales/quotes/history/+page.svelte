@@ -162,7 +162,7 @@
             <table class="w-full text-left border-collapse">
                 <thead>
                     <tr class="bg-surface-soft/50 border-b border-border-subtle">
-                        <th class="px-6 py-5 text-xs font-black uppercase tracking-[0.1em] text-text-muted">Fecha</th>
+                        <th class="px-6 py-5 text-xs font-black uppercase tracking-[0.1em] text-text-muted">Fechas</th>
                         <th class="px-6 py-5 text-xs font-black uppercase tracking-[0.1em] text-text-muted">Documento</th>
                         <th class="px-6 py-5 text-xs font-black uppercase tracking-[0.1em] text-text-muted">Cliente</th>
                         <th class="px-6 py-5 text-xs font-black uppercase tracking-[0.1em] text-text-muted text-right">Monto</th>
@@ -187,9 +187,22 @@
                             {@const status = getStatus(quote)}
                             <tr class="hover:bg-brand-500/5 transition-colors group">
                                 <td class="px-6 py-5">
-                                    <div class="flex flex-col">
-                                        <span class="text-sm font-bold text-text-base">{dayjs(quote.fec_emis).format('DD MMM YYYY')}</span>
-                                        <span class="text-[10px] text-text-muted font-mono">{dayjs(quote.fec_emis).format('hh:mm A')}</span>
+                                    <div class="flex flex-col space-y-1.5">
+                                        <div class="flex items-center gap-2" title="Fecha de Creación">
+                                            <span class="text-[9px] font-black uppercase tracking-wider text-brand-400 bg-brand-500/10 px-1.5 py-0.5 rounded leading-none shrink-0">Creación</span>
+                                            <span class="text-xs font-bold text-text-base">{dayjs(quote.fec_reg || quote.fec_emis).format('DD/MM/YYYY hh:mm A')}</span>
+                                        </div>
+                                        {#if quote.fec_us_mo}
+                                            <div class="flex items-center gap-2" title="Fecha de Última Modificación">
+                                                <span class="text-[9px] font-black uppercase tracking-wider text-amber-400 bg-amber-500/10 px-1.5 py-0.5 rounded leading-none shrink-0">Edición</span>
+                                                <span class="text-xs font-bold text-text-base">{dayjs(quote.fec_us_mo).format('DD/MM/YYYY hh:mm A')}</span>
+                                            </div>
+                                        {:else}
+                                            <div class="flex items-center gap-2 opacity-40">
+                                                <span class="text-[9px] font-black uppercase tracking-wider text-text-muted bg-white/5 px-1.5 py-0.5 rounded leading-none shrink-0">Edición</span>
+                                                <span class="text-[10px] font-bold text-text-muted font-mono">Sin modificar</span>
+                                            </div>
+                                        {/if}
                                     </div>
                                 </td>
                                 <td class="px-6 py-5">
