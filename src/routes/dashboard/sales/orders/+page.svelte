@@ -913,14 +913,27 @@
       ivaBS += baseBS * (rate / 100);
     });
 
+    const porcEsp = selectedClient?.porc_esp ? Number(selectedClient.porc_esp) : 0;
+    const retencionUSD = ivaUSD * (porcEsp / 100);
+    const retencionBS = ivaBS * (porcEsp / 100);
+
+    const totalFacturaUSD = subUSD + ivaUSD;
+    const totalFacturaBS = subBS + ivaBS;
+
+    const totalUSD = totalFacturaUSD - retencionUSD;
+    const totalBS = totalFacturaBS - retencionBS;
+
     return {
       subtotal: showUSD ? subUSD : subBS,
       iva: showUSD ? ivaUSD : ivaBS,
-      total: showUSD ? subUSD + ivaUSD : subBS + ivaBS,
+      retencion: showUSD ? retencionUSD : retencionBS,
+      porc_esp: porcEsp,
+      totalFactura: showUSD ? totalFacturaUSD : totalFacturaBS,
+      total: showUSD ? totalUSD : totalBS,
       symbol: showUSD ? "$" : "Bs.",
       raw: {
-        usd: { sub: subUSD, iva: ivaUSD, total: subUSD + ivaUSD },
-        bs: { sub: subBS, iva: ivaBS, total: subBS + ivaBS },
+        usd: { sub: subUSD, iva: ivaUSD, retencion: retencionUSD, totalFactura: totalFacturaUSD, total: totalUSD },
+        bs: { sub: subBS, iva: ivaBS, retencion: retencionBS, totalFactura: totalFacturaBS, total: totalBS },
       },
     };
   });
@@ -1298,11 +1311,13 @@
                         >Estatus Fiscal</span
                       >
                       <span class="font-bold text-text-base">
-                        {selectedClient.contribuyente
-                          ? selectedClient.contribu_e
-                            ? "Contribuyente Especial"
-                            : "Contribuyente Ordinario"
-                          : "No Contribuyente"}
+                        {selectedClient.porc_esp > 0
+                          ? `Contribuyente Especial (${selectedClient.porc_esp}%)`
+                          : selectedClient.contribuyente
+                            ? selectedClient.contribu_e
+                              ? "Contribuyente Especial"
+                              : "Contribuyente Ordinario"
+                            : "No Contribuyente"}
                       </span>
                     </div>
                   </div>
@@ -2215,11 +2230,13 @@
                       >Estatus Fiscal</span
                     >
                     <span class="text-sm font-bold text-text-base">
-                      {selectedClient.contribuyente
-                        ? selectedClient.contribu_e
-                          ? "Contribuyente Especial"
-                          : "Contribuyente Ordinario"
-                        : "No Contribuyente"}
+                      {selectedClient.porc_esp > 0
+                        ? `Contribuyente Especial (${selectedClient.porc_esp}%)`
+                        : selectedClient.contribuyente
+                          ? selectedClient.contribu_e
+                            ? "Contribuyente Especial"
+                            : "Contribuyente Ordinario"
+                          : "No Contribuyente"}
                     </span>
                   </div>
                   <div class="space-y-1">
@@ -2537,6 +2554,35 @@
                 </div>
 
                 <div
+                  class="flex justify-between items-center text-base font-bold text-text-muted"
+                >
+                  <span>Total Factura</span>
+                  <span class="font-mono text-text-base"
+                    >{totals().symbol}
+                    {totals().totalFactura.toLocaleString("de-DE", {
+                      minimumFractionDigits: 2,
+                      maximumFractionDigits: 2,
+                    })}</span
+                  >
+                </div>
+
+                {#if totals().retencion > 0}
+                  <div
+                    class="flex justify-between items-center text-base font-bold text-amber-500/90"
+                    transition:slide
+                  >
+                    <span>Retención ({totals().porc_esp}%)</span>
+                    <span class="font-mono"
+                      >- {totals().symbol}
+                      {totals().retencion.toLocaleString("de-DE", {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                      })}</span
+                    >
+                  </div>
+                {/if}
+
+                <div
                   class="pt-8 border-t border-border-bold flex flex-col gap-2"
                 >
                   <div class="flex justify-between items-end">
@@ -2550,25 +2596,6 @@
                       >
                         {totals().symbol}
                         {totals().total.toLocaleString("de-DE", {
-                          minimumFractionDigits: 2,
-                          maximumFractionDigits: 2,
-                        })}
-                      </div>
-                    </div>
-                    <div class="text-right pb-1">
-                      <div
-                        class="text-[10px] font-black uppercase tracking-widest text-text-muted italic mb-1"
-                      >
-                        Ref. {showUSD ? "Bolívares" : "Dólares"}
-                      </div>
-                      <div
-                        class="text-lg font-black font-mono text-brand-400/80"
-                      >
-                        {showUSD ? "Bs." : "$"}
-                        {(showUSD
-                          ? totals().raw.bs.total
-                          : totals().raw.usd.total
-                        ).toLocaleString("de-DE", {
                           minimumFractionDigits: 2,
                           maximumFractionDigits: 2,
                         })}

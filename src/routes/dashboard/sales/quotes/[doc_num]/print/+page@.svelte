@@ -25,6 +25,34 @@
         });
     }
 
+    // --- CÁLCULO DE RETENCIÓN DE IVA ---
+    const porcEsp = Number(quote.porc_esp || 0);
+    const isContribEspecial = quote.contribu_e || porcEsp > 0;
+    
+    const rawBruto = Number(quote.total_bruto || 0);
+    const rawImp = Number(quote.monto_imp || 0);
+    const rawNeto = Number(quote.total_neto || 0);
+    
+    // USD Mode
+    const tasaDoc = Number(quote.tasa || 1);
+    const subtotalUSD = rawBruto / tasaDoc;
+    const ivaUSD = rawImp / tasaDoc;
+    const totalFacturaUSD = rawNeto / tasaDoc;
+    const hasRetention = isContribEspecial && porcEsp > 0 && rawImp > 0;
+    const retencionUSD = hasRetention ? (ivaUSD * porcEsp) / 100 : 0;
+    const totalAPagarUSD = totalFacturaUSD - retencionUSD;
+    
+    // Bs Mode
+    const subtotalBS = rawBruto;
+    const ivaBS = rawImp;
+    const totalFacturaBS = rawNeto;
+    const retencionBS = hasRetention ? (ivaBS * porcEsp) / 100 : 0;
+    const totalAPagarBS = totalFacturaBS - retencionBS;
+
+    // Tasa referencia para Bs Mode
+    const tasaRef = Number(quote.tasa_actual && Number(quote.tasa) === 1 ? quote.tasa_actual : quote.tasa || 1);
+    const totalAPagarUSDRef = totalAPagarBS / tasaRef;
+
     // --- LÓGICA DE PAGINACIÓN MAXIMIZADA ---
     // Aumentamos los límites para aprovechar el espacio blanco que todavía se ve.
     const LIMIT_WITH_TOTALS = 36; // Antes 27
@@ -129,6 +157,18 @@
                         <p class="client-rif">RIF: {quote.cli_rif || quote.co_cli}</p>
                         <p class="client-address font-medium">DIRECCIÓN: {quote.cli_dir || "Dirección no registrada"}</p>
                         {#if quote.cli_tel}<p class="client-phone font-bold mt-1 text-slate-700">TELÉFONO: {quote.cli_tel}</p>{/if}
+                        <p class="client-rif mt-1 font-bold text-[8px]">
+                            ESTATUS FISCAL: 
+                            <span class="text-blue-800 font-extrabold uppercase">
+                                {#if isContribEspecial}
+                                    CONTRIBUYENTE ESPECIAL ({porcEsp}%)
+                                {:else if quote.contrib === false || quote.contrib === 0}
+                                    NO CONTRIBUYENTE
+                                {:else}
+                                    CONTRIBUYENTE ORDINARIO
+                                {/if}
+                            </span>
+                        </p>
                     </div>
                     <div class="logistic-box">
                         <div class="info-row"><span class="label">Vendedor:</span><span class="val">{quote.ven_des || quote.co_ven}</span></div>
@@ -193,18 +233,39 @@
 
                             <div class="totals-box">
                                 {#if isUSD}
-                                    <div class="total-row"><span>Subtotal ($)</span><span>{formatCurrency(Number(quote.total_bruto) / Number(quote.tasa || 1))}</span></div>
-                                    <div class="total-row"><span>IVA (16%)</span><span>{formatCurrency(Number(quote.monto_imp) / Number(quote.tasa || 1))}</span></div>
-                                    <div class="grand-total-outline">
-                                        <div class="bs-total"><span class="label">Total General</span><span class="val">$ {formatCurrency(Number(quote.total_neto) / Number(quote.tasa || 1))}</span></div>
-                                    </div>
+                                    <div class="total-row"><span>Subtotal ($)</span><span>{formatCurrency(subtotalUSD)}</span></div>
+                                    {#if ivaUSD > 0}
+                                        <div class="total-row"><span>IVA (16%)</span><span>{formatCurrency(ivaUSD)}</span></div>
+                                    {/if}
+                                    {#if hasRetention}
+                                        <div class="total-row"><span>Total Factura ($)</span><span>{formatCurrency(totalFacturaUSD)}</span></div>
+                                        <div class="total-row text-amber-600 font-bold"><span>Retención ({porcEsp}%)</span><span>- {formatCurrency(retencionUSD)}</span></div>
+                                        <div class="grand-total-outline">
+                                            <div class="bs-total"><span class="label">Total a Pagar</span><span class="val">$ {formatCurrency(totalAPagarUSD)}</span></div>
+                                        </div>
+                                    {:else}
+                                        <div class="grand-total-outline">
+                                            <div class="bs-total"><span class="label">Total General</span><span class="val">$ {formatCurrency(totalFacturaUSD)}</span></div>
+                                        </div>
+                                    {/if}
                                 {:else}
-                                    <div class="total-row"><span>Subtotal (Bs.)</span><span>{formatCurrency(quote.total_bruto)}</span></div>
-                                    <div class="total-row"><span>IVA (16%)</span><span>{formatCurrency(quote.monto_imp)}</span></div>
-                                    <div class="grand-total-outline">
-                                        <div class="bs-total"><span class="label">Total General</span><span class="val">Bs. {formatCurrency(quote.total_neto)}</span></div>
-                                        <div class="usd-reference"><span>Referencia</span><strong>$ {formatCurrency(Number(quote.total_neto) / Number(quote.tasa_actual && Number(quote.tasa) === 1 ? quote.tasa_actual : quote.tasa || 1))}</strong></div>
-                                    </div>
+                                    <div class="total-row"><span>Subtotal (Bs.)</span><span>{formatCurrency(subtotalBS)}</span></div>
+                                    {#if ivaBS > 0}
+                                        <div class="total-row"><span>IVA (16%)</span><span>{formatCurrency(ivaBS)}</span></div>
+                                    {/if}
+                                    {#if hasRetention}
+                                        <div class="total-row"><span>Total Factura (Bs.)</span><span>{formatCurrency(totalFacturaBS)}</span></div>
+                                        <div class="total-row text-amber-600 font-bold"><span>Retención ({porcEsp}%)</span><span>- {formatCurrency(retencionBS)}</span></div>
+                                        <div class="grand-total-outline">
+                                            <div class="bs-total"><span class="label">Total a Pagar</span><span class="val">Bs. {formatCurrency(totalAPagarBS)}</span></div>
+                                            <div class="usd-reference"><span>Referencia</span><strong>$ {formatCurrency(totalAPagarUSDRef)}</strong></div>
+                                        </div>
+                                    {:else}
+                                        <div class="grand-total-outline">
+                                            <div class="bs-total"><span class="label">Total General</span><span class="val">Bs. {formatCurrency(totalFacturaBS)}</span></div>
+                                            <div class="usd-reference"><span>Referencia</span><strong>$ {formatCurrency(totalFacturaBS / tasaRef)}</strong></div>
+                                        </div>
+                                    {/if}
                                 {/if}
                             </div>
                         </div>

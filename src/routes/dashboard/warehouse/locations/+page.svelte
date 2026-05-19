@@ -358,7 +358,7 @@
         <input
           type="text"
           bind:value={searchTerm}
-          placeholder="Buscar código o descripción..."
+          placeholder="Buscar código, descripción o referencia..."
           class="w-full h-full bg-surface-base pl-6 pr-14 rounded-2xl border border-white/5 focus:border-brand-500/30 outline-none transition-all font-bold text-sm placeholder:font-normal placeholder:text-text-secondary/30"
         />
         <button
@@ -578,12 +578,19 @@
           </div>
 
           <div class="mt-2 text-sm">
-            <h3 class="text-lg font-bold leading-tight mb-4">
+            <h3 class="text-lg font-bold leading-tight mb-2">
               {article.art_des ||
                 article.descripcion ||
                 article.name ||
                 "Sin título"}
             </h3>
+            {#if article.referencia || article.ref}
+              <div class="text-[11px] text-text-muted mb-4 font-mono">
+                REF: <span class="font-bold text-text-primary">{article.referencia || article.ref}</span>
+              </div>
+            {:else}
+              <div class="h-2 font-mono"></div>
+            {/if}
 
             <div class="flex flex-col gap-2 mt-3 mb-2">
               <span

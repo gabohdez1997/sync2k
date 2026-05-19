@@ -74,8 +74,7 @@ export const load: PageServerLoad = protectLoad('inv_articles', async ({ url, lo
 			params.set('limit', '500');
 
 			if (searchTerm) {
-				const isCode = /^\d/.test(searchTerm.trim());
-				params.set(isCode ? 'co_art' : 'descripcion', searchTerm);
+				params.set('search', searchTerm);
 			}
 			if (lineaId) params.set('linea', lineaId);
 			if (categoriaId) params.set('categoria', categoriaId);

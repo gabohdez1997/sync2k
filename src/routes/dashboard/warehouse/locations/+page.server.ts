@@ -147,14 +147,11 @@ export const load: PageServerLoad = protectLoad('sec_articles', async ({ url, lo
 		if (ubicacionId) params.set('co_ubicacion', ubicacionId);
 
 		if (searchTerm) {
-			const isCode = /^\d/.test(searchTerm);
-			params.set(isCode ? 'co_art' : 'descripcion', searchTerm);
+			params.set('search', searchTerm);
 		}
 
 		// Bypass /articulos endpoint size issue by forcing /search with a sort filter fallback
-		if (!searchTerm && !linea && !categoria && !ubicacionId) {
-			params.set('sort', 'default');
-		}
+		params.set('sort', url.searchParams.get('sort') || 'default');
 
 		const endpoint = `/articulos/search?${params.toString()}`;
 

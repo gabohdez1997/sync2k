@@ -42,6 +42,8 @@ export const load: PageServerLoad = protectLoad('sales_quotes', async ({ params,
                 const clientData = Array.isArray(clientRes.data) ? clientRes.data[0] : clientRes.data;
                 // Adjuntamos la dirección al objeto quote para que el PDF la consuma
                 quote.cli_dir = clientData.direc1 || clientData.direc2 || quote.cli_dir;
+                quote.contribu_e = clientData.contribu_e;
+                quote.porc_esp = clientData.porc_esp;
             }
         }
 
