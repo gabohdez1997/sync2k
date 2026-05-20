@@ -160,6 +160,8 @@
           co_zon: String(q.co_zon || "").trim(),
           zon_des: String(q.zon_des || "").trim(),
           contribu_e: !!q.contribu_e,
+          contribuyente: !!q.contribu_e,
+          porc_esp: Number(q.porc_esp || 0),
           co_ven: String(q.co_ven || "").trim(),
           ven_des: String(q.ven_des || "").trim(),
           co_mone: String(q.co_mone || "BS").trim(),
