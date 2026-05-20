@@ -2,6 +2,7 @@ import { protectLoad, protectAction } from '$lib/server/permissions';
 import { AgentClient } from '$lib/server/agent';
 import { hasPermission } from '$lib/server/auth';
 import { logAction } from '$lib/server/audit';
+import { supabaseAdmin } from '$lib/server/supabase';
 import { redirect, fail, type Actions } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
 
@@ -128,17 +129,32 @@ export const actions: Actions = {
 		const profile = locals.profile;
 		const formData = await request.formData();
 		const payload = { ...Object.fromEntries(formData), contribuyente: formData.has('contribuyente'), contribu_e: formData.has('contribu_e') || formData.has('contribuu_e'), porc_esp: parseFloat(formData.get('porc_esp') as string) || 0 };
-		const targetBranches = profile.allowed_branches || [];
-		if (targetBranches.length === 0) return fail(403, { message: 'Sin sucursales' });
-		let successCount = 0; let failedBranches = []; let createdClient = null;
+
+		// Broadcast: obtener TODAS las sucursales activas desde Supabase (igual que customers)
+		let targetBranches: any[] = [];
+		const profileAllowed = profile.allowed_branches || [];
+		const isAdmin = !profileAllowed || profileAllowed.length === 0;
+		if (isAdmin) {
+			const { data } = await supabaseAdmin.from('branches').select('*').eq('active', true);
+			targetBranches = data || [];
+		} else {
+			const allowedIds = profileAllowed.map((b: any) => (typeof b === 'object' ? b.id : b));
+			const { data } = await supabaseAdmin.from('branches').select('*').in('id', allowedIds).eq('active', true);
+			targetBranches = data || [];
+		}
+		if (targetBranches.length === 0) return fail(403, { message: 'No se encontraron sucursales activas autorizadas.' });
+
+		let successCount = 0; let failedBranches: string[] = []; let createdClient = null;
+		console.log(`[ORDERS SAVE BROADCAST] Creando cliente en ${targetBranches.length} sedes...`);
 		for (const branch of targetBranches) {
+			if (!branch.agent_url) { failedBranches.push(`${branch.name || branch.id}: Sin URL de Agente`); continue; }
 			try {
 				let verifiedCoSucu = '';
 				if (Array.isArray(branch.profit_branch_codes) && branch.profit_branch_codes.length > 0) {
 					const def = branch.profit_branch_codes.find((c: any) => c.is_default);
 					verifiedCoSucu = def ? def.code : branch.profit_branch_codes[0].code;
 				}
-				const agent = new AgentClient(branch, profile, fetch);
+				const agent = new AgentClient({ slug: branch.id, agent_url: branch.agent_url, agent_api_key: branch.agent_token }, profile, fetch);
 				const response = await agent.saveCustomer(payload, true, verifiedCoSucu || branch.id);
 				if (response.success) { successCount++; if (!createdClient) createdClient = response.data || payload; }
 				else failedBranches.push(`${branch.name}: ${response.message}`);
