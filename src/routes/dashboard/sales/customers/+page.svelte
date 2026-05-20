@@ -649,7 +649,7 @@
                 required
                 bind:value={descripcion}
                 placeholder="Nombre del Cliente"
-                class="w-full bg-surface-base border border-border-subtle rounded-2xl pl-12 pr-5 py-4 focus:outline-none focus:ring-2 focus:ring-brand-500/50 transition-all uppercase"
+                class="w-full bg-surface-base border border-border-subtle rounded-2xl pl-12 pr-5 py-4 focus:outline-none focus:ring-2 focus:ring-brand-500/50 transition-all"
               />
             </div>
           </div>

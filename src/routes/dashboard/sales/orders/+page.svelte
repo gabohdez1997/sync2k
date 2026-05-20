@@ -1506,7 +1506,7 @@
                         required
                         bind:value={newClient.descripcion}
                         placeholder="NOMBRE DEL CLIENTE"
-                        class="w-full h-14 bg-surface-soft border border-border-bold rounded-2xl pl-12 pr-5 outline-none focus:border-brand-500/50 transition-all font-bold uppercase"
+                        class="w-full h-14 bg-surface-soft border border-border-bold rounded-2xl pl-12 pr-5 outline-none focus:border-brand-500/50 transition-all font-bold"
                       />
                     </div>
                   </div>
