@@ -155,12 +155,12 @@
                   type="number"
                   step="0.0001"
                   bind:value={manualRate}
-                  class="w-full bg-surface-base border border-brand-500/30 rounded-2xl px-6 py-4 text-3xl font-black text-white outline-none focus:ring-2 ring-brand-500/20"
+                  class="w-full bg-surface-base border border-brand-500/30 rounded-2xl px-6 py-4 text-3xl font-black text-text-base outline-none focus:ring-2 ring-brand-500/20"
                 />
               </div>
             {:else}
               <div class="flex items-baseline gap-2">
-                <span class="text-5xl font-black text-white tracking-tighter">
+                <span class="text-5xl font-black text-text-base tracking-tighter">
                   {displayRate ? formatCurr(displayRate) : "---"}
                 </span>
                 <span class="text-xl font-bold text-brand-400">Bs.</span>
@@ -278,7 +278,7 @@
                     class="font-mono font-bold text-lg {branch.currentRate ===
                     data.bcvRate
                       ? 'text-emerald-400'
-                      : 'text-white'}"
+                      : 'text-text-base'}"
                   >
                     {formatCurr(branch.currentRate)}
                   </span>
@@ -348,11 +348,4 @@
   </div>
 </div>
 
-<style>
-  /* Estilos base para el diseño glass */
-  .glass {
-    background: rgba(255, 255, 255, 0.03);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-  }
-</style>
+

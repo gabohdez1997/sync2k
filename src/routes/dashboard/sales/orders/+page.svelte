@@ -41,6 +41,8 @@
     Clock,
     Users,
     X,
+    Briefcase,
+    Building2,
   } from "lucide-svelte";
   import { toast } from "svelte-sonner";
   import { deserialize } from "$app/forms";
@@ -531,6 +533,7 @@
   // Datos para nuevo cliente
   let newClient = $state({
     rif: "",
+    descripcion: "",
     cli_des: "",
     email: "",
     telefonos: "",
@@ -540,7 +543,16 @@
     contribu_e: false,
     porc_esp: 75,
     tipo_per: "1",
+    tip_cli: "",
     id_precio: "01",
+  });
+
+  $effect(() => {
+    newClient.cli_des = newClient.descripcion;
+  });
+
+  $effect(() => {
+    newClient.contribu_e = newClient.contribuyente;
   });
 
   // Estandarizar rifInput reactivamente
@@ -1427,26 +1439,96 @@
                 class="space-y-6"
               >
                 <input type="hidden" name="branch_id" value={selectedBranch} />
-                <input type="hidden" name="rif" value={rifInput} />
-                <input type="hidden" name="co_cli" value={rifInput} />
+                <input type="hidden" name="rif" value={newClient.rif} />
+                <input type="hidden" name="co_cli" value={newClient.rif} />
+                <input type="hidden" name="tip_cli" value={newClient.tip_cli} />
+                <input type="hidden" name="cli_des" value={newClient.descripcion} />
 
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <!-- Nombre / R. Social -->
-                  <div class="space-y-2 md:col-span-2">
+                  <!-- RIF -->
+                  <div class="space-y-2">
                     <label
+                      for="rif"
                       class="text-[10px] font-black uppercase tracking-widest text-text-muted ml-2"
-                      >Razón Social</label
+                      >RIF / IDENTIFICACIÓN</label
                     >
                     <div class="relative">
-                      <User
+                      <Tag
                         class="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted opacity-40"
                         size={18}
                       />
                       <input
+                        id="rif"
                         type="text"
-                        name="cli_des"
                         required
-                        placeholder="Nombre completo o Empresa"
+                        bind:value={newClient.rif}
+                        placeholder="Ej: J123456789"
+                        class="w-full h-14 bg-surface-soft border border-border-bold rounded-2xl pl-12 pr-5 outline-none focus:border-brand-500/50 transition-all font-bold"
+                      />
+                    </div>
+                  </div>
+
+                  <!-- Tipo Cliente -->
+                  <div class="space-y-2">
+                    <label
+                      for="tip_cli"
+                      class="text-[10px] font-black uppercase tracking-widest text-text-muted ml-2"
+                      >TIPO DE CLIENTE</label
+                    >
+                    <Combobox
+                      options={(data.context?.tiposCliente || []).map((tc: any) => ({
+                        value: tc.tip_cli,
+                        label: tc.des_tipo,
+                      }))}
+                      bind:value={newClient.tip_cli}
+                      placeholder="Seleccione tipo de cliente..."
+                      allLabel="Sin tipo"
+                      icon={Briefcase}
+                    />
+                  </div>
+
+                  <!-- Razón Social -->
+                  <div class="space-y-2 md:col-span-2">
+                    <label
+                      for="descripcion"
+                      class="text-[10px] font-black uppercase tracking-widest text-text-muted ml-2"
+                      >RAZÓN SOCIAL / NOMBRE</label
+                    >
+                    <div class="relative">
+                      <Building2
+                        class="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted opacity-40"
+                        size={18}
+                      />
+                      <input
+                        id="descripcion"
+                        name="descripcion"
+                        type="text"
+                        required
+                        bind:value={newClient.descripcion}
+                        placeholder="NOMBRE DEL CLIENTE"
+                        class="w-full h-14 bg-surface-soft border border-border-bold rounded-2xl pl-12 pr-5 outline-none focus:border-brand-500/50 transition-all font-bold uppercase"
+                      />
+                    </div>
+                  </div>
+
+                  <!-- Telefono -->
+                  <div class="space-y-2">
+                    <label
+                      for="telefonos"
+                      class="text-[10px] font-black uppercase tracking-widest text-text-muted ml-2"
+                      >TELÉFONOS</label
+                    >
+                    <div class="relative">
+                      <Phone
+                        class="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted opacity-40"
+                        size={18}
+                      />
+                      <input
+                        id="telefonos"
+                        type="text"
+                        name="telefonos"
+                        bind:value={newClient.telefonos}
+                        placeholder="+584120000000"
                         class="w-full h-14 bg-surface-soft border border-border-bold rounded-2xl pl-12 pr-5 outline-none focus:border-brand-500/50 transition-all font-bold"
                       />
                     </div>
@@ -1455,8 +1537,9 @@
                   <!-- Email -->
                   <div class="space-y-2">
                     <label
+                      for="email"
                       class="text-[10px] font-black uppercase tracking-widest text-text-muted ml-2"
-                      >Email</label
+                      >CORREO ELECTRÓNICO</label
                     >
                     <div class="relative">
                       <Mail
@@ -1464,39 +1547,45 @@
                         size={18}
                       />
                       <input
+                        id="email"
                         type="email"
                         name="email"
-                        placeholder="ejemplo@correo.com"
+                        bind:value={newClient.email}
+                        placeholder="cliente@ejemplo.com"
                         class="w-full h-14 bg-surface-soft border border-border-bold rounded-2xl pl-12 pr-5 outline-none focus:border-brand-500/50 transition-all font-bold"
                       />
                     </div>
                   </div>
 
-                  <!-- Telefono -->
-                  <div class="space-y-2">
+                  <!-- Dirección -->
+                  <div class="space-y-2 md:col-span-2">
                     <label
+                      for="direccion"
                       class="text-[10px] font-black uppercase tracking-widest text-text-muted ml-2"
-                      >Teléfono</label
+                      >DIRECCIÓN FISCAL</label
                     >
                     <div class="relative">
-                      <Phone
-                        class="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted opacity-40"
+                      <MapPin
+                        class="absolute left-4 top-4 text-text-muted opacity-40"
                         size={18}
                       />
-                      <input
-                        type="text"
-                        name="telefonos"
-                        placeholder="0412-0000000"
-                        class="w-full h-14 bg-surface-soft border border-border-bold rounded-2xl pl-12 pr-5 outline-none focus:border-brand-500/50 transition-all font-bold"
-                      />
+                      <textarea
+                        id="direccion"
+                        name="direc1"
+                        required
+                        bind:value={newClient.direc1}
+                        placeholder="Calle, Av, Edificio..."
+                        class="w-full h-24 bg-white/5 border border-white/10 rounded-2xl pl-12 pr-5 py-4 outline-none focus:border-brand-500/50 transition-all font-bold resize-none"
+                      ></textarea>
                     </div>
                   </div>
 
                   <!-- Zona (Combobox) -->
                   <div class="space-y-2">
                     <label
+                      for="co_zon"
                       class="text-[10px] font-black uppercase tracking-widest text-text-muted ml-2"
-                      >Zona</label
+                      >ZONA GEOGRÁFICA</label
                     >
                     <input
                       type="hidden"
@@ -1509,121 +1598,101 @@
                         label: z.zon_des || z.co_zon || "Sin nombre",
                       }))}
                       bind:value={newClient.co_zon}
-                      placeholder="Seleccionar zona..."
+                      placeholder="Seleccione una zona..."
                       allLabel="Sin zona"
                       icon={MapPin}
                     />
                   </div>
 
-                  <!-- Dirección -->
-                  <div class="space-y-2">
-                    <label
-                      class="text-[10px] font-black uppercase tracking-widest text-text-muted ml-2"
-                      >Dirección Fiscal</label
-                    >
-                    <div class="relative">
-                      <MapPin
-                        class="absolute left-4 top-4 text-text-muted opacity-40"
-                        size={18}
-                      />
-                      <textarea
-                        name="direc1"
-                        required
-                        placeholder="Calle, Edificio, Referencias..."
-                        class="w-full h-14 bg-white/5 border border-white/10 rounded-2xl pl-12 pr-5 py-4 outline-none focus:border-brand-500/50 transition-all font-bold resize-none"
-                      ></textarea>
-                    </div>
-                  </div>
-
-                  <!-- Tributaria / Fiscal -->
-                  <div class="md:col-span-2 space-y-4 pt-4">
+                  <!-- Contribuyente Toggle -->
+                  <div class="space-y-2 flex flex-col justify-end">
                     <div
-                      class="flex items-center justify-between p-4 bg-white/5 border border-white/10 rounded-2xl"
+                      class="flex items-center justify-between p-4 bg-white/5 border border-white/10 rounded-2xl h-14"
                     >
-                      <label class="flex items-center gap-3 cursor-pointer">
+                      <span class="text-sm font-bold">Contribuyente</span>
+                      <label
+                        class="relative inline-flex items-center cursor-pointer"
+                      >
                         <input
                           type="checkbox"
                           name="contribuyente"
+                          value="true"
                           bind:checked={newClient.contribuyente}
-                          class="w-5 h-5 rounded border-white/20 text-brand-500 focus:ring-brand-500 bg-transparent"
+                          class="sr-only peer"
                         />
-                        <span class="text-sm font-bold">Es Contribuyente</span>
+                        <div
+                          class="w-11 h-6 bg-border-bold peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-brand-600"
+                        ></div>
                       </label>
-
-                      {#if newClient.contribuyente}
-                        <label
-                          class="flex items-center gap-3 cursor-pointer animate-in fade-in slide-in-from-right-2"
-                        >
-                          <input
-                            type="checkbox"
-                            name="contribu_e"
-                            bind:checked={newClient.contribu_e}
-                            class="w-5 h-5 rounded border-border-bold text-brand-500 focus:ring-brand-500 bg-transparent"
-                          />
-                          <span class="text-sm font-bold">Especial</span>
-                        </label>
-                      {/if}
                     </div>
-
-                    {#if newClient.contribuyente}
-                      <div
-                        class="grid grid-cols-1 md:grid-cols-2 gap-4 animate-in slide-in-from-top-2 duration-300"
-                      >
-                        <!-- Tipo Persona -->
-                        <div class="space-y-2">
-                          <label
-                            class="text-[10px] font-black uppercase tracking-widest text-text-muted ml-2"
-                            >Tipo de Persona</label
-                          >
-                          <input
-                            type="hidden"
-                            name="tipo_per"
-                            value={newClient.tipo_per}
-                          />
-                          <Combobox
-                            options={[
-                              { value: "1", label: "(PNR) Nat. Residente" },
-                              { value: "2", label: "(PNNR) Nat. No Residente" },
-                              { value: "3", label: "(PJD) Jur. Domiciliada" },
-                              {
-                                value: "4",
-                                label: "(PJND) Jur. No Domiciliada",
-                              },
-                              { value: "5", label: "Exenta" },
-                            ]}
-                            bind:value={newClient.tipo_per}
-                            placeholder="Tipo de persona..."
-                          />
-                        </div>
-
-                        <!-- Retencion (si es especial) -->
-                        {#if newClient.contribu_e}
-                          <div
-                            class="space-y-2 animate-in zoom-in-95 duration-200"
-                          >
-                            <label
-                              class="text-[10px] font-black uppercase tracking-widest text-text-muted ml-2"
-                              >% Retención</label
-                            >
-                            <div class="relative">
-                              <input
-                                type="number"
-                                name="porc_esp"
-                                bind:value={newClient.porc_esp}
-                                min="0"
-                                max="100"
-                                class="w-full h-14 bg-surface-soft border border-border-bold rounded-2xl px-5 outline-none focus:border-brand-500/50 font-bold"
-                              />
-                              <span
-                                class="absolute right-5 top-1/2 -translate-y-1/2 font-bold text-text-muted"
-                                >%</span
-                              >
-                            </div>
-                          </div>
-                        {/if}
-                      </div>
-                    {/if}
                   </div>
+
+                  {#if newClient.contribuyente}
+                    <div class="md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-6 animate-in fade-in slide-in-from-top-2 duration-300">
+                      <input type="hidden" name="contribu_e" value="true" />
+                      <!-- Tipo Persona -->
+                      <div class="space-y-2">
+                        <label
+                          for="tipo_per"
+                          class="text-[10px] font-black uppercase tracking-widest text-text-muted ml-2"
+                          >TIPO DE PERSONA</label
+                        >
+                        <input
+                          type="hidden"
+                          name="tipo_per"
+                          value={newClient.tipo_per}
+                        />
+                        <Combobox
+                          options={[
+                            {
+                              value: "1",
+                              label: "(PNR) Persona Natural Residente",
+                            },
+                            {
+                              value: "2",
+                              label: "(PNNR) Persona Natural No Residente",
+                            },
+                            {
+                              value: "3",
+                              label: "(PJD) Persona Jurídica Domiciliada",
+                            },
+                            {
+                              value: "4",
+                              label: "(PJND) Persona Jurídica No Domiciliada",
+                            },
+                            { value: "5", label: "Exenta" },
+                          ]}
+                          bind:value={newClient.tipo_per}
+                          placeholder="Tipo de persona..."
+                        />
+                      </div>
+
+                      <!-- Retencion -->
+                      <div class="space-y-2">
+                        <label
+                          for="porc_esp"
+                          class="text-[10px] font-black uppercase tracking-widest text-text-muted ml-2"
+                          >PORCENTAJE DE RETENCIÓN</label
+                        >
+                        <div class="relative">
+                          <input
+                            id="porc_esp"
+                            type="number"
+                            name="porc_esp"
+                            step="0.01"
+                            bind:value={newClient.porc_esp}
+                            min="0"
+                            max="100"
+                            class="w-full h-14 bg-surface-soft border border-border-bold rounded-2xl px-5 outline-none focus:border-brand-500/50 font-bold"
+                          />
+                          <span
+                            class="absolute right-5 top-1/2 -translate-y-1/2 font-bold text-text-muted"
+                            >%</span
+                          >
+                        </div>
+                      </div>
+                    </div>
+                  {/if}
                 </div>
 
                 <div class="pt-6 flex gap-4">

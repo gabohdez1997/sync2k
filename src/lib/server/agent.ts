@@ -187,4 +187,11 @@ export class AgentClient {
 	async getZonas() {
 		return this.request<any>('/catalogos/zonas');
 	}
+
+	/**
+	 * Obtiene el catálogo de tipos de cliente
+	 */
+	async getTiposCliente() {
+		return this.request<any>('/catalogos/tipos_cliente');
+	}
 }

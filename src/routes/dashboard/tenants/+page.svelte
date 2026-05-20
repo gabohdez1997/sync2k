@@ -291,7 +291,7 @@
                   type="text" 
                   name="rif" 
                   bind:value={editingTenant.rif}
-                  placeholder="J-12345678-0"
+                  placeholder="J123456780"
                   class="w-full h-14 bg-white/5 border border-white/10 rounded-2xl pl-12 pr-5 focus:border-brand-500 transition-all uppercase"
                 />
               </div>

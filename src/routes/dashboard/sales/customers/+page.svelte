@@ -62,6 +62,7 @@
   let direccion = $state("");
   let ciudad = $state("");
   let co_zon = $state("");
+  let tip_cli = $state("");
 
   // Tax Info State
   let contribuyente = $state(false);
@@ -84,6 +85,10 @@
       selectedBranch =
         data.context?.branchId || $page.url.searchParams.get("branch_id") || "";
     }
+  });
+
+  $effect(() => {
+    contribu_e = contribuyente;
   });
 
   let localCustomers = $state(data.customers || []);
@@ -138,6 +143,7 @@
     direccion = "";
     ciudad = "";
     co_zon = "";
+    tip_cli = "";
     contribuyente = false;
     tipo_per = "1";
     contribu_e = false;
@@ -155,6 +161,7 @@
     direccion = customer.direc1 || customer.direccion;
     ciudad = customer.ciudad;
     co_zon = customer.co_zon || "";
+    tip_cli = customer.tip_cli || "";
     contribuyente =
       customer.contrib ?? customer.bContrib ?? customer.contribuyente ?? false;
     tipo_per = customer.sTipo_Per || customer.tipo_per || "1";
@@ -579,35 +586,10 @@
         <input type="hidden" name="_isNew" value={String(!isEditing)} />
         <input type="hidden" name="tenant_id" value={selectedTenant} />
         <input type="hidden" name="branch_id" value={selectedBranch} />
+        <input type="hidden" name="co_cli" value={isEditing ? co_cli : rif} />
+        <input type="hidden" name="tip_cli" value={tip_cli} />
 
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <!-- Code -->
-          <div class="space-y-2">
-            <label
-              for="co_cli"
-              class="text-xs font-bold uppercase tracking-widest text-text-muted ml-1"
-              >Código del Cliente</label
-            >
-            <div class="relative">
-              <Hash
-                size={18}
-                class="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted opacity-40"
-              />
-              <input
-                id="co_cli"
-                name="co_cli"
-                type="text"
-                required
-                readonly={isEditing}
-                bind:value={co_cli}
-                placeholder="Ej: CLI-001"
-                class="w-full bg-surface-base border border-border-subtle rounded-2xl pl-12 pr-5 py-4 focus:outline-none focus:ring-2 focus:ring-brand-500/50 transition-all font-mono {isEditing
-                  ? 'opacity-50'
-                  : ''}"
-              />
-            </div>
-          </div>
-
           <!-- RIF -->
           <div class="space-y-2">
             <label
@@ -626,10 +608,26 @@
                 type="text"
                 required
                 bind:value={rif}
-                placeholder="Ej: J-12345678-9"
+                placeholder="Ej: J123456789"
                 class="w-full bg-surface-base border border-border-subtle rounded-2xl pl-12 pr-5 py-4 focus:outline-none focus:ring-2 focus:ring-brand-500/50 transition-all"
               />
             </div>
+          </div>
+
+          <!-- Tipo Cliente -->
+          <div class="space-y-2">
+            <label
+              for="tip_cli"
+              class="text-xs font-bold uppercase tracking-widest text-text-muted ml-1"
+              >Tipo de Cliente</label
+            >
+            <Combobox
+              options={(data.context?.tiposCliente || []).map((tc: any) => ({ value: tc.tip_cli, label: tc.des_tipo }))}
+              bind:value={tip_cli}
+              placeholder="Seleccione tipo de cliente..."
+              allLabel="Sin tipo"
+              icon={Briefcase}
+            />
           </div>
 
           <!-- Description -->
@@ -650,7 +648,7 @@
                 type="text"
                 required
                 bind:value={descripcion}
-                placeholder="Nombre comercial o jurídico"
+                placeholder="Nombre del Cliente"
                 class="w-full bg-surface-base border border-border-subtle rounded-2xl pl-12 pr-5 py-4 focus:outline-none focus:ring-2 focus:ring-brand-500/50 transition-all uppercase"
               />
             </div>
@@ -673,7 +671,7 @@
                 name="telefonos"
                 type="text"
                 bind:value={telefonos}
-                placeholder="+58 212-0000000"
+                placeholder="+584120000000"
                 class="w-full bg-surface-base border border-border-subtle rounded-2xl pl-12 pr-5 py-4 focus:outline-none focus:ring-2 focus:ring-brand-500/50 transition-all"
               />
             </div>
@@ -727,15 +725,8 @@
         </div>
 
         <!-- Extra Info & Tax Data -->
-        <div class="space-y-6 pt-2">
-          <div class="flex items-center gap-3 mb-2">
-            <div class="h-px flex-1 bg-border-subtle"></div>
-            <span
-              class="text-[10px] font-black uppercase tracking-[0.2em] text-text-muted"
-              >Configuración de Cuenta</span
-            >
-            <div class="h-px flex-1 bg-border-subtle"></div>
-          </div>
+        <div class="space-y-2">
+          
 
           <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
             <!-- Zone -->
@@ -776,7 +767,10 @@
             <div
               class="space-y-6 pt-2 animate-in fade-in slide-in-from-top-2 duration-300"
             >
+              <input type="hidden" name="contribu_e" value="true" />
+              
               <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <!-- Tipo de Persona -->
                 <div class="space-y-2">
                   <label for="tipo_per" class="text-xs font-bold uppercase tracking-widest text-text-muted ml-1">Tipo de Persona</label>
                   <input type="hidden" name="tipo_per" value={tipo_per} />
@@ -796,28 +790,8 @@
                   />
                 </div>
 
-                <!-- Contribuyente Especial -->
-                <div
-                  class="flex items-center gap-4 p-4 bg-surface-base border border-border-subtle rounded-2xl h-[60px] self-end"
-                >
-                  <input
-                    type="checkbox"
-                    id="contribu_e"
-                    name="contribu_e"
-                    value="true"
-                    bind:checked={contribu_e}
-                    class="w-5 h-5 rounded border-border-subtle text-brand-600 focus:ring-brand-500"
-                  />
-                  <label
-                    for="contribu_e"
-                    class="text-sm font-bold text-text-base"
-                    >Contribuyente Especial</label
-                  >
-                </div>
-              </div>
-
-              {#if contribu_e}
-                <div class="space-y-2 animate-in zoom-in-95 duration-200">
+                <!-- Porcentaje de Retención -->
+                <div class="space-y-2">
                   <label
                     for="porc_esp"
                     class="text-xs font-bold uppercase tracking-widest text-text-muted ml-1"
@@ -840,7 +814,7 @@
                     >
                   </div>
                 </div>
-              {/if}
+              </div>
             </div>
           {/if}
         </div>

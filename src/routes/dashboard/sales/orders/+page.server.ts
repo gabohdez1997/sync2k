@@ -34,18 +34,21 @@ export const load: PageServerLoad = protectLoad('sales_orders', async ({ url, lo
 		let lineas: any[] = [];
 		let categorias: any[] = [];
 		let zonas: any[] = [];
+		let tiposCliente: any[] = [];
 
 		try {
-			const [almaRes, lineasRes, catsRes, zonRes] = await Promise.all([
+			const [almaRes, lineasRes, catsRes, zonRes, tcRes] = await Promise.all([
 				agentClient.request<any>('/catalogos/almacenes'),
 				agentClient.request<any>('/catalogos/lineas'),
 				agentClient.request<any>('/catalogos/categorias').catch(() => ({ data: [] })),
-				agentClient.getZonas().catch(() => ({ data: [] }))
+				agentClient.getZonas().catch(() => ({ data: [] })),
+				agentClient.getTiposCliente().catch(() => ({ data: [] }))
 			]);
 			warehouseList = (almaRes as any).data || (almaRes as any).items || (Array.isArray(almaRes) ? almaRes : []);
 			lineas = (lineasRes as any).data || (lineasRes as any).items || (Array.isArray(lineasRes) ? lineasRes : []);
 			categorias = (catsRes as any).data || (catsRes as any).items || (Array.isArray(catsRes) ? catsRes : []);
 			zonas = (zonRes as any).data || (zonRes as any).items || (Array.isArray(zonRes) ? zonRes : []);
+			tiposCliente = (tcRes as any).data || (tcRes as any).items || (Array.isArray(tcRes) ? tcRes : []);
 		} catch (e) { console.error('[ORDERS] Catalog fetch error:', e); }
 
 		const profileWarehouses: string[] = profile.allowed_warehouses || [];
@@ -76,7 +79,7 @@ export const load: PageServerLoad = protectLoad('sales_orders', async ({ url, lo
 		return {
 			articles: [], pagination: { total: 0, page: 1, limit: 12, totalPages: 0 },
 			branches: allowedBranches, selectedBranchId: selectedBranch.id, preloadedOrder,
-			context: { branchId: selectedBranch.id, warehouseId: '', finalWarehouseIds, lineas, categorias, zonas, warehouses: allowedWarehousesForBranch }
+			context: { branchId: selectedBranch.id, warehouseId: '', finalWarehouseIds, lineas, categorias, zonas, tiposCliente, warehouses: allowedWarehousesForBranch }
 		};
 	} catch (err: any) {
 		return { articles: [], pagination: { total: 0, page: 1, limit: 12, totalPages: 1 }, error: 'Error: ' + err.message, context: { branches: [] } };

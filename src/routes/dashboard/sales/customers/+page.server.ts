@@ -123,6 +123,7 @@ export const load: PageServerLoad = protectLoad('sales_customers', async ({ loca
         let customers: any[] = [];
         let resData: any = { success: true, data: { items: [] }, pagination: { total: 0, page: 1, limit: 20, totalPages: 0 } };
         let zonas: any[] = [];
+        let tiposCliente: any[] = [];
 
         try {
             // Solo consultamos al agente si no estamos en un proceso de redirección o similar
@@ -171,6 +172,12 @@ export const load: PageServerLoad = protectLoad('sales_customers', async ({ loca
             if (zonRes && zonRes.success) {
                 zonas = zonRes.data || [];
             }
+
+            // También cargar tipos de cliente para el modal de cliente
+            const tcRes = await agentClient.getTiposCliente().catch(() => null);
+            if (tcRes && tcRes.success) {
+                tiposCliente = tcRes.data || [];
+            }
         } catch (err) {
             console.warn('[CUSTOMERS] Safe SSR Load failed:', err);
         }
@@ -200,7 +207,8 @@ export const load: PageServerLoad = protectLoad('sales_customers', async ({ loca
             context: {
                 branchId: selectedBranch.id,
                 branches: allowedBranches,
-                zonas
+                zonas,
+                tiposCliente
             }
         };
     } catch (err: any) {
