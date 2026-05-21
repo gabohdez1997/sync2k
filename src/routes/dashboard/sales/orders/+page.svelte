@@ -135,6 +135,9 @@
   let importQuotesList = $state<any[]>([]);
   let isSearchingQuotes = $state(false);
   let isLoadingQuoteDetail = $state(false);
+  let selectedImportQuote = $state<any>(null); // Detalles de la cotización seleccionada para importación parcial
+  let selectedImportItems = $state<Record<string, boolean>>({}); // Renglones seleccionados
+  let importItemQuantities = $state<Record<string, number>>({}); // Cantidades a importar para cada renglón
 
   $effect(() => {
     if (showImportModal && !importBranch && selectedBranch) {
@@ -194,8 +197,9 @@
 
   async function loadQuoteIntoPedido(doc_num: string) {
     isLoadingQuoteDetail = true;
+    const targetBranch = importBranch || selectedBranch;
     const formData = new FormData();
-    formData.append("branch_id", selectedBranch);
+    formData.append("branch_id", targetBranch);
     formData.append("doc_num", doc_num);
 
     try {
@@ -210,79 +214,17 @@
         const q = payload?.quote;
 
         if (q) {
-          // 1. Cargar Cliente
-          selectedClient = {
-            co_cli: String(q.co_cli || "").trim(),
-            cli_des: String(q.cli_des || "").trim(),
-            rif: String(q.rif || q.co_cli || "").trim(),
-            direc1: String(q.direc1 || q.dir_ent || "").trim(),
-            telefonos: String(q.telefonos || "N/A").trim(),
-            email: String(q.email || "N/A").trim(),
-            co_zon: String(q.co_zon || "").trim(),
-            co_ven: String(q.co_ven || "").trim(),
-            cond_pag: String(q.co_cond || "").trim(),
-            contribu_e: !!q.contribu_e,
-            contribuyente: !!q.contribu_e,
-            porc_esp: Number(q.porc_esp || 0),
-          };
+          selectedImportQuote = q;
+          selectedImportItems = {};
+          importItemQuantities = {};
 
-          // 2. Cargar Metadata
-          showUSD = String(q.co_mone || "")
-            .toUpperCase()
-            .includes("US");
-          quoteTaxRate = (Number(q.monto_imp) || 0) === 0 ? 0 : 16;
-          quoteDescription =
-            `Ref: Cotización ${q.doc_num} - ` + String(q.descrip || "").trim();
-
-          // 3. Cargar Renglones al Carrito
           if (q.renglones && Array.isArray(q.renglones)) {
-            cart = q.renglones.map((r: any) => {
-              const artId = String(r.co_art || "").trim();
-              const almaId = String(r.co_alma || "").trim();
-
-              // Inicializar estados individuales para que el UI responda correctamente
-              quantities[artId] = Number(r.cantidad || 0);
-              selectedItemWarehouse[artId] = almaId;
-              selectedItemPriceIndex[artId] = 0;
-
-              return {
-                co_art: artId,
-                art_des: String(r.art_des || r.des_art || "").trim(),
-                qty: Number(r.cantidad || 0),
-                cantidad: Number(r.cantidad || 0),
-                co_uni: String(r.co_uni || "").trim(),
-                co_alma_selected: almaId,
-                porc_imp: Number(r.porc_imp || 0),
-                tipo_imp: String(r.tipo_imp || "1"),
-                co_lin: String(r.co_lin || "").trim(),
-                // Mapear precios
-                price_selected: {
-                  precio: showUSD
-                    ? Number(r.prec_vta_om || 0)
-                    : Number(r.precio || 0) / Number(q.tasa || 1),
-                  precio_ves: Number(r.precio || 0),
-                  id_precio: String(r.co_precio || "01").trim(),
-                },
-                precios: [
-                  {
-                    precio: showUSD
-                      ? Number(r.prec_vta_om || 0)
-                      : Number(r.precio || 0) / Number(q.tasa || 1),
-                    precio_ves: Number(r.precio || 0),
-                    des_tipo: "Precio Cotización",
-                    id_precio: String(r.co_precio || "01").trim(),
-                  },
-                ],
-              };
+            q.renglones.forEach((r: any) => {
+              const key = String(r.rowguid_doc || r.rowguid).trim();
+              selectedImportItems[key] = Number(r.pendiente || 0) > 0;
+              importItemQuantities[key] = Number(r.pendiente || 0);
             });
-
-            // Disparar rehidratación para traer existencias reales y precios actuales
-            rehydrateCart();
           }
-
-          showImportModal = false;
-          activeTab = 1; // Ir a artículos para revisar
-          toast.success(`Cotización ${doc_num} importada con éxito`);
         } else {
           toast.error("No se pudo obtener el detalle de la cotización");
         }
@@ -295,6 +237,101 @@
     } finally {
       isLoadingQuoteDetail = false;
     }
+  }
+
+  function confirmImportQuote() {
+    if (!selectedImportQuote) return;
+    const q = selectedImportQuote;
+
+    const selectedLines = (q.renglones || []).filter((r: any) => {
+      const key = String(r.rowguid_doc || r.rowguid).trim();
+      return selectedImportItems[key] && Number(importItemQuantities[key] || 0) > 0;
+    });
+
+    if (selectedLines.length === 0) {
+      toast.error("Por favor, seleccione al menos un renglón con cantidad válida para importar.");
+      return;
+    }
+
+    // 1. Cargar Cliente
+    selectedClient = {
+      co_cli: String(q.co_cli || "").trim(),
+      cli_des: String(q.cli_des || "").trim(),
+      rif: String(q.rif || q.co_cli || "").trim(),
+      direc1: String(q.direc1 || q.dir_ent || "").trim(),
+      telefonos: String(q.telefonos || "N/A").trim(),
+      email: String(q.email || "N/A").trim(),
+      co_zon: String(q.co_zon || "").trim(),
+      co_ven: String(q.co_ven || "").trim(),
+      cond_pag: String(q.co_cond || "").trim(),
+      contribu_e: !!q.contribu_e,
+      contribuyente: !!q.contribu_e,
+      porc_esp: Number(q.porc_esp || 0),
+    };
+
+    // 2. Cargar Metadata
+    showUSD = String(q.co_mone || "")
+      .toUpperCase()
+      .includes("US");
+    quoteTaxRate = (Number(q.monto_imp) || 0) === 0 ? 0 : 16;
+    quoteDescription =
+      `Ref: Cotización ${q.doc_num} - ` + String(q.descrip || "").trim();
+
+    // 3. Cargar Renglones Seleccionados al Carrito con datos de vinculación
+    cart = selectedLines.map((r: any) => {
+      const artId = String(r.co_art || "").trim();
+      const almaId = String(r.co_alma || "").trim();
+      const key = String(r.rowguid_doc || r.rowguid).trim();
+      const importQty = Number(importItemQuantities[key]);
+
+      // Inicializar estados individuales para que el UI responda correctamente
+      quantities[artId] = importQty;
+      selectedItemWarehouse[artId] = almaId;
+      selectedItemPriceIndex[artId] = 0;
+
+      return {
+        co_art: artId,
+        art_des: String(r.art_des || r.des_art || "").trim(),
+        qty: importQty,
+        cantidad: Number(r.cantidad || 0),
+        co_uni: String(r.co_uni || "").trim(),
+        co_alma_selected: almaId,
+        porc_imp: Number(r.porc_imp || 0),
+        tipo_imp: String(r.tipo_imp || "1"),
+        co_lin: String(r.co_lin || "").trim(),
+        // VINCULACIÓN CON COTIZACIÓN ORIGEN
+        tipo_doc: 'CCLI',
+        num_doc: String(q.doc_num).trim(),
+        rowguid_doc: String(r.rowguid_doc || r.rowguid).trim(),
+        // Mapear precios
+        price_selected: {
+          precio: showUSD
+            ? Number(r.prec_vta_om || 0)
+            : Number(r.precio || 0) / Number(q.tasa || 1),
+          precio_ves: Number(r.precio || 0),
+          id_precio: String(r.co_precio || "01").trim(),
+        },
+        precios: [
+          {
+            precio: showUSD
+              ? Number(r.prec_vta_om || 0)
+              : Number(r.precio || 0) / Number(q.tasa || 1),
+            precio_ves: Number(r.precio || 0),
+            des_tipo: "Precio Cotización",
+            id_precio: String(r.co_precio || "01").trim(),
+          },
+        ],
+      };
+    });
+
+    // Disparar rehidratación para traer existencias reales y precios actuales
+    rehydrateCart();
+
+    // Resetear estados y cerrar modal
+    showImportModal = false;
+    selectedImportQuote = null;
+    activeTab = 1; // Ir a artículos para revisar
+    toast.success(`Cotización ${q.doc_num} importada con éxito`);
   }
 
   $effect(() => {
@@ -2750,6 +2787,9 @@
                           co_precio: item.price_selected?.id_precio || "01",
                           tipo_imp: taxType,
                           porc_imp: rate,
+                          tipo_doc: item.tipo_doc || null,
+                          num_doc: item.num_doc || null,
+                          rowguid_doc: item.rowguid_doc || null,
                         };
                       }),
                     })}
@@ -2812,149 +2852,316 @@
         class="p-8 border-b border-border-subtle flex justify-between items-center bg-surface-soft/50"
       >
         <div>
-          <h2 class="text-2xl font-black tracking-tight">
-            Importar Cotización
-          </h2>
-          <p class="text-text-muted text-sm">
-            Selecciona una cotización para convertirla en pedido
-          </p>
+          {#if selectedImportQuote}
+            <div class="flex items-center">
+              <button
+                type="button"
+                onclick={() => (selectedImportQuote = null)}
+                class="mr-3 p-2 hover:bg-surface-strong rounded-full transition-colors flex items-center justify-center text-text-muted hover:text-text-base active:scale-90"
+              >
+                <ChevronLeft size={20} />
+              </button>
+              <div>
+                <h2 class="text-2xl font-black tracking-tight">
+                  Cotización {selectedImportQuote.doc_num?.trim()}
+                </h2>
+                <p class="text-text-muted text-sm truncate max-w-[400px]">
+                  {selectedImportQuote.cli_des?.trim() || selectedImportQuote.co_cli?.trim()}
+                </p>
+              </div>
+            </div>
+          {:else}
+            <h2 class="text-2xl font-black tracking-tight">
+              Importar Cotización
+            </h2>
+            <p class="text-text-muted text-sm">
+              Selecciona una cotización para convertirla en pedido
+            </p>
+          {/if}
         </div>
         <button
-          onclick={() => (showImportModal = false)}
+          type="button"
+          onclick={() => {
+            showImportModal = false;
+            selectedImportQuote = null;
+          }}
           class="p-2 hover:bg-surface-strong rounded-full transition-colors"
         >
           <Plus size={24} class="rotate-45" />
         </button>
       </div>
 
-      <div class="p-6 border-b border-border-subtle bg-surface-base">
-        <form
-          method="POST"
-          action="?/searchQuotes"
-          use:enhance={() => {
-            isSearchingQuotes = true;
-            importQuotesList = [];
-            return async ({ result }) => {
-              isSearchingQuotes = false;
-              if (result.type === "success") {
-                const data = result.data as any;
-                importQuotesList = data?.quotes || [];
-                if (importQuotesList.length === 0) {
-                  toast.info("No se encontraron cotizaciones.");
+      {#if !selectedImportQuote}
+        <div class="p-6 border-b border-border-subtle bg-surface-base">
+          <form
+            method="POST"
+            action="?/searchQuotes"
+            use:enhance={() => {
+              isSearchingQuotes = true;
+              importQuotesList = [];
+              return async ({ result }) => {
+                isSearchingQuotes = false;
+                if (result.type === "success") {
+                  const data = result.data as any;
+                  importQuotesList = data?.quotes || [];
+                  if (importQuotesList.length === 0) {
+                    toast.info("No se encontraron cotizaciones.");
+                  }
+                } else if (result.type === "failure") {
+                  toast.error(
+                    (result.data as any)?.message || "Error en la búsqueda",
+                  );
                 }
-              } else if (result.type === "failure") {
-                toast.error(
-                  (result.data as any)?.message || "Error en la búsqueda",
-                );
-              }
-            };
-          }}
-          class="flex flex-col md:flex-row gap-4"
-        >
-          <!-- Selector de Sucursal -->
-          <div class="w-full md:w-60">
-            <div class="relative group">
-              <Store
-                size={16}
-                class="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted group-focus-within:text-brand-500 transition-colors pointer-events-none"
-              />
-              <select
-                name="branch_id"
-                bind:value={importBranch}
-                class="w-full h-14 pl-10 pr-4 bg-surface-soft border border-border-subtle rounded-2xl focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none transition-all font-medium text-sm appearance-none cursor-pointer"
-              >
-                {#each data.branches || [] as b}
-                  <option value={b.id}>{b.name}</option>
-                {/each}
-              </select>
-              <ChevronDown
-                size={16}
-                class="absolute right-4 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none"
-              />
-            </div>
-          </div>
-
-          <div class="flex-1 relative group">
-            <Search
-              size={20}
-              class="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted group-focus-within:text-brand-500 transition-colors"
-            />
-            <input
-              type="text"
-              name="search"
-              bind:value={importSearch}
-              placeholder="Buscar por Nro de Cotización o Cliente..."
-              class="w-full h-14 pl-12 pr-32 bg-surface-soft border border-border-subtle rounded-2xl focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none transition-all font-medium"
-            />
-            <button
-              type="submit"
-              disabled={isSearchingQuotes}
-              class="absolute right-2 top-1/2 -translate-y-1/2 h-10 px-4 bg-brand-600 hover:bg-brand-500 text-white rounded-xl text-xs font-bold transition-all disabled:opacity-50"
-            >
-              {isSearchingQuotes ? "..." : "BUSCAR"}
-            </button>
-          </div>
-        </form>
-      </div>
-
-      <div
-        class="flex-1 overflow-y-auto p-4 space-y-3 no-scrollbar min-h-[300px]"
-      >
-        {#if isSearchingQuotes}
-          <div class="flex flex-col items-center justify-center py-20 gap-4">
-            <Loader2 size={40} class="animate-spin text-brand-500" />
-            <p class="text-text-muted font-bold animate-pulse">
-              Buscando cotizaciones...
-            </p>
-          </div>
-        {:else if importQuotesList.length === 0}
-          <div
-            class="flex flex-col items-center justify-center py-20 gap-3 text-text-muted opacity-50"
+              };
+            }}
+            class="flex flex-col md:flex-row gap-4"
           >
-            <FileText size={48} />
-            <p class="font-bold">No se encontraron cotizaciones</p>
-          </div>
-        {:else}
-          {#each importQuotesList as q}
-            <button
-              onclick={() => loadQuoteIntoPedido(q.doc_num)}
-              disabled={isLoadingQuoteDetail}
-              class="w-full p-4 rounded-2xl bg-surface-soft border border-border-subtle hover:border-brand-500/50 hover:bg-surface-strong transition-all flex items-center justify-between group text-left"
-            >
-              <div class="flex items-center gap-4">
-                <div
-                  class="bg-surface-strong p-3 rounded-xl group-hover:bg-brand-500/10 group-hover:text-brand-400 transition-colors"
+            <!-- Selector de Sucursal -->
+            <div class="w-full md:w-60">
+              <div class="relative group">
+                <Store
+                  size={16}
+                  class="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted group-focus-within:text-brand-500 transition-colors pointer-events-none"
+                />
+                <select
+                  name="branch_id"
+                  bind:value={importBranch}
+                  class="w-full h-14 pl-10 pr-4 bg-surface-soft border border-border-subtle rounded-2xl focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none transition-all font-medium text-sm appearance-none cursor-pointer"
                 >
-                  <FileText size={20} />
-                </div>
-                <div>
-                  <div class="flex items-center gap-2">
-                    <span class="font-black text-text-base">{q.doc_num}</span>
-                    <span
-                      class="text-[10px] px-2 py-0.5 rounded-full bg-surface-strong text-text-muted font-bold uppercase"
-                      >{q.sede_nombre || "N/A"}</span
-                    >
-                  </div>
-                  <p
-                    class="text-sm text-text-muted font-medium truncate max-w-[300px]"
+                  {#each data.branches || [] as b}
+                    <option value={b.id}>{b.name}</option>
+                  {/each}
+                </select>
+                <ChevronDown
+                  size={16}
+                  class="absolute right-4 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none"
+                />
+              </div>
+            </div>
+
+            <div class="flex-1 relative group">
+              <Search
+                size={20}
+                class="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted group-focus-within:text-brand-500 transition-colors"
+              />
+              <input
+                type="text"
+                name="search"
+                bind:value={importSearch}
+                placeholder="Buscar por Nro de Cotización o Cliente..."
+                class="w-full h-14 pl-12 pr-32 bg-surface-soft border border-border-subtle rounded-2xl focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none transition-all font-medium"
+              />
+              <button
+                type="submit"
+                disabled={isSearchingQuotes}
+                class="absolute right-2 top-1/2 -translate-y-1/2 h-10 px-4 bg-brand-600 hover:bg-brand-500 text-white rounded-xl text-xs font-bold transition-all disabled:opacity-50"
+              >
+                {isSearchingQuotes ? "..." : "BUSCAR"}
+              </button>
+            </div>
+          </form>
+        </div>
+
+        <div
+          class="flex-1 overflow-y-auto p-4 space-y-3 no-scrollbar min-h-[300px]"
+        >
+          {#if isSearchingQuotes}
+            <div class="flex flex-col items-center justify-center py-20 gap-4">
+              <Loader2 size={40} class="animate-spin text-brand-500" />
+              <p class="text-text-muted font-bold animate-pulse">
+                Buscando cotizaciones...
+              </p>
+            </div>
+          {:else if importQuotesList.length === 0}
+            <div
+              class="flex flex-col items-center justify-center py-20 gap-3 text-text-muted opacity-50"
+            >
+              <FileText size={48} />
+              <p class="font-bold">No se encontraron cotizaciones</p>
+            </div>
+          {:else}
+            {#each importQuotesList as q}
+              <button
+                onclick={() => loadQuoteIntoPedido(q.doc_num)}
+                disabled={isLoadingQuoteDetail}
+                class="w-full p-4 rounded-2xl bg-surface-soft border border-border-subtle hover:border-brand-500/50 hover:bg-surface-strong transition-all flex items-center justify-between group text-left"
+              >
+                <div class="flex items-center gap-4">
+                  <div
+                    class="bg-surface-strong p-3 rounded-xl group-hover:bg-brand-500/10 group-hover:text-brand-400 transition-colors"
                   >
-                    {q.cli_des || q.co_cli}
+                    <FileText size={20} />
+                  </div>
+                  <div>
+                    <div class="flex items-center gap-2">
+                      <span class="font-black text-text-base">{q.doc_num}</span>
+                      <span
+                        class="text-[10px] px-2 py-0.5 rounded-full bg-surface-strong text-text-muted font-bold uppercase"
+                        >{q.sede_nombre || "N/A"}</span
+                      >
+                    </div>
+                    <p
+                      class="text-sm text-text-muted font-medium truncate max-w-[300px]"
+                    >
+                      {q.cli_des || q.co_cli}
+                    </p>
+                  </div>
+                </div>
+                <div class="text-right">
+                  <p class="font-black text-text-base">
+                    {#if q.co_mone === 'BS'}
+                      Bs {Number(q.total_neto).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    {:else}
+                      $ {(Number(q.total_neto) / Number(q.tasa || 1)).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD
+                    {/if}
+                  </p>
+                  {#if q.co_mone !== 'BS'}
+                    <p class="text-[10px] text-text-muted font-bold">
+                      Ref. Bs {Number(q.total_neto).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </p>
+                  {/if}
+                  <p class="text-[10px] text-text-muted font-bold uppercase mt-0.5">
+                    {new Date(q.fec_emis).toLocaleDateString()}
+                  </p>
+                </div>
+              </button>
+            {/each}
+          {/if}
+        </div>
+      {:else}
+        <!-- Partial selection screen -->
+        <div class="flex-1 overflow-y-auto p-6 space-y-4 no-scrollbar min-h-[300px] bg-surface-base">
+          {#each selectedImportQuote.renglones || [] as r}
+            {@const key = String(r.rowguid_doc || r.rowguid).trim()}
+            {@const isAvailable = Number(r.pendiente || 0) > 0}
+            <div class="p-4 rounded-2xl border border-border-subtle transition-all bg-surface-soft/40 flex flex-col md:flex-row md:items-center justify-between gap-4 {isAvailable ? 'hover:border-brand-500/30' : 'opacity-60 bg-surface-strong/20' }">
+              <!-- Checkbox e Info del Renglón -->
+              <div class="flex items-start gap-3 flex-1 min-w-0">
+                {#if isAvailable}
+                  <label class="relative flex items-center justify-center cursor-pointer mt-1 select-none">
+                    <input
+                      type="checkbox"
+                      bind:checked={selectedImportItems[key]}
+                      class="sr-only peer"
+                    />
+                    <div class="w-6 h-6 border-2 border-border-bold rounded-lg peer-checked:bg-brand-600 peer-checked:border-brand-600 transition-all flex items-center justify-center text-white">
+                      {#if selectedImportItems[key]}
+                        <Check size={14} class="stroke-[3]" />
+                      {/if}
+                    </div>
+                  </label>
+                {:else}
+                  <div class="w-6 h-6 rounded-lg bg-surface-strong flex items-center justify-center text-text-muted mt-1 border border-border-subtle">
+                    <Plus size={14} class="rotate-45" />
+                  </div>
+                {/if}
+                <div class="flex-1 min-w-0 ml-1">
+                  <div class="flex items-center gap-2 flex-wrap">
+                    <span class="font-black text-text-base text-sm bg-surface-strong/60 px-2 py-0.5 rounded-lg border border-border-subtle">{r.co_art?.trim()}</span>
+                    {#if !isAvailable}
+                      <span class="text-[9px] px-2 py-0.5 rounded-full bg-red-500/10 text-red-400 font-bold uppercase border border-red-500/20">USADO</span>
+                    {:else}
+                      <span class="text-[9px] px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 font-bold uppercase border border-emerald-500/20">PENDIENTE</span>
+                    {/if}
+                  </div>
+                  <p class="text-sm font-bold text-text-base mt-1.5 truncate leading-tight">{r.art_des?.trim() || r.des_art?.trim() || 'Sin descripción'}</p>
+                  <p class="text-[11px] text-text-muted font-semibold mt-1">
+                    Pendiente: <span class="text-text-base font-bold">{Number(r.pendiente || 0)}</span> / Original: <span class="text-text-muted">{Number(r.cantidad || r.total_art || 0)}</span> {r.unidad?.trim() || r.co_uni?.trim()}
                   </p>
                 </div>
               </div>
-              <div class="text-right">
-                <p class="font-black text-text-base">
-                  {q.total_neto.toLocaleString()}
-                  {q.co_mone || "Bs."}
-                </p>
-                <p class="text-[10px] text-text-muted font-bold uppercase">
-                  {new Date(q.fec_emis).toLocaleDateString()}
-                </p>
-              </div>
-            </button>
+
+              <!-- Selector Numérico de Cantidad -->
+              {#if isAvailable}
+                <div class="flex items-center gap-2 shrink-0 justify-end">
+                  <span class="text-xs font-semibold text-text-muted mr-1">Importar:</span>
+                  <div class="flex items-center h-10 bg-surface-soft border border-border-subtle rounded-xl overflow-hidden shadow-sm transition-all focus-within:border-brand-500/50">
+                    <button
+                      type="button"
+                      disabled={!selectedImportItems[key] || Number(importItemQuantities[key] || 0) <= getStep(r)}
+                      onclick={() => {
+                        const step = getStep(r);
+                        importItemQuantities[key] = Math.max(step, Number(importItemQuantities[key] || 0) - step);
+                      }}
+                      class="w-8 h-full hover:bg-surface-strong active:bg-surface-base text-text-muted hover:text-text-base flex items-center justify-center font-black transition-colors disabled:opacity-30 disabled:pointer-events-none"
+                    >
+                      -
+                    </button>
+                    <input
+                      type="number"
+                      disabled={!selectedImportItems[key]}
+                      bind:value={importItemQuantities[key]}
+                      min={getStep(r)}
+                      max={Number(r.pendiente || 0)}
+                      step={getStep(r)}
+                      oninput={(e) => {
+                        let v = parseFloat((e.currentTarget as HTMLInputElement).value);
+                        if (!isNaN(v)) {
+                          const maxVal = Number(r.pendiente || 0);
+                          if (v > maxVal) {
+                            v = maxVal;
+                          }
+                          importItemQuantities[key] = v;
+                        }
+                      }}
+                      onblur={() => {
+                        const step = getStep(r);
+                        let val = Number(importItemQuantities[key] || 0);
+                        if (isNaN(val) || val < step) {
+                          val = step;
+                        } else if (val > Number(r.pendiente || 0)) {
+                          val = Number(r.pendiente || 0);
+                        }
+                        if (step === 1) {
+                          val = Math.round(val);
+                        } else {
+                          val = Math.round(val / step) * step;
+                        }
+                        importItemQuantities[key] = val;
+                      }}
+                      class="w-14 h-full bg-transparent text-center font-bold text-sm outline-none text-text-base"
+                    />
+                    <button
+                      type="button"
+                      disabled={!selectedImportItems[key] || Number(importItemQuantities[key] || 0) >= Number(r.pendiente || 0)}
+                      onclick={() => {
+                        const step = getStep(r);
+                        importItemQuantities[key] = Math.min(Number(r.pendiente || 0), Number(importItemQuantities[key] || 0) + step);
+                      }}
+                      class="w-8 h-full hover:bg-surface-strong active:bg-surface-base text-text-muted hover:text-text-base flex items-center justify-center font-black transition-colors disabled:opacity-30 disabled:pointer-events-none"
+                    >
+                      +
+                    </button>
+                  </div>
+                </div>
+              {/if}
+            </div>
+          {:else}
+            <div class="flex flex-col items-center justify-center py-20 gap-3 text-text-muted opacity-50 bg-surface-base">
+              <FileText size={48} />
+              <p class="font-bold">No hay renglones en la cotización</p>
+            </div>
           {/each}
-        {/if}
-      </div>
+        </div>
+
+        <!-- Footer de Selección -->
+        <div class="p-6 border-t border-border-subtle bg-surface-soft/40 flex gap-4 items-center justify-between">
+          <button
+            type="button"
+            onclick={() => (selectedImportQuote = null)}
+            class="h-14 px-6 rounded-2xl bg-surface-strong hover:bg-surface-base border border-border-subtle font-bold text-sm tracking-wide transition-all active:scale-[0.97]"
+          >
+            Volver
+          </button>
+          <button
+            type="button"
+            onclick={confirmImportQuote}
+            class="h-14 px-8 rounded-2xl bg-brand-600 hover:bg-brand-500 text-white font-bold text-sm tracking-wide transition-all active:scale-[0.97] shadow-lg shadow-brand-500/20"
+          >
+            Confirmar Importación
+          </button>
+        </div>
+      {/if}
 
       {#if isLoadingQuoteDetail}
         <div

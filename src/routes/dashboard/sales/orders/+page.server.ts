@@ -255,7 +255,7 @@ export const actions: Actions = {
 		if (!branch) return fail(404, { message: 'Sucursal no encontrada' });
 
 		const canSeeOthers = hasPermission(profile, 'sales_quotes', 'others') || hasPermission(profile, 'sales_orders', 'others');
-		let url = `/cotizaciones?limit=50`;
+		let url = `/cotizaciones?limit=50&only_available=true`;
 		if (search) url += `&search=${encodeURIComponent(search)}`;
 		if (!canSeeOthers) url += `&co_ven=${encodeURIComponent(profile.profit_user)}`;
 		
