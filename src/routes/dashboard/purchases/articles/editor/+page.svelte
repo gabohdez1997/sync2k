@@ -164,6 +164,47 @@
     }
   });
 
+  function handleEnhance({ cancel }) {
+    if (!co_art || !co_art.trim()) {
+      toast.error("No se puede guardar el artículo sin código");
+      activeTab = 0;
+      cancel();
+      return;
+    }
+    if (!art_des || !art_des.trim()) {
+      toast.error("No se puede guardar el artículo sin descripción");
+      activeTab = 0;
+      cancel();
+      return;
+    }
+    if (!co_uni || !co_uni.trim()) {
+      toast.error("No se puede guardar el artículo sin unidad de medida");
+      activeTab = 0;
+      cancel();
+      return;
+    }
+    if (priceEntries.length === 0) {
+      toast.error("No se puede guardar el artículo sin márgenes de precio");
+      activeTab = 2;
+      cancel();
+      return;
+    }
+    for (const entry of priceEntries) {
+      if (entry.margen === undefined || entry.margen === null || isNaN(entry.margen) || entry.margen <= 0) {
+        toast.error(`El margen para el Precio ${entry.tipo} debe ser mayor a 0%`);
+        activeTab = 2;
+        cancel();
+        return;
+      }
+    }
+    loading = true;
+
+    return async ({ update }) => {
+      loading = false;
+      await update();
+    };
+  }
+
   const steps = [
     { icon: Package, label: "General" },
     { icon: Settings, label: "Adicional" },
@@ -246,7 +287,7 @@
     <!-- Formulario -->
     <div class="col-span-1 lg:col-span-9">
       <div class="glass rounded-3xl border border-white/5 shadow-xl flex flex-col h-full">
-        <form id="articleForm" method="POST" use:enhance class="p-6 flex-1 bg-surface-base/20 rounded-3xl" onsubmit={() => loading = true}>
+        <form id="articleForm" method="POST" use:enhance={handleEnhance} novalidate class="p-6 flex-1 bg-surface-base/20 rounded-3xl">
           <input type="hidden" name="co_art_ori" value={data.article?.co_art || ""} />
           <input type="hidden" name="is_new" value={isEditing ? 'false' : 'true'} />
           <input type="hidden" name="imageBase64" value={imageBase64} />
