@@ -145,11 +145,15 @@ export const actions: Actions = {
             image_base64: formData.get('imageBase64')?.toString() || null,
         };
 
-        // Extraer Márgenes dinámicos y enviarlos como margen_1, margen_2, etc.
+        // Extraer Márgenes y Precios dinámicos y enviarlos como margen_1, precio_1, etc.
         for (let i = 1; i <= 5; i++) {
             const margenVal = formData.get(`margen_${i}`);
             if (margenVal !== null && margenVal !== '') {
                 payload[`margen_${i}`] = Number(margenVal) || 0;
+            }
+            const precioVal = formData.get(`precio_${i}`);
+            if (precioVal !== null && precioVal !== '') {
+                payload[`precio_${i}`] = Number(precioVal) || 0;
             }
         }
 

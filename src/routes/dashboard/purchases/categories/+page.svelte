@@ -258,6 +258,7 @@
           };
         }}
       >
+        <input type="hidden" name="is_new" value={isNew ? 'true' : 'false'} />
         <input type="hidden" name="co_cat" value={isNew ? generatedCode : modalCode} />
 
         <div class="p-8 space-y-6">

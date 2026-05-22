@@ -71,6 +71,44 @@
     return line ? line.lin_des?.trim() : co_lin?.trim();
   }
 
+  function suggestNextCode(lineCode: string) {
+    if (!lineCode) return '';
+    const lineTrim = lineCode.trim();
+    const siblingSublines = sublines.filter((s: any) => s.co_lin?.trim() === lineTrim);
+    
+    if (siblingSublines.length === 0) {
+      return lineTrim + "01";
+    }
+    
+    let maxSeq = 0;
+    for (const sub of siblingSublines) {
+      const code = sub.co_subl?.trim() || '';
+      if (code.startsWith(lineTrim)) {
+        const seqStr = code.slice(lineTrim.length);
+        const seq = parseInt(seqStr, 10);
+        if (!isNaN(seq) && seq > maxSeq) {
+          maxSeq = seq;
+        }
+      } else {
+        const seqStr = code.slice(-2);
+        const seq = parseInt(seqStr, 10);
+        if (!isNaN(seq) && seq > maxSeq) {
+          maxSeq = seq;
+        }
+      }
+    }
+    
+    const nextSeq = maxSeq + 1;
+    const paddedSeq = String(nextSeq).padStart(2, '0');
+    return lineTrim + paddedSeq;
+  }
+
+  $effect(() => {
+    if (isNew && modalLine) {
+      modalCode = suggestNextCode(modalLine);
+    }
+  });
+
   // ── Feedback ──
   $effect(() => {
     if (form) {
@@ -244,8 +282,31 @@
         }}
       >
         <input type="hidden" name="is_new" value={isNew ? 'true' : 'false'} />
+        {#if !isNew}
+          <input type="hidden" name="co_subl" value={modalCode} />
+        {/if}
 
         <div class="p-8 space-y-6">
+          <!-- Línea padre -->
+          <div class="space-y-2">
+            <label for="co_lin" class="text-[10px] font-black uppercase tracking-widest text-text-muted ml-1 flex items-center gap-1.5">
+              <Layers size={12} />
+              Línea Padre
+            </label>
+            <select
+              id="co_lin"
+              name="co_lin"
+              bind:value={modalLine}
+              required
+              class="w-full h-14 bg-surface-base border border-border-subtle rounded-2xl px-5 text-sm font-bold focus:outline-none focus:border-brand-500/50 transition-all appearance-none cursor-pointer"
+            >
+              <option value="" disabled>Selecciona una línea</option>
+              {#each lines as line}
+                <option value={line.co_lin?.trim()}>{line.co_lin?.trim()} — {line.lin_des?.trim()}</option>
+              {/each}
+            </select>
+          </div>
+
           <!-- Código -->
           <div class="space-y-2">
             <label for="co_subl" class="text-[10px] font-black uppercase tracking-widest text-text-muted ml-1 flex items-center gap-1.5">
@@ -281,26 +342,6 @@
               placeholder="Ej: ALAMBRON - VARILLAS"
               class="w-full h-14 bg-surface-base border border-border-subtle rounded-2xl px-5 text-sm font-bold focus:outline-none focus:border-brand-500/50 transition-all placeholder:text-text-muted/40 uppercase"
             />
-          </div>
-
-          <!-- Línea padre -->
-          <div class="space-y-2">
-            <label for="co_lin" class="text-[10px] font-black uppercase tracking-widest text-text-muted ml-1 flex items-center gap-1.5">
-              <Layers size={12} />
-              Línea Padre
-            </label>
-            <select
-              id="co_lin"
-              name="co_lin"
-              bind:value={modalLine}
-              required
-              class="w-full h-14 bg-surface-base border border-border-subtle rounded-2xl px-5 text-sm font-bold focus:outline-none focus:border-brand-500/50 transition-all appearance-none cursor-pointer"
-            >
-              <option value="" disabled>Selecciona una línea</option>
-              {#each lines as line}
-                <option value={line.co_lin?.trim()}>{line.co_lin?.trim()} — {line.lin_des?.trim()}</option>
-              {/each}
-            </select>
           </div>
 
           {#if !isNew}

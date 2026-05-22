@@ -1,5 +1,7 @@
 <!-- src/routes/dashboard/audit/+page.svelte -->
 <script lang="ts">
+  import { page } from "$app/stores";
+  import { goto } from "$app/navigation";
   import { fade, fly } from "svelte/transition";
   import { 
     ClipboardList, 
@@ -25,17 +27,21 @@
     DollarSign,
     MapPin,
     Layers,
-    GitBranch
+    GitBranch,
+    ChevronLeft,
+    ChevronRight
   } from "lucide-svelte";
   import Combobox from "$lib/components/ui/Combobox.svelte";
   import type { PageData } from "./$types";
 
   let { data }: { data: PageData } = $props();
 
-  // ── States ─────────────────────────────────────────────────────────────────
-  let searchQuery = $state("");
-  let selectedBranch = $state<string | null>(null);
-  let selectedAction = $state<string | null>(null);
+  // ── States (initialized from URL once) ────────────────────────────────────
+  let searchQuery = $state($page.url.searchParams.get("search") || "");
+  let selectedBranch = $state<string | null>($page.url.searchParams.get("branch_id") || null);
+  let selectedAction = $state<string | null>($page.url.searchParams.get("action") || null);
+  let startDate = $state($page.url.searchParams.get("startDate") || "");
+  let endDate = $state($page.url.searchParams.get("endDate") || "");
 
   // States for Detail Modal
   let showDetailModal = $state(false);
@@ -55,21 +61,6 @@
     'auth_login':      { label: 'Sesión', icon: Shield, color: 'text-brand-400' },
     'auth_logout':     { label: 'Sesión', icon: Shield, color: 'text-zinc-500' }
   };
-
-  // Computed / Filtered
-  let filteredLogs = $derived(
-    data.logs.filter((log: any) => {
-      const matchesSearch = 
-        log.user_email?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        log.module?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        log.action?.toLowerCase().includes(searchQuery.toLowerCase());
-      
-      const matchesBranch = !selectedBranch || log.branch_id === selectedBranch;
-      const matchesAction = !selectedAction || log.action === selectedAction;
-
-      return matchesSearch && matchesBranch && matchesAction;
-    })
-  );
 
   const actionColors: Record<string, string> = {
     'CREATE': 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20',
@@ -95,12 +86,48 @@
   function formatJSON(data: any): string {
     if (!data) return '';
     try {
-      // Si ya es un objeto, lo formateamos. Si es string, intentamos parsearlo primero.
       const obj = typeof data === 'string' ? JSON.parse(data) : data;
       return JSON.stringify(obj, null, 2);
     } catch (e) {
       return String(data);
     }
+  }
+
+  // ── Navigation helpers ────────────────────────────────────────────────────
+  function buildFilterUrl(pageNum: number = 1) {
+    const u = new URL($page.url.origin + $page.url.pathname);
+    if (searchQuery.trim()) u.searchParams.set("search", searchQuery.trim());
+    if (selectedBranch) u.searchParams.set("branch_id", selectedBranch);
+    if (selectedAction) u.searchParams.set("action", selectedAction);
+    if (startDate) u.searchParams.set("startDate", startDate);
+    if (endDate) u.searchParams.set("endDate", endDate);
+    u.searchParams.set("page", String(pageNum));
+    return u.toString();
+  }
+
+  function applyFilters() {
+    goto(buildFilterUrl(1), { keepFocus: true, noScroll: true });
+  }
+
+  function goToPage(p: number) {
+    goto(buildFilterUrl(p), { keepFocus: true, noScroll: true });
+  }
+
+  function resetFilters() {
+    searchQuery = "";
+    selectedBranch = null;
+    selectedAction = null;
+    startDate = "";
+    endDate = "";
+    goto($page.url.pathname, { keepFocus: true, noScroll: true });
+  }
+
+  function onBranchChange() {
+    applyFilters();
+  }
+
+  function onActionChange() {
+    applyFilters();
   }
 </script>
 
@@ -111,6 +138,11 @@
       <h1 class="text-4xl font-black tracking-tight flex items-center gap-3">
         <ClipboardList class="text-brand-500" size={40} />
         Auditoría de Sistema
+        {#if data.pagination?.total > 0}
+          <span class="text-sm font-black bg-brand-500/10 text-brand-500 px-3 py-1 rounded-full border border-brand-500/20">
+            {data.pagination.total}
+          </span>
+        {/if}
       </h1>
       <p class="text-text-muted mt-2 text-lg">Monitorea todas las acciones y cambios realizados en la plataforma.</p>
     </div>
@@ -118,8 +150,11 @@
 
   <!-- Filters Bar -->
   <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
-    <!-- Search -->
-    <div class="relative md:col-span-2">
+    <!-- Search (form submit on Enter) -->
+    <form
+      onsubmit={(e) => { e.preventDefault(); applyFilters(); }}
+      class="relative md:col-span-2"
+    >
       <Search size={18} class="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted" />
       <input 
         type="text" 
@@ -127,7 +162,7 @@
         placeholder="Buscar por correo, acción o entidad..."
         class="w-full bg-surface-raised border border-border-subtle rounded-2xl pl-12 pr-4 py-3 text-text-base focus:outline-none focus:ring-2 focus:ring-brand-500/50 transition-all placeholder:text-text-muted/40"
       />
-    </div>
+    </form>
 
     <!-- Branch Filter -->
     <Combobox
@@ -136,6 +171,7 @@
       placeholder="Todas las Sucursales"
       allLabel="Todas las Sucursales"
       icon={Building}
+      onchange={onBranchChange}
     />
 
     <!-- Action Filter -->
@@ -152,7 +188,48 @@
       placeholder="Todas las acciones"
       allLabel="Todas las acciones"
       icon={Tag}
+      onchange={onActionChange}
     />
+  </div>
+
+  <!-- Date Range + Reset -->
+  <div class="flex flex-col md:flex-row gap-4 items-stretch md:items-center">
+    <div class="flex items-center gap-2 bg-surface-raised border border-border-subtle rounded-2xl px-4 py-3 w-full md:max-w-md">
+      <Calendar size={18} class="text-text-muted shrink-0" />
+      <input 
+        type="date" 
+        bind:value={startDate}
+        onchange={applyFilters}
+        class="bg-transparent border-0 text-text-base focus:outline-none text-xs w-full cursor-pointer"
+      />
+      <span class="text-text-muted font-bold px-1 text-xs shrink-0">al</span>
+      <input 
+        type="date" 
+        bind:value={endDate}
+        onchange={applyFilters}
+        class="bg-transparent border-0 text-text-base focus:outline-none text-xs w-full cursor-pointer"
+      />
+      {#if startDate || endDate}
+        <button 
+          onclick={() => { startDate = ""; endDate = ""; applyFilters(); }}
+          class="p-1 hover:bg-white/10 rounded-full text-text-muted hover:text-red-400 transition-colors shrink-0"
+          title="Limpiar fechas"
+        >
+          <X size={14} />
+        </button>
+      {/if}
+    </div>
+
+    {#if searchQuery || selectedBranch || selectedAction || startDate || endDate}
+      <button
+        onclick={resetFilters}
+        class="h-12 px-5 bg-surface-raised hover:bg-white/5 border border-white/5 hover:border-white/10 text-text-muted hover:text-text-base rounded-2xl font-bold transition-all active:scale-95 flex items-center gap-2 text-xs shrink-0 justify-center"
+      >
+        <X size={14} /> Limpiar Todo
+      </button>
+    {/if}
+
+   
   </div>
 
   <!-- Logs Table -->
@@ -170,7 +247,7 @@
           </tr>
         </thead>
         <tbody class="divide-y divide-border-subtle">
-          {#each filteredLogs as log (log.id)}
+          {#each data.logs as log (log.id)}
             {@const mInfo = moduleInfo[log.module] || { label: log.module, icon: Info, color: 'text-text-muted' }}
             <tr class="hover:bg-brand-500/5 transition-colors group">
               <td class="px-8 py-5">
@@ -224,7 +301,7 @@
             </tr>
           {:else}
             <tr>
-              <td colspan="5" class="px-8 py-20 text-center text-text-muted opacity-50 italic">
+              <td colspan="6" class="px-8 py-20 text-center text-text-muted opacity-50 italic">
                 No se han registrado auditorías que coincidan con los filtros.
               </td>
             </tr>
@@ -233,6 +310,31 @@
       </table>
     </div>
   </div>
+
+  <!-- Pagination -->
+  {#if data.pagination && data.pagination.totalPages > 1}
+    <div class="flex justify-center items-center gap-4">
+      <button
+        disabled={data.pagination.page <= 1}
+        onclick={() => goToPage(data.pagination.page - 1)}
+        class="h-12 w-12 rounded-xl bg-surface-base border border-white/5 flex items-center justify-center hover:bg-white/5 disabled:opacity-30 transition-all text-text-base"
+      >
+        <ChevronLeft size={20} />
+      </button>
+      <div
+        class="h-12 px-6 rounded-xl bg-brand-500/10 border border-brand-500/20 flex items-center font-black text-brand-500 text-xs"
+      >
+        Página {data.pagination.page} de {data.pagination.totalPages}
+      </div>
+      <button
+        disabled={data.pagination.page >= data.pagination.totalPages}
+        onclick={() => goToPage(data.pagination.page + 1)}
+        class="h-12 w-12 rounded-xl bg-surface-base border border-white/5 flex items-center justify-center hover:bg-white/5 disabled:opacity-30 transition-all text-text-base"
+      >
+        <ChevronRight size={20} />
+      </button>
+    </div>
+  {/if}
 </div>
 
 <!-- DETALLES MODAL -->
@@ -294,7 +396,7 @@
           <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
              <!-- OLD DATA -->
              <div class="space-y-2">
-               <label class="text-[10px] font-black uppercase tracking-widest text-text-muted ml-4">Estado Anterior</label>
+               <span class="block text-[10px] font-black uppercase tracking-widest text-text-muted ml-4">Estado Anterior</span>
                <div class="bg-black/40 rounded-[32px] p-6 border border-white/5 min-h-[200px] font-mono text-[11px] overflow-auto max-h-60 custom-scrollbar leading-relaxed">
                   {#if selectedLog.old_data}
                     <pre class="text-red-400/80">{formatJSON(selectedLog.old_data)}</pre>
@@ -309,7 +411,7 @@
 
              <!-- NEW DATA -->
              <div class="space-y-2">
-               <label class="text-[10px] font-black uppercase tracking-widest text-text-muted ml-4">Nuevo Estado</label>
+               <span class="block text-[10px] font-black uppercase tracking-widest text-text-muted ml-4">Nuevo Estado</span>
                <div class="bg-brand-500/[0.03] rounded-[32px] p-6 border border-brand-500/10 min-h-[200px] font-mono text-[11px] overflow-auto max-h-60 custom-scrollbar leading-relaxed">
                   {#if selectedLog.new_data}
                     <pre class="text-emerald-400/90">{formatJSON(selectedLog.new_data)}</pre>

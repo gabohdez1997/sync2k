@@ -3,7 +3,7 @@
   import { enhance } from "$app/forms";
   import { goto } from "$app/navigation";
   import {
-    ArrowLeft, Save, ImagePlus, X, Package, Tag, ListFilter,
+    ArrowLeft, Save, Package, Tag, ListFilter,
     MapPin, DollarSign, Percent, AlertCircle, Plus, Edit2, Box,
     Check, Settings, ChevronRight, Lock, Trash2
   } from "lucide-svelte";
@@ -44,12 +44,13 @@
 
   // ── Precios / Márgenes Dinámicos ──
   let costo_act = $state(data.article?.costo_act || 0);
-  let priceEntries = $state<Array<{tipo: string, margen: number}>>(
+  let priceEntries = $state<Array<{tipo: string, margen: number | null, precio: number | null}>>(
     (data.article?.precios || [])
-      .filter((p: any) => (p.margen || 0) > 0)
+      .filter((p: any) => (p.margen || 0) > 0 || (p.precio || 0) > 0)
       .map((p: any) => ({
         tipo: String(parseInt(p.id_precio)),
-        margen: p.margen || 0
+        margen: p.margen || null,
+        precio: p.precio || null
       }))
   );
 
@@ -60,29 +61,14 @@
 
   function addPriceEntry() {
     if (availablePriceTypes.length === 0) return;
-    priceEntries = [...priceEntries, { tipo: availablePriceTypes[0], margen: 0 }];
+    priceEntries = [...priceEntries, { tipo: availablePriceTypes[0], margen: null, precio: null }];
   }
 
   function removePriceEntry(index: number) {
     priceEntries = priceEntries.filter((_, i) => i !== index);
   }
 
-  // ── Imagen ──
-  let imageBase64 = $state(data.article?.image_base64 || "");
-  let imageFile = $state<File | null>(null);
-  let imagePreviewUrl = $state(imageBase64);
 
-  function handleImageUpload(e: Event) {
-    const input = e.target as HTMLInputElement;
-    if (input.files && input.files[0]) {
-      const file = input.files[0];
-      if (file.size > 2 * 1024 * 1024) { toast.error("La imagen debe pesar menos de 2MB"); return; }
-      imageFile = file;
-      const reader = new FileReader();
-      reader.onload = (ev) => { imagePreviewUrl = ev.target?.result as string; imageBase64 = ev.target?.result as string; };
-      reader.readAsDataURL(file);
-    }
-  }
 
   // ── Cascade Filtering ──
   const filteredSublineas = $derived(
@@ -196,6 +182,12 @@
         cancel();
         return;
       }
+      if (entry.precio === undefined || entry.precio === null || isNaN(entry.precio) || entry.precio <= 0) {
+        toast.error(`El precio para el Precio ${entry.tipo} debe ser mayor a 0 USD`);
+        activeTab = 2;
+        cancel();
+        return;
+      }
     }
     loading = true;
 
@@ -245,63 +237,31 @@
     </div>
   </div>
 
-  <!-- Contenido: 2 Columnas -->
-  <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
-    <!-- Imagen -->
-    <div class="col-span-1 lg:col-span-3 flex flex-col gap-4">
-      <div class="glass p-6 rounded-3xl border border-white/5 shadow-xl flex flex-col items-center">
-        <h3 class="text-xs font-bold uppercase tracking-widest text-text-muted w-full mb-4">Fotografía</h3>
-        <label class="w-full aspect-square border-2 border-dashed rounded-3xl flex flex-col items-center justify-center cursor-pointer transition-all overflow-hidden relative group {imagePreviewUrl ? 'border-brand-500/50 bg-black/20' : 'border-white/10 hover:border-brand-500/30 bg-surface-base hover:bg-surface-soft'}">
-          <input type="file" accept="image/*" class="hidden" onchange={handleImageUpload} />
-          {#if imagePreviewUrl}
-            <img src={imagePreviewUrl} alt="Preview" class="w-full h-full object-cover" />
-            <div class="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-all">
-              <span class="text-white font-bold flex items-center gap-2 bg-brand-500/80 px-4 py-2 rounded-xl backdrop-blur-sm"><ImagePlus size={18} /> Cambiar</span>
-            </div>
-            <button type="button" onclick={(e) => { e.preventDefault(); imagePreviewUrl = ""; imageBase64 = ""; imageFile = null; }} class="absolute top-2 right-2 p-2 bg-red-500/80 hover:bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-all shadow-lg backdrop-blur-sm">
-              <X size={16} />
-            </button>
-          {:else}
-            <ImagePlus size={48} class="text-text-muted/50 mb-4 group-hover:scale-110 transition-transform group-hover:text-brand-500" />
-            <span class="text-sm font-bold text-text-muted group-hover:text-text-base transition-colors">Subir Imagen</span>
-            <span class="text-[10px] text-text-muted mt-2">JPG, PNG (Max 2MB)</span>
-          {/if}
-        </label>
-      </div>
+  <!-- Contenido Formulario Completo -->
+  <div class="glass rounded-3xl border border-white/5 shadow-xl flex flex-col">
+    <form id="articleForm" method="POST" use:enhance={handleEnhance} novalidate class="p-6 flex-1 bg-surface-base/20 rounded-3xl">
+      <input type="hidden" name="co_art_ori" value={data.article?.co_art || ""} />
+      <input type="hidden" name="is_new" value={isEditing ? 'false' : 'true'} />
 
-      <!-- Código Auto-Generado (sidebar info) -->
-      {#if codePrefix() && !isEditing}
-        <div class="glass p-4 rounded-2xl border border-brand-500/20 bg-brand-500/5" in:fade>
-          <h4 class="text-[10px] font-black uppercase tracking-widest text-brand-400 mb-2">Código Sugerido</h4>
-          <div class="flex items-center gap-2">
-            <p class="font-mono text-lg font-bold text-brand-300">{co_art || codePrefix() + "___"}</p>
-            {#if fetchingCode}
-               <div class="w-3 h-3 border-2 border-brand-500/30 border-t-brand-500 rounded-full animate-spin"></div>
+      <!-- TAB 0: GENERAL -->
+      <div class:hidden={activeTab !== 0}>
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div class="space-y-2 lg:col-span-1">
+            <label class="text-xs uppercase font-black tracking-widest text-text-muted flex gap-1">Código <span class="text-brand-500">*</span>{#if isEditing}<Lock size={10} class="text-text-muted/40 ml-1" />{/if}</label>
+            <div class="relative">
+              <input type="text" name="co_art" bind:value={co_art} readonly={isEditing} required maxlength="30" class="w-full bg-surface-base h-12 px-4 {isEditing ? 'pr-10' : ''} rounded-xl border border-border-subtle outline-none font-mono text-sm transition-all uppercase {isEditing ? 'opacity-60 cursor-not-allowed bg-surface-raised !border-white/5 select-none' : 'focus:border-brand-500'}" placeholder="Ej: 0101001001" />
+              {#if isEditing}<Lock size={16} class="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted/40" />{/if}
+            </div>
+            {#if codePrefix() && !isEditing}
+              <div class="flex items-center gap-1.5 mt-1 text-[10px] text-brand-400 font-bold" in:fade>
+                <span>Sugerido:</span>
+                <span class="font-mono text-brand-300">{co_art || codePrefix() + "___"}</span>
+                {#if fetchingCode}
+                  <div class="w-2.5 h-2.5 border border-brand-500/30 border-t-brand-500 rounded-full animate-spin"></div>
+                {/if}
+              </div>
             {/if}
           </div>
-          <p class="text-[10px] text-text-muted mt-1">Prefijo: {codePrefix()} + secuencial</p>
-        </div>
-      {/if}
-    </div>
-
-    <!-- Formulario -->
-    <div class="col-span-1 lg:col-span-9">
-      <div class="glass rounded-3xl border border-white/5 shadow-xl flex flex-col h-full">
-        <form id="articleForm" method="POST" use:enhance={handleEnhance} novalidate class="p-6 flex-1 bg-surface-base/20 rounded-3xl">
-          <input type="hidden" name="co_art_ori" value={data.article?.co_art || ""} />
-          <input type="hidden" name="is_new" value={isEditing ? 'false' : 'true'} />
-          <input type="hidden" name="imageBase64" value={imageBase64} />
-
-          <!-- TAB 0: GENERAL -->
-          <div class:hidden={activeTab !== 0}>
-            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              <div class="space-y-2 lg:col-span-1">
-                <label class="text-xs uppercase font-black tracking-widest text-text-muted flex gap-1">Código <span class="text-brand-500">*</span>{#if isEditing}<Lock size={10} class="text-text-muted/40 ml-1" />{/if}</label>
-                <div class="relative">
-                  <input type="text" name="co_art" bind:value={co_art} readonly={isEditing} required maxlength="30" class="w-full bg-surface-base h-12 px-4 {isEditing ? 'pr-10' : ''} rounded-xl border border-border-subtle outline-none font-mono text-sm transition-all uppercase {isEditing ? 'opacity-60 cursor-not-allowed bg-surface-raised !border-white/5 select-none' : 'focus:border-brand-500'}" placeholder="Ej: 0101001001" />
-                  {#if isEditing}<Lock size={16} class="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted/40" />{/if}
-                </div>
-              </div>
               <div class="space-y-2 lg:col-span-2">
                 <label class="text-xs uppercase font-black tracking-widest text-text-muted flex gap-1">Descripción <span class="text-brand-500">*</span></label>
                 <input type="text" name="art_des" bind:value={art_des} required maxlength="60" class="w-full bg-surface-base h-12 px-4 rounded-xl border border-border-subtle focus:border-brand-500 outline-none text-sm transition-all" placeholder="Nombre del artículo" />
@@ -420,7 +380,7 @@
               <!-- Márgenes Dinámicos -->
               <div class="space-y-4">
                 <div class="flex items-center justify-between">
-                  <h3 class="text-xs uppercase font-black tracking-widest text-text-muted">Márgenes de Precio</h3>
+                  <h3 class="text-xs uppercase font-black tracking-widest text-text-muted">Márgenes y Precios</h3>
                   {#if availablePriceTypes.length > 0}
                     <button type="button" onclick={addPriceEntry} class="h-9 px-4 bg-brand-600 hover:bg-brand-500 text-white text-xs font-bold rounded-lg flex items-center gap-2 transition-all active:scale-95 shadow-md shadow-brand-600/20">
                       <Plus size={14} /> Agregar Margen
@@ -436,7 +396,14 @@
                   </div>
                 {:else}
                   <div class="flex flex-col gap-3">
-                    {#each priceEntries as entry, i}
+                    <!-- Cabeceras de Columnas -->
+                    <div class="flex items-center gap-3 px-3 text-[10px] font-black uppercase tracking-widest text-text-muted/50 mb-1">
+                      <div class="min-w-[140px]">Categoría</div>
+                      <div class="flex-1 text-center">Margen de Ganancia</div>
+                      <div class="flex-1 text-center">Precio de Venta</div>
+                      <div class="w-10"></div>
+                    </div>
+                    {#each priceEntries as entry, i (entry.tipo)}
                       <div class="flex items-center gap-3 bg-surface-base/60 border border-border-subtle rounded-xl p-3 group hover:border-brand-500/30 transition-all" in:fade={{duration: 150}}>
                         <select bind:value={entry.tipo} class="bg-surface-raised h-10 px-3 rounded-lg border border-border-subtle focus:border-brand-500 outline-none text-sm font-bold transition-all min-w-[140px]">
                           {#each ['1','2','3','4','5'] as t}
@@ -446,13 +413,18 @@
                           {/each}
                         </select>
                         <div class="relative flex-1">
-                          <input type="number" step="0.01" min="0" max="1000" bind:value={entry.margen} class="w-full bg-surface-base h-10 px-3 pr-8 rounded-lg border border-border-subtle focus:border-brand-500 outline-none text-sm font-mono text-right transition-all" placeholder="0" />
+                          <input type="number" step="0.01" min="0" max="1000" bind:value={entry.margen} class="w-full bg-surface-base h-10 px-3 pr-8 rounded-lg border border-border-subtle focus:border-brand-500 outline-none text-sm font-mono text-right transition-all" placeholder="Margen %" />
                           <Percent size={14} class="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted/50" />
+                        </div>
+                        <div class="relative flex-1">
+                          <input type="number" step="0.01" min="0" bind:value={entry.precio} class="w-full bg-surface-base h-10 px-3 pr-8 rounded-lg border border-border-subtle focus:border-brand-500 outline-none text-sm font-mono text-right transition-all" placeholder="Precio USD" />
+                          <DollarSign size={14} class="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted/50" />
                         </div>
                         <button type="button" onclick={() => removePriceEntry(i)} class="h-10 w-10 flex items-center justify-center rounded-lg text-text-muted/40 hover:text-red-400 hover:bg-red-500/10 border border-transparent hover:border-red-500/20 transition-all">
                           <Trash2 size={16} />
                         </button>
                         <input type="hidden" name={`margen_${entry.tipo}`} value={entry.margen} />
+                        <input type="hidden" name={`precio_${entry.tipo}`} value={entry.precio} />
                       </div>
                     {/each}
                   </div>
@@ -471,8 +443,6 @@
             </div>
           </div>
 
-        </form>
-      </div>
-    </div>
+    </form>
   </div>
 </div>
