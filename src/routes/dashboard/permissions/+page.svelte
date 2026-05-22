@@ -36,8 +36,8 @@
       icon: ShoppingBag,
       options: [
         { id: "sales_customers", label: "Clientes" },
-        { id: "sales_quotes", label: "Cotizaciones", hasOthers: true },
-        { id: "sales_orders", label: "Pedidos", hasOthers: true },
+        { id: "sales_quotes", label: "Cotizaciones", hasOthers: true, hasVoid: true },
+        { id: "sales_orders", label: "Pedidos", hasOthers: true, hasVoid: true },
       ],
     },
     {
@@ -112,7 +112,7 @@
   let rolePermissions = $state<
     Record<
       string,
-      { read: boolean; create: boolean; update: boolean; delete: boolean; others: boolean }
+      { read: boolean; create: boolean; update: boolean; delete: boolean; void: boolean; others: boolean }
     >
   >({});
 
@@ -140,6 +140,7 @@
           create: false,
           update: false,
           delete: false,
+          void: false,
           others: false,
         };
       }),
@@ -212,6 +213,7 @@
           create: role.permissions[optId].create ?? false,
           update: role.permissions[optId].update ?? false,
           delete: role.permissions[optId].delete ?? false,
+          void: role.permissions[optId].void ?? false,
           others: role.permissions[optId].others ?? false,
         };
       }
@@ -239,17 +241,19 @@
 
   function toggleAll(optionId: string) {
     const p = rolePermissions[optionId];
-    // Buscamos si el módulo tiene la opción 'others' habilitada estructuralmente
+    // Buscamos si el módulo tiene la opción 'others' o 'void' habilitada estructuralmente
     const option = navStructure.flatMap(n => n.options).find(o => o.id === optionId);
     const supportsOthers = (option as any)?.hasOthers || false;
+    const supportsVoid = (option as any)?.hasVoid || false;
 
-    const anyOff = !p.read || !p.create || !p.update || !p.delete || (supportsOthers && !p.others);
+    const anyOff = !p.read || !p.create || !p.update || !p.delete || (supportsOthers && !p.others) || (supportsVoid && !p.void);
 
     rolePermissions[optionId] = {
       read: anyOff,
       create: anyOff,
       update: anyOff,
       delete: anyOff,
+      void: anyOff,
       others: anyOff,
     };
   }
@@ -257,7 +261,7 @@
   function handleCheckboxChange(optionId: string, action: string) {
     if (action !== "read") {
       const p = rolePermissions[optionId];
-      if (p.create || p.update || p.delete || p.others) {
+      if (p.create || p.update || p.delete || p.others || p.void) {
         rolePermissions[optionId].read = true;
       }
     }
@@ -639,6 +643,10 @@
                 >
                 <th
                   class="px-6 py-4 text-xs font-bold uppercase tracking-wider text-text-muted text-center border-b border-border-subtle"
+                  >Anular</th
+                >
+                <th
+                  class="px-6 py-4 text-xs font-bold uppercase tracking-wider text-text-muted text-center border-b border-border-subtle"
                   >Terceros</th
                 >
               </tr>
@@ -651,7 +659,7 @@
                   onclick={() => toggleCategory(category.id)}
                 >
                   <td
-                    colspan="7"
+                    colspan="8"
                     class="px-6 py-3 border-b border-border-subtle sticky left-0 bg-surface-raised/90 backdrop-blur-sm z-10"
                   >
                     <div class="flex items-center justify-between">
@@ -702,17 +710,18 @@
                         <button
                           type="button"
                           onclick={() => toggleAll(opt.id)}
-                          class="w-6 h-6 rounded-lg border-2 border-brand-500/30 flex items-center justify-center transition-all {rolePermissions[
-                            opt.id
-                          ].read &&
-                          rolePermissions[opt.id].create &&
-                          rolePermissions[opt.id].update &&
-                          rolePermissions[opt.id].delete &&
-                          rolePermissions[opt.id].others
-                            ? 'bg-brand-500 border-brand-500'
-                            : 'hover:bg-brand-500/10'}"
+                          class="w-6 h-6 rounded-lg border-2 border-brand-500/30 flex items-center justify-center transition-all {
+                            rolePermissions[opt.id].read &&
+                            rolePermissions[opt.id].create &&
+                            rolePermissions[opt.id].update &&
+                            rolePermissions[opt.id].delete &&
+                            (opt.hasOthers ? rolePermissions[opt.id].others : true) &&
+                            (opt.hasVoid ? rolePermissions[opt.id].void : true)
+                              ? 'bg-brand-500 border-brand-500'
+                              : 'hover:bg-brand-500/10'
+                          }"
                         >
-                          {#if rolePermissions[opt.id].read && rolePermissions[opt.id].create && rolePermissions[opt.id].update && rolePermissions[opt.id].delete && (opt.hasOthers ? rolePermissions[opt.id].others : true)}
+                          {#if rolePermissions[opt.id].read && rolePermissions[opt.id].create && rolePermissions[opt.id].update && rolePermissions[opt.id].delete && (opt.hasOthers ? rolePermissions[opt.id].others : true) && (opt.hasVoid ? rolePermissions[opt.id].void : true)}
                             <div in:fade={{ duration: 100 }}>
                               <Check
                                 size={14}
@@ -727,11 +736,11 @@
                         {/if}
                       </td>
 
-                      {#each ["read", "create", "update", "delete", "others"] as action}
+                      {#each ["read", "create", "update", "delete", "void", "others"] as action}
                         <td
                           class="px-6 py-4 text-center border-b border-border-subtle"
                         >
-                          {#if (opt.id !== 'cash_exchange' && (action !== 'others' || opt.hasOthers)) || (opt.id === 'cash_exchange' && action === 'update')}
+                          {#if (opt.id !== 'cash_exchange' && (action !== 'others' || opt.hasOthers) && (action !== 'void' || opt.hasVoid)) || (opt.id === 'cash_exchange' && action === 'update')}
                             <label
                               class="relative inline-flex items-center cursor-pointer justify-center"
                             >

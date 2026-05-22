@@ -14,7 +14,7 @@ export const load: PageServerLoad = protectLoad('sales_quotes', async ({ url, lo
 
     const urlBranchId = url.searchParams.get('branch_id');
     const selectedBranch = urlBranchId 
-        ? allowedBranches.find(b => b.id === urlBranchId)
+        ? allowedBranches.find((b: any) => b.id === urlBranchId)
         : allowedBranches[0];
 
     if (!selectedBranch || !selectedBranch.agent_url) {
@@ -36,6 +36,7 @@ export const load: PageServerLoad = protectLoad('sales_quotes', async ({ url, lo
     const canCreate = hasPermission(profile, 'sales_quotes', 'create');
     const canUpdate = hasPermission(profile, 'sales_quotes', 'update');
     const canDelete = hasPermission(profile, 'sales_quotes', 'delete');
+    const canVoid = hasPermission(profile, 'sales_quotes', 'void');
 
     let co_ven = url.searchParams.get('co_ven') || '';
 
@@ -50,7 +51,8 @@ export const load: PageServerLoad = protectLoad('sales_quotes', async ({ url, lo
                 canSeeOthers,
                 canCreate,
                 canUpdate,
-                canDelete
+                canDelete,
+                canVoid
             };
         }
         co_ven = sellerCode;
@@ -79,6 +81,7 @@ export const load: PageServerLoad = protectLoad('sales_quotes', async ({ url, lo
             canCreate,
             canUpdate,
             canDelete,
+            canVoid,
             filters: { doc_num, co_cli, search, co_ven, fec_d, fec_h }
         };
     } catch (e: any) {
@@ -149,6 +152,183 @@ export const actions = {
         }
 
         return { success: true, message: res?.message || 'Cotización eliminada correctamente.' };
+    }),
+
+    voidQuote: protectAction('sales_quotes', async ({ request, locals, fetch }) => {
+        const formData = await request.formData();
+        const doc_num = String(formData.get('doc_num') || '').trim();
+        const branch_id = String(formData.get('branch_id') || '').trim();
+        const password = String(formData.get('password') || '');
+        const profile = (locals as any).profile;
+
+        if (!hasPermission(profile, 'sales_quotes', 'void')) {
+            return fail(403, { success: false, message: 'No tienes permiso para anular cotizaciones.' });
+        }
+
+        if (!doc_num) return fail(400, { success: false, message: 'Documento no válido.' });
+        if (!branch_id) return fail(400, { success: false, message: 'Sucursal no válida.' });
+        if (!password) {
+            return fail(400, { success: false, message: 'La contraseña es requerida para confirmar la anulación.' });
+        }
+
+        const email = locals.session?.user?.email;
+        if (!email) return fail(401, { success: false, message: 'Sesión no válida.' });
+
+        // Confirmación de seguridad: validar contraseña actual del usuario.
+        const { error: authErr } = await locals.supabase.auth.signInWithPassword({ email, password });
+        if (authErr) return fail(401, { success: false, message: 'Contraseña de confirmación incorrecta.' });
+
+        const branch = profile.allowed_branches?.find((b: any) => b.id === branch_id);
+        if (!branch) return fail(403, { success: false, message: 'Sucursal no autorizada.' });
+
+        const agentClient = new AgentClient(branch, profile, fetch);
+
+        // Regla de negocio: solo anular cotizaciones "Sin procesar" y no anuladas.
+        const detailRes: any = await agentClient.request(`/cotizaciones/${doc_num}`);
+        const detailRaw = Array.isArray(detailRes?.data) ? detailRes.data[0] : detailRes?.data;
+        const quote = detailRaw && Array.isArray(detailRaw) ? detailRaw[0] : detailRaw;
+        const rawStatus = String(quote?.status ?? '').trim();
+        const isAnulada = Boolean(quote?.anulado);
+
+        const statusLabel = (status: string, anulada: boolean) => {
+            if (anulada) return 'Anulada';
+            if (status === '0') return 'Sin procesar';
+            if (status === '1') return 'Procesada';
+            if (status === '2') return 'Parcialmente procesada';
+            return status ? `Estado ${status}` : 'Desconocido';
+        };
+
+        if (isAnulada || rawStatus !== '0') {
+            return fail(400, {
+                success: false,
+                message: `No se puede anular la cotización ${doc_num} porque está en estado "${statusLabel(rawStatus, isAnulada)}". Solo se permiten cotizaciones sin procesar.`
+            });
+        }
+
+        const res: any = await agentClient.request(`/cotizaciones/${doc_num}/anular`, { method: 'POST' });
+
+        if (!res?.success) {
+            return fail(500, { success: false, message: res?.message || 'No se pudo anular la cotización.' });
+        }
+
+        // --- REGISTRO DE AUDITORÍA EN SUPABASE ---
+        try {
+            await locals.supabase.from('audit_log').insert({
+                action: 'VOID',
+                module: 'sales_quotes',
+                record_id: doc_num,
+                user_email: email,
+                branch_id: branch.id,
+                metadata: {
+                    message: `Cotización ${doc_num} anulada con éxito`,
+                    doc_num: doc_num
+                }
+            });
+        } catch (auditError) {
+            console.error('Error al guardar log de auditoría de anulación:', auditError);
+        }
+
+        return { success: true, message: res?.message || 'Cotización anulada correctamente.' };
+    }),
+
+    voidAllQuotes: protectAction('sales_quotes', async ({ request, locals, fetch }) => {
+        const formData = await request.formData();
+        const branch_id = String(formData.get('branch_id') || '').trim();
+        const password = String(formData.get('password') || '');
+        const profile = (locals as any).profile;
+
+        if (!hasPermission(profile, 'sales_quotes', 'void')) {
+            return fail(403, { success: false, message: 'No tienes permiso para anular cotizaciones.' });
+        }
+
+        if (!branch_id) return fail(400, { success: false, message: 'Sucursal no válida.' });
+        if (!password) {
+            return fail(400, { success: false, message: 'La contraseña es requerida para confirmar la anulación masiva.' });
+        }
+
+        const email = locals.session?.user?.email;
+        if (!email) return fail(401, { success: false, message: 'Sesión no válida.' });
+
+        // Confirmación de seguridad: validar contraseña actual del usuario.
+        const { error: authErr } = await locals.supabase.auth.signInWithPassword({ email, password });
+        if (authErr) return fail(401, { success: false, message: 'Contraseña de confirmación incorrecta.' });
+
+        const branch = profile.allowed_branches?.find((b: any) => b.id === branch_id);
+        if (!branch) return fail(403, { success: false, message: 'Sucursal no autorizada.' });
+
+        const agentClient = new AgentClient(branch, profile, fetch);
+
+        // LÓGICA DE PERMISOS PARA SELLER
+        const canSeeOthers = hasPermission(profile, 'sales_quotes', 'others');
+        const sellerCode = !canSeeOthers ? (profile.profit_user || '').trim().toUpperCase() : '';
+
+        if (!canSeeOthers && !sellerCode) {
+            return fail(403, { success: false, message: 'Tu perfil no tiene asociado un código de Vendedor. No puedes anular cotizaciones.' });
+        }
+
+        try {
+            const fetchParams = new URLSearchParams({
+                limit: '1000',
+                page: '1',
+                co_ven: sellerCode || ''
+            });
+
+            const listRes: any = await agentClient.request(`/cotizaciones?${fetchParams.toString()}`);
+            if (!listRes?.success) {
+                return fail(500, { success: false, message: listRes?.message || 'Error al obtener cotizaciones del Agente.' });
+            }
+
+            const allDocs = listRes.data || [];
+            const unprocessedDocs = allDocs.filter((d: any) => String(d.status).trim() === '0' && !d.anulado);
+
+            if (unprocessedDocs.length === 0) {
+                return { success: true, message: 'No hay cotizaciones sin procesar para anular en esta sucursal.' };
+            }
+
+            let successCount = 0;
+            let failCount = 0;
+            const errors: string[] = [];
+
+            // Procesamiento secuencial seguro para evitar bloqueos/deadlocks en Profit
+            for (const doc of unprocessedDocs) {
+                try {
+                    const res: any = await agentClient.request(`/cotizaciones/${doc.doc_num}/anular`, { method: 'POST' });
+                    if (res?.success) {
+                        successCount++;
+                        // Registro de auditoría
+                        await locals.supabase.from('audit_log').insert({
+                            action: 'VOID',
+                            module: 'sales_quotes',
+                            record_id: doc.doc_num,
+                            user_email: email,
+                            branch_id: branch.id,
+                            metadata: {
+                                message: `Cotización ${doc.doc_num} anulada en proceso masivo`,
+                                doc_num: doc.doc_num,
+                                batch: true
+                            }
+                        });
+                    } else {
+                        failCount++;
+                        errors.push(`Cotización ${doc.doc_num}: ${res?.message || 'Error desconocido'}`);
+                    }
+                } catch (e: any) {
+                    failCount++;
+                    errors.push(`Cotización ${doc.doc_num}: ${e.message}`);
+                }
+            }
+
+            if (failCount > 0) {
+                return { 
+                    success: true, 
+                    message: `Se anularon ${successCount} cotizaciones. Fallaron ${failCount} documentos: ${errors.join(', ')}` 
+                };
+            }
+
+            return { success: true, message: `Se anularon correctamente las ${successCount} cotizaciones sin procesar.` };
+        } catch (e: any) {
+            return fail(500, { success: false, message: 'Error de comunicación con el Agente: ' + e.message });
+        }
     }),
 
     printQuote: protectAction('sales_quotes', async ({ request, locals, fetch }) => {

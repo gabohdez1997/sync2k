@@ -4,7 +4,8 @@
         Hash, DollarSign, Edit2, Trash2, 
         FileDown, ChevronLeft, ChevronRight,
         Plus, Clock, MoreVertical, Store,
-        Printer, Trash, AlertCircle, FileText, Lock, Loader2, Check
+        Printer, Trash, AlertCircle, FileText, Lock, Loader2, Check,
+        Ban
     } from 'lucide-svelte';
     import { goto } from '$app/navigation';
     import { page } from '$app/stores';
@@ -24,6 +25,15 @@
     let orderToDelete = $state<any>(null);
     let deletePassword = $state('');
     let isDeleting = $state(false);
+
+    let showVoidModal = $state(false);
+    let orderToVoid = $state<any>(null);
+    let voidPassword = $state('');
+    let isVoiding = $state(false);
+
+    let showVoidAllModal = $state(false);
+    let voidAllPassword = $state('');
+    let isVoidingAll = $state(false);
 
     // Filtros locales para el buscador reactivo
     let filterDoc = $state('');
@@ -83,6 +93,12 @@
         deletePassword = '';
         showDeleteModal = true;
     }
+
+    function openVoidModal(order: any) {
+        orderToVoid = order;
+        voidPassword = '';
+        showVoidModal = true;
+    }
 </script>
 
 <div class="space-y-6" in:fade>
@@ -113,8 +129,21 @@
             </p>
         </div>
 
-        {#if data.canCreate}
-            <div class="flex items-center gap-3 w-full md:w-auto">
+        <div class="flex flex-wrap items-center gap-3 w-full md:w-auto justify-end">
+            {#if data.canVoid}
+                <button 
+                    onclick={() => {
+                        voidAllPassword = '';
+                        showVoidAllModal = true;
+                    }}
+                    class="flex items-center justify-center gap-3 border border-amber-500/25 text-amber-500 bg-amber-500/10 hover:bg-amber-500/25 h-14 px-8 rounded-2xl font-black transition-all active:scale-95 shrink-0 w-full md:w-auto"
+                >
+                    <Ban size={20} />
+                    Anular Todos
+                </button>
+            {/if}
+
+            {#if data.canCreate}
                 <button 
                     onclick={() => {
                         localStorage.removeItem('profit_order_draft');
@@ -125,8 +154,8 @@
                     <Plus size={20} />
                     Nuevo Pedido
                 </button>
-            </div>
-        {/if}
+            {/if}
+        </div>
     </div>
 
     <!-- SEARCH & FILTERS ROW -->
@@ -263,6 +292,16 @@
                                                 class="p-2 text-text-muted hover:text-red-500 hover:bg-red-500/10 rounded-xl transition-all" title="Eliminar"
                                             >
                                                 <Trash2 size={18} />
+                                            </button>
+                                        {/if}
+
+                                        <!-- Anular -->
+                                        {#if data.canVoid && !quote.anulado && String(quote.status ?? '').trim() === '0'}
+                                            <button 
+                                                onclick={() => openVoidModal(quote)}
+                                                class="p-2 text-text-muted hover:text-amber-500 hover:bg-amber-500/10 rounded-xl transition-all" title="Anular"
+                                            >
+                                                <Ban size={18} />
                                             </button>
                                         {/if}
 
@@ -440,5 +479,251 @@
         </div>
     </div>
 {/if}
+
+{#if showVoidModal}
+    <div class="fixed inset-0 z-[60] flex items-center justify-center p-4">
+        <div
+            class="absolute inset-0 bg-black/90 backdrop-blur-md"
+            onclick={() => !isVoiding && (showVoidModal = false)}
+            onkeydown={(e) =>
+                e.key === "Escape" && !isVoiding && (showVoidModal = false)}
+            role="button"
+            tabindex="-1"
+        ></div>
+
+        <div
+            class="glass w-full max-w-md rounded-[40px] border border-white/10 shadow-2xl relative z-10 overflow-hidden"
+            transition:slide
+        >
+            <div class="p-8 text-center space-y-6">
+                <div
+                    class="h-20 w-20 rounded-3xl bg-amber-500/20 text-amber-500 flex items-center justify-center mx-auto shadow-lg shadow-amber-500/10"
+                >
+                    <Ban size={40} />
+                </div>
+
+                <div class="space-y-2">
+                    <h2 class="text-2xl font-black tracking-tight">Confirmar Anulación</h2>
+                    <p class="text-text-muted text-sm px-4">
+                        ¿Estás seguro de que deseas anular el pedido
+                        <span class="text-text-base font-bold">{orderToVoid?.doc_num}</span>?
+                        Esta acción no eliminará físicamente el documento, pero lo marcará como anulado y liberará sus renglones y stock comprometido.
+                    </p>
+                    {#if orderToVoid}
+                        {@const qStatus = getStatus(orderToVoid)}
+                        <div class="text-left p-4 rounded-2xl bg-white/5 border border-white/10 space-y-2">
+                            <p class="text-xs text-text-muted"><span class="font-bold">Cliente:</span> {orderToVoid.cli_des || orderToVoid.co_cli}</p>
+                            <p class="text-xs text-text-muted"><span class="font-bold">Fecha:</span> {dayjs(orderToVoid.fec_emis).format('DD/MM/YYYY HH:mm')}</p>
+                            <p class="text-xs text-text-muted">
+                                <span class="font-bold">Monto:</span>
+                                {orderToVoid.co_mone === 'BS'
+                                    ? `Bs ${Number(orderToVoid.total_neto || 0).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                                    : `$ ${(Number(orderToVoid.total_neto || 0) / Number(orderToVoid.tasa || 1)).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                                }
+                            </p>
+                            <p class="text-xs text-text-muted flex items-center gap-2">
+                                <span class="font-bold">Estatus:</span>
+                                <span class="px-2 py-0.5 rounded-full border text-[10px] font-black uppercase tracking-widest {qStatus.class}">
+                                    {qStatus.label}
+                                </span>
+                            </p>
+                            {#if orderToVoid.anulado || orderToVoid.status !== '0'}
+                                <p class="text-xs text-red-400 font-bold">
+                                    Solo se pueden anular pedidos en estado "Sin procesar".
+                                </p>
+                            {/if}
+                        </div>
+                    {/if}
+                </div>
+
+                <form
+                    method="POST"
+                    action="?/voidOrder"
+                    use:enhance={() => {
+                        isVoiding = true;
+                        return async ({ result, update }) => {
+                            await update();
+                            isVoiding = false;
+
+                            if (result.type === 'success') {
+                                showVoidModal = false;
+                                toast.success((result as any).data?.message || 'Pedido anulado con éxito');
+                            } else if (result.type === 'failure' && (result as any).data?.message) {
+                                toast.error((result as any).data.message);
+                            } else {
+                                toast.error('Error al anular el pedido');
+                            }
+                        };
+                    }}
+                    class="space-y-4 pt-4"
+                >
+                    <input type="hidden" name="doc_num" value={orderToVoid?.doc_num} />
+                    <input type="hidden" name="branch_id" value={data.selectedBranchId} />
+
+                    <div class="space-y-2 text-left">
+                        <label
+                            class="text-[10px] font-black uppercase tracking-widest text-text-muted ml-1"
+                            for="void-pass">Contraseña de Confirmación</label
+                        >
+                        <div class="relative">
+                            <Lock
+                                size={18}
+                                class="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted opacity-40"
+                            />
+                            <input
+                                id="void-pass"
+                                type="password"
+                                name="password"
+                                bind:value={voidPassword}
+                                required
+                                placeholder="Introduzca su contraseña"
+                                class="w-full h-14 bg-white/5 border border-white/10 rounded-2xl pl-12 pr-5 focus:border-amber-500/50 outline-none transition-all"
+                            />
+                        </div>
+                    </div>
+
+                    <div class="flex gap-3 pt-4">
+                        <button
+                            type="button"
+                            onclick={() => (showVoidModal = false)}
+                            disabled={isVoiding}
+                            class="flex-1 h-14 rounded-2xl font-bold bg-white/5 hover:bg-white/10 transition-all text-text-muted disabled:opacity-50"
+                        >
+                            Cancelar
+                        </button>
+                        <button
+                            type="submit"
+                            disabled={isVoiding || !voidPassword || (orderToVoid?.anulado || orderToVoid?.status !== '0')}
+                            class="flex-1 h-14 rounded-2xl font-bold bg-amber-600 hover:bg-amber-500 text-white shadow-lg shadow-amber-500/20 transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2"
+                        >
+                            {#if isVoiding}
+                                <Loader2 size={18} class="animate-spin" />
+                            {:else}
+                                <Check size={18} />
+                                Anular
+                            {/if}
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+{/if}
+
+{#if showVoidAllModal}
+    <div class="fixed inset-0 z-[60] flex items-center justify-center p-4">
+        <div
+            class="absolute inset-0 bg-black/90 backdrop-blur-md"
+            onclick={() => !isVoidingAll && (showVoidAllModal = false)}
+            onkeydown={(e) =>
+                e.key === "Escape" && !isVoidingAll && (showVoidAllModal = false)}
+            role="button"
+            tabindex="-1"
+        ></div>
+
+        <div
+            class="glass w-full max-w-md rounded-[40px] border border-amber-500/20 shadow-2xl shadow-amber-500/10 relative z-10 overflow-hidden"
+            transition:slide
+        >
+            <div class="p-8 text-center space-y-6">
+                <div
+                    class="h-20 w-20 rounded-3xl bg-amber-500/20 text-amber-500 flex items-center justify-center mx-auto shadow-lg shadow-amber-500/10"
+                >
+                    <Ban size={40} />
+                </div>
+
+                <div class="space-y-2">
+                    <h2 class="text-2xl font-black tracking-tight text-amber-400">Anulación Masiva</h2>
+                    <p class="text-text-muted text-sm px-4">
+                        ¿Estás absolutamente seguro de que deseas <span class="text-amber-400 font-bold">anular TODOS</span> los documentos sin procesar en la sucursal actual?
+                    </p>
+                    <div class="text-left p-4 rounded-2xl bg-amber-500/5 border border-amber-500/10 space-y-2 text-xs">
+                        <p class="text-text-muted leading-relaxed">
+                            <span class="font-bold text-amber-400/80">Ámbito de Seguridad:</span> 
+                            {#if data.canSeeOthers}
+                                Se anularán todos los documentos sin procesar de todos los vendedores en la sucursal activa.
+                            {:else}
+                                Solo se anularán los documentos sin procesar creados bajo su código de vendedor ({data.filters?.co_ven || 'su usuario'}).
+                            {/if}
+                        </p>
+                        <p class="text-red-400 font-bold">
+                            Esta acción es masiva y no se puede deshacer. Se requerirá autenticación con su contraseña.
+                        </p>
+                    </div>
+                </div>
+
+                <form
+                    method="POST"
+                    action="?/voidAllOrders"
+                    use:enhance={() => {
+                        isVoidingAll = true;
+                        return async ({ result, update }) => {
+                            await update();
+                            isVoidingAll = false;
+
+                            if (result.type === 'success') {
+                                showVoidAllModal = false;
+                                toast.success((result as any).data?.message || 'Proceso de anulación masiva completado.');
+                            } else if (result.type === 'failure' && (result as any).data?.message) {
+                                toast.error((result as any).data.message);
+                            } else {
+                                toast.error('Error durante la anulación masiva');
+                            }
+                        };
+                    }}
+                    class="space-y-4 pt-4"
+                >
+                    <input type="hidden" name="branch_id" value={data.selectedBranchId} />
+
+                    <div class="space-y-2 text-left">
+                        <label
+                            class="text-[10px] font-black uppercase tracking-widest text-text-muted ml-1"
+                            for="void-all-pass">Contraseña de Confirmación</label
+                        >
+                        <div class="relative">
+                            <Lock
+                                size={18}
+                                class="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted opacity-40"
+                            />
+                            <input
+                                id="void-all-pass"
+                                type="password"
+                                name="password"
+                                bind:value={voidAllPassword}
+                                required
+                                placeholder="Introduzca su contraseña"
+                                class="w-full h-14 bg-white/5 border border-white/10 rounded-2xl pl-12 pr-5 focus:border-amber-500/50 outline-none transition-all"
+                            />
+                        </div>
+                    </div>
+
+                    <div class="flex gap-3 pt-4">
+                        <button
+                            type="button"
+                            onclick={() => (showVoidAllModal = false)}
+                            disabled={isVoidingAll}
+                            class="flex-1 h-14 rounded-2xl font-bold bg-white/5 hover:bg-white/10 transition-all text-text-muted disabled:opacity-50"
+                        >
+                            Cancelar
+                        </button>
+                        <button
+                            type="submit"
+                            disabled={isVoidingAll || !voidAllPassword}
+                            class="flex-1 h-14 rounded-2xl font-bold bg-amber-600 hover:bg-amber-500 text-white shadow-lg shadow-amber-500/20 transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2"
+                        >
+                            {#if isVoidingAll}
+                                <Loader2 size={18} class="animate-spin" />
+                            {:else}
+                                <Check size={18} />
+                                Confirmar Anulación
+                            {/if}
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+{/if}
+
 
 
