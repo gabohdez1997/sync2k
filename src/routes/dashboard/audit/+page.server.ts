@@ -40,7 +40,52 @@ export const load: PageServerLoad = protectLoad('sec_audit', async ({ url }) => 
     query = query.lte('created_at', `${endDate}T23:59:59.999Z`);
   }
   if (search) {
-    query = query.or(`user_email.ilike.%${search}%,module.ilike.%${search}%,action.ilike.%${search}%`);
+    const cleanSearch = search.trim().toLowerCase();
+    const orParts = [
+      `user_email.ilike.%${search}%`,
+      `module.ilike.%${search}%`,
+      `action.ilike.%${search}%`,
+      `record_id.ilike.%${search}%`
+    ];
+
+    // Mapeo inteligente de términos comunes en español a slugs del sistema en inglés
+    if (cleanSearch.includes('tasa') || cleanSearch.includes('cambio') || cleanSearch.includes('bcv') || cleanSearch.includes('dolar') || cleanSearch.includes('usd')) {
+      orParts.push(`module.eq.cash_exchange`);
+    }
+    if (cleanSearch.includes('articulo') || cleanSearch.includes('producto')) {
+      orParts.push(`module.eq.pur_articles`);
+    }
+    if (cleanSearch.includes('linea')) {
+      orParts.push(`module.eq.pur_lines`);
+      orParts.push(`module.eq.pur_sublines`);
+    }
+    if (cleanSearch.includes('sublinea') || cleanSearch.includes('sub-linea')) {
+      orParts.push(`module.eq.pur_sublines`);
+    }
+    if (cleanSearch.includes('categoria')) {
+      orParts.push(`module.eq.pur_categories`);
+    }
+    if (cleanSearch.includes('sucursal')) {
+      orParts.push(`module.eq.sec_branches`);
+    }
+    if (cleanSearch.includes('ubicacion')) {
+      orParts.push(`module.eq.sec_articles`);
+    }
+    if (cleanSearch.includes('usuario')) {
+      orParts.push(`module.eq.sec_users`);
+    }
+    if (cleanSearch.includes('rol') || cleanSearch.includes('permiso')) {
+      orParts.push(`module.eq.sec_roles`);
+    }
+    if (cleanSearch.includes('auditor')) {
+      orParts.push(`module.eq.sec_audit`);
+    }
+    if (cleanSearch.includes('sesion') || cleanSearch.includes('inicio') || cleanSearch.includes('cierre') || cleanSearch.includes('login') || cleanSearch.includes('logout')) {
+      orParts.push(`module.eq.auth_login`);
+      orParts.push(`module.eq.auth_logout`);
+    }
+
+    query = query.or(orParts.join(','));
   }
 
   query = query

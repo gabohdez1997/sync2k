@@ -24,7 +24,7 @@ export interface AuditLog {
 export async function logAction(log: AuditLog) {
   try {
     const supabaseAdmin = getSupabaseAdmin();
-    await supabaseAdmin.rpc('log_action', {
+    const { data, error } = await supabaseAdmin.rpc('log_action', {
       p_user_id:    log.uid,
       p_user_email: log.user_email,
       p_action:     log.action,
@@ -35,7 +35,13 @@ export async function logAction(log: AuditLog) {
       p_branch_id:  log.branch_id   ?? null,
       p_source:     log.source      ?? 'cloud'
     });
+
+    if (error) {
+      console.error('[AUDIT] Error registrando acción (RPC):', error);
+    } else {
+      console.log('[AUDIT] Acción registrada con éxito, ID:', data);
+    }
   } catch (err) {
-    console.error('[AUDIT] Error registrando acción:', err);
+    console.error('[AUDIT] Error registrando acción (Excepción):', err);
   }
 }
