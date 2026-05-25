@@ -35,7 +35,8 @@
     MapPin,
     Layers,
     GitBranch,
-    Tag
+    Tag,
+    Search
   } from 'lucide-svelte';
   import { slide, fade } from 'svelte/transition';
 
@@ -76,6 +77,7 @@
         { id: 'sales_customers', label: 'Clientes', href: '/dashboard/sales/customers', icon: Users },
         { id: 'sales_quotes', label: 'Cotizaciones', href: '/dashboard/sales/quotes', icon: FileText },
         { id: 'sales_orders', label: 'Pedidos', href: '/dashboard/sales/orders', icon: ClipboardList },
+        { id: 'sales_price_checker', label: 'Consultor de Precios', href: '/dashboard/sales/price-checker', icon: Search },
       ]
     },
     {
@@ -116,6 +118,14 @@
       ]
     },
     {
+      id: 'reports',
+      label: 'Reportes',
+      icon: FileText,
+      subItems: [
+        { id: 'reports_receivables', label: 'Cuentas por Cobrar', href: '/dashboard/reports/receivables', icon: Wallet }
+      ]
+    },
+    {
       id: 'security',
       label: 'Seguridad',
       icon: ShieldCheck,
@@ -136,6 +146,7 @@
     cash: false,
     warehouse: false,
     purchases: false,
+    reports: false,
     security: false
   });
 

@@ -17,6 +17,7 @@
     Building,
     ShoppingCart,
     Loader2,
+    FileText,
   } from "lucide-svelte";
   import type { PageData, ActionData } from "./$types";
 
@@ -28,16 +29,17 @@
       id: "general",
       label: "General",
       icon: LayoutDashboard,
-      options: [{ id: "dashboard", label: "Dashboard" }],
+      options: [{ id: "dashboard", label: "Dashboard", onlyRead: true }],
     },
     {
       id: "sales",
       label: "Ventas",
       icon: ShoppingBag,
       options: [
-        { id: "sales_customers", label: "Clientes" },
+        { id: "sales_customers", label: "Clientes", hasOthers: true },
         { id: "sales_quotes", label: "Cotizaciones", hasOthers: true, hasVoid: true },
         { id: "sales_orders", label: "Pedidos", hasOthers: true, hasVoid: true },
+        { id: "sales_price_checker", label: "Consultor de Precios", onlyRead: true },
       ],
     },
     {
@@ -78,6 +80,14 @@
       ],
     },
     {
+      id: "reports",
+      label: "Reportes",
+      icon: FileText,
+      options: [
+        { id: "reports_receivables", label: "Cuentas por Cobrar", hasOthers: true, hasVoid: false, onlyRead: true },
+      ],
+    },
+    {
       id: "security",
       label: "Seguridad",
       icon: ShieldCheck,
@@ -87,7 +97,7 @@
         //{ id: "sec_tenants", label: "Empresas" },
         { id: "sec_branches", label: "Sucursales" },
         { id: "sec_settings", label: "Parametrización" },
-        { id: "sec_audit", label: "Auditoría" },
+        { id: "sec_audit", label: "Auditoría", onlyRead: true },
       ],
     },
   ];
@@ -123,6 +133,7 @@
     cash: true,
     warehouse: true,
     purchases: true,
+    reports: true,
     security: true,
   });
 
@@ -245,17 +256,30 @@
     const option = navStructure.flatMap(n => n.options).find(o => o.id === optionId);
     const supportsOthers = (option as any)?.hasOthers || false;
     const supportsVoid = (option as any)?.hasVoid || false;
+    const onlyRead = (option as any)?.onlyRead || false;
 
-    const anyOff = !p.read || !p.create || !p.update || !p.delete || (supportsOthers && !p.others) || (supportsVoid && !p.void);
-
-    rolePermissions[optionId] = {
-      read: anyOff,
-      create: anyOff,
-      update: anyOff,
-      delete: anyOff,
-      void: anyOff,
-      others: anyOff,
-    };
+    let anyOff = false;
+    if (onlyRead) {
+      anyOff = !p.read || (supportsOthers && !p.others);
+      rolePermissions[optionId] = {
+        read: anyOff,
+        create: false,
+        update: false,
+        delete: false,
+        void: false,
+        others: supportsOthers ? anyOff : false,
+      };
+    } else {
+      anyOff = !p.read || !p.create || !p.update || !p.delete || (supportsOthers && !p.others) || (supportsVoid && !p.void);
+      rolePermissions[optionId] = {
+        read: anyOff,
+        create: anyOff,
+        update: anyOff,
+        delete: anyOff,
+        void: anyOff,
+        others: anyOff,
+      };
+    }
   }
 
   function handleCheckboxChange(optionId: string, action: string) {
@@ -711,17 +735,21 @@
                           type="button"
                           onclick={() => toggleAll(opt.id)}
                           class="w-6 h-6 rounded-lg border-2 border-brand-500/30 flex items-center justify-center transition-all {
-                            rolePermissions[opt.id].read &&
-                            rolePermissions[opt.id].create &&
-                            rolePermissions[opt.id].update &&
-                            rolePermissions[opt.id].delete &&
-                            (opt.hasOthers ? rolePermissions[opt.id].others : true) &&
-                            (opt.hasVoid ? rolePermissions[opt.id].void : true)
+                            (opt.onlyRead
+                              ? rolePermissions[opt.id].read && (opt.hasOthers ? rolePermissions[opt.id].others : true)
+                              : rolePermissions[opt.id].read &&
+                                rolePermissions[opt.id].create &&
+                                rolePermissions[opt.id].update &&
+                                rolePermissions[opt.id].delete &&
+                                (opt.hasOthers ? rolePermissions[opt.id].others : true) &&
+                                (opt.hasVoid ? rolePermissions[opt.id].void : true))
                               ? 'bg-brand-500 border-brand-500'
                               : 'hover:bg-brand-500/10'
                           }"
                         >
-                          {#if rolePermissions[opt.id].read && rolePermissions[opt.id].create && rolePermissions[opt.id].update && rolePermissions[opt.id].delete && (opt.hasOthers ? rolePermissions[opt.id].others : true) && (opt.hasVoid ? rolePermissions[opt.id].void : true)}
+                          {#if (opt.onlyRead
+                            ? rolePermissions[opt.id].read && (opt.hasOthers ? rolePermissions[opt.id].others : true)
+                            : rolePermissions[opt.id].read && rolePermissions[opt.id].create && rolePermissions[opt.id].update && rolePermissions[opt.id].delete && (opt.hasOthers ? rolePermissions[opt.id].others : true) && (opt.hasVoid ? rolePermissions[opt.id].void : true))}
                             <div in:fade={{ duration: 100 }}>
                               <Check
                                 size={14}
@@ -740,7 +768,7 @@
                         <td
                           class="px-6 py-4 text-center border-b border-border-subtle"
                         >
-                          {#if (opt.id !== 'cash_exchange' && (action !== 'others' || opt.hasOthers) && (action !== 'void' || opt.hasVoid)) || (opt.id === 'cash_exchange' && action === 'update')}
+                          {#if opt.onlyRead ? (action === 'read' || (action === 'others' && opt.hasOthers)) : ((opt.id !== 'cash_exchange' && (action !== 'others' || opt.hasOthers) && (action !== 'void' || opt.hasVoid)) || (opt.id === 'cash_exchange' && action === 'update'))}
                             <label
                               class="relative inline-flex items-center cursor-pointer justify-center"
                             >
