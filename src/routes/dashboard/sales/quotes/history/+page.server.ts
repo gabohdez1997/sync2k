@@ -133,8 +133,8 @@ export const actions = {
         const statusLabel = (status: string, anulada: boolean) => {
             if (anulada) return 'Anulada';
             if (status === '0') return 'Sin procesar';
-            if (status === '1') return 'Procesada';
-            if (status === '2') return 'Parcialmente procesada';
+            if (status === '1') return 'Parcialmente procesada';
+            if (status === '2') return 'Procesada';
             return status ? `Estado ${status}` : 'Desconocido';
         };
 
@@ -193,8 +193,8 @@ export const actions = {
         const statusLabel = (status: string, anulada: boolean) => {
             if (anulada) return 'Anulada';
             if (status === '0') return 'Sin procesar';
-            if (status === '1') return 'Procesada';
-            if (status === '2') return 'Parcialmente procesada';
+            if (status === '1') return 'Parcialmente procesada';
+            if (status === '2') return 'Procesada';
             return status ? `Estado ${status}` : 'Desconocido';
         };
 

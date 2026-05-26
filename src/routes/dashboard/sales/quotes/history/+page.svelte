@@ -66,8 +66,8 @@
 
     const statuses = {
         '0': { label: 'Sin procesar', class: 'bg-amber-500/10 text-amber-400 border-amber-500/20' },
-        '1': { label: 'Procesada', class: 'bg-green-500/10 text-green-500 border-green-500/20' },
-        '2': { label: 'Parcial procesada', class: 'bg-blue-500/10 text-blue-500 border-blue-500/20' },
+        '1': { label: 'Parcial procesada', class: 'bg-blue-500/10 text-blue-500 border-blue-500/20' },
+        '2': { label: 'Procesada', class: 'bg-green-500/10 text-green-500 border-green-500/20' },
         'anulada': { label: 'Anulada', class: 'bg-red-500/10 text-red-500 border-red-500/20' },
         'default': { label: 'Desconocido', class: 'bg-gray-500/10 text-gray-500 border-gray-500/20' }
     };
