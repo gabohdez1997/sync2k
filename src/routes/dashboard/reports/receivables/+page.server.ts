@@ -42,7 +42,7 @@ export const load: PageServerLoad = protectLoad('reports_receivables', async ({ 
 		}
 
 		const page = url.searchParams.get('page') || '1';
-		const limit = url.searchParams.get('limit') || '10';
+		const limit = url.searchParams.get('limit') || '1000';
 		const search = url.searchParams.get('search') || '';
 		const tipo_doc = url.searchParams.get('tipo_doc') || 'all';
 		const status = url.searchParams.get('status') || 'all';

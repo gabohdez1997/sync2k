@@ -3,7 +3,8 @@
     import { 
         Wallet, FileText, Calendar, DollarSign, Clock, AlertTriangle, 
         ChevronLeft, ChevronRight, Store, Search, Filter, FileDown,
-        TrendingDown, TrendingUp, CheckCircle, RefreshCw, Loader2
+        TrendingDown, TrendingUp, CheckCircle, RefreshCw, Loader2,
+        User, Eye, X, FileSpreadsheet
     } from 'lucide-svelte';
     import { goto } from '$app/navigation';
     import { page } from '$app/stores';
@@ -77,12 +78,88 @@
         'FACT': { label: 'Factura', class: 'bg-blue-500/10 text-blue-500 dark:text-blue-400 border-blue-500/20' },
         'NDEB': { label: 'N/Débito', class: 'bg-purple-500/10 text-purple-500 dark:text-purple-400 border-purple-500/20' },
         'GIRO': { label: 'Giro', class: 'bg-amber-500/10 text-amber-500 dark:text-amber-400 border-amber-500/20' },
+        'N/CR': { label: 'N/Crédito', class: 'bg-emerald-500/10 text-emerald-500 dark:text-emerald-400 border-emerald-500/20' },
         'default': { label: 'Otro', class: 'bg-gray-500/10 text-gray-500 border-gray-500/20' }
     };
 
     function getDocTypeBadge(type: string) {
         const t = String(type).trim().toUpperCase();
         return docTypes[t] || docTypes['default'];
+    }
+
+    // --- LOGICA DE AGRUPACIÓN POR CLIENTE ---
+    let selectedClient = $state<any>(null);
+    let showModal = $state(false);
+    let currentPage = $state(1);
+    const clientsPerPage = 12;
+
+    let groupedClients = $derived.by(() => {
+        const docs = data.cxc?.data || [];
+        const groups: Record<string, any> = {};
+        for (const doc of docs) {
+            const coCli = (doc.co_cli || "").trim();
+            if (!groups[coCli]) {
+                groups[coCli] = {
+                    co_cli: coCli,
+                    cli_des: (doc.cli_des || 'Cliente Desconocido').trim(),
+                    documents: [],
+                    total_usd: 0,
+                    total_bs: 0,
+                    saldo_usd: 0,
+                    saldo_bs: 0,
+                    saldo_vencido_usd: 0,
+                    saldo_vencido_bs: 0,
+                    saldo_por_vencer_usd: 0,
+                    saldo_por_vencer_bs: 0,
+                    doc_count: 0,
+                    max_dias_retraso: 0
+                };
+            }
+            
+            const g = groups[coCli];
+            g.documents.push(doc);
+            g.total_usd += doc.total_usd;
+            g.total_bs += doc.total_bs;
+            g.saldo_usd += doc.saldo_usd;
+            g.saldo_bs += doc.saldo_bs;
+            
+            if (doc.vencido) {
+                g.saldo_vencido_usd += doc.saldo_usd;
+                g.saldo_vencido_bs += doc.saldo_bs;
+                if (doc.dias_vencidos > g.max_dias_retraso) {
+                    g.max_dias_retraso = doc.dias_vencidos;
+                }
+            } else {
+                g.saldo_por_vencer_usd += doc.saldo_usd;
+                g.saldo_por_vencer_bs += doc.saldo_bs;
+            }
+            g.doc_count++;
+        }
+        
+        return Object.values(groups).sort((a: any, b: any) => b.saldo_usd - a.saldo_usd);
+    });
+
+    let paginatedClients = $derived.by(() => {
+        const offset = (currentPage - 1) * clientsPerPage;
+        return groupedClients.slice(offset, offset + clientsPerPage);
+    });
+
+    let totalClientPages = $derived(Math.ceil(groupedClients.length / clientsPerPage));
+
+    $effect(() => {
+        // Reset local page if search / filter groups change
+        const _len = groupedClients.length;
+        currentPage = 1;
+    });
+
+    function openClientDetail(client: any) {
+        selectedClient = client;
+        showModal = true;
+    }
+
+    function closeClientDetail() {
+        showModal = false;
+        setTimeout(() => { selectedClient = null; }, 300);
     }
 </script>
 
@@ -113,25 +190,7 @@
             </p>
         </div>
 
-        <div class="flex flex-wrap items-center gap-3 justify-start lg:justify-end shrink-0">
-            <button 
-                onclick={() => handleExport('excel')}
-                disabled={exporting || !data.cxc?.data?.length}
-                class="flex items-center justify-center gap-2 bg-white/5 border border-white/10 hover:bg-white/10 text-text-base h-12 px-6 rounded-xl font-bold transition-all disabled:opacity-50"
-            >
-                <FileDown size={18} />
-                Exportar Excel
-            </button>
 
-            <button 
-                onclick={() => handleExport('pdf')}
-                disabled={exporting || !data.cxc?.data?.length}
-                class="flex items-center justify-center gap-2 bg-brand-600 hover:bg-brand-500 text-white h-12 px-6 rounded-xl font-bold shadow-xl shadow-brand-500/20 transition-all disabled:opacity-50"
-            >
-                <FileDown size={18} />
-                Exportar PDF
-            </button>
-        </div>
     </div>
 
     <!-- METRICS CARDS -->
@@ -144,7 +203,7 @@
                 <div class="absolute -right-4 -bottom-4 w-24 h-24 bg-brand-500/10 rounded-full blur-2xl group-hover:scale-125 transition-transform duration-500"></div>
                 <div class="flex items-start justify-between">
                     <div class="space-y-2">
-                        <span class="text-xs font-black uppercase tracking-widest text-text-muted">Cartera Total</span>
+                        <span class="text-xs font-black uppercase tracking-widest text-text-muted">Saldo Total</span>
                         <h2 class="text-2xl font-black text-text-base tracking-tight">{formatCurrency(metrics.total_outstanding_usd, 'USD')}</h2>
                         <p class="text-xs text-text-muted font-bold">{formatCurrency(metrics.total_outstanding_bs, 'VES')}</p>
                     </div>
@@ -159,7 +218,7 @@
                 <div class="absolute -right-4 -bottom-4 w-24 h-24 bg-red-500/10 rounded-full blur-2xl group-hover:scale-125 transition-transform duration-500"></div>
                 <div class="flex items-start justify-between">
                     <div class="space-y-2">
-                        <span class="text-xs font-black uppercase tracking-widest text-red-500/80">Cartera Vencida</span>
+                        <span class="text-xs font-black uppercase tracking-widest text-red-500/80">Saldo Vencido</span>
                         <h2 class="text-2xl font-black text-red-500 tracking-tight">{formatCurrency(metrics.total_overdue_usd, 'USD')}</h2>
                         <p class="text-xs text-text-muted font-bold">{formatCurrency(metrics.total_overdue_bs, 'VES')}</p>
                     </div>
@@ -174,7 +233,7 @@
                 <div class="absolute -right-4 -bottom-4 w-24 h-24 bg-green-500/10 rounded-full blur-2xl group-hover:scale-125 transition-transform duration-500"></div>
                 <div class="flex items-start justify-between">
                     <div class="space-y-2">
-                        <span class="text-xs font-black uppercase tracking-widest text-green-500/80">Cartera por Vencer</span>
+                        <span class="text-xs font-black uppercase tracking-widest text-green-500/80">Saldo por Vencer</span>
                         <h2 class="text-2xl font-black text-green-500 tracking-tight">{formatCurrency(metrics.total_upcoming_usd, 'USD')}</h2>
                         <p class="text-xs text-text-muted font-bold">{formatCurrency(metrics.total_upcoming_bs, 'VES')}</p>
                     </div>
@@ -191,7 +250,7 @@
                     <div class="space-y-2">
                         <span class="text-xs font-black uppercase tracking-widest text-text-muted">Documentos Activos</span>
                         <h2 class="text-2xl font-black text-text-base tracking-tight">{metrics.doc_count}</h2>
-                        <p class="text-xs text-text-muted font-bold">Invoices / Giros pendientes</p>
+                        <p class="text-xs text-text-muted font-bold">Facturas / Notas</p>
                     </div>
                     <div class="h-10 w-10 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-500">
                         <FileText size={20} />
@@ -280,170 +339,142 @@
 
     </div>
 
-    <!-- MAIN LIST -->
-    <div class="bg-surface-raised/50 backdrop-blur-md rounded-[32px] border border-border-subtle shadow-2xl overflow-hidden min-h-[400px]">
-        <div class="overflow-x-auto">
-            <table class="w-full text-left border-collapse">
-                <thead>
-                    <tr class="bg-surface-soft/50 border-b border-border-subtle">
-                        <th class="px-6 py-5 text-xs font-black uppercase tracking-[0.1em] text-text-muted">Documento</th>
-                        <th class="px-6 py-5 text-xs font-black uppercase tracking-[0.1em] text-text-muted">Cliente</th>
-                        <th class="px-6 py-5 text-xs font-black uppercase tracking-[0.1em] text-text-muted">Emisión</th>
-                        <th class="px-6 py-5 text-xs font-black uppercase tracking-[0.1em] text-text-muted">Vencimiento</th>
-                        <th class="px-6 py-5 text-xs font-black uppercase tracking-[0.1em] text-text-muted text-right">Monto Original</th>
-                        <th class="px-6 py-5 text-xs font-black uppercase tracking-[0.1em] text-text-muted text-right">Saldo Pendiente</th>
-                        <th class="px-6 py-5 text-xs font-black uppercase tracking-[0.1em] text-text-muted text-center">Días Retraso</th>
-                        {#if data.hasOthers}
-                            <th class="px-6 py-5 text-xs font-black uppercase tracking-[0.1em] text-text-muted text-center">Vendedor</th>
-                        {/if}
-                    </tr>
-                </thead>
-                <tbody class="divide-y divide-border-subtle">
-                    {#if isSearching}
-                        <tr>
-                            <td colspan={data.hasOthers ? 8 : 7} class="px-6 py-20 text-center">
-                                <div class="flex flex-col items-center justify-center gap-3">
-                                    <Loader2 size={40} class="animate-spin text-brand-500" />
-                                    <p class="text-sm font-bold text-text-muted">Consultando saldos con el agente Profit local...</p>
-                                </div>
-                            </td>
-                        </tr>
+    <!-- MAIN LIST - CLIENT CARDS GRID -->
+    {#if isSearching}
+        <div class="glass p-20 rounded-[32px] border border-white/5 shadow-2xl flex flex-col items-center justify-center gap-4 min-h-[400px]">
+            <Loader2 size={48} class="animate-spin text-brand-500" />
+            <p class="text-base font-black text-text-muted">Consultando cuentas por cobrar con el agente Profit...</p>
+        </div>
+    {:else if groupedClients.length === 0}
+        <div class="glass p-20 rounded-[32px] border border-white/5 shadow-2xl flex flex-col items-center justify-center gap-3 text-center min-h-[400px]" in:fade>
+            <CheckCircle size={56} class="text-brand-500 mb-2 animate-bounce" />
+            <h3 class="text-2xl font-black text-text-base">¡Cartera 100% al Día!</h3>
+            <p class="text-sm text-text-muted font-bold max-w-md">No se encontraron clientes con cuentas por cobrar pendientes en esta sede bajo los filtros seleccionados.</p>
+        </div>
+    {:else}
+        <!-- Grid of Client Cards -->
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" in:fade>
+            {#each paginatedClients as client (client.co_cli)}
+                {@const hasOverdue = client.saldo_vencido_usd > 0}
+                <div class="glass p-6 rounded-3xl border border-white/5 shadow-xl hover:border-brand-500/30 hover:shadow-brand-500/5 transition-all duration-300 flex flex-col justify-between group relative overflow-hidden">
+                    <!-- Background ambient glow for overdue clients -->
+                    {#if hasOverdue}
+                        <div class="absolute -right-10 -top-10 w-28 h-28 bg-red-500/5 rounded-full blur-2xl group-hover:scale-125 transition-transform duration-500"></div>
                     {:else}
-                        {#each data.cxc?.data || [] as doc (doc.nro_doc + doc.sede_id + doc.co_tipo_doc)}
-                            {@const badge = getDocTypeBadge(doc.co_tipo_doc)}
-                            <tr class="hover:bg-brand-500/5 transition-colors group">
-                                <!-- Documento -->
-                                <td class="px-6 py-5">
-                                    <div class="flex items-center gap-3">
-                                        <div class="p-2 rounded-xl bg-white/5 border border-white/5 text-text-muted group-hover:text-brand-500 transition-colors">
-                                            <FileText size={16} />
-                                        </div>
-                                        <div class="flex flex-col min-w-0">
-                                            <span class="font-black text-sm tracking-tight text-text-base">{doc.nro_doc}</span>
-                                            <span class="px-1.5 py-0.5 mt-1 border text-[9px] font-black uppercase tracking-wider rounded-md text-center max-w-[65px] {badge.class}">
-                                                {badge.label}
-                                            </span>
-                                        </div>
-                                    </div>
-                                </td>
-
-                                <!-- Cliente -->
-                                <td class="px-6 py-5">
-                                    <div class="flex flex-col min-w-0">
-                                        <span class="font-bold text-sm text-text-base truncate group-hover:text-brand-400 transition-colors max-w-[200px]" title={doc.cli_des}>
-                                            {doc.cli_des}
-                                        </span>
-                                        <span class="text-[10px] text-text-muted font-mono mt-0.5">{doc.co_cli}</span>
-                                    </div>
-                                </td>
-
-                                <!-- Emision -->
-                                <td class="px-6 py-5 whitespace-nowrap">
-                                    <div class="flex items-center gap-2 text-text-muted">
-                                        <Calendar size={14} class="opacity-65" />
-                                        <span class="text-xs font-bold">{dayjs(doc.fec_emis).format('DD MMM YYYY')}</span>
-                                    </div>
-                                </td>
-
-                                <!-- Vencimiento -->
-                                <td class="px-6 py-5 whitespace-nowrap">
-                                    <div class="flex items-center gap-2 font-bold text-xs" class:text-red-400={doc.vencido} class:text-text-muted={!doc.vencido}>
-                                        <Clock size={14} class="opacity-65" />
-                                        <span>{dayjs(doc.fec_venc).format('DD MMM YYYY')}</span>
-                                    </div>
-                                </td>
-
-                                <!-- Monto Original -->
-                                <td class="px-6 py-5 text-right whitespace-nowrap">
-                                    <div class="flex flex-col items-end">
-                                        <span class="font-bold text-sm text-text-base">{formatCurrency(doc.total_usd, 'USD')}</span>
-                                        <span class="text-[10px] text-text-muted mt-0.5">{formatCurrency(doc.total_bs, 'VES')}</span>
-                                    </div>
-                                </td>
-
-                                <!-- Saldo Pendiente -->
-                                <td class="px-6 py-5 text-right whitespace-nowrap">
-                                    <div class="flex flex-col items-end">
-                                        <span class="font-black text-sm" class:text-red-400={doc.vencido} class:text-green-400={!doc.vencido}>
-                                            {formatCurrency(doc.saldo_usd, 'USD')}
-                                        </span>
-                                        <span class="text-[10px] text-text-muted mt-0.5">{formatCurrency(doc.saldo_bs, 'VES')}</span>
-                                    </div>
-                                </td>
-
-                                <!-- Dias Retraso -->
-                                <td class="px-6 py-5 text-center">
-                                    {#if doc.vencido}
-                                        <span class="px-2 py-1 bg-red-500/10 text-red-500 border border-red-500/20 text-xs font-bold rounded-lg whitespace-nowrap">
-                                            {doc.dias_vencidos} días
-                                        </span>
-                                    {:else}
-                                        <span class="px-2 py-1 bg-green-500/10 text-green-500 border border-green-500/20 text-xs font-bold rounded-lg whitespace-nowrap flex items-center justify-center gap-1 max-w-[80px] mx-auto">
-                                            <CheckCircle size={10} />
-                                            Al día
-                                        </span>
-                                    {/if}
-                                </td>
-
-                                <!-- Vendedor -->
-                                {#if data.hasOthers}
-                                    <td class="px-6 py-5 text-center whitespace-nowrap">
-                                        <span class="px-2 py-1 bg-white/5 border border-white/5 text-[11px] font-mono font-bold rounded-lg text-text-muted">
-                                            {doc.co_ven}
-                                        </span>
-                                    </td>
-                                {/if}
-                            </tr>
-                        {:else}
-                            <tr>
-                                <td colspan={data.hasOthers ? 8 : 7} class="px-6 py-20 text-center">
-                                    <div class="flex flex-col items-center justify-center gap-2 opacity-50">
-                                        <CheckCircle size={40} class="text-brand-500 mb-2" />
-                                        <p class="text-lg font-black text-text-base">¡Cartera Impecable!</p>
-                                        <p class="text-sm text-text-muted font-bold max-w-md">No se encontraron cuentas por cobrar pendientes en esta sede que coincidan con los filtros seleccionados.</p>
-                                    </div>
-                                </td>
-                            </tr>
-                        {/each}
+                        <div class="absolute -right-10 -top-10 w-28 h-28 bg-green-500/5 rounded-full blur-2xl group-hover:scale-125 transition-transform duration-500"></div>
                     {/if}
-                </tbody>
-            </table>
+
+                    <div class="space-y-5 relative z-10">
+                        <!-- Card Header -->
+                        <div class="flex items-start justify-between gap-3">
+                            <div class="flex items-center gap-3 min-w-0">
+                                <div class="h-10 w-10 rounded-xl flex items-center justify-center shrink-0 transition-colors {hasOverdue ? 'bg-red-500/10 text-red-500' : 'bg-green-500/10 text-green-500'}">
+                                    <User size={20} />
+                                </div>
+                                <div class="flex flex-col min-w-0">
+                                    <h3 class="font-black text-base tracking-tight text-text-base truncate group-hover:text-brand-400 transition-colors" title={client.cli_des}>
+                                        {client.cli_des}
+                                    </h3>
+                                    <span class="text-[10px] text-text-muted font-mono font-black mt-0.5">{client.co_cli}</span>
+                                </div>
+                            </div>
+                            <!-- Documents count badge -->
+                            <span class="px-2 py-1 bg-white/5 border border-white/5 text-[10px] font-black rounded-lg text-text-muted shrink-0">
+                                {client.doc_count} {client.doc_count === 1 ? 'doc' : 'docs'}
+                            </span>
+                        </div>
+
+                        <!-- Outstanding Balance -->
+                        <div class="p-4 rounded-2xl bg-black/20 border border-white/5 space-y-1">
+                            <span class="text-[10px] font-black uppercase tracking-widest text-text-muted">Deuda Pendiente</span>
+                            <div class="flex items-baseline gap-2">
+                                <span class="text-2xl font-black tracking-tight" class:text-red-400={hasOverdue} class:text-green-400={!hasOverdue}>
+                                    {formatCurrency(client.saldo_usd, 'USD')}
+                                </span>
+                            </div>
+                            <p class="text-xs text-text-muted font-bold">{formatCurrency(client.saldo_bs, 'VES')}</p>
+                        </div>
+
+                        <!-- Overdue & Upcoming split -->
+                        <div class="grid grid-cols-2 gap-4 text-xs font-bold">
+                            <!-- Vencido -->
+                            <div class="flex flex-col gap-0.5">
+                                <span class="text-[9px] uppercase tracking-wider text-text-muted">Vencido</span>
+                                {#if hasOverdue}
+                                    <span class="text-red-400 font-black">{formatCurrency(client.saldo_vencido_usd, 'USD')}</span>
+                                {:else}
+                                    <span class="text-green-500 font-black flex items-center gap-1">
+                                        <CheckCircle size={10} /> Al día
+                                    </span>
+                                {/if}
+                            </div>
+                            <!-- Por vencer -->
+                            <div class="flex flex-col gap-0.5">
+                                <span class="text-[9px] uppercase tracking-wider text-text-muted">Por Vencer</span>
+                                <span class="text-text-base font-black">{formatCurrency(client.saldo_por_vencer_usd, 'USD')}</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Card Footer Actions -->
+                    <div class="mt-6 pt-4 border-t border-white/5 flex items-center justify-between gap-3 relative z-10">
+                        <!-- Delay indicator -->
+                        {#if hasOverdue}
+                            <span class="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-red-500/10 text-red-500 border border-red-500/20 text-[10px] font-black">
+                                <Clock size={12} />
+                                Máx: {client.max_dias_retraso} días
+                            </span>
+                        {:else}
+                            <span class="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-green-500/10 text-green-500 border border-green-500/20 text-[10px] font-black">
+                                <CheckCircle size={12} />
+                                Sin mora
+                            </span>
+                        {/if}
+
+                        <button 
+                            onclick={() => openClientDetail(client)}
+                            class="flex items-center gap-1.5 text-xs font-black text-brand-400 hover:text-brand-300 transition-colors uppercase tracking-wider group/btn"
+                        >
+                            Ver Detalles
+                            <Eye size={14} class="group-hover/btn:translate-x-0.5 transition-transform" />
+                        </button>
+                    </div>
+                </div>
+            {/each}
         </div>
 
-        <!-- PAGINATION BAR -->
-        {#if data.cxc?.total_pages && data.cxc.total_pages > 1}
-            {@const page = data.cxc.page}
-            {@const totalPages = data.cxc.total_pages}
-            <div class="px-6 py-5 bg-surface-soft/40 border-t border-border-subtle flex items-center justify-between gap-4">
+        <!-- CLIENTS PAGINATION BAR -->
+        {#if totalClientPages > 1}
+            <div class="px-6 py-5 bg-surface-raised/50 backdrop-blur-md rounded-3xl border border-white/5 shadow-xl flex items-center justify-between gap-4 mt-8" in:fade>
                 <span class="text-xs font-bold text-text-muted">
-                    Mostrando página <strong class="text-text-base font-black">{page}</strong> de <strong class="text-text-base font-black">{totalPages}</strong> (Consolidado: {data.cxc.total_items} docs)
+                    Mostrando clientes <strong class="text-text-base font-black">{(currentPage - 1) * clientsPerPage + 1}</strong> a <strong class="text-text-base font-black">{Math.min(currentPage * clientsPerPage, groupedClients.length)}</strong> de <strong class="text-text-base font-black">{groupedClients.length}</strong> (Consolidado: {data.cxc?.data?.length || 0} docs)
                 </span>
 
                 <div class="flex items-center gap-1.5">
                     <button 
-                        onclick={() => changePage(page - 1)}
-                        disabled={page === 1}
+                        onclick={() => { if (currentPage > 1) currentPage--; }}
+                        disabled={currentPage === 1}
                         class="p-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/5 text-text-muted hover:text-text-base transition disabled:opacity-30 disabled:pointer-events-none"
                     >
                         <ChevronLeft size={16} />
                     </button>
 
-                    {#each Array.from({ length: totalPages }, (_, i) => i + 1) as p}
-                        {#if p === 1 || p === totalPages || (p >= page - 1 && p <= page + 1)}
+                    {#each Array.from({ length: totalClientPages }, (_, i) => i + 1) as p}
+                        {#if p === 1 || p === totalClientPages || (p >= currentPage - 1 && p <= currentPage + 1)}
                             <button 
-                                onclick={() => changePage(p)}
-                                class="h-9 w-9 rounded-xl text-xs font-black transition border {p === page ? 'bg-brand-600 border-brand-500 text-white' : 'bg-white/5 hover:bg-white/10 border-white/5 text-text-muted hover:text-text-base'}"
+                                onclick={() => currentPage = p}
+                                class="h-9 w-9 rounded-xl text-xs font-black transition border {p === currentPage ? 'bg-brand-600 border-brand-500 text-white shadow-lg shadow-brand-500/20' : 'bg-white/5 hover:bg-white/10 border-white/5 text-text-muted hover:text-text-base'}"
                             >
                                 {p}
                             </button>
-                        {:else if p === page - 2 || p === page + 2}
+                        {:else if p === currentPage - 2 || p === currentPage + 2}
                             <span class="px-1 text-text-muted text-xs font-bold">...</span>
                         {/if}
                     {/each}
 
                     <button 
-                        onclick={() => changePage(page + 1)}
-                        disabled={page === totalPages}
+                        onclick={() => { if (currentPage < totalClientPages) currentPage++; }}
+                        disabled={currentPage === totalClientPages}
                         class="p-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/5 text-text-muted hover:text-text-base transition disabled:opacity-30 disabled:pointer-events-none"
                     >
                         <ChevronRight size={16} />
@@ -451,8 +482,217 @@
                 </div>
             </div>
         {/if}
+    {/if}
 
-    </div>
+    <!-- MODAL DE DETALLES DEL CLIENTE -->
+    {#if showModal && selectedClient}
+        {@const client = selectedClient}
+        <div class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md" transition:fade={{ duration: 200 }}>
+            <!-- svelte-ignore a11y_click_events_have_key_events -->
+            <!-- svelte-ignore a11y_no_static_element_interactions -->
+            <div class="fixed inset-0" onclick={closeClientDetail}></div>
+
+            <div class="glass border border-white/10 rounded-[32px] max-w-6xl w-full max-h-[85vh] flex flex-col shadow-2xl relative z-10 overflow-hidden" 
+                 transition:slide={{ duration: 300 }}>
+                
+                <!-- Modal Header -->
+                <div class="px-8 py-6 border-b border-white/5 flex items-center justify-between gap-4 bg-white/5">
+                    <div class="flex items-center gap-4 min-w-0">
+                        <div class="h-12 w-12 rounded-2xl bg-brand-500/10 border border-brand-500/20 flex items-center justify-center text-brand-500 shrink-0">
+                            <User size={24} />
+                        </div>
+                        <div class="flex flex-col min-w-0">
+                            <span class="text-xs font-black uppercase tracking-widest text-brand-400">Detalle de Cuenta por Cobrar</span>
+                            <h2 class="text-xl font-black tracking-tight text-text-base truncate" title={client.cli_des}>
+                                {client.cli_des}
+                            </h2>
+                            <span class="text-xs text-text-muted font-mono font-bold mt-0.5">Código / RIF: {client.co_cli}</span>
+                        </div>
+                    </div>
+                    
+                    <button 
+                        onclick={closeClientDetail}
+                        class="p-3 rounded-2xl bg-white/5 hover:bg-white/10 text-text-muted hover:text-text-base transition-all"
+                        aria-label="Cerrar"
+                    >
+                        <X size={20} />
+                    </button>
+                </div>
+
+                <!-- Modal Content Scrollable -->
+                <div class="p-8 overflow-y-auto space-y-8 flex-1">
+                    
+                    <!-- Client Quick Totals Grid -->
+                    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                        <!-- Total outstanding -->
+                        <div class="p-5 rounded-2xl bg-white/5 border border-white/5 space-y-1 relative overflow-hidden">
+                            <span class="text-[10px] font-black uppercase tracking-widest text-text-muted">Total Pendiente</span>
+                            <h3 class="text-xl font-black text-text-base tracking-tight">{formatCurrency(client.saldo_usd, 'USD')}</h3>
+                            <p class="text-[11px] text-text-muted font-bold">{formatCurrency(client.saldo_bs, 'VES')}</p>
+                        </div>
+                        <!-- Overdue -->
+                        <div class="p-5 rounded-2xl bg-white/5 border border-white/5 space-y-1">
+                            <span class="text-[10px] font-black uppercase tracking-widest text-red-500/80">Saldo Vencido</span>
+                            <h3 class="text-xl font-black text-red-400 tracking-tight">
+                                {client.saldo_vencido_usd > 0 ? formatCurrency(client.saldo_vencido_usd, 'USD') : 'Al día'}
+                            </h3>
+                            <p class="text-[11px] text-text-muted font-bold">{formatCurrency(client.saldo_vencido_bs, 'VES')}</p>
+                        </div>
+                        <!-- Upcoming -->
+                        <div class="p-5 rounded-2xl bg-white/5 border border-white/5 space-y-1">
+                            <span class="text-[10px] font-black uppercase tracking-widest text-green-500/80">Por Vencer</span>
+                            <h3 class="text-xl font-black text-green-400 tracking-tight">{formatCurrency(client.saldo_por_vencer_usd, 'USD')}</h3>
+                            <p class="text-[11px] text-text-muted font-bold">{formatCurrency(client.saldo_por_vencer_bs, 'VES')}</p>
+                        </div>
+                        <!-- Documents counts and delay -->
+                        <div class="p-5 rounded-2xl bg-white/5 border border-white/5 flex flex-col justify-between">
+                            <div class="flex justify-between items-center">
+                                <span class="text-[10px] font-black uppercase tracking-widest text-text-muted">Docs Activos</span>
+                                <span class="px-2 py-0.5 bg-brand-500/10 text-brand-400 border border-brand-500/20 text-[10px] font-black rounded-md">
+                                    {client.doc_count}
+                                </span>
+                            </div>
+                            <div class="pt-2 text-xs font-bold text-text-muted">
+                                {#if client.saldo_vencido_usd > 0}
+                                    <span class="text-red-400 font-black flex items-center gap-1">
+                                        <AlertTriangle size={12} /> {client.max_dias_retraso} días retraso máx.
+                                    </span>
+                                {:else}
+                                    <span class="text-green-400 font-black flex items-center gap-1">
+                                        <CheckCircle size={12} /> Cartera al día
+                                    </span>
+                                {/if}
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Documents Table -->
+                    <div class="space-y-4">
+                        <h3 class="text-sm font-black uppercase tracking-widest text-text-muted flex items-center gap-2">
+                            <FileSpreadsheet size={16} />
+                            Desglose de Documentos Pendientes
+                        </h3>
+                        
+                        <div class="bg-black/20 rounded-2xl border border-white/5 overflow-hidden">
+                            <div class="overflow-x-auto">
+                                <table class="w-full text-left border-collapse">
+                                    <thead>
+                                        <tr class="bg-white/5 border-b border-white/5 text-xs font-black uppercase tracking-wider text-text-muted">
+                                            <th class="px-6 py-4">Documento</th>
+                                            <th class="px-6 py-4">Emisión</th>
+                                            <th class="px-6 py-4">Vencimiento</th>
+                                            <th class="px-6 py-4 text-right">Monto Original</th>
+                                            <th class="px-6 py-4 text-right">Saldo Pendiente</th>
+                                            <th class="px-6 py-4 text-center">Días Mora</th>
+                                            {#if data.hasOthers}
+                                                <th class="px-6 py-4 text-center">Vendedor</th>
+                                            {/if}
+                                        </tr>
+                                    </thead>
+                                    <tbody class="divide-y divide-white/5 text-xs">
+                                        {#each client.documents as doc (doc.nro_doc + doc.co_tipo_doc)}
+                                            {@const badge = getDocTypeBadge(doc.co_tipo_doc)}
+                                            {@const isNCR = doc.co_tipo_doc.trim().toUpperCase() === 'N/CR'}
+                                            <tr class="hover:bg-white/5 transition-colors">
+                                                <!-- Documento / Tipo -->
+                                                <td class="px-6 py-4">
+                                                    <div class="flex items-center gap-3">
+                                                        <div class="p-2 rounded-lg bg-white/5 text-text-muted">
+                                                            <FileText size={14} />
+                                                        </div>
+                                                        <div class="flex flex-col">
+                                                            <span class="font-black text-text-base">{doc.nro_doc}</span>
+                                                            <span class="px-1.5 py-0.5 mt-0.5 border text-[8px] font-black uppercase tracking-wider rounded text-center max-w-[55px] {badge.class}">
+                                                                {badge.label}
+                                                            </span>
+                                                        </div>
+                                                    </div>
+                                                </td>
+                                                
+                                                <!-- Emision -->
+                                                <td class="px-6 py-4 whitespace-nowrap text-text-muted font-bold">
+                                                    {dayjs(doc.fec_emis).format('DD MMM YYYY')}
+                                                </td>
+
+                                                <!-- Vencimiento -->
+                                                <td class="px-6 py-4 whitespace-nowrap font-bold" class:text-red-400={doc.vencido} class:text-text-muted={!doc.vencido}>
+                                                    {dayjs(doc.fec_venc).format('DD MMM YYYY')}
+                                                </td>
+
+                                                <!-- Monto Original -->
+                                                <td class="px-6 py-4 text-right whitespace-nowrap font-bold">
+                                                    <div class="flex flex-col items-end">
+                                                        <span class="text-text-base">{formatCurrency(doc.total_usd, 'USD')}</span>
+                                                        <span class="text-[9px] text-text-muted mt-0.5">{formatCurrency(doc.total_bs, 'VES')}</span>
+                                                    </div>
+                                                </td>
+
+                                                <!-- Saldo Pendiente -->
+                                                <td class="px-6 py-4 text-right whitespace-nowrap font-black">
+                                                    <div class="flex flex-col items-end">
+                                                        <span class:text-red-400={doc.vencido && !isNCR} 
+                                                              class:text-emerald-400={isNCR} 
+                                                              class:text-green-400={!doc.vencido && !isNCR}>
+                                                            {formatCurrency(doc.saldo_usd, 'USD')}
+                                                        </span>
+                                                        <span class="text-[9px] mt-0.5 font-bold {isNCR ? 'text-emerald-500/80' : 'text-text-muted'}">
+                                                            {formatCurrency(doc.saldo_bs, 'VES')}
+                                                        </span>
+                                                    </div>
+                                                </td>
+
+                                                <!-- Mora -->
+                                                <td class="px-6 py-4 text-center whitespace-nowrap">
+                                                    {#if doc.vencido}
+                                                        <span class="px-2 py-0.5 font-bold rounded {isNCR ? 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20' : 'bg-red-500/10 text-red-500 border border-red-500/20'}">
+                                                            {doc.dias_vencidos} días
+                                                        </span>
+                                                    {:else}
+                                                        <span class="px-2 py-0.5 font-bold rounded inline-flex items-center gap-1 {isNCR ? 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20' : 'bg-green-500/10 text-green-500 border border-green-500/20'}">
+                                                            {#if !isNCR}
+                                                                <CheckCircle size={8} />
+                                                            {/if}
+                                                            Al día
+                                                        </span>
+                                                    {/if}
+                                                </td>
+
+                                                <!-- Vendedor -->
+                                                {#if data.hasOthers}
+                                                    <td class="px-6 py-4 text-center whitespace-nowrap font-mono font-bold text-text-muted">
+                                                        {doc.co_ven}
+                                                    </td>
+                                                {/if}
+                                            </tr>
+                                        {/each}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Modal Footer -->
+                <div class="px-8 py-5 border-t border-white/5 flex justify-end gap-3 bg-white/5 font-bold text-xs">
+                    <a 
+                        href="/dashboard/reports/receivables/{client.co_cli}/print?branch_id={data.selectedBranchId}"
+                        target="_blank"
+                        class="flex items-center justify-center gap-2 bg-brand-600 hover:bg-brand-500 text-white px-6 py-2.5 rounded-xl transition-all shadow-lg shadow-brand-500/20"
+                    >
+                        <FileDown size={16} />
+                        Exportar PDF
+                    </a>
+                    
+                    <button 
+                        onclick={closeClientDetail}
+                        class="px-6 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-sm font-black transition-all"
+                    >
+                        Cerrar Detalle
+                    </button>
+                </div>
+            </div>
+        </div>
+    {/if}
 
 </div>
 
