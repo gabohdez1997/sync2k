@@ -98,6 +98,18 @@
         const groups: Record<string, any> = {};
         for (const doc of docs) {
             const coCli = (doc.co_cli || "").trim();
+            const isNCR = (doc.co_tipo_doc || "").trim().toUpperCase() === 'N/CR';
+            
+            // Forzar saldos negativos para Notas de Crédito (N/CR) y desactivar vencimiento
+            if (isNCR) {
+                doc.saldo_usd = -Math.abs(doc.saldo_usd);
+                doc.saldo_bs = -Math.abs(doc.saldo_bs);
+                doc.total_usd = -Math.abs(doc.total_usd);
+                doc.total_bs = -Math.abs(doc.total_bs);
+                doc.vencido = false;
+                doc.dias_vencidos = 0;
+            }
+
             if (!groups[coCli]) {
                 groups[coCli] = {
                     co_cli: coCli,

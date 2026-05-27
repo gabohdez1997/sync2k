@@ -28,6 +28,16 @@
     let maxDiasMora = 0;
 
     documents.forEach((d: any) => {
+        const isNCR = d.co_tipo_doc.trim().toUpperCase() === 'N/CR';
+        if (isNCR) {
+            d.saldo_usd = -Math.abs(d.saldo_usd);
+            d.saldo_bs = -Math.abs(d.saldo_bs);
+            d.total_usd = -Math.abs(d.total_usd);
+            d.total_bs = -Math.abs(d.total_bs);
+            d.vencido = false;
+            d.dias_vencidos = 0;
+        }
+
         totalSaldoUsd += d.saldo_usd;
         totalSaldoBs += d.saldo_bs;
         if (d.vencido) {
