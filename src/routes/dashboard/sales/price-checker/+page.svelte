@@ -263,50 +263,47 @@
   </div>
 
   <!-- Buscador Principal -->
-  <div class="grid grid-cols-1 gap-6">
-    <div class="bg-surface-raised/40 backdrop-blur-xl border border-border-subtle p-6 rounded-3xl shadow-xl space-y-4">
-      <div class="flex flex-col sm:flex-row gap-3">
-        <div class="relative flex-1">
-          <Search size={20} class="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted opacity-60" />
-          <input
-            bind:this={searchInputRef}
-            type="text"
-            bind:value={searchQuery}
-            placeholder="Buscar por descripción, código o referencia del artículo..."
-            onkeydown={(e) => e.key === "Enter" && handleSearch()}
-            class="w-full h-14 pl-12 pr-12 bg-surface-base border border-border-subtle rounded-2xl text-text-base focus:outline-none focus:ring-2 focus:ring-brand-500/50 transition-all font-bold placeholder:text-text-muted/40 placeholder:font-normal"
-          />
-          {#if searchQuery}
-            <button
-              onclick={clearSearch}
-              class="absolute right-4 top-1/2 -translate-y-1/2 text-text-muted hover:text-brand-500 transition-colors"
-            >
-              <X size={20} />
-            </button>
-          {/if}
-        </div>
-
+  <div class="glass p-4 rounded-3xl border border-border-subtle shadow-2xl relative z-10">
+    <div class="flex items-center gap-2 w-full h-14">
+      <form onsubmit={(e) => { e.preventDefault(); handleSearch(); }} class="relative group flex-1 h-full">
+        <input
+          bind:this={searchInputRef}
+          type="text"
+          bind:value={searchQuery}
+          placeholder="Buscar por descripción, código o referencia del artículo..."
+          class="w-full h-full bg-surface-base pl-6 pr-14 rounded-2xl border border-border-subtle focus:border-brand-500/30 outline-none transition-all font-bold text-sm placeholder:font-normal placeholder:text-text-secondary/30"
+        />
+        {#if searchQuery}
+          <button
+            type="button"
+            onclick={clearSearch}
+            class="absolute right-14 top-1/2 -translate-y-1/2 text-text-muted hover:text-brand-500 transition-colors"
+          >
+            <X size={18} />
+          </button>
+        {/if}
         <button
-          onclick={() => handleSearch()}
+          type="submit"
           disabled={searching}
-          class="h-14 px-6 bg-brand-600 hover:bg-brand-500 disabled:opacity-50 text-white rounded-2xl font-black text-sm uppercase tracking-wider flex items-center justify-center gap-2 hover:shadow-lg hover:shadow-brand-500/20 active:scale-95 transition-all"
+          class="absolute right-1 top-1 bottom-1 w-12 flex items-center justify-center bg-surface-soft hover:bg-surface-strong text-brand-400 rounded-xl transition-all border border-border-subtle active:scale-95 disabled:opacity-50 cursor-pointer"
+          title="Buscar"
         >
           {#if searching}
-            <Loader2 size={18} class="animate-spin" />
+            <Loader2 size={18} class="animate-spin text-brand-500" />
           {:else}
             <Search size={18} />
           {/if}
-          Buscar
         </button>
+      </form>
 
-        <button
-          onclick={toggleScanner}
-          class="h-14 px-6 bg-white/5 hover:bg-white/10 text-text-base border border-border-subtle rounded-2xl font-black text-sm uppercase tracking-wider flex items-center justify-center gap-2 active:scale-95 transition-all"
-        >
-          <Camera size={18} class="text-brand-400" />
-          Escanear QR
-        </button>
-      </div>
+      <button
+        onclick={toggleScanner}
+        class="h-full px-5 bg-surface-soft hover:bg-surface-strong border border-border-subtle rounded-2xl flex items-center justify-center gap-2 text-[10px] font-black uppercase tracking-widest text-text-muted hover:text-text-base transition-all active:scale-95 cursor-pointer shrink-0"
+        title="Escanear QR"
+      >
+        <Camera size={16} class="text-brand-400" />
+        <span>Escanear QR</span>
+      </button>
     </div>
   </div>
 

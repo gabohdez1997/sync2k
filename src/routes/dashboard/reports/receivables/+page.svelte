@@ -186,7 +186,7 @@
                 <h3 class="text-sm font-black text-red-500 uppercase tracking-widest mb-1">Error de Comunicación</h3>
                 <p class="text-text-muted font-bold text-sm leading-relaxed">{data.error}</p>
             </div>
-            <button onclick={() => window.location.reload()} class="px-5 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-xs font-black transition-all">Reintentar</button>
+            <button onclick={() => window.location.reload()} class="px-5 py-2 rounded-xl bg-surface-soft hover:bg-surface-strong border border-border-subtle text-xs font-black transition-all cursor-pointer">Reintentar</button>
         </div>
     {/if}
 
@@ -211,7 +211,7 @@
         <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6" in:slide>
             
             <!-- Card 1: Cartera Total -->
-            <div class="glass p-6 rounded-3xl border border-white/5 shadow-xl relative overflow-hidden group">
+            <div class="glass p-6 rounded-3xl border border-border-subtle shadow-xl relative overflow-hidden group">
                 <div class="absolute -right-4 -bottom-4 w-24 h-24 bg-brand-500/10 rounded-full blur-2xl group-hover:scale-125 transition-transform duration-500"></div>
                 <div class="flex items-start justify-between">
                     <div class="space-y-2">
@@ -226,7 +226,7 @@
             </div>
 
             <!-- Card 2: Cartera Vencida -->
-            <div class="glass p-6 rounded-3xl border border-white/5 shadow-xl relative overflow-hidden group">
+            <div class="glass p-6 rounded-3xl border border-border-subtle shadow-xl relative overflow-hidden group">
                 <div class="absolute -right-4 -bottom-4 w-24 h-24 bg-red-500/10 rounded-full blur-2xl group-hover:scale-125 transition-transform duration-500"></div>
                 <div class="flex items-start justify-between">
                     <div class="space-y-2">
@@ -241,7 +241,7 @@
             </div>
 
             <!-- Card 3: Cartera Por Vencer -->
-            <div class="glass p-6 rounded-3xl border border-white/5 shadow-xl relative overflow-hidden group">
+            <div class="glass p-6 rounded-3xl border border-border-subtle shadow-xl relative overflow-hidden group">
                 <div class="absolute -right-4 -bottom-4 w-24 h-24 bg-green-500/10 rounded-full blur-2xl group-hover:scale-125 transition-transform duration-500"></div>
                 <div class="flex items-start justify-between">
                     <div class="space-y-2">
@@ -256,7 +256,7 @@
             </div>
 
             <!-- Card 4: Conteo Documentos -->
-            <div class="glass p-6 rounded-3xl border border-white/5 shadow-xl relative overflow-hidden group">
+            <div class="glass p-6 rounded-3xl border border-border-subtle shadow-xl relative overflow-hidden group">
                 <div class="absolute -right-4 -bottom-4 w-24 h-24 bg-blue-500/10 rounded-full blur-2xl group-hover:scale-125 transition-transform duration-500"></div>
                 <div class="flex items-start justify-between">
                     <div class="space-y-2">
@@ -274,7 +274,7 @@
     {/if}
 
     <!-- FILTERS BAR -->
-    <div class="glass p-5 rounded-3xl border border-white/5 shadow-2xl flex flex-col xl:flex-row gap-4 items-center w-full relative z-10">
+    <div class="glass p-5 rounded-3xl border border-border-subtle shadow-2xl flex flex-col xl:flex-row gap-4 items-center w-full relative z-10">
         
         <!-- Sede Selector -->
         {#if data.branches && data.branches.length > 1}
@@ -292,8 +292,8 @@
         {/if}
 
         <!-- Status Filter -->
-        <div class="w-full xl:w-56">
-            <div class="relative w-full h-12 bg-black/20 border border-white/10 rounded-xl flex items-center px-3 group focus-within:border-brand-500/50 transition-all">
+        <div class="w-full xl:w-64">
+            <div class="relative w-full h-12 bg-surface-soft border border-border-subtle rounded-xl flex items-center px-3 group focus-within:border-brand-500/50 transition-all">
                 <Clock size={16} class="text-text-muted mr-2.5 shrink-0" />
                 <select 
                     bind:value={filterStatus} 
@@ -303,26 +303,6 @@
                     <option value="all" class="bg-surface-raised text-text-base">Todos los Saldos</option>
                     <option value="vencidos" class="bg-surface-raised text-text-base">Vencidos (Overdue)</option>
                     <option value="por_vencer" class="bg-surface-raised text-text-base">Por Vencer (Upcoming)</option>
-                </select>
-                <div class="pointer-events-none absolute right-3 flex items-center text-text-muted">
-                    <Filter size={14} />
-                </div>
-            </div>
-        </div>
-
-        <!-- Tipo Doc Filter -->
-        <div class="w-full xl:w-56">
-            <div class="relative w-full h-12 bg-black/20 border border-white/10 rounded-xl flex items-center px-3 group focus-within:border-brand-500/50 transition-all">
-                <FileText size={16} class="text-text-muted mr-2.5 shrink-0" />
-                <select 
-                    bind:value={filterTipoDoc} 
-                    onchange={applyFilters}
-                    class="w-full h-full bg-transparent outline-none text-sm text-text-base font-bold cursor-pointer appearance-none pr-8"
-                >
-                    <option value="all" class="bg-surface-raised text-text-base">Todos los Tipos</option>
-                    <option value="FACT" class="bg-surface-raised text-text-base">Facturas (FACT)</option>
-                    <option value="NDEB" class="bg-surface-raised text-text-base">Notas de Débito</option>
-                    <option value="GIRO" class="bg-surface-raised text-text-base">Giros</option>
                 </select>
                 <div class="pointer-events-none absolute right-3 flex items-center text-text-muted">
                     <Filter size={14} />
@@ -343,7 +323,7 @@
 
         <button 
             onclick={() => applyFilters()} 
-            class="h-12 w-full xl:w-auto px-6 bg-white/5 border border-white/10 hover:bg-white/10 text-text-base font-black rounded-xl transition-all flex items-center justify-center gap-2"
+            class="h-12 w-full xl:w-auto px-6 bg-surface-soft border border-border-subtle hover:bg-surface-strong text-text-base font-black rounded-xl transition-all flex items-center justify-center gap-2 cursor-pointer"
         >
             <RefreshCw size={16} class={isSearching ? 'animate-spin' : ''} />
             Actualizar
@@ -353,12 +333,12 @@
 
     <!-- MAIN LIST - CLIENT CARDS GRID -->
     {#if isSearching}
-        <div class="glass p-20 rounded-[32px] border border-white/5 shadow-2xl flex flex-col items-center justify-center gap-4 min-h-[400px]">
+        <div class="glass p-20 rounded-[32px] border border-border-subtle shadow-2xl flex flex-col items-center justify-center gap-4 min-h-[400px]">
             <Loader2 size={48} class="animate-spin text-brand-500" />
             <p class="text-base font-black text-text-muted">Consultando cuentas por cobrar con el agente Profit...</p>
         </div>
     {:else if groupedClients.length === 0}
-        <div class="glass p-20 rounded-[32px] border border-white/5 shadow-2xl flex flex-col items-center justify-center gap-3 text-center min-h-[400px]" in:fade>
+        <div class="glass p-20 rounded-[32px] border border-border-subtle shadow-2xl flex flex-col items-center justify-center gap-3 text-center min-h-[400px]" in:fade>
             <CheckCircle size={56} class="text-brand-500 mb-2 animate-bounce" />
             <h3 class="text-2xl font-black text-text-base">¡Cartera 100% al Día!</h3>
             <p class="text-sm text-text-muted font-bold max-w-md">No se encontraron clientes con cuentas por cobrar pendientes en esta sede bajo los filtros seleccionados.</p>
@@ -368,7 +348,7 @@
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" in:fade>
             {#each paginatedClients as client (client.co_cli)}
                 {@const hasOverdue = client.saldo_vencido_usd > 0}
-                <div class="glass p-6 rounded-3xl border border-white/5 shadow-xl hover:border-brand-500/30 hover:shadow-brand-500/5 transition-all duration-300 flex flex-col justify-between group relative overflow-hidden">
+                <div class="glass p-6 rounded-3xl border border-border-subtle shadow-xl hover:border-brand-500/30 hover:shadow-brand-500/5 transition-all duration-300 flex flex-col justify-between group relative overflow-hidden">
                     <!-- Background ambient glow for overdue clients -->
                     {#if hasOverdue}
                         <div class="absolute -right-10 -top-10 w-28 h-28 bg-red-500/5 rounded-full blur-2xl group-hover:scale-125 transition-transform duration-500"></div>
@@ -391,13 +371,13 @@
                                 </div>
                             </div>
                             <!-- Documents count badge -->
-                            <span class="px-2 py-1 bg-white/5 border border-white/5 text-[10px] font-black rounded-lg text-text-muted shrink-0">
+                            <span class="px-2 py-1 bg-surface-soft border border-border-subtle text-[10px] font-black rounded-lg text-text-muted shrink-0">
                                 {client.doc_count} {client.doc_count === 1 ? 'doc' : 'docs'}
                             </span>
                         </div>
 
                         <!-- Outstanding Balance -->
-                        <div class="p-4 rounded-2xl bg-black/20 border border-white/5 space-y-1">
+                        <div class="p-4 rounded-2xl bg-surface-soft border border-border-subtle space-y-1">
                             <span class="text-[10px] font-black uppercase tracking-widest text-text-muted">Deuda Pendiente</span>
                             <div class="flex items-baseline gap-2">
                                 <span class="text-2xl font-black tracking-tight" class:text-red-400={hasOverdue} class:text-green-400={!hasOverdue}>
@@ -429,7 +409,7 @@
                     </div>
 
                     <!-- Card Footer Actions -->
-                    <div class="mt-6 pt-4 border-t border-white/5 flex items-center justify-between gap-3 relative z-10">
+                    <div class="mt-6 pt-4 border-t border-border-subtle flex items-center justify-between gap-3 relative z-10">
                         <!-- Delay indicator -->
                         {#if hasOverdue}
                             <span class="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-red-500/10 text-red-500 border border-red-500/20 text-[10px] font-black">
@@ -457,7 +437,7 @@
 
         <!-- CLIENTS PAGINATION BAR -->
         {#if totalClientPages > 1}
-            <div class="px-6 py-5 bg-surface-raised/50 backdrop-blur-md rounded-3xl border border-white/5 shadow-xl flex items-center justify-between gap-4 mt-8" in:fade>
+            <div class="px-6 py-5 bg-surface-raised/50 backdrop-blur-md rounded-3xl border border-border-subtle shadow-xl flex items-center justify-between gap-4 mt-8" in:fade>
                 <span class="text-xs font-bold text-text-muted">
                     Mostrando clientes <strong class="text-text-base font-black">{(currentPage - 1) * clientsPerPage + 1}</strong> a <strong class="text-text-base font-black">{Math.min(currentPage * clientsPerPage, groupedClients.length)}</strong> de <strong class="text-text-base font-black">{groupedClients.length}</strong> (Consolidado: {data.cxc?.data?.length || 0} docs)
                 </span>
@@ -466,7 +446,7 @@
                     <button 
                         onclick={() => { if (currentPage > 1) currentPage--; }}
                         disabled={currentPage === 1}
-                        class="p-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/5 text-text-muted hover:text-text-base transition disabled:opacity-30 disabled:pointer-events-none"
+                        class="p-2 rounded-xl bg-surface-soft hover:bg-surface-strong border border-border-subtle text-text-muted hover:text-text-base transition disabled:opacity-30 disabled:pointer-events-none cursor-pointer"
                     >
                         <ChevronLeft size={16} />
                     </button>
@@ -475,7 +455,7 @@
                         {#if p === 1 || p === totalClientPages || (p >= currentPage - 1 && p <= currentPage + 1)}
                             <button 
                                 onclick={() => currentPage = p}
-                                class="h-9 w-9 rounded-xl text-xs font-black transition border {p === currentPage ? 'bg-brand-600 border-brand-500 text-white shadow-lg shadow-brand-500/20' : 'bg-white/5 hover:bg-white/10 border-white/5 text-text-muted hover:text-text-base'}"
+                                class="h-9 w-9 rounded-xl text-xs font-black transition border {p === currentPage ? 'bg-brand-600 border-brand-500 text-white shadow-lg shadow-brand-500/20' : 'bg-surface-soft hover:bg-surface-strong border-border-subtle text-text-muted hover:text-text-base cursor-pointer'}"
                             >
                                 {p}
                             </button>
@@ -487,7 +467,7 @@
                     <button 
                         onclick={() => { if (currentPage < totalClientPages) currentPage++; }}
                         disabled={currentPage === totalClientPages}
-                        class="p-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/5 text-text-muted hover:text-text-base transition disabled:opacity-30 disabled:pointer-events-none"
+                        class="p-2 rounded-xl bg-surface-soft hover:bg-surface-strong border border-border-subtle text-text-muted hover:text-text-base transition disabled:opacity-30 disabled:pointer-events-none cursor-pointer"
                     >
                         <ChevronRight size={16} />
                     </button>
@@ -504,11 +484,11 @@
             <!-- svelte-ignore a11y_no_static_element_interactions -->
             <div class="fixed inset-0" onclick={closeClientDetail}></div>
 
-            <div class="glass border border-white/10 rounded-[32px] max-w-6xl w-full max-h-[85vh] flex flex-col shadow-2xl relative z-10 overflow-hidden" 
+            <div class="glass border border-border-subtle rounded-[32px] max-w-6xl w-full max-h-[85vh] flex flex-col shadow-2xl relative z-10 overflow-hidden" 
                  transition:slide={{ duration: 300 }}>
                 
                 <!-- Modal Header -->
-                <div class="px-8 py-6 border-b border-white/5 flex items-center justify-between gap-4 bg-white/5">
+                <div class="px-8 py-6 border-b border-border-subtle flex items-center justify-between gap-4 bg-surface-soft">
                     <div class="flex items-center gap-4 min-w-0">
                         <div class="h-12 w-12 rounded-2xl bg-brand-500/10 border border-brand-500/20 flex items-center justify-center text-brand-500 shrink-0">
                             <User size={24} />
@@ -524,7 +504,7 @@
                     
                     <button 
                         onclick={closeClientDetail}
-                        class="p-3 rounded-2xl bg-white/5 hover:bg-white/10 text-text-muted hover:text-text-base transition-all"
+                        class="p-3 rounded-2xl bg-surface-soft hover:bg-surface-strong text-text-muted hover:text-text-base transition-all cursor-pointer"
                         aria-label="Cerrar"
                     >
                         <X size={20} />
@@ -537,13 +517,13 @@
                     <!-- Client Quick Totals Grid -->
                     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
                         <!-- Total outstanding -->
-                        <div class="p-5 rounded-2xl bg-white/5 border border-white/5 space-y-1 relative overflow-hidden">
+                        <div class="p-5 rounded-2xl bg-surface-soft border border-border-subtle space-y-1 relative overflow-hidden">
                             <span class="text-[10px] font-black uppercase tracking-widest text-text-muted">Total Pendiente</span>
                             <h3 class="text-xl font-black text-text-base tracking-tight">{formatCurrency(client.saldo_usd, 'USD')}</h3>
                             <p class="text-[11px] text-text-muted font-bold">{formatCurrency(client.saldo_bs, 'VES')}</p>
                         </div>
                         <!-- Overdue -->
-                        <div class="p-5 rounded-2xl bg-white/5 border border-white/5 space-y-1">
+                        <div class="p-5 rounded-2xl bg-surface-soft border border-border-subtle space-y-1">
                             <span class="text-[10px] font-black uppercase tracking-widest text-red-500/80">Saldo Vencido</span>
                             <h3 class="text-xl font-black text-red-400 tracking-tight">
                                 {client.saldo_vencido_usd > 0 ? formatCurrency(client.saldo_vencido_usd, 'USD') : 'Al día'}
@@ -551,13 +531,13 @@
                             <p class="text-[11px] text-text-muted font-bold">{formatCurrency(client.saldo_vencido_bs, 'VES')}</p>
                         </div>
                         <!-- Upcoming -->
-                        <div class="p-5 rounded-2xl bg-white/5 border border-white/5 space-y-1">
+                        <div class="p-5 rounded-2xl bg-surface-soft border border-border-subtle space-y-1">
                             <span class="text-[10px] font-black uppercase tracking-widest text-green-500/80">Por Vencer</span>
                             <h3 class="text-xl font-black text-green-400 tracking-tight">{formatCurrency(client.saldo_por_vencer_usd, 'USD')}</h3>
                             <p class="text-[11px] text-text-muted font-bold">{formatCurrency(client.saldo_por_vencer_bs, 'VES')}</p>
                         </div>
                         <!-- Documents counts and delay -->
-                        <div class="p-5 rounded-2xl bg-white/5 border border-white/5 flex flex-col justify-between">
+                        <div class="p-5 rounded-2xl bg-surface-soft border border-border-subtle flex flex-col justify-between">
                             <div class="flex justify-between items-center">
                                 <span class="text-[10px] font-black uppercase tracking-widest text-text-muted">Docs Activos</span>
                                 <span class="px-2 py-0.5 bg-brand-500/10 text-brand-400 border border-brand-500/20 text-[10px] font-black rounded-md">
@@ -585,11 +565,11 @@
                             Desglose de Documentos Pendientes
                         </h3>
                         
-                        <div class="bg-black/20 rounded-2xl border border-white/5 overflow-hidden">
+                        <div class="bg-surface-soft rounded-2xl border border-border-subtle overflow-hidden">
                             <div class="overflow-x-auto">
                                 <table class="w-full text-left border-collapse">
                                     <thead>
-                                        <tr class="bg-white/5 border-b border-white/5 text-xs font-black uppercase tracking-wider text-text-muted">
+                                        <tr class="bg-surface-strong border-b border-border-subtle text-xs font-black uppercase tracking-wider text-text-muted">
                                             <th class="px-6 py-4">Documento</th>
                                             <th class="px-6 py-4">Emisión</th>
                                             <th class="px-6 py-4">Vencimiento</th>
@@ -601,15 +581,15 @@
                                             {/if}
                                         </tr>
                                     </thead>
-                                    <tbody class="divide-y divide-white/5 text-xs">
+                                    <tbody class="divide-y divide-border-subtle text-xs">
                                         {#each client.documents as doc (doc.nro_doc + doc.co_tipo_doc)}
                                             {@const badge = getDocTypeBadge(doc.co_tipo_doc)}
                                             {@const isNCR = doc.co_tipo_doc.trim().toUpperCase() === 'N/CR'}
-                                            <tr class="hover:bg-white/5 transition-colors">
+                                            <tr class="hover:bg-surface-soft transition-colors">
                                                 <!-- Documento / Tipo -->
                                                 <td class="px-6 py-4">
                                                     <div class="flex items-center gap-3">
-                                                        <div class="p-2 rounded-lg bg-white/5 text-text-muted">
+                                                        <div class="p-2 rounded-lg bg-surface-soft text-text-muted">
                                                             <FileText size={14} />
                                                         </div>
                                                         <div class="flex flex-col">
@@ -685,7 +665,7 @@
                 </div>
 
                 <!-- Modal Footer -->
-                <div class="px-8 py-5 border-t border-white/5 flex justify-end gap-3 bg-white/5 font-bold text-xs">
+                <div class="px-8 py-5 border-t border-border-subtle flex justify-end gap-3 bg-surface-soft/50 font-bold text-xs">
                     <a 
                         href="/dashboard/reports/receivables/{client.co_cli}/print?branch_id={data.selectedBranchId}"
                         target="_blank"
@@ -697,7 +677,7 @@
                     
                     <button 
                         onclick={closeClientDetail}
-                        class="px-6 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-sm font-black transition-all"
+                        class="px-6 py-2.5 rounded-xl bg-surface-soft hover:bg-surface-strong text-sm font-black transition-all cursor-pointer"
                     >
                         Cerrar Detalle
                     </button>

@@ -1967,21 +1967,21 @@
             transition:slide
           >
             <div
-              class="glass p-4 rounded-[32px] border border-brand-500/30 bg-brand-600/20 backdrop-blur-2xl shadow-2xl flex items-center justify-between gap-4"
+              class="p-4 rounded-[32px] border border-brand-400/25 bg-brand-600 shadow-2xl flex items-center justify-between gap-4 text-white"
             >
               <div class="flex items-center gap-4">
                 <div
-                  class="h-12 w-12 rounded-2xl bg-brand-500 text-white flex items-center justify-center relative shadow-lg"
+                  class="h-12 w-12 rounded-2xl bg-white/15 text-white flex items-center justify-center relative shadow-sm border border-white/10"
                 >
                   <ShoppingCart size={24} />
                   <span
-                    class="absolute -top-2 -right-2 bg-red-500 text-white text-[10px] w-6 h-6 rounded-full flex items-center justify-center font-black border-2 border-white"
+                    class="absolute -top-2 -right-2 bg-red-500 text-white text-[10px] w-6 h-6 rounded-full flex items-center justify-center font-black border-2 border-brand-600"
                     >{cart.length}</span
                   >
                 </div>
                 <div>
                   <div
-                    class="text-[10px] font-black uppercase tracking-widest text-brand-400"
+                    class="text-[10px] font-black uppercase tracking-widest text-white/70"
                   >
                     Cotización en curso
                   </div>
@@ -1995,7 +1995,7 @@
               </div>
               <button
                 onclick={nextStep}
-                class="bg-white text-brand-600 h-12 px-6 rounded-2xl font-black uppercase text-xs tracking-widest shadow-xl hover:scale-105 active:scale-95 transition-all"
+                class="bg-white text-brand-600 hover:bg-brand-50 h-12 px-6 rounded-2xl font-black uppercase text-xs tracking-widest shadow-xl hover:scale-105 active:scale-95 transition-all cursor-pointer"
               >
                 Confirmar
               </button>

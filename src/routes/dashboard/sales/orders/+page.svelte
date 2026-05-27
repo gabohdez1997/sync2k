@@ -2192,21 +2192,21 @@
             transition:slide
           >
             <div
-              class="glass p-4 rounded-[32px] border border-brand-500/30 bg-brand-600/20 backdrop-blur-2xl shadow-2xl flex items-center justify-between gap-4"
+              class="p-4 rounded-[32px] border border-brand-400/25 bg-brand-600 shadow-2xl flex items-center justify-between gap-4 text-white"
             >
               <div class="flex items-center gap-4">
                 <div
-                  class="h-12 w-12 rounded-2xl bg-brand-500 text-white flex items-center justify-center relative shadow-lg"
+                  class="h-12 w-12 rounded-2xl bg-white/15 text-white flex items-center justify-center relative shadow-sm border border-white/10"
                 >
                   <ShoppingCart size={24} />
                   <span
-                    class="absolute -top-2 -right-2 bg-red-500 text-white text-[10px] w-6 h-6 rounded-full flex items-center justify-center font-black border-2 border-white"
+                    class="absolute -top-2 -right-2 bg-red-500 text-white text-[10px] w-6 h-6 rounded-full flex items-center justify-center font-black border-2 border-brand-600"
                     >{cart.length}</span
                   >
                 </div>
                 <div>
                   <div
-                    class="text-[10px] font-black uppercase tracking-widest text-brand-400"
+                    class="text-[10px] font-black uppercase tracking-widest text-white/70"
                   >
                     Pedido en curso
                   </div>
@@ -2220,7 +2220,7 @@
               </div>
               <button
                 onclick={nextStep}
-                class="bg-white text-brand-600 h-12 px-6 rounded-2xl font-black uppercase text-xs tracking-widest shadow-xl hover:scale-105 active:scale-95 transition-all"
+                class="bg-white text-brand-600 hover:bg-brand-50 h-12 px-6 rounded-2xl font-black uppercase text-xs tracking-widest shadow-xl hover:scale-105 active:scale-95 transition-all cursor-pointer"
               >
                 Confirmar
               </button>
@@ -2939,24 +2939,25 @@
               </div>
             </div>
 
-            <div class="flex-1 relative group">
-              <Search
-                size={20}
-                class="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted group-focus-within:text-brand-500 transition-colors"
-              />
+            <div class="flex-1 relative group h-14">
               <input
                 type="text"
                 name="search"
                 bind:value={importSearch}
                 placeholder="Buscar por Nro de Cotización o Cliente..."
-                class="w-full h-14 pl-12 pr-32 bg-surface-soft border border-border-subtle rounded-2xl focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none transition-all font-medium"
+                class="w-full h-full bg-surface-base pl-6 pr-14 rounded-2xl border border-border-subtle focus:border-brand-500/30 outline-none transition-all font-bold text-sm placeholder:font-normal placeholder:text-text-secondary/30"
               />
               <button
                 type="submit"
                 disabled={isSearchingQuotes}
-                class="absolute right-2 top-1/2 -translate-y-1/2 h-10 px-4 bg-brand-600 hover:bg-brand-500 text-white rounded-xl text-xs font-bold transition-all disabled:opacity-50"
+                class="absolute right-1 top-1 bottom-1 w-12 flex items-center justify-center bg-surface-soft hover:bg-surface-strong text-brand-400 rounded-xl transition-all border border-border-subtle active:scale-95 disabled:opacity-50 cursor-pointer"
+                title="Buscar"
               >
-                {isSearchingQuotes ? "..." : "BUSCAR"}
+                {#if isSearchingQuotes}
+                  <div class="w-4 h-4 border-2 border-brand-500/20 border-t-brand-500 rounded-full animate-spin"></div>
+                {:else}
+                  <Search size={18} />
+                {/if}
               </button>
             </div>
           </form>
