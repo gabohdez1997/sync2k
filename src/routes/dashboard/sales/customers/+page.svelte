@@ -68,7 +68,7 @@
   let contribuyente = $state(false);
   let tipo_per = $state("1"); // 1 = PNR by default
   let contribu_e = $state(false);
-  let porc_esp = $state(100);
+  let porc_esp = $state(75);
 
   let selectedTenant = $state("");
   let selectedBranch = $state("");
@@ -147,7 +147,7 @@
     contribuyente = false;
     tipo_per = "1";
     contribu_e = false;
-    porc_esp = 100;
+    porc_esp = 75;
     showModal = true;
   }
 
