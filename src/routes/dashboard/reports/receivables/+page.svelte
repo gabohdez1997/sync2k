@@ -562,7 +562,7 @@
                     <div class="space-y-4">
                         <h3 class="text-sm font-black uppercase tracking-widest text-text-muted flex items-center gap-2">
                             <FileSpreadsheet size={16} />
-                            Desglose de Documentos Pendientes
+                                    Desglose de Documentos Pendientes
                         </h3>
                         
                         <div class="bg-surface-soft rounded-2xl border border-border-subtle overflow-hidden">
@@ -572,6 +572,7 @@
                                         <tr class="bg-surface-strong border-b border-border-subtle text-xs font-black uppercase tracking-wider text-text-muted">
                                             <th class="px-6 py-4">Documento</th>
                                             <th class="px-6 py-4">Emisión</th>
+                                            <th class="px-6 py-4">Origen</th>
                                             <th class="px-6 py-4">Vencimiento</th>
                                             <th class="px-6 py-4 text-right">Monto Original</th>
                                             <th class="px-6 py-4 text-right">Saldo Pendiente</th>
@@ -592,10 +593,10 @@
                                                         <div class="p-2 rounded-lg bg-surface-soft text-text-muted">
                                                             <FileText size={14} />
                                                         </div>
-                                                        <div class="flex flex-col">
+                                    <div class="flex flex-col gap-1.5">
                                                             <span class="font-black text-text-base">{doc.nro_doc}</span>
-                                                            <span class="px-1.5 py-0.5 mt-0.5 border text-[8px] font-black uppercase tracking-wider rounded text-center max-w-[55px] {badge.class}">
-                                                                {badge.label}
+                                                            <span class="px-1.5 py-0.5 border text-[9px] font-black uppercase tracking-wider rounded text-center max-w-[55px] {badge.class}">
+                                                                {doc.co_tipo_doc.trim()}
                                                             </span>
                                                         </div>
                                                     </div>
@@ -604,6 +605,23 @@
                                                 <!-- Emision -->
                                                 <td class="px-6 py-4 whitespace-nowrap text-text-muted font-bold">
                                                     {dayjs(doc.fec_emis).format('DD MMM YYYY')}
+                                                </td>
+ 
+                                                <!-- Origen -->
+                                                <td class="px-6 py-4 whitespace-nowrap text-text-muted">
+                                                    <div class="flex flex-col gap-1.5">
+                                                        {#if doc.nro_orig && doc.nro_orig.trim()}
+                                                            <span class="font-black text-text-base">{doc.nro_orig.trim()}</span>
+                                                            {#if doc.doc_orig && doc.doc_orig.trim()}
+                                                                {@const origBadge = getDocTypeBadge(doc.doc_orig)}
+                                                                <span class="px-1.5 py-0.5 border text-[9px] font-black uppercase tracking-wider rounded text-center max-w-[55px] {origBadge.class}">
+                                                                    {doc.doc_orig.trim()}
+                                                                </span>
+                                                            {/if}
+                                                        {:else}
+                                                            <span class="text-text-muted/40 italic font-medium">—</span>
+                                                        {/if}
+                                                    </div>
                                                 </td>
 
                                                 <!-- Vencimiento -->
