@@ -397,32 +397,45 @@
                 {:else}
                   <div class="flex flex-col gap-3">
                     <!-- Cabeceras de Columnas -->
-                    <div class="flex items-center gap-3 px-3 text-[10px] font-black uppercase tracking-widest text-text-muted/50 mb-1">
+                    <div class="hidden md:flex items-center gap-3 px-3 text-[10px] font-black uppercase tracking-widest text-text-muted/50 mb-1">
                       <div class="min-w-[140px]">Categoría</div>
                       <div class="flex-1 text-center">Margen de Ganancia</div>
                       <div class="flex-1 text-center">Precio de Venta</div>
                       <div class="w-10"></div>
                     </div>
                     {#each priceEntries as entry, i (entry.tipo)}
-                      <div class="flex items-center gap-3 bg-surface-base/60 border border-border-subtle rounded-xl p-3 group hover:border-brand-500/30 transition-all" in:fade={{duration: 150}}>
-                        <select bind:value={entry.tipo} class="bg-surface-raised h-10 px-3 rounded-lg border border-border-subtle focus:border-brand-500 outline-none text-sm font-bold transition-all min-w-[140px]">
-                          {#each ['1','2','3','4','5'] as t}
-                            {#if t === entry.tipo || !usedPriceTypes.includes(t)}
-                              <option value={t}>Precio {t}</option>
-                            {/if}
-                          {/each}
-                        </select>
-                        <div class="relative flex-1">
-                          <input type="number" step="0.01" min="0" max="1000" bind:value={entry.margen} class="w-full bg-surface-base h-10 px-3 pr-8 rounded-lg border border-border-subtle focus:border-brand-500 outline-none text-sm font-mono text-right transition-all" placeholder="Margen %" />
-                          <Percent size={14} class="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted/50" />
+                      <div class="flex flex-col gap-3 bg-surface-base/60 border border-border-subtle rounded-xl p-3 group hover:border-brand-500/30 transition-all md:flex-row md:items-center md:gap-3" in:fade={{duration: 150}}>
+                        <!-- Fila del Selector de Categoría y Eliminar en Móvil -->
+                        <div class="flex items-center gap-2 w-full md:w-auto">
+                          <select bind:value={entry.tipo} class="bg-surface-raised h-10 px-3 rounded-lg border border-border-subtle focus:border-brand-500 outline-none text-sm font-bold transition-all w-full md:w-[140px] md:min-w-[140px]">
+                            {#each ['1','2','3','4','5'] as t}
+                              {#if t === entry.tipo || !usedPriceTypes.includes(t)}
+                                <option value={t}>Precio {t}</option>
+                              {/if}
+                            {/each}
+                          </select>
+                          <button type="button" onclick={() => removePriceEntry(i)} class="md:hidden h-10 w-10 flex items-center justify-center rounded-lg text-text-muted/40 hover:text-red-400 hover:bg-red-500/10 border border-transparent hover:border-red-500/20 transition-all shrink-0">
+                            <Trash2 size={16} />
+                          </button>
                         </div>
-                        <div class="relative flex-1">
-                          <input type="number" step="0.01" min="0" bind:value={entry.precio} class="w-full bg-surface-base h-10 px-3 pr-8 rounded-lg border border-border-subtle focus:border-brand-500 outline-none text-sm font-mono text-right transition-all" placeholder="Precio USD" />
-                          <DollarSign size={14} class="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted/50" />
+                        
+                        <!-- Inputs de Margen y Precio (Lado a lado en móvil y escritorio) -->
+                        <div class="flex items-center gap-3 flex-1 w-full">
+                          <div class="relative flex-1">
+                            <input type="number" step="0.01" min="0" max="1000" bind:value={entry.margen} class="w-full bg-surface-base h-10 px-3 pr-8 rounded-lg border border-border-subtle focus:border-brand-500 outline-none text-sm font-mono text-right transition-all" placeholder="Margen %" />
+                            <Percent size={14} class="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted/50" />
+                          </div>
+                          <div class="relative flex-1">
+                            <input type="number" step="0.01" min="0" bind:value={entry.precio} class="w-full bg-surface-base h-10 px-3 pr-8 rounded-lg border border-border-subtle focus:border-brand-500 outline-none text-sm font-mono text-right transition-all" placeholder="Precio USD" />
+                            <DollarSign size={14} class="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted/50" />
+                          </div>
                         </div>
-                        <button type="button" onclick={() => removePriceEntry(i)} class="h-10 w-10 flex items-center justify-center rounded-lg text-text-muted/40 hover:text-red-400 hover:bg-red-500/10 border border-transparent hover:border-red-500/20 transition-all">
+                        
+                        <!-- Botón de Eliminar para Escritorio -->
+                        <button type="button" onclick={() => removePriceEntry(i)} class="hidden md:flex h-10 w-10 items-center justify-center rounded-lg text-text-muted/40 hover:text-red-400 hover:bg-red-500/10 border border-transparent hover:border-red-500/20 transition-all shrink-0">
                           <Trash2 size={16} />
                         </button>
+                        
                         <input type="hidden" name={`margen_${entry.tipo}`} value={entry.margen} />
                         <input type="hidden" name={`precio_${entry.tipo}`} value={entry.precio} />
                       </div>

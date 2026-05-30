@@ -106,6 +106,50 @@
     ($page.url.searchParams.get("sort") as any) || "relevance",
   );
   let showUSD = $state(true);
+  let dragX = $state(32); // offset px desde la derecha
+  let dragY = $state(90); // offset px desde abajo (inicialmente por encima del menú móvil)
+  let activeDrag = false;
+  let startX = 0;
+  let startY = 0;
+  let startDragX = 32;
+  let startDragY = 90;
+
+  $effect(() => {
+    if (typeof window !== 'undefined') {
+      const savedX = localStorage.getItem('currency_switch_x');
+      const savedY = localStorage.getItem('currency_switch_y');
+      if (savedX) dragX = parseInt(savedX, 10);
+      if (savedY) dragY = parseInt(savedY, 10);
+    }
+  });
+
+  function onPointerDown(e: PointerEvent) {
+    if (e.button !== 0 && e.pointerType === 'mouse') return;
+    const target = e.target as HTMLElement;
+    if (target.closest('button')) return;
+    activeDrag = true;
+    startX = e.clientX;
+    startY = e.clientY;
+    startDragX = dragX;
+    startDragY = dragY;
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+  }
+
+  function onPointerMove(e: PointerEvent) {
+    if (!activeDrag) return;
+    const dx = e.clientX - startX;
+    const dy = e.clientY - startY;
+    dragX = Math.max(16, Math.min(window.innerWidth - 180, startDragX - dx));
+    dragY = Math.max(16, Math.min(window.innerHeight - 80, startDragY - dy));
+  }
+
+  function onPointerUp(e: PointerEvent) {
+    if (!activeDrag) return;
+    activeDrag = false;
+    localStorage.setItem('currency_switch_x', dragX.toString());
+    localStorage.setItem('currency_switch_y', dragY.toString());
+  }
+
   let quoteTaxRate = $state(16); // 16 o 0 (global para items no exentos)
   let quoteDescription = $state("");
   let masterBranchId = $state(""); // Sede donde se inició la cotización (dueña del cliente)
@@ -2702,3 +2746,56 @@
     </div>
   </div>
 {/if}
+
+{#if activeTab === 1}
+  <div
+    class="fixed z-[100] touch-none select-none animate-in fade-in slide-in-from-bottom-8 duration-500"
+    style="bottom: {dragY}px; right: {dragX}px;"
+    onpointerdown={onPointerDown}
+    onpointermove={onPointerMove}
+    onpointerup={onPointerUp}
+    transition:fade
+  >
+    <div
+      class="flex items-center gap-1 bg-surface-raised/95 border border-border-bold p-1.5 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.6)] backdrop-blur-xl cursor-grab active:cursor-grabbing"
+    >
+      <!-- Grab handle dots on the left -->
+      <div class="flex flex-col gap-0.5 px-1.5 opacity-30 shrink-0">
+        <div class="flex gap-0.5">
+          <span class="w-1 h-1 bg-white rounded-full"></span>
+          <span class="w-1 h-1 bg-white rounded-full"></span>
+        </div>
+        <div class="flex gap-0.5">
+          <span class="w-1 h-1 bg-white rounded-full"></span>
+          <span class="w-1 h-1 bg-white rounded-full"></span>
+        </div>
+        <div class="flex gap-0.5">
+          <span class="w-1 h-1 bg-white rounded-full"></span>
+          <span class="w-1 h-1 bg-white rounded-full"></span>
+        </div>
+      </div>
+      
+      <button
+        onclick={() => (showUSD = true)}
+        class={`h-11 px-5 rounded-xl text-xs font-black tracking-widest transition-all duration-300 flex items-center gap-2 ${
+          showUSD
+            ? "bg-brand-600 text-white shadow-lg shadow-brand-500/20 scale-105"
+            : "text-text-muted hover:text-text-base hover:bg-white/5"
+        }`}
+      >
+        USD
+      </button>
+      <button
+        onclick={() => (showUSD = false)}
+        class={`h-11 px-5 rounded-xl text-xs font-black tracking-widest transition-all duration-300 flex items-center gap-2 ${
+          !showUSD
+            ? "bg-brand-600 text-white shadow-lg shadow-brand-500/20 scale-105"
+            : "text-text-muted hover:text-text-base hover:bg-white/5"
+        }`}
+      >
+        BS
+      </button>
+    </div>
+  </div>
+{/if}
+
