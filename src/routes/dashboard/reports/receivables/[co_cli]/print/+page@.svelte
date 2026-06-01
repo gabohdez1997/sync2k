@@ -184,10 +184,10 @@
                                 <th class="col-doc">Documento</th>
                                 <th class="col-type">Tipo</th>
                                 <th class="col-date">Emisión</th>
+                                <th class="col-doc">Origen</th>
                                 <th class="col-date">Vencimiento</th>
                                 <th class="col-amount text-right">Monto Original (USD)</th>
                                 <th class="col-amount text-right">Saldo Pendiente (USD)</th>
-                                <th class="col-amount text-right">Saldo Pendiente (Bs)</th>
                                 <th class="col-days">Días Mora</th>
                             </tr>
                         </thead>
@@ -197,13 +197,22 @@
                                 <tr>
                                     <td class="font-mono font-bold">{item.nro_doc}</td>
                                     <td class="font-bold uppercase" class:text-emerald-600={isNCR}>
-                                        {#if item.co_tipo_doc === 'FACT'}Factura{:else if item.co_tipo_doc === 'NDEB'}N/Débito{:else if item.co_tipo_doc === 'GIRO'}Giro{:else if item.co_tipo_doc === 'N/CR'}N/Crédito{:else}{item.co_tipo_doc}{/if}
+                                        {item.co_tipo_doc.trim()}
                                     </td>
                                     <td class:text-emerald-600={isNCR}>{dayjs(item.fec_emis).format("DD/MM/YYYY")}</td>
+                                    <td class="font-mono" class:text-emerald-600={isNCR}>
+                                        {#if item.nro_orig && item.nro_orig.trim()}
+                                            {item.nro_orig.trim()}
+                                            {#if item.doc_orig && item.doc_orig.trim()}
+                                                <span class="text-[7.5px] text-slate-400 font-sans font-bold">({item.doc_orig.trim()})</span>
+                                            {/if}
+                                        {:else}
+                                            <span class="text-slate-300">—</span>
+                                        {/if}
+                                    </td>
                                     <td class="font-bold" class:text-red-600={item.vencido && !isNCR} class:text-emerald-600={isNCR}>{dayjs(item.fec_venc).format("DD/MM/YYYY")}</td>
                                     <td class="text-right" class:text-emerald-600={isNCR}>{formatCurrency(item.total_usd)}</td>
                                     <td class="text-right font-black" class:text-red-600={item.vencido && !isNCR} class:text-emerald-600={isNCR}>{formatCurrency(item.saldo_usd)}</td>
-                                    <td class="text-right" class:text-emerald-600={isNCR} class:text-slate-500={!isNCR}>{formatCurrency(item.saldo_bs)}</td>
                                     <td class="font-bold">
                                         {#if item.vencido}
                                             <span class={isNCR ? "text-emerald-600" : "text-red-600"}>{item.dias_vencidos} días</span>
