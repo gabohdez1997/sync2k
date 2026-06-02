@@ -440,6 +440,7 @@
 
             return {
               co_art: artId,
+              co_lin: String(r.co_lin || "").trim(),
               art_des: String(r.art_des || "").trim(),
               qty: Number(r.cantidad || 0),
               precio_ves: Number(r.precio || 0),
@@ -948,6 +949,10 @@
     item.price_index_selected = priceIndex;
     item.price_selected = newPrice;
     cart[index] = { ...item };
+  }
+
+  function toggleCurrency(toUSD: boolean) {
+    showUSD = toUSD;
   }
 
   function handleSearch(e?: Event) {
@@ -1928,12 +1933,12 @@
               class="flex items-center bg-white/5 border border-white/5 p-1 rounded-xl h-full"
             >
               <button
-                onclick={() => (showUSD = true)}
+                onclick={() => toggleCurrency(true)}
                 class={`px-3 h-full rounded-lg text-[10px] font-black transition-all ${showUSD ? "bg-brand-500 text-white" : "text-text-muted hover:text-white"}`}
                 >USD</button
               >
               <button
-                onclick={() => (showUSD = false)}
+                onclick={() => toggleCurrency(false)}
                 class={`px-3 h-full rounded-lg text-[10px] font-black transition-all ${!showUSD ? "bg-brand-500 text-white" : "text-text-muted hover:text-white"}`}
                 >Bs.</button
               >
@@ -1988,13 +1993,7 @@
                   >
                     {article.co_art || article.codigo}
                   </span>
-                  {#if (article.co_lin || "").trim() === "09" || (article.co_art || article.codigo || "").startsWith("09")}
-                    <span
-                      class="px-2 py-0.5 rounded-md bg-green-500/10 text-green-400 text-[8px] font-black uppercase tracking-tighter border border-green-500/20"
-                    >
-                      Servicio / Exento
-                    </span>
-                  {/if}
+
                 </div>
 
                 <div
@@ -2255,7 +2254,7 @@
                     Pedido en curso
                   </div>
                   <div class="text-sm font-black text-white">
-                    $ {totals().total.toLocaleString("de-DE", {
+                    {totals().symbol} {totals().total.toLocaleString("de-DE", {
                       minimumFractionDigits: 2,
                       maximumFractionDigits: 2,
                     })}
@@ -2504,12 +2503,7 @@
                           >{item.co_art}</span
                         >
 
-                        {#if (item.co_lin || "").trim() === "09" || (item.co_art || "").startsWith("09")}
-                          <span
-                            class="px-2 py-0.5 rounded-md bg-green-500/10 text-green-500 text-[9px] font-black border border-green-500/20"
-                            >EXENTO</span
-                          >
-                        {/if}
+
 
                         <span class="h-1 w-1 rounded-full bg-border-subtle"
                         ></span>
@@ -2652,12 +2646,12 @@
                   class="flex bg-surface-base p-1 rounded-xl border border-border-bold shadow-lg"
                 >
                   <button
-                    onclick={() => (showUSD = true)}
+                    onclick={() => toggleCurrency(true)}
                     class={`px-5 py-2 rounded-lg text-xs font-black transition-all duration-300 ${showUSD ? "bg-brand-600 text-white shadow-lg scale-105" : "text-text-muted hover:text-text-base"}`}
                     >USD</button
                   >
                   <button
-                    onclick={() => (showUSD = false)}
+                    onclick={() => toggleCurrency(false)}
                     class={`px-5 py-2 rounded-lg text-xs font-black transition-all duration-300 ${!showUSD ? "bg-brand-600 text-white shadow-lg scale-105" : "text-text-muted hover:text-text-base"}`}
                     >BS</button
                   >
@@ -3321,7 +3315,7 @@
   </div>
 {/if}
 
-{#if activeTab === 1}
+{#if activeTab === 1 || activeTab === 2}
   <div
     class="fixed z-[100] touch-none select-none animate-in fade-in slide-in-from-bottom-8 duration-500"
     style="bottom: {dragY}px; right: {dragX}px;"
@@ -3334,23 +3328,23 @@
       class="flex items-center gap-1 bg-surface-raised/95 border border-border-bold p-1.5 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.6)] backdrop-blur-xl cursor-grab active:cursor-grabbing"
     >
       <!-- Grab handle dots on the left -->
-      <div class="flex flex-col gap-0.5 px-1.5 opacity-30 shrink-0">
+      <div class="flex flex-col gap-0.5 px-1.5 opacity-40 shrink-0">
         <div class="flex gap-0.5">
-          <span class="w-1 h-1 bg-white rounded-full"></span>
-          <span class="w-1 h-1 bg-white rounded-full"></span>
+          <span class="w-1 h-1 bg-text-base rounded-full"></span>
+          <span class="w-1 h-1 bg-text-base rounded-full"></span>
         </div>
         <div class="flex gap-0.5">
-          <span class="w-1 h-1 bg-white rounded-full"></span>
-          <span class="w-1 h-1 bg-white rounded-full"></span>
+          <span class="w-1 h-1 bg-text-base rounded-full"></span>
+          <span class="w-1 h-1 bg-text-base rounded-full"></span>
         </div>
         <div class="flex gap-0.5">
-          <span class="w-1 h-1 bg-white rounded-full"></span>
-          <span class="w-1 h-1 bg-white rounded-full"></span>
+          <span class="w-1 h-1 bg-text-base rounded-full"></span>
+          <span class="w-1 h-1 bg-text-base rounded-full"></span>
         </div>
       </div>
       
       <button
-        onclick={() => (showUSD = true)}
+        onclick={() => toggleCurrency(true)}
         class={`h-11 px-5 rounded-xl text-xs font-black tracking-widest transition-all duration-300 flex items-center gap-2 ${
           showUSD
             ? "bg-brand-600 text-white shadow-lg shadow-brand-500/20 scale-105"
@@ -3360,7 +3354,7 @@
         USD
       </button>
       <button
-        onclick={() => (showUSD = false)}
+        onclick={() => toggleCurrency(false)}
         class={`h-11 px-5 rounded-xl text-xs font-black tracking-widest transition-all duration-300 flex items-center gap-2 ${
           !showUSD
             ? "bg-brand-600 text-white shadow-lg shadow-brand-500/20 scale-105"
