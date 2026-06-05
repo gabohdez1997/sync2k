@@ -64,21 +64,13 @@
         return formatter.format(val);
     }
 
-    function handleExport(format: 'pdf' | 'excel') {
-        exporting = true;
-        toast.info(`Simulando exportación a ${format.toUpperCase()}...`);
-        setTimeout(() => {
-            exporting = false;
-            toast.success(`Reporte exportado exitosamente en formato ${format.toUpperCase()}!`);
-        }, 1500);
-    }
-
     // Tipo de documentos badges
     const docTypes: Record<string, { label: string, class: string }> = {
         'FACT': { label: 'Factura', class: 'bg-blue-500/10 text-blue-500 dark:text-blue-400 border-blue-500/20' },
         'NDEB': { label: 'N/Débito', class: 'bg-purple-500/10 text-purple-500 dark:text-purple-400 border-purple-500/20' },
         'GIRO': { label: 'Giro', class: 'bg-amber-500/10 text-amber-500 dark:text-amber-400 border-amber-500/20' },
         'N/CR': { label: 'N/Crédito', class: 'bg-emerald-500/10 text-emerald-500 dark:text-emerald-400 border-emerald-500/20' },
+        'NCR': { label: 'N/Crédito', class: 'bg-emerald-500/10 text-emerald-500 dark:text-emerald-400 border-emerald-500/20' },
         'default': { label: 'Otro', class: 'bg-gray-500/10 text-gray-500 border-gray-500/20' }
     };
 
@@ -87,33 +79,22 @@
         return docTypes[t] || docTypes['default'];
     }
 
-    // --- LOGICA DE AGRUPACIÓN POR CLIENTE ---
-    let selectedClient = $state<any>(null);
+    // --- LOGICA DE AGRUPACIÓN POR PROVEEDOR ---
+    let selectedSupplier = $state<any>(null);
     let showModal = $state(false);
     let currentPage = $state(1);
-    const clientsPerPage = 12;
+    const suppliersPerPage = 12;
 
-    let groupedClients = $derived.by(() => {
-        const docs = data.cxc?.data || [];
+    let groupedSuppliers = $derived.by(() => {
+        const docs = data.cxp?.data || [];
         const groups: Record<string, any> = {};
         for (const doc of docs) {
-            const coCli = (doc.co_cli || "").trim();
-            const isNCR = (doc.co_tipo_doc || "").trim().toUpperCase() === 'N/CR';
-            
-            // Forzar saldos negativos para Notas de Crédito (N/CR) y desactivar vencimiento
-            if (isNCR) {
-                doc.saldo_usd = -Math.abs(doc.saldo_usd);
-                doc.saldo_bs = -Math.abs(doc.saldo_bs);
-                doc.total_usd = -Math.abs(doc.total_usd);
-                doc.total_bs = -Math.abs(doc.total_bs);
-                doc.vencido = false;
-                doc.dias_vencidos = 0;
-            }
+            const coProv = (doc.co_prov || "").trim();
 
-            if (!groups[coCli]) {
-                groups[coCli] = {
-                    co_cli: coCli,
-                    cli_des: (doc.cli_des || 'Cliente Desconocido').trim(),
+            if (!groups[coProv]) {
+                groups[coProv] = {
+                    co_prov: coProv,
+                    prov_des: (doc.prov_des || 'Proveedor Desconocido').trim(),
                     documents: [],
                     total_usd: 0,
                     total_bs: 0,
@@ -128,7 +109,7 @@
                 };
             }
             
-            const g = groups[coCli];
+            const g = groups[coProv];
             g.documents.push(doc);
             g.total_usd += doc.total_usd;
             g.total_bs += doc.total_bs;
@@ -148,30 +129,31 @@
             g.doc_count++;
         }
         
-        return Object.values(groups).sort((a: any, b: any) => b.saldo_usd - a.saldo_usd);
+        // Ordenar de más negativo a más positivo (los proveedores a los que más les debemos primero)
+        return Object.values(groups).sort((a: any, b: any) => a.saldo_usd - b.saldo_usd);
     });
 
-    let paginatedClients = $derived.by(() => {
-        const offset = (currentPage - 1) * clientsPerPage;
-        return groupedClients.slice(offset, offset + clientsPerPage);
+    let paginatedSuppliers = $derived.by(() => {
+        const offset = (currentPage - 1) * suppliersPerPage;
+        return groupedSuppliers.slice(offset, offset + suppliersPerPage);
     });
 
-    let totalClientPages = $derived(Math.ceil(groupedClients.length / clientsPerPage));
+    let totalSupplierPages = $derived(Math.ceil(groupedSuppliers.length / suppliersPerPage));
 
     $effect(() => {
         // Reset local page if search / filter groups change
-        const _len = groupedClients.length;
+        const _len = groupedSuppliers.length;
         currentPage = 1;
     });
 
-    function openClientDetail(client: any) {
-        selectedClient = client;
+    function openSupplierDetail(supplier: any) {
+        selectedSupplier = supplier;
         showModal = true;
     }
 
-    function closeClientDetail() {
+    function closeSupplierDetail() {
         showModal = false;
-        setTimeout(() => { selectedClient = null; }, 300);
+        setTimeout(() => { selectedSupplier = null; }, 300);
     }
 </script>
 
@@ -195,19 +177,17 @@
         <div class="flex flex-col gap-2">
             <h1 class="text-4xl font-black tracking-tight flex items-center gap-3">
                 <Wallet size={40} class="text-brand-500" />
-                Cuentas por Cobrar (CxC)
+                Cuentas por Pagar (CxP)
             </h1>
             <p class="text-text-muted text-lg">
-                Visualización consolidada y análisis de cartera de clientes pendiente.
+                Visualización consolidada y análisis de cartera de proveedores pendiente.
             </p>
         </div>
-
-
     </div>
 
     <!-- METRICS CARDS -->
-    {#if data.cxc?.metrics}
-        {@const metrics = data.cxc.metrics}
+    {#if data.cxp?.metrics}
+        {@const metrics = data.cxp.metrics}
         <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6" in:slide>
             
             <!-- Card 1: Cartera Total -->
@@ -316,7 +296,7 @@
                 bind:value={filterSearch} 
                 isSearching={isSearching} 
                 onsubmit={applyFilters} 
-                placeholder="Buscar por cliente, documento o RIF..."
+                placeholder="Buscar por proveedor, documento o RIF..."
                 className="w-full h-12"
             />
         </div>
@@ -331,25 +311,25 @@
 
     </div>
 
-    <!-- MAIN LIST - CLIENT CARDS GRID -->
+    <!-- MAIN LIST - SUPPLIER CARDS GRID -->
     {#if isSearching}
         <div class="glass p-20 rounded-[32px] border border-border-subtle shadow-2xl flex flex-col items-center justify-center gap-4 min-h-[400px]">
             <Loader2 size={48} class="animate-spin text-brand-500" />
-            <p class="text-base font-black text-text-muted">Consultando cuentas por cobrar con el agente Profit...</p>
+            <p class="text-base font-black text-text-muted">Consultando cuentas por pagar con el agente Profit...</p>
         </div>
-    {:else if groupedClients.length === 0}
+    {:else if groupedSuppliers.length === 0}
         <div class="glass p-20 rounded-[32px] border border-border-subtle shadow-2xl flex flex-col items-center justify-center gap-3 text-center min-h-[400px]" in:fade>
             <CheckCircle size={56} class="text-brand-500 mb-2 animate-bounce" />
             <h3 class="text-2xl font-black text-text-base">¡Cartera 100% al Día!</h3>
-            <p class="text-sm text-text-muted font-bold max-w-md">No se encontraron clientes con cuentas por cobrar pendientes en esta sede bajo los filtros seleccionados.</p>
+            <p class="text-sm text-text-muted font-bold max-w-md">No se encontraron proveedores con cuentas por pagar pendientes en esta sede bajo los filtros seleccionados.</p>
         </div>
     {:else}
-        <!-- Grid of Client Cards -->
+        <!-- Grid of Supplier Cards -->
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" in:fade>
-            {#each paginatedClients as client (client.co_cli)}
-                {@const hasOverdue = client.saldo_vencido_usd > 0}
+            {#each paginatedSuppliers as supplier (supplier.co_prov)}
+                {@const hasOverdue = supplier.saldo_vencido_usd < 0}
                 <div class="glass p-6 rounded-3xl border border-border-subtle shadow-xl hover:border-brand-500/30 hover:shadow-brand-500/5 transition-all duration-300 flex flex-col justify-between group relative overflow-hidden">
-                    <!-- Background ambient glow for overdue clients -->
+                    <!-- Background ambient glow -->
                     {#if hasOverdue}
                         <div class="absolute -right-10 -top-10 w-28 h-28 bg-red-500/5 rounded-full blur-2xl group-hover:scale-125 transition-transform duration-500"></div>
                     {:else}
@@ -364,27 +344,27 @@
                                     <User size={20} />
                                 </div>
                                 <div class="flex flex-col min-w-0">
-                                    <h3 class="font-black text-base tracking-tight text-text-base truncate group-hover:text-brand-400 transition-colors" title={client.cli_des}>
-                                        {client.cli_des}
+                                    <h3 class="font-black text-base tracking-tight text-text-base truncate group-hover:text-brand-400 transition-colors" title={supplier.prov_des}>
+                                        {supplier.prov_des}
                                     </h3>
-                                    <span class="text-[10px] text-text-muted font-mono font-black mt-0.5">{client.co_cli}</span>
+                                    <span class="text-[10px] text-text-muted font-mono font-black mt-0.5">{supplier.co_prov}</span>
                                 </div>
                             </div>
                             <!-- Documents count badge -->
                             <span class="px-2 py-1 bg-surface-soft border border-border-subtle text-[10px] font-black rounded-lg text-text-muted shrink-0">
-                                {client.doc_count} {client.doc_count === 1 ? 'doc' : 'docs'}
+                                {supplier.doc_count} {supplier.doc_count === 1 ? 'doc' : 'docs'}
                             </span>
                         </div>
 
                         <!-- Outstanding Balance -->
                         <div class="p-4 rounded-2xl bg-surface-soft border border-border-subtle space-y-1">
-                            <span class="text-[10px] font-black uppercase tracking-widest text-text-muted">Deuda Pendiente</span>
+                            <span class="text-[10px] font-black uppercase tracking-widest text-text-muted">Monto por Pagar</span>
                             <div class="flex items-baseline gap-2">
                                 <span class="text-2xl font-black tracking-tight {hasOverdue ? 'text-text-red' : 'text-text-green'}">
-                                    {formatCurrency(client.saldo_usd, 'USD')}
+                                    {formatCurrency(supplier.saldo_usd, 'USD')}
                                 </span>
                             </div>
-                            <p class="text-xs text-text-muted font-bold">{formatCurrency(client.saldo_bs, 'VES')}</p>
+                            <p class="text-xs text-text-muted font-bold">{formatCurrency(supplier.saldo_bs, 'VES')}</p>
                         </div>
 
                         <!-- Overdue & Upcoming split -->
@@ -393,7 +373,7 @@
                             <div class="flex flex-col gap-0.5">
                                 <span class="text-[9px] uppercase tracking-wider text-text-muted">Vencido</span>
                                 {#if hasOverdue}
-                                    <span class="text-text-red font-black">{formatCurrency(client.saldo_vencido_usd, 'USD')}</span>
+                                    <span class="text-text-red font-black">{formatCurrency(supplier.saldo_vencido_usd, 'USD')}</span>
                                 {:else}
                                     <span class="text-green-500 font-black flex items-center gap-1">
                                         <CheckCircle size={10} /> Al día
@@ -403,7 +383,7 @@
                             <!-- Por vencer -->
                             <div class="flex flex-col gap-0.5">
                                 <span class="text-[9px] uppercase tracking-wider text-text-muted">Por Vencer</span>
-                                <span class="text-text-base font-black">{formatCurrency(client.saldo_por_vencer_usd, 'USD')}</span>
+                                <span class="text-text-base font-black">{formatCurrency(supplier.saldo_por_vencer_usd, 'USD')}</span>
                             </div>
                         </div>
                     </div>
@@ -414,7 +394,7 @@
                         {#if hasOverdue}
                             <span class="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-red-500/10 text-red-500 border border-red-500/20 text-[10px] font-black">
                                 <Clock size={12} />
-                                Máx: {client.max_dias_retraso} días
+                                Máx: {supplier.max_dias_retraso} días
                             </span>
                         {:else}
                             <span class="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-green-500/10 text-green-500 border border-green-500/20 text-[10px] font-black">
@@ -424,7 +404,7 @@
                         {/if}
 
                         <button 
-                            onclick={() => openClientDetail(client)}
+                            onclick={() => openSupplierDetail(supplier)}
                             class="flex items-center gap-1.5 text-xs font-black text-brand-400 hover:text-brand-300 transition-colors uppercase tracking-wider group/btn"
                         >
                             Ver Detalles
@@ -435,11 +415,11 @@
             {/each}
         </div>
 
-        <!-- CLIENTS PAGINATION BAR -->
-        {#if totalClientPages > 1}
+        <!-- SUPPLIERS PAGINATION BAR -->
+        {#if totalSupplierPages > 1}
             <div class="px-6 py-5 bg-surface-raised/50 backdrop-blur-md rounded-3xl border border-border-subtle shadow-xl flex items-center justify-between gap-4 mt-8" in:fade>
                 <span class="text-xs font-bold text-text-muted">
-                    Mostrando clientes <strong class="text-text-base font-black">{(currentPage - 1) * clientsPerPage + 1}</strong> a <strong class="text-text-base font-black">{Math.min(currentPage * clientsPerPage, groupedClients.length)}</strong> de <strong class="text-text-base font-black">{groupedClients.length}</strong> (Consolidado: {data.cxc?.data?.length || 0} docs)
+                    Mostrando proveedores <strong class="text-text-base font-black">{(currentPage - 1) * suppliersPerPage + 1}</strong> a <strong class="text-text-base font-black">{Math.min(currentPage * suppliersPerPage, groupedSuppliers.length)}</strong> de <strong class="text-text-base font-black">{groupedSuppliers.length}</strong> (Consolidado: {data.cxp?.data?.length || 0} docs)
                 </span>
 
                 <div class="flex items-center gap-1.5">
@@ -451,8 +431,8 @@
                         <ChevronLeft size={16} />
                     </button>
 
-                    {#each Array.from({ length: totalClientPages }, (_, i) => i + 1) as p}
-                        {#if p === 1 || p === totalClientPages || (p >= currentPage - 1 && p <= currentPage + 1)}
+                    {#each Array.from({ length: totalSupplierPages }, (_, i) => i + 1) as p}
+                        {#if p === 1 || p === totalSupplierPages || (p >= currentPage - 1 && p <= currentPage + 1)}
                             <button 
                                 onclick={() => currentPage = p}
                                 class="h-9 w-9 rounded-xl text-xs font-black transition border {p === currentPage ? 'bg-brand-600 border-brand-500 text-white shadow-lg shadow-brand-500/20' : 'bg-surface-soft hover:bg-surface-strong border-border-subtle text-text-muted hover:text-text-base cursor-pointer'}"
@@ -465,8 +445,8 @@
                     {/each}
 
                     <button 
-                        onclick={() => { if (currentPage < totalClientPages) currentPage++; }}
-                        disabled={currentPage === totalClientPages}
+                        onclick={() => { if (currentPage < totalSupplierPages) currentPage++; }}
+                        disabled={currentPage === totalSupplierPages}
                         class="p-2 rounded-xl bg-surface-soft hover:bg-surface-strong border border-border-subtle text-text-muted hover:text-text-base transition disabled:opacity-30 disabled:pointer-events-none cursor-pointer"
                     >
                         <ChevronRight size={16} />
@@ -476,13 +456,13 @@
         {/if}
     {/if}
 
-    <!-- MODAL DE DETALLES DEL CLIENTE -->
-    {#if showModal && selectedClient}
-        {@const client = selectedClient}
+    <!-- MODAL DE DETALLES DEL PROVEEDOR -->
+    {#if showModal && selectedSupplier}
+        {@const supplier = selectedSupplier}
         <div class="fixed inset-0 z-50 flex items-center justify-center p-4 backdrop-blur-md" style="background-color: var(--modal-backdrop);" transition:fade={{ duration: 200 }}>
             <!-- svelte-ignore a11y_click_events_have_key_events -->
             <!-- svelte-ignore a11y_no_static_element_interactions -->
-            <div class="fixed inset-0" onclick={closeClientDetail}></div>
+            <div class="fixed inset-0" onclick={closeSupplierDetail}></div>
 
             <div class="glass bg-surface-raised border border-border-subtle rounded-[32px] max-w-6xl w-full max-h-[85vh] flex flex-col shadow-2xl relative z-10 overflow-hidden" 
                  transition:slide={{ duration: 300 }}>
@@ -494,16 +474,16 @@
                             <User size={24} />
                         </div>
                         <div class="flex flex-col min-w-0">
-                            <span class="text-xs font-black uppercase tracking-widest text-brand-400">Detalle de Cuenta por Cobrar</span>
-                            <h2 class="text-xl font-black tracking-tight text-text-base truncate" title={client.cli_des}>
-                                {client.cli_des}
+                            <span class="text-xs font-black uppercase tracking-widest text-brand-400">Detalle de Cuenta por Pagar</span>
+                            <h2 class="text-xl font-black tracking-tight text-text-base truncate" title={supplier.prov_des}>
+                                {supplier.prov_des}
                             </h2>
-                            <span class="text-xs text-text-muted font-mono font-bold mt-0.5">Código / RIF: {client.co_cli}</span>
+                            <span class="text-xs text-text-muted font-mono font-bold mt-0.5">Código / RIF: {supplier.co_prov}</span>
                         </div>
                     </div>
                     
                     <button 
-                        onclick={closeClientDetail}
+                        onclick={closeSupplierDetail}
                         class="p-3 rounded-2xl bg-surface-soft hover:bg-surface-strong text-text-muted hover:text-text-base transition-all cursor-pointer"
                         aria-label="Cerrar"
                     >
@@ -514,40 +494,40 @@
                 <!-- Modal Content Scrollable -->
                 <div class="p-8 overflow-y-auto space-y-8 flex-1">
                     
-                    <!-- Client Quick Totals Grid -->
+                    <!-- Supplier Quick Totals Grid -->
                     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
                         <!-- Total outstanding -->
                         <div class="p-5 rounded-2xl bg-surface-soft border border-border-subtle space-y-1 relative overflow-hidden">
                             <span class="text-[10px] font-black uppercase tracking-widest text-text-muted">Total Pendiente</span>
-                            <h3 class="text-xl font-black text-text-base tracking-tight">{formatCurrency(client.saldo_usd, 'USD')}</h3>
-                            <p class="text-[11px] text-text-muted font-bold">{formatCurrency(client.saldo_bs, 'VES')}</p>
+                            <h3 class="text-xl font-black text-text-base tracking-tight">{formatCurrency(supplier.saldo_usd, 'USD')}</h3>
+                            <p class="text-[11px] text-text-muted font-bold">{formatCurrency(supplier.saldo_bs, 'VES')}</p>
                         </div>
                         <!-- Overdue -->
                         <div class="p-5 rounded-2xl bg-surface-soft border border-border-subtle space-y-1">
                             <span class="text-[10px] font-black uppercase tracking-widest text-red-500/80">Saldo Vencido</span>
                             <h3 class="text-xl font-black text-text-red tracking-tight">
-                                {client.saldo_vencido_usd > 0 ? formatCurrency(client.saldo_vencido_usd, 'USD') : 'Al día'}
+                                {supplier.saldo_vencido_usd < 0 ? formatCurrency(supplier.saldo_vencido_usd, 'USD') : 'Al día'}
                             </h3>
-                            <p class="text-[11px] text-text-muted font-bold">{formatCurrency(client.saldo_vencido_bs, 'VES')}</p>
+                            <p class="text-[11px] text-text-muted font-bold">{formatCurrency(supplier.saldo_vencido_bs, 'VES')}</p>
                         </div>
                         <!-- Upcoming -->
                         <div class="p-5 rounded-2xl bg-surface-soft border border-border-subtle space-y-1">
                             <span class="text-[10px] font-black uppercase tracking-widest text-green-500/80">Por Vencer</span>
-                            <h3 class="text-xl font-black text-text-green tracking-tight">{formatCurrency(client.saldo_por_vencer_usd, 'USD')}</h3>
-                            <p class="text-[11px] text-text-muted font-bold">{formatCurrency(client.saldo_por_vencer_bs, 'VES')}</p>
+                            <h3 class="text-xl font-black text-text-green tracking-tight">{formatCurrency(supplier.saldo_por_vencer_usd, 'USD')}</h3>
+                            <p class="text-[11px] text-text-muted font-bold">{formatCurrency(supplier.saldo_por_vencer_bs, 'VES')}</p>
                         </div>
                         <!-- Documents counts and delay -->
                         <div class="p-5 rounded-2xl bg-surface-soft border border-border-subtle flex flex-col justify-between">
                             <div class="flex justify-between items-center">
                                 <span class="text-[10px] font-black uppercase tracking-widest text-text-muted">Docs Activos</span>
                                 <span class="px-2 py-0.5 bg-brand-500/10 text-brand-400 border border-brand-500/20 text-[10px] font-black rounded-md">
-                                    {client.doc_count}
+                                    {supplier.doc_count}
                                 </span>
                             </div>
                             <div class="pt-2 text-xs font-bold text-text-muted">
-                                {#if client.saldo_vencido_usd > 0}
+                                {#if supplier.saldo_vencido_usd < 0}
                                     <span class="text-text-red font-black flex items-center gap-1">
-                                        <AlertTriangle size={12} /> {client.max_dias_retraso} días retraso máx.
+                                        <AlertTriangle size={12} /> {supplier.max_dias_retraso} días retraso máx.
                                     </span>
                                 {:else}
                                     <span class="text-text-green font-black flex items-center gap-1">
@@ -577,15 +557,12 @@
                                             <th class="px-6 py-4 text-right">Monto Original</th>
                                             <th class="px-6 py-4 text-right">Saldo Pendiente</th>
                                             <th class="px-6 py-4 text-center">Días Mora</th>
-                                            {#if data.hasOthers}
-                                                <th class="px-6 py-4 text-center">Vendedor</th>
-                                            {/if}
                                         </tr>
                                     </thead>
                                     <tbody class="divide-y divide-border-subtle text-xs">
-                                        {#each client.documents as doc (doc.nro_doc + doc.co_tipo_doc)}
+                                        {#each supplier.documents as doc (doc.nro_doc + doc.co_tipo_doc)}
                                             {@const badge = getDocTypeBadge(doc.co_tipo_doc)}
-                                            {@const isNCR = doc.co_tipo_doc.trim().toUpperCase() === 'N/CR'}
+                                            {@const isNCR = doc.co_tipo_doc.trim().toUpperCase() === 'N/CR' || doc.co_tipo_doc.trim().toUpperCase() === 'NCR'}
                                             <tr class="hover:bg-surface-soft transition-colors">
                                                 <!-- Documento / Tipo -->
                                                 <td class="px-6 py-4">
@@ -593,7 +570,7 @@
                                                         <div class="p-2 rounded-lg bg-surface-soft text-text-muted">
                                                             <FileText size={14} />
                                                         </div>
-                                    <div class="flex flex-col gap-1.5">
+                                                        <div class="flex flex-col gap-1.5">
                                                             <span class="font-black text-text-base">{doc.nro_doc}</span>
                                                             <span class="px-1.5 py-0.5 border text-[9px] font-black uppercase tracking-wider rounded text-center max-w-[55px] {badge.class}">
                                                                 {doc.co_tipo_doc.trim()}
@@ -664,13 +641,6 @@
                                                         </span>
                                                     {/if}
                                                 </td>
-
-                                                <!-- Vendedor -->
-                                                {#if data.hasOthers}
-                                                    <td class="px-6 py-4 text-center whitespace-nowrap font-mono font-bold text-text-muted">
-                                                        {doc.co_ven}
-                                                    </td>
-                                                {/if}
                                             </tr>
                                         {/each}
                                     </tbody>
@@ -683,7 +653,7 @@
                 <!-- Modal Footer -->
                 <div class="px-8 py-5 border-t border-border-subtle flex justify-end gap-3 bg-surface-soft/50 font-bold text-xs">
                     <a 
-                        href="/dashboard/reports/receivables/{client.co_cli}/print?branch_id={data.selectedBranchId}"
+                        href="/dashboard/reports/payables/{supplier.co_prov}/print?branch_id={data.selectedBranchId}"
                         target="_blank"
                         class="flex items-center justify-center gap-2 bg-brand-600 hover:bg-brand-500 text-white px-6 py-2.5 rounded-xl transition-all shadow-lg shadow-brand-500/20"
                     >
@@ -692,7 +662,7 @@
                     </a>
                     
                     <button 
-                        onclick={closeClientDetail}
+                        onclick={closeSupplierDetail}
                         class="px-6 py-2.5 rounded-xl bg-surface-soft hover:bg-surface-strong text-sm font-black transition-all cursor-pointer"
                     >
                         Cerrar Detalle

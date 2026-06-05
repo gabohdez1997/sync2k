@@ -122,7 +122,9 @@
       label: 'Reportes',
       icon: FileText,
       subItems: [
-        { id: 'reports_receivables', label: 'Cuentas por Cobrar', href: '/dashboard/reports/receivables', icon: Wallet }
+        { id: 'reports_receivables', label: 'Cuentas por Cobrar', href: '/dashboard/reports/receivables', icon: Wallet },
+        { id: 'reports_payables', label: 'Cuentas por Pagar', href: '/dashboard/reports/payables', icon: Wallet },
+        { id: 'reports_detailed_account', label: 'Cuenta Detallada', href: '/dashboard/reports/detailed-account', icon: ClipboardList }
       ]
     },
     {

@@ -26,6 +26,11 @@
   /* Glassmorphism Classes as utility */
   --bg-glass: var(--glass-bg);
   --blur-glass: 16px;
+
+  /* Colores de texto semánticos (con contraste según el tema) */
+  --color-text-green: var(--color-green-semantic);
+  --color-text-red: var(--color-red-semantic);
+  --color-text-emerald: var(--color-emerald-semantic);
 }
 
 :root {
@@ -45,6 +50,10 @@
   --surface-soft: rgba(255, 255, 255, 0.04);
   --surface-strong: rgba(255, 255, 255, 0.08);
   --glass-bg: rgba(15, 15, 17, 0.6);
+  --modal-backdrop: rgba(0, 0, 0, 0.85);
+  --color-green-semantic: #4ade80; /* green-400 */
+  --color-red-semantic: #f87171; /* red-400 */
+  --color-emerald-semantic: #34d399; /* emerald-400 */
   --accent-gradient: linear-gradient(135deg, var(--color-brand-500) 0%, var(--color-brand-700) 100%);
   --bg-gradient: radial-gradient(circle at 50% 0%, #111827 0%, #050505 100%);
 }
@@ -60,6 +69,10 @@
   --surface-soft: rgba(0, 0, 0, 0.03);
   --surface-strong: rgba(0, 0, 0, 0.06);
   --glass-bg: rgba(255, 255, 255, 0.7);
+  --modal-backdrop: rgba(15, 23, 42, 0.45);
+  --color-green-semantic: #15803d; /* green-700 - Contraste alto */
+  --color-red-semantic: #b91c1c; /* red-700 - Contraste alto */
+  --color-emerald-semantic: #047857; /* emerald-700 - Contraste alto */
   --accent-gradient: linear-gradient(135deg, var(--color-brand-600) 0%, var(--color-brand-400) 100%);
   --bg-gradient: radial-gradient(circle at 50% 0%, #f1f5f9 0%, #f8fafc 100%);
 }

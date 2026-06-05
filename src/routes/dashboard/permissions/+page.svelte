@@ -85,6 +85,8 @@
       icon: FileText,
       options: [
         { id: "reports_receivables", label: "Cuentas por Cobrar", hasOthers: true, hasVoid: false, onlyRead: true },
+        { id: "reports_payables", label: "Cuentas por Pagar", hasOthers: true, hasVoid: false, onlyRead: true },
+        { id: "reports_detailed_account", label: "Cuenta Detallada", hasOthers: true, hasVoid: false, onlyRead: true },
       ],
     },
     {
