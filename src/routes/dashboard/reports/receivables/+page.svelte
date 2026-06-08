@@ -98,14 +98,10 @@
         const groups: Record<string, any> = {};
         for (const doc of docs) {
             const coCli = (doc.co_cli || "").trim();
-            const isNCR = (doc.co_tipo_doc || "").trim().toUpperCase() === 'N/CR';
+            const isCredit = ['ADEL', 'AJNA', 'AJNM', 'ISLR', 'IVAN', 'N/CR', 'NCR'].includes((doc.co_tipo_doc || "").trim().toUpperCase());
             
-            // Forzar saldos negativos para Notas de Crédito (N/CR) y desactivar vencimiento
-            if (isNCR) {
-                doc.saldo_usd = -Math.abs(doc.saldo_usd);
-                doc.saldo_bs = -Math.abs(doc.saldo_bs);
-                doc.total_usd = -Math.abs(doc.total_usd);
-                doc.total_bs = -Math.abs(doc.total_bs);
+            // Asegurar que los créditos no tengan días vencidos ni marquen vencimiento
+            if (isCredit) {
                 doc.vencido = false;
                 doc.dias_vencidos = 0;
             }
@@ -148,7 +144,7 @@
             g.doc_count++;
         }
         
-        return Object.values(groups).sort((a: any, b: any) => b.saldo_usd - a.saldo_usd);
+        return Object.values(groups).sort((a: any, b: any) => a.saldo_usd - b.saldo_usd);
     });
 
     let paginatedClients = $derived.by(() => {
@@ -347,7 +343,7 @@
         <!-- Grid of Client Cards -->
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" in:fade>
             {#each paginatedClients as client (client.co_cli)}
-                {@const hasOverdue = client.saldo_vencido_usd > 0}
+                {@const hasOverdue = client.saldo_vencido_usd < 0}
                 <div class="glass p-6 rounded-3xl border border-border-subtle shadow-xl hover:border-brand-500/30 hover:shadow-brand-500/5 transition-all duration-300 flex flex-col justify-between group relative overflow-hidden">
                     <!-- Background ambient glow for overdue clients -->
                     {#if hasOverdue}
@@ -526,7 +522,7 @@
                         <div class="p-5 rounded-2xl bg-surface-soft border border-border-subtle space-y-1">
                             <span class="text-[10px] font-black uppercase tracking-widest text-red-500/80">Saldo Vencido</span>
                             <h3 class="text-xl font-black text-text-red tracking-tight">
-                                {client.saldo_vencido_usd > 0 ? formatCurrency(client.saldo_vencido_usd, 'USD') : 'Al día'}
+                                {client.saldo_vencido_usd < 0 ? formatCurrency(client.saldo_vencido_usd, 'USD') : 'Al día'}
                             </h3>
                             <p class="text-[11px] text-text-muted font-bold">{formatCurrency(client.saldo_vencido_bs, 'VES')}</p>
                         </div>
@@ -545,7 +541,7 @@
                                 </span>
                             </div>
                             <div class="pt-2 text-xs font-bold text-text-muted">
-                                {#if client.saldo_vencido_usd > 0}
+                                {#if client.saldo_vencido_usd < 0}
                                     <span class="text-text-red font-black flex items-center gap-1">
                                         <AlertTriangle size={12} /> {client.max_dias_retraso} días retraso máx.
                                     </span>
@@ -585,7 +581,7 @@
                                     <tbody class="divide-y divide-border-subtle text-xs">
                                         {#each client.documents as doc (doc.nro_doc + doc.co_tipo_doc)}
                                             {@const badge = getDocTypeBadge(doc.co_tipo_doc)}
-                                            {@const isNCR = doc.co_tipo_doc.trim().toUpperCase() === 'N/CR'}
+                                            {@const isCredit = ['ADEL', 'AJNA', 'AJNM', 'ISLR', 'IVAN', 'N/CR', 'NCR'].includes(doc.co_tipo_doc.trim().toUpperCase())}
                                             <tr class="hover:bg-surface-soft transition-colors">
                                                 <!-- Documento / Tipo -->
                                                 <td class="px-6 py-4">
@@ -640,10 +636,10 @@
                                                 <!-- Saldo Pendiente -->
                                                 <td class="px-6 py-4 text-right whitespace-nowrap font-black">
                                                     <div class="flex flex-col items-end">
-                                                         <span class="{doc.vencido && !isNCR ? 'text-text-red' : isNCR ? 'text-text-emerald' : 'text-text-green'}">
+                                                         <span class="{doc.vencido && !isCredit ? 'text-text-red' : isCredit ? 'text-text-emerald' : 'text-text-green'}">
                                                              {formatCurrency(doc.saldo_usd, 'USD')}
                                                          </span>
-                                                        <span class="text-[9px] mt-0.5 font-bold {isNCR ? 'text-emerald-500/80' : 'text-text-muted'}">
+                                                        <span class="text-[9px] mt-0.5 font-bold {isCredit ? 'text-emerald-500/80' : 'text-text-muted'}">
                                                             {formatCurrency(doc.saldo_bs, 'VES')}
                                                         </span>
                                                     </div>
@@ -652,12 +648,12 @@
                                                 <!-- Mora -->
                                                 <td class="px-6 py-4 text-center whitespace-nowrap">
                                                     {#if doc.vencido}
-                                                        <span class="px-2 py-0.5 font-bold rounded {isNCR ? 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20' : 'bg-red-500/10 text-red-500 border border-red-500/20'}">
+                                                        <span class="px-2 py-0.5 font-bold rounded {isCredit ? 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20' : 'bg-red-500/10 text-red-500 border border-red-500/20'}">
                                                             {doc.dias_vencidos} días
                                                         </span>
                                                     {:else}
-                                                        <span class="px-2 py-0.5 font-bold rounded inline-flex items-center gap-1 {isNCR ? 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20' : 'bg-green-500/10 text-green-500 border border-green-500/20'}">
-                                                            {#if !isNCR}
+                                                        <span class="px-2 py-0.5 font-bold rounded inline-flex items-center gap-1 {isCredit ? 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20' : 'bg-green-500/10 text-green-500 border border-green-500/20'}">
+                                                            {#if !isCredit}
                                                                 <CheckCircle size={8} />
                                                             {/if}
                                                             Al día

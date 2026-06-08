@@ -28,12 +28,8 @@
     let maxDiasMora = 0;
 
     documents.forEach((d: any) => {
-        const isNCR = d.co_tipo_doc.trim().toUpperCase() === 'N/CR';
-        if (isNCR) {
-            d.saldo_usd = -Math.abs(d.saldo_usd);
-            d.saldo_bs = -Math.abs(d.saldo_bs);
-            d.total_usd = -Math.abs(d.total_usd);
-            d.total_bs = -Math.abs(d.total_bs);
+        const isCredit = ['ADEL', 'AJNA', 'AJNM', 'ISLR', 'IVAN', 'N/CR', 'NCR'].includes(d.co_tipo_doc.trim().toUpperCase());
+        if (isCredit) {
             d.vencido = false;
             d.dias_vencidos = 0;
         }
@@ -168,8 +164,8 @@
                         <div class="info-row"><span class="label">Documentos:</span><span class="val">{documents.length} activos</span></div>
                         <div class="info-row">
                             <span class="label">Estatus:</span>
-                            <span class="val" class:text-red-600={totalVencidoUsd > 0} class:text-green-600={totalVencidoUsd === 0}>
-                                {totalVencidoUsd > 0 ? `CON DEUDA VENCIDA (MÁX ${maxDiasMora} DÍAS)` : 'CARTERA AL DÍA'}
+                            <span class="val" class:text-red-600={totalVencidoUsd < 0} class:text-green-600={totalVencidoUsd === 0}>
+                                {totalVencidoUsd < 0 ? `CON DEUDA VENCIDA (MÁX ${maxDiasMora} DÍAS)` : 'CARTERA AL DÍA'}
                             </span>
                         </div>
                         <div class="info-row"><span class="label">Sede:</span><span class="val">{branch.name}</span></div>
@@ -193,14 +189,14 @@
                         </thead>
                         <tbody>
                             {#each page.items as item}
-                                {@const isNCR = item.co_tipo_doc.trim().toUpperCase() === 'N/CR'}
+                                {@const isCredit = ['ADEL', 'AJNA', 'AJNM', 'ISLR', 'IVAN', 'N/CR', 'NCR'].includes(item.co_tipo_doc.trim().toUpperCase())}
                                 <tr>
                                     <td class="font-mono font-bold">{item.nro_doc}</td>
-                                    <td class="font-bold uppercase" class:text-emerald-600={isNCR}>
+                                    <td class="font-bold uppercase" class:text-emerald-600={isCredit}>
                                         {item.co_tipo_doc.trim()}
                                     </td>
-                                    <td class:text-emerald-600={isNCR}>{dayjs(item.fec_emis).format("DD/MM/YYYY")}</td>
-                                    <td class="font-mono" class:text-emerald-600={isNCR}>
+                                    <td class:text-emerald-600={isCredit}>{dayjs(item.fec_emis).format("DD/MM/YYYY")}</td>
+                                    <td class="font-mono" class:text-emerald-600={isCredit}>
                                         {#if item.nro_orig && item.nro_orig.trim()}
                                             {item.nro_orig.trim()}
                                             {#if item.doc_orig && item.doc_orig.trim()}
@@ -210,14 +206,14 @@
                                             <span class="text-slate-300">—</span>
                                         {/if}
                                     </td>
-                                    <td class="font-bold" class:text-red-600={item.vencido && !isNCR} class:text-emerald-600={isNCR}>{dayjs(item.fec_venc).format("DD/MM/YYYY")}</td>
-                                    <td class="text-right" class:text-emerald-600={isNCR}>{formatCurrency(item.total_usd)}</td>
-                                    <td class="text-right font-black" class:text-red-600={item.vencido && !isNCR} class:text-emerald-600={isNCR}>{formatCurrency(item.saldo_usd)}</td>
+                                    <td class="font-bold" class:text-red-600={item.vencido && !isCredit} class:text-emerald-600={isCredit}>{dayjs(item.fec_venc).format("DD/MM/YYYY")}</td>
+                                    <td class="text-right" class:text-emerald-600={isCredit}>{formatCurrency(item.total_usd)}</td>
+                                    <td class="text-right font-black" class:text-red-600={item.vencido && !isCredit} class:text-emerald-600={isCredit}>{formatCurrency(item.saldo_usd)}</td>
                                     <td class="font-bold">
                                         {#if item.vencido}
-                                            <span class={isNCR ? "text-emerald-600" : "text-red-600"}>{item.dias_vencidos} días</span>
+                                            <span class={isCredit ? "text-emerald-600" : "text-red-600"}>{item.dias_vencidos} días</span>
                                         {:else}
-                                            <span class={isNCR ? "text-emerald-600" : "text-green-600"}>Al día</span>
+                                            <span class={isCredit ? "text-emerald-600" : "text-green-600"}>Al día</span>
                                         {/if}
                                     </td>
                                 </tr>
