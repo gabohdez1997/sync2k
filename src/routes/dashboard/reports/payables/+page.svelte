@@ -22,6 +22,7 @@
         Eye,
         X,
         FileSpreadsheet,
+        Percent,
     } from "lucide-svelte";
     import { goto } from "$app/navigation";
     import { page } from "$app/stores";
@@ -245,6 +246,87 @@
         } catch (err) {
             console.error(err);
             alert("Error de conexión al actualizar la tasa del proveedor.");
+        }
+    }
+
+    let showDiscountModal = $state(false);
+    let discountDoc = $state<any>(null);
+    let tempCampo1 = $state("");
+    let tempCampo2 = $state("");
+    let tempCampo3 = $state("");
+    let savingDiscounts = $state(false);
+
+    function openDiscountModal(doc: any) {
+        discountDoc = doc;
+        tempCampo1 = doc.campo1 !== undefined && doc.campo1 !== null ? doc.campo1.toString() : "0";
+        tempCampo2 = doc.campo2 !== undefined && doc.campo2 !== null ? doc.campo2.toString() : "0";
+        tempCampo3 = doc.campo3 !== undefined && doc.campo3 !== null ? doc.campo3.toString() : "0";
+        showDiscountModal = true;
+    }
+
+    function closeDiscountModal() {
+        showDiscountModal = false;
+        setTimeout(() => {
+            discountDoc = null;
+        }, 200);
+    }
+
+    async function saveDiscounts() {
+        if (!discountDoc) return;
+        
+        const val1 = parseFloat(tempCampo1) || 0.0;
+        const val2 = parseFloat(tempCampo2) || 0.0;
+        const val3 = parseFloat(tempCampo3) || 0.0;
+
+        if (val1 < 0 || val1 > 100 || val2 < 0 || val2 > 100 || val3 < 0 || val3 > 100) {
+            toast.error("Los descuentos deben estar entre 0.00% y 100.00%");
+            return;
+        }
+
+        savingDiscounts = true;
+        try {
+            const res = await fetch("/api/agent/payables/descuentos", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                    co_tipo_doc: discountDoc.co_tipo_doc,
+                    nro_doc: discountDoc.nro_doc,
+                    campo1: val1,
+                    campo2: val2,
+                    campo3: val3,
+                    sede_id: discountDoc.sede_id,
+                }),
+            });
+            const resData = await res.json();
+            if (resData.success) {
+                // Update local document states
+                const sourceDoc = data.cxp?.data?.find(
+                    (d: any) =>
+                        d.nro_doc === discountDoc.nro_doc &&
+                        d.co_tipo_doc === discountDoc.co_tipo_doc &&
+                        d.sede_id === discountDoc.sede_id
+                );
+                if (sourceDoc) {
+                    sourceDoc.campo1 = val1;
+                    sourceDoc.campo2 = val2;
+                    sourceDoc.campo3 = val3;
+                    
+                    discountDoc.campo1 = val1;
+                    discountDoc.campo2 = val2;
+                    discountDoc.campo3 = val3;
+                }
+                toast.success("Descuentos actualizados correctamente.");
+                closeDiscountModal();
+            } else {
+                toast.error("Error al guardar descuentos: " + resData.message);
+            }
+        } catch (err) {
+            console.error(err);
+            toast.error("Error al conectar para actualizar descuentos.");
+        } finally {
+            savingDiscounts = false;
         }
     }
 
@@ -939,6 +1021,7 @@
                                             <th class="px-3 py-3">Origen</th>
                                             <th class="px-3 py-3">Vencimiento</th>
                                             <th class="px-3 py-3 text-right">Monto Original</th>
+                                            <th class="px-3 py-3 text-center">Desc.</th>
                                             <th class="px-3 py-3 text-right">Saldo Pendiente</th>
                                             <th class="px-3 py-3 text-center">Tasa Prov.</th>
                                             <th class="px-3 py-3 text-center">Días Mora</th>
@@ -961,7 +1044,7 @@
                                                         class="flex items-center gap-3"
                                                     >
                                                         <div
-                                                            class="p-2 rounded-lg bg-surface-soft text-text-muted"
+                                                            class="p-2 rounded-lg bg-surface-soft text-text-muted shrink-0"
                                                         >
                                                             <FileText
                                                                 size={14}
@@ -1057,6 +1140,19 @@
                                                             )}</span
                                                         >
                                                     </div>
+                                                </td>
+
+                                                <!-- Descuentos -->
+                                                <td
+                                                    class="px-3 py-3 text-center whitespace-nowrap"
+                                                >
+                                                    <button
+                                                        onclick={() => openDiscountModal(doc)}
+                                                        class="p-2 rounded-lg transition-all cursor-pointer { (doc.campo1 > 0 || doc.campo2 > 0 || doc.campo3 > 0) ? 'bg-emerald-500/15 text-emerald-500 border border-emerald-500/30 font-black' : 'bg-surface-soft text-text-muted hover:bg-brand-500/10 hover:text-brand-500 border border-transparent' }"
+                                                        title="Descuentos: {doc.campo1 || 0}%, {doc.campo2 || 0}%, {doc.campo3 || 0}%"
+                                                    >
+                                                        <Percent size={14} />
+                                                    </button>
                                                 </td>
 
                                                 <!-- Saldo Pendiente -->
@@ -1174,6 +1270,133 @@
                     >
                         Cerrar Detalle
                     </button>
+                </div>
+            </div>
+        </div>
+    {/if}
+
+    <!-- MODAL DE DESCUENTOS POR DOCUMENTO -->
+    {#if showDiscountModal && discountDoc}
+        {@const doc = discountDoc}
+        <div
+            class="fixed inset-0 z-50 flex items-center justify-center p-4 backdrop-blur-md"
+            style="background-color: var(--modal-backdrop);"
+            transition:fade={{ duration: 150 }}
+        >
+            <!-- svelte-ignore a11y_click_events_have_key_events -->
+            <!-- svelte-ignore a11y_no_static_element_interactions -->
+            <div class="fixed inset-0" onclick={closeDiscountModal}></div>
+
+            <div
+                class="glass bg-surface-raised border border-border-subtle rounded-[24px] max-w-md w-full flex flex-col shadow-2xl relative z-10 overflow-hidden"
+                transition:slide={{ duration: 250 }}
+            >
+                <!-- Header -->
+                <div class="px-6 py-4 border-b border-border-subtle flex items-center justify-between bg-surface-soft">
+                    <div class="flex items-center gap-3">
+                        <div class="h-8 w-8 rounded-lg bg-brand-500/10 border border-brand-500/20 flex items-center justify-center text-brand-500 shrink-0">
+                            <Percent size={16} />
+                        </div>
+                        <div>
+                            <h3 class="font-black text-sm text-text-base">Descuentos de Documento</h3>
+                            <p class="text-[10px] text-text-muted font-bold font-mono">{doc.co_tipo_doc} {doc.nro_doc}</p>
+                        </div>
+                    </div>
+                    <button
+                        onclick={closeDiscountModal}
+                        class="p-2 rounded-xl bg-surface-soft hover:bg-surface-strong text-text-muted hover:text-text-base transition-all cursor-pointer"
+                    >
+                        <X size={16} />
+                    </button>
+                </div>
+
+                <!-- Body / Inputs -->
+                <div class="p-6 space-y-4">
+                    <p class="text-xs text-text-muted font-medium leading-relaxed">
+                        Ingresa los porcentajes de descuento a aplicar sobre este documento. Rango permitido: <strong>0.00%</strong> a <strong>100.00%</strong>.
+                    </p>
+
+                    <div class="space-y-3">
+                        <!-- Campo 1 -->
+                        <div class="flex flex-col gap-1.5">
+                            <label for="campo1" class="text-[10px] font-black uppercase tracking-wider text-text-muted">Descuento 1 (%)</label>
+                            <div class="relative rounded-xl bg-surface-soft border border-border-subtle overflow-hidden focus-within:border-brand-500/50 transition-all">
+                                <input
+                                    id="campo1"
+                                    type="number"
+                                    min="0"
+                                    max="100"
+                                    step="0.01"
+                                    placeholder="0.00"
+                                    disabled={!data.canEdit}
+                                    bind:value={tempCampo1}
+                                    class="w-full h-10 bg-transparent outline-none px-3 pr-8 text-xs font-mono text-text-base disabled:opacity-50"
+                                />
+                                <span class="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-text-muted/60">%</span>
+                            </div>
+                        </div>
+
+                        <!-- Campo 2 -->
+                        <div class="flex flex-col gap-1.5">
+                            <label for="campo2" class="text-[10px] font-black uppercase tracking-wider text-text-muted">Descuento 2 (%)</label>
+                            <div class="relative rounded-xl bg-surface-soft border border-border-subtle overflow-hidden focus-within:border-brand-500/50 transition-all">
+                                <input
+                                    id="campo2"
+                                    type="number"
+                                    min="0"
+                                    max="100"
+                                    step="0.01"
+                                    placeholder="0.00"
+                                    disabled={!data.canEdit}
+                                    bind:value={tempCampo2}
+                                    class="w-full h-10 bg-transparent outline-none px-3 pr-8 text-xs font-mono text-text-base disabled:opacity-50"
+                                />
+                                <span class="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-text-muted/60">%</span>
+                            </div>
+                        </div>
+
+                        <!-- Campo 3 -->
+                        <div class="flex flex-col gap-1.5">
+                            <label for="campo3" class="text-[10px] font-black uppercase tracking-wider text-text-muted">Descuento 3 (%)</label>
+                            <div class="relative rounded-xl bg-surface-soft border border-border-subtle overflow-hidden focus-within:border-brand-500/50 transition-all">
+                                <input
+                                    id="campo3"
+                                    type="number"
+                                    min="0"
+                                    max="100"
+                                    step="0.01"
+                                    placeholder="0.00"
+                                    disabled={!data.canEdit}
+                                    bind:value={tempCampo3}
+                                    class="w-full h-10 bg-transparent outline-none px-3 pr-8 text-xs font-mono text-text-base disabled:opacity-50"
+                                />
+                                <span class="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-text-muted/60">%</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Footer -->
+                <div class="px-6 py-4 border-t border-border-subtle flex justify-end gap-2 bg-surface-soft/50 text-xs font-bold">
+                    <button
+                        onclick={closeDiscountModal}
+                        class="px-4 py-2 rounded-xl bg-surface-soft hover:bg-surface-strong text-text-base transition-all cursor-pointer"
+                    >
+                        Cancelar
+                    </button>
+                    {#if data.canEdit}
+                        <button
+                            onclick={saveDiscounts}
+                            disabled={savingDiscounts}
+                            class="px-5 py-2 rounded-xl bg-brand-600 hover:bg-brand-500 text-white transition-all shadow-lg shadow-brand-500/20 disabled:opacity-50 disabled:pointer-events-none cursor-pointer flex items-center gap-1.5"
+                        >
+                            {#if savingDiscounts}
+                                <Loader2 size={12} class="animate-spin" /> Guardando...
+                            {:else}
+                                Guardar
+                            {/if}
+                        </button>
+                    {/if}
                 </div>
             </div>
         </div>
