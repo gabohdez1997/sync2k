@@ -37,9 +37,23 @@
       icon: ShoppingBag,
       options: [
         { id: "sales_customers", label: "Clientes", hasOthers: true },
-        { id: "sales_quotes", label: "Cotizaciones", hasOthers: true, hasVoid: true },
-        { id: "sales_orders", label: "Pedidos", hasOthers: true, hasVoid: true },
-        { id: "sales_price_checker", label: "Consultor de Precios", onlyRead: true },
+        {
+          id: "sales_quotes",
+          label: "Cotizaciones",
+          hasOthers: true,
+          hasVoid: true,
+        },
+        {
+          id: "sales_orders",
+          label: "Pedidos",
+          hasOthers: true,
+          hasVoid: true,
+        },
+        {
+          id: "sales_price_checker",
+          label: "Consultor de Precios",
+          onlyRead: true,
+        },
       ],
     },
     {
@@ -84,9 +98,27 @@
       label: "Reportes",
       icon: FileText,
       options: [
-        { id: "reports_receivables", label: "Cuentas por Cobrar", hasOthers: true, hasVoid: false, onlyRead: true },
-        { id: "reports_payables", label: "Cuentas por Pagar", hasOthers: true, hasVoid: false, onlyRead: true },
-        { id: "reports_detailed_account", label: "Cuenta Detallada", hasOthers: true, hasVoid: false, onlyRead: true },
+        {
+          id: "reports_receivables",
+          label: "Cuentas por Cobrar",
+          hasOthers: true,
+          hasVoid: false,
+          onlyRead: true,
+        },
+        {
+          id: "reports_payables",
+          label: "Cuentas por Pagar",
+          hasOthers: true,
+          hasVoid: false,
+          onlyReadAndEdit: true,
+        },
+        {
+          id: "reports_detailed_account",
+          label: "Cuenta Detallada",
+          hasOthers: true,
+          hasVoid: false,
+          onlyRead: true,
+        },
       ],
     },
     {
@@ -124,7 +156,14 @@
   let rolePermissions = $state<
     Record<
       string,
-      { read: boolean; create: boolean; update: boolean; delete: boolean; void: boolean; others: boolean }
+      {
+        read: boolean;
+        create: boolean;
+        update: boolean;
+        delete: boolean;
+        void: boolean;
+        others: boolean;
+      }
     >
   >({});
 
@@ -183,11 +222,14 @@
 
       // Agregamos los nuevos almacenes a la lista de disponibles (evitando duplicados)
       const newWs = wData.warehouses || [];
-      const currentIds = new Set(availableWarehouses.map(w => w.co_alma || w.id));
-      
-      const filteredNew = newWs.filter((w: any) => !currentIds.has(w.co_alma || w.id));
+      const currentIds = new Set(
+        availableWarehouses.map((w) => w.co_alma || w.id),
+      );
+
+      const filteredNew = newWs.filter(
+        (w: any) => !currentIds.has(w.co_alma || w.id),
+      );
       availableWarehouses = [...availableWarehouses, ...filteredNew];
-      
     } catch (e: any) {
       console.error("Error loading context", e);
       contextError = e.message;
@@ -255,10 +297,13 @@
   function toggleAll(optionId: string) {
     const p = rolePermissions[optionId];
     // Buscamos si el módulo tiene la opción 'others' o 'void' habilitada estructuralmente
-    const option = navStructure.flatMap(n => n.options).find(o => o.id === optionId);
+    const option = navStructure
+      .flatMap((n) => n.options)
+      .find((o) => o.id === optionId);
     const supportsOthers = (option as any)?.hasOthers || false;
     const supportsVoid = (option as any)?.hasVoid || false;
     const onlyRead = (option as any)?.onlyRead || false;
+    const onlyReadAndEdit = (option as any)?.onlyReadAndEdit || false;
 
     let anyOff = false;
     if (onlyRead) {
@@ -271,8 +316,24 @@
         void: false,
         others: supportsOthers ? anyOff : false,
       };
+    } else if (onlyReadAndEdit) {
+      anyOff = !p.read || !p.update || (supportsOthers && !p.others);
+      rolePermissions[optionId] = {
+        read: anyOff,
+        create: false,
+        update: anyOff,
+        delete: false,
+        void: false,
+        others: supportsOthers ? anyOff : false,
+      };
     } else {
-      anyOff = !p.read || !p.create || !p.update || !p.delete || (supportsOthers && !p.others) || (supportsVoid && !p.void);
+      anyOff =
+        !p.read ||
+        !p.create ||
+        !p.update ||
+        !p.delete ||
+        (supportsOthers && !p.others) ||
+        (supportsVoid && !p.void);
       rolePermissions[optionId] = {
         read: anyOff,
         create: anyOff,
@@ -459,10 +520,14 @@
               <Building size={12} />
               Sucursales Autorizadas
             </label>
-            
-            <div class="bg-surface-base border border-border-subtle rounded-xl p-3 space-y-2 max-h-40 overflow-y-auto">
+
+            <div
+              class="bg-surface-base border border-border-subtle rounded-xl p-3 space-y-2 max-h-40 overflow-y-auto"
+            >
               {#each data.branches as branch}
-                <label class="flex items-center gap-3 p-2 hover:bg-white/5 rounded-lg cursor-pointer transition-colors">
+                <label
+                  class="flex items-center gap-3 p-2 hover:bg-white/5 rounded-lg cursor-pointer transition-colors"
+                >
                   <input
                     type="checkbox"
                     bind:group={branchIds}
@@ -479,7 +544,9 @@
                   />
                   <div class="flex flex-col">
                     <span class="text-sm font-bold">{branch.name}</span>
-                    <span class="text-[9px] text-text-muted opacity-60 truncate">{branch.agent_url}</span>
+                    <span class="text-[9px] text-text-muted opacity-60 truncate"
+                      >{branch.agent_url}</span
+                    >
                   </div>
                 </label>
               {/each}
@@ -522,13 +589,22 @@
                         class="w-4 h-4 rounded border-border-subtle text-brand-500 focus:ring-brand-500 bg-black/20"
                       />
                       <div class="flex flex-col">
-                        <span class="text-sm font-medium">{warehouse.des_alma || warehouse.name || wid}</span>
-                        <span class="text-[9px] opacity-40 font-mono italic">ID: {wid}</span>
+                        <span class="text-sm font-medium"
+                          >{warehouse.des_alma || warehouse.name || wid}</span
+                        >
+                        <span class="text-[9px] opacity-40 font-mono italic"
+                          >ID: {wid}</span
+                        >
                       </div>
                     </label>
                   {/each}
                   {#if loadingContext}
-                     <div class="flex items-center justify-center py-2 opacity-50"><Loader2 size={12} class="animate-spin mr-2"/> Actualizando lista...</div>
+                    <div
+                      class="flex items-center justify-center py-2 opacity-50"
+                    >
+                      <Loader2 size={12} class="animate-spin mr-2" /> Actualizando
+                      lista...
+                    </div>
                   {/if}
                 </div>
               {/if}
@@ -732,35 +808,46 @@
                       <td
                         class="px-6 py-4 text-center border-b border-border-subtle"
                       >
-                        {#if opt.id !== 'cash_exchange'}
-                        <button
-                          type="button"
-                          onclick={() => toggleAll(opt.id)}
-                          class="w-6 h-6 rounded-lg border-2 border-brand-500/30 flex items-center justify-center transition-all {
-                            (opt.onlyRead
-                              ? rolePermissions[opt.id].read && (opt.hasOthers ? rolePermissions[opt.id].others : true)
-                              : rolePermissions[opt.id].read &&
-                                rolePermissions[opt.id].create &&
-                                rolePermissions[opt.id].update &&
-                                rolePermissions[opt.id].delete &&
-                                (opt.hasOthers ? rolePermissions[opt.id].others : true) &&
-                                (opt.hasVoid ? rolePermissions[opt.id].void : true))
+                        {#if opt.id !== "cash_exchange"}
+                          <button
+                            type="button"
+                            onclick={() => toggleAll(opt.id)}
+                            class="w-6 h-6 rounded-lg border-2 border-brand-500/30 flex items-center justify-center transition-all {(
+                              opt.onlyRead
+                                ? rolePermissions[opt.id].read &&
+                                  (opt.hasOthers
+                                    ? rolePermissions[opt.id].others
+                                    : true)
+                                : opt.onlyReadAndEdit
+                                  ? rolePermissions[opt.id].read &&
+                                    rolePermissions[opt.id].update &&
+                                    (opt.hasOthers
+                                      ? rolePermissions[opt.id].others
+                                      : true)
+                                  : rolePermissions[opt.id].read &&
+                                    rolePermissions[opt.id].create &&
+                                    rolePermissions[opt.id].update &&
+                                    rolePermissions[opt.id].delete &&
+                                    (opt.hasOthers
+                                      ? rolePermissions[opt.id].others
+                                      : true) &&
+                                    (opt.hasVoid
+                                      ? rolePermissions[opt.id].void
+                                      : true)
+                            )
                               ? 'bg-brand-500 border-brand-500'
-                              : 'hover:bg-brand-500/10'
-                          }"
-                        >
-                          {#if (opt.onlyRead
-                            ? rolePermissions[opt.id].read && (opt.hasOthers ? rolePermissions[opt.id].others : true)
-                            : rolePermissions[opt.id].read && rolePermissions[opt.id].create && rolePermissions[opt.id].update && rolePermissions[opt.id].delete && (opt.hasOthers ? rolePermissions[opt.id].others : true) && (opt.hasVoid ? rolePermissions[opt.id].void : true))}
-                            <div in:fade={{ duration: 100 }}>
-                              <Check
-                                size={14}
-                                class="text-white"
-                                strokeWidth={4}
-                              />
-                            </div>
-                          {/if}
-                        </button>
+                              : 'hover:bg-brand-500/10'}"
+                          >
+                            {#if opt.onlyRead ? rolePermissions[opt.id].read && (opt.hasOthers ? rolePermissions[opt.id].others : true) : opt.onlyReadAndEdit ? rolePermissions[opt.id].read && rolePermissions[opt.id].update && (opt.hasOthers ? rolePermissions[opt.id].others : true) : rolePermissions[opt.id].read && rolePermissions[opt.id].create && rolePermissions[opt.id].update && rolePermissions[opt.id].delete && (opt.hasOthers ? rolePermissions[opt.id].others : true) && (opt.hasVoid ? rolePermissions[opt.id].void : true)}
+                              <div in:fade={{ duration: 100 }}>
+                                <Check
+                                  size={14}
+                                  class="text-white"
+                                  strokeWidth={4}
+                                />
+                              </div>
+                            {/if}
+                          </button>
                         {:else}
                           <span class="text-[9px] text-text-muted/20">—</span>
                         {/if}
@@ -770,7 +857,7 @@
                         <td
                           class="px-6 py-4 text-center border-b border-border-subtle"
                         >
-                          {#if opt.onlyRead ? (action === 'read' || (action === 'others' && opt.hasOthers)) : ((opt.id !== 'cash_exchange' && (action !== 'others' || opt.hasOthers) && (action !== 'void' || opt.hasVoid)) || (opt.id === 'cash_exchange' && action === 'update'))}
+                          {#if opt.onlyRead ? action === "read" || (action === "others" && opt.hasOthers) : opt.onlyReadAndEdit ? action === "read" || action === "update" || (action === "others" && opt.hasOthers) : (opt.id !== "cash_exchange" && (action !== "others" || opt.hasOthers) && (action !== "void" || opt.hasVoid)) || (opt.id === "cash_exchange" && action === "update")}
                             <label
                               class="relative inline-flex items-center cursor-pointer justify-center"
                             >
@@ -784,7 +871,11 @@
                                 onchange={() => {
                                   handleCheckboxChange(opt.id, action);
                                   // Forzar read=true si es cash_exchange y se marca update
-                                  if (opt.id === 'cash_exchange' && action === 'update' && rolePermissions[opt.id].update) {
+                                  if (
+                                    opt.id === "cash_exchange" &&
+                                    action === "update" &&
+                                    rolePermissions[opt.id].update
+                                  ) {
                                     rolePermissions[opt.id].read = true;
                                   }
                                 }}
