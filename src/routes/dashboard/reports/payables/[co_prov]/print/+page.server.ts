@@ -44,7 +44,12 @@ export const load: PageServerLoad = protectLoad('reports_payables', async ({ par
         }
 
         // Filtrar documentos que coincidan exactamente con el co_prov para evitar falsos positivos
-        const documents = (res.data || []).filter((d: any) => (d.co_prov || "").trim().toUpperCase() === co_prov.trim().toUpperCase());
+        let documents = (res.data || []).filter((d: any) => (d.co_prov || "").trim().toUpperCase() === co_prov.trim().toUpperCase());
+
+        const onlyProviderRates = url.searchParams.get('only_provider_rates') === 'true';
+        if (onlyProviderRates) {
+            documents = documents.filter((d: any) => d.tasa_proveedor && d.tasa_proveedor > 0);
+        }
 
         if (documents.length === 0) {
             throw error(404, 'No se encontraron cuentas por pagar activas para este proveedor.');
@@ -83,6 +88,7 @@ export const load: PageServerLoad = protectLoad('reports_payables', async ({ par
             documents,
             branch,
             settings: settings || {},
+            onlyProviderRates,
             title: `Estado de Cuenta - ${supplierInfo.prov_des}`
         };
 
