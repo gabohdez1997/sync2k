@@ -1101,9 +1101,10 @@
                                                         step="0.01" 
                                                         min="0"
                                                         placeholder="Tasa"
+                                                        disabled={!data.canEdit}
                                                         value={doc.tasa_proveedor || ""} 
                                                         onchange={(e) => updateProviderTasa(doc, e.currentTarget.value)}
-                                                        class="w-18 bg-surface-base border border-border-subtle rounded-lg px-1 py-0.5 text-xs text-center focus:outline-none focus:ring-1 focus:ring-brand-500/50 transition-all font-mono"
+                                                        class="w-18 bg-surface-base border border-border-subtle rounded-lg px-1 py-0.5 text-xs text-center focus:outline-none focus:ring-1 focus:ring-brand-500/50 transition-all font-mono disabled:opacity-50 disabled:cursor-not-allowed"
                                                     />
                                                 </td>
 

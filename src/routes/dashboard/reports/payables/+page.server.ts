@@ -35,6 +35,7 @@ export const load: PageServerLoad = protectLoad('reports_payables', async ({ url
 		}, profile, fetch);
 
 		const hasOthers = hasPermission(profile, 'reports_payables', 'others');
+		const canEdit = hasPermission(profile, 'reports_payables', 'update');
 
 		const page = url.searchParams.get('page') || '1';
 		const limit = url.searchParams.get('limit') || '1000';
@@ -57,7 +58,8 @@ export const load: PageServerLoad = protectLoad('reports_payables', async ({ url
 				cxp: { data: [], metrics: null, page: 1, limit: 10, total_items: 0, total_pages: 0 },
 				branches: allowedBranches,
 				selectedBranchId: selectedBranch.id,
-				error: response?.message || 'Error al obtener reporte del agente local.'
+				error: response?.message || 'Error al obtener reporte del agente local.',
+				canEdit
 			};
 		}
 
@@ -65,7 +67,8 @@ export const load: PageServerLoad = protectLoad('reports_payables', async ({ url
 			cxp: response,
 			branches: allowedBranches,
 			selectedBranchId: selectedBranch.id,
-			hasOthers
+			hasOthers,
+			canEdit
 		};
 
 	} catch (err: any) {
