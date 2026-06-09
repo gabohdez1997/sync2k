@@ -119,6 +119,13 @@
           hasVoid: false,
           onlyRead: true,
         },
+        {
+          id: "reports_cashier_month",
+          label: "Cajero del Mes",
+          hasOthers: false,
+          hasVoid: false,
+          onlyRead: true,
+        },
       ],
     },
     {
