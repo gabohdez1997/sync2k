@@ -251,11 +251,12 @@
                                 {#if onlyProviderRates}
                                     <th class="col-amount text-right">Saldo Pendiente (USD)</th>
                                     <th class="col-amount text-right">Saldo Pendiente (VES)</th>
+                                    <th class="col-days text-right">Tasa</th>
                                 {:else}
                                     <th class="col-amount text-right">Monto Original (USD)</th>
                                     <th class="col-amount text-right">Saldo Pendiente (USD)</th>
+                                    <th class="col-days">Días Mora</th>
                                 {/if}
-                                <th class="col-days">Días Mora</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -329,23 +330,29 @@
                                             >{formatCurrency(item.saldo_usd)}</td
                                         >
                                     {/if}
-                                    <td class="font-bold">
-                                        {#if item.vencido}
-                                            <span
-                                                class={isCredit
-                                                    ? "text-emerald-600"
-                                                    : "text-red-600"}
-                                                >{item.dias_vencidos} días</span
-                                            >
-                                        {:else}
-                                            <span
-                                                class={isCredit
-                                                    ? "text-emerald-600"
-                                                    : "text-green-600"}
-                                                >Al día</span
-                                            >
-                                        {/if}
-                                    </td>
+                                    {#if onlyProviderRates}
+                                        <td class="font-mono font-bold text-right">
+                                            {formatCurrency(item.tasa_proveedor || item.tasa)}
+                                        </td>
+                                    {:else}
+                                        <td class="font-bold">
+                                            {#if item.vencido}
+                                                <span
+                                                    class={isCredit
+                                                        ? "text-emerald-600"
+                                                        : "text-red-600"}
+                                                    >{item.dias_vencidos} días</span
+                                                >
+                                            {:else}
+                                                <span
+                                                    class={isCredit
+                                                        ? "text-emerald-600"
+                                                        : "text-green-600"}
+                                                    >Al día</span
+                                                >
+                                            {/if}
+                                        </td>
+                                    {/if}
                                 </tr>
                             {/each}
                             {#if page.items.length < page.expectedRows}

@@ -62,6 +62,7 @@
     }
 
     const docTypes: Record<string, { label: string, class: string }> = {
+        'COBR': { label: 'Cobro', class: 'bg-emerald-500/10 text-emerald-500 dark:text-emerald-400 border-emerald-500/20' },
         'FACT': { label: 'Factura', class: 'bg-blue-500/10 text-blue-500 dark:text-blue-400 border-blue-500/20' },
         'NDEB': { label: 'N/Débito', class: 'bg-purple-500/10 text-purple-500 dark:text-purple-400 border-purple-500/20' },
         'N/DB': { label: 'N/Débito', class: 'bg-purple-500/10 text-purple-500 dark:text-purple-400 border-purple-500/20' },
@@ -109,14 +110,49 @@
             
             const g = groups[coCli];
             g.documents.push(doc);
-            g.total_usd += doc.total_usd;
-            g.total_bs += doc.total_bs;
-            g.saldo_usd += doc.saldo_usd;
-            g.saldo_bs += doc.saldo_bs;
             g.doc_count++;
         }
+
+        // For each client, sort documents ascending chronologically and compute Debe, Haber, and running Saldo
+        for (const key of Object.keys(groups)) {
+            const g = groups[key];
+            g.documents.sort((a: any, b: any) => new Date(a.fec_emis).getTime() - new Date(b.fec_emis).getTime());
+            
+            let runningUsd = 0;
+            let runningBs = 0;
+            g.documents = g.documents.map((d: any) => {
+                const isDebe = d.total_usd < 0; // Negative under sign logic represents Debe (-)
+                const amtUsd = Math.abs(d.total_usd);
+                const amtBs = Math.abs(d.total_bs);
+                
+                const debeUsd = isDebe ? parseFloat(amtUsd.toFixed(2)) : 0;
+                const debeBs = isDebe ? parseFloat(amtBs.toFixed(2)) : 0;
+                const haberUsd = !isDebe ? parseFloat(amtUsd.toFixed(2)) : 0;
+                const haberBs = !isDebe ? parseFloat(amtBs.toFixed(2)) : 0;
+                
+                runningUsd = parseFloat((runningUsd + (haberUsd - debeUsd)).toFixed(2));
+                runningBs = parseFloat((runningBs + (haberBs - debeBs)).toFixed(2));
+                
+                return {
+                    ...d,
+                    debeUsd,
+                    debeBs,
+                    haberUsd,
+                    haberBs,
+                    runningUsd,
+                    runningBs
+                };
+            });
+            
+            // Client total balances correspond to the final running balance
+            g.saldo_usd = parseFloat(runningUsd.toFixed(2));
+            g.saldo_bs = parseFloat(runningBs.toFixed(2));
+            g.total_usd = parseFloat(runningUsd.toFixed(2));
+            g.total_bs = parseFloat(runningBs.toFixed(2));
+        }
         
-        return Object.values(groups).sort((a: any, b: any) => b.saldo_usd - a.saldo_usd);
+        // Sort clients putting those who owe us the most (most negative) at the top
+        return Object.values(groups).sort((a: any, b: any) => a.saldo_usd - b.saldo_usd);
     });
 
     let paginatedClients = $derived.by(() => {
@@ -143,130 +179,7 @@
 
     function exportToPDF() {
         if (!selectedClient) return;
-        
-        const client = selectedClient;
-        const printWindow = window.open('', '_blank');
-        if (!printWindow) {
-            toast.error('No se pudo abrir la ventana de impresión. Por favor, permite las ventanas emergentes.');
-            return;
-        }
-
-        const documentsHtml = client.documents.map((doc: any) => {
-            const badge = getDocTypeBadge(doc.co_tipo_doc);
-            const isAnulado = doc.anulado;
-            const morStr = doc.vencido ? doc.dias_vencidos + ' días' : 'Al día';
-            
-            let origHtml = '—';
-            if (doc.nro_orig && doc.nro_orig.trim()) {
-                origHtml = '<strong>' + doc.nro_orig.trim() + '</strong><br/>' +
-                           '<span style="font-size: 10px; color: #666;">' + (doc.doc_orig || '').trim() + '</span>';
-            }
-
-            const td_saldo_usd_and_bs = '<td style="padding: 8px; border-bottom: 1px solid #ddd; text-align: right; color: ' + (doc.saldo_usd !== 0 ? '#d9534f' : '#333') + '; font-weight: bold;">' +
-                '<strong>' + formatCurrency(doc.saldo_usd, 'USD') + '</strong><br/>' +
-                '<span style="font-size: 10px; color: ' + (doc.saldo_usd !== 0 ? '#d9534f' : '#666') + ';">' + formatCurrency(doc.saldo_bs, 'VES') + '</span>' +
-            '</td>';
-
-            return '<tr>' +
-                '<td style="padding: 8px; border-bottom: 1px solid #ddd;">' +
-                    '<strong>' + doc.nro_doc + '</strong><br/>' +
-                    '<span style="font-size: 10px; color: #666; border: 1px solid #ccc; padding: 1px 4px; border-radius: 3px; background: #f0f0f0;">' +
-                        doc.co_tipo_doc.trim() +
-                    '</span>' +
-                '</td>' +
-                '<td style="padding: 8px; border-bottom: 1px solid #ddd;">' + dayjs(doc.fec_emis).format('DD MMM YYYY') + '</td>' +
-                '<td style="padding: 8px; border-bottom: 1px solid #ddd;">' + origHtml + '</td>' +
-                '<td style="padding: 8px; border-bottom: 1px solid #ddd;">' + dayjs(doc.fec_venc).format('DD MMM YYYY') + '</td>' +
-                '<td style="padding: 8px; border-bottom: 1px solid #ddd; text-align: center;">' +
-                    '<span style="color: ' + (isAnulado ? '#d9534f' : '#5cb85c') + '; font-weight: bold; font-size: 10px;">' +
-                        (isAnulado ? 'ANULADO' : 'ACTIVO') +
-                    '</span>' +
-                '</td>' +
-                '<td style="padding: 8px; border-bottom: 1px solid #ddd; text-align: right;">' +
-                    '<strong>' + formatCurrency(doc.total_usd, 'USD') + '</strong><br/>' +
-                    '<span style="font-size: 10px; color: #666;">' + formatCurrency(doc.total_bs, 'VES') + '</span>' +
-                '</td>' +
-                td_saldo_usd_and_bs +
-                '<td style="padding: 8px; border-bottom: 1px solid #ddd; text-align: center;">' +
-                    '<span style="padding: 2px 6px; border-radius: 4px; font-weight: bold; font-size: 10px; background: ' + (doc.vencido ? '#f2dede' : '#dff0d8') + '; color: ' + (doc.vencido ? '#a94442' : '#3c763d') + ';">' +
-                        morStr +
-                    '</span>' +
-                '</td>' +
-            '</tr>';
-        }).join('');
-
-        const html = [
-            '<html>',
-            '<head>',
-            '    <title>Cuenta Detallada - ' + client.cli_des + '</title>',
-            '    <style>',
-            '        body { font-family: \'Helvetica Neue\', Helvetica, Arial, sans-serif; color: #333; margin: 30px; }',
-            '        .header { margin-bottom: 30px; border-bottom: 3px solid #222; padding-bottom: 15px; }',
-            '        .header h1 { margin: 0 0 5px 0; font-size: 24px; }',
-            '        .header p { margin: 0; color: #666; font-size: 12px; }',
-            '        .summary-box { display: flex; gap: 20px; margin-bottom: 30px; }',
-            '        .card { flex: 1; padding: 15px; border: 1px solid #ddd; border-radius: 8px; background: #fafafa; }',
-            '        .card span { font-size: 10px; text-transform: uppercase; color: #666; font-weight: bold; }',
-            '        .card h3 { margin: 5px 0; font-size: 18px; }',
-            '        .card p { margin: 0; font-size: 11px; color: #666; }',
-            '        table { width: 100%; border-collapse: collapse; margin-top: 20px; font-size: 11px; }',
-            '        th { padding: 10px 8px; background: #222; color: #fff; text-align: left; text-transform: uppercase; font-size: 10px; border: 1px solid #ddd; }',
-            '        td { border: 1px solid #ddd; }',
-            '        tr:nth-child(even) { background: #fafafa; }',
-            '        @media print {',
-            '            body { margin: 0; }',
-            '            button { display: none; }',
-            '        }',
-            '    </style>',
-            '</head>',
-            '<body>',
-            '    <div class="header">',
-            '        <h1>' + client.cli_des + '</h1>',
-            '        <p><strong>Código / RIF:</strong> ' + client.co_cli + ' &nbsp;|&nbsp; <strong>Fecha Emisión Reporte:</strong> ' + dayjs().format('DD/MM/YYYY HH:mm') + '</p>',
-            '    </div>',
-            '    ',
-            '    <div class="summary-box">',
-            '        <div class="card">',
-            '            <span>Saldo Neto Pendiente</span>',
-            '            <h3 style="color: ' + (client.saldo_usd !== 0 ? '#d9534f' : '#333') + ';">' + formatCurrency(client.saldo_usd, 'USD') + '</h3>',
-            '            <p>' + formatCurrency(client.saldo_bs, 'VES') + '</p>',
-            '        </div>',
-            '        <div class="card">',
-            '            <span>Documentos Registrados</span>',
-            '            <h3>' + client.doc_count + ' asociados</h3>',
-            '        </div>',
-            '    </div>',
-            '',
-            '    <h3 style="text-transform: uppercase; font-size: 14px; border-bottom: 1px solid #ddd; padding-bottom: 5px;">Detalle de Documentos</h3>',
-            '    <table>',
-            '        <thead>',
-            '            <tr>',
-            '                <th style="width: 15%;">Documento</th>',
-            '                <th style="width: 12%;">Emisión</th>',
-            '                <th style="width: 15%;">Origen</th>',
-            '                <th style="width: 12%;">Vencimiento</th>',
-            '                <th style="text-align: center; width: 10%;">Estado</th>',
-            '                <th style="text-align: right; width: 13%;">Monto Original</th>',
-            '                <th style="text-align: right; width: 13%;">Saldo Pendiente</th>',
-            '                <th style="text-align: center; width: 10%;">Días Mora</th>',
-            '            </tr>',
-            '        </thead>',
-            '        <tbody>',
-            documentsHtml,
-            '        </tbody>',
-            '    </table>',
-            '    <' + 'script>',
-            '        window.onload = function() {',
-            '            window.print();',
-            '            setTimeout(function() { window.close(); }, 500);',
-            '        };',
-            '    </' + 'script>',
-            '</body>',
-            '</html>'
-        ].join('\n');
-
-        printWindow.document.write(html);
-        printWindow.document.close();
+        window.open(`/dashboard/reports/detailed-account/${selectedClient.co_cli}/print?branch_id=${data.selectedBranchId}`, '_blank');
     }
 </script>
 
@@ -436,11 +349,11 @@
                         <div class="p-4 rounded-2xl bg-surface-soft border border-border-subtle space-y-1">
                             <span class="text-[10px] font-black uppercase tracking-widest text-text-muted">Saldo Neto</span>
                             <div class="flex items-baseline gap-2">
-                                <span class="text-2xl font-black tracking-tight {client.saldo_usd !== 0 ? 'text-text-red' : 'text-text-green'}">
+                                <span class="text-2xl font-black tracking-tight {client.saldo_usd >= 0 ? 'text-text-green' : 'text-text-red'}">
                                     {formatCurrency(client.saldo_usd, 'USD')}
                                 </span>
                             </div>
-                            <p class="text-xs font-bold {client.saldo_bs !== 0 ? 'text-text-red' : 'text-text-muted'}">{formatCurrency(client.saldo_bs, 'VES')}</p>
+                            <p class="text-xs font-bold {client.saldo_bs >= 0 ? 'text-text-green' : 'text-text-red'}">{formatCurrency(client.saldo_bs, 'VES')}</p>
                         </div>
                     </div>
 
@@ -542,10 +455,10 @@
                         <!-- Total outstanding -->
                         <div class="p-5 rounded-2xl bg-surface-soft border border-border-subtle space-y-1 relative overflow-hidden">
                             <span class="text-[10px] font-black uppercase tracking-widest text-text-muted">Saldo Neto (USD)</span>
-                            <h3 class="text-xl font-black tracking-tight {client.saldo_usd !== 0 ? 'text-text-red' : 'text-text-green'}">
+                            <h3 class="text-xl font-black tracking-tight {client.saldo_usd >= 0 ? 'text-text-green' : 'text-text-red'}">
                                 {formatCurrency(client.saldo_usd, 'USD')}
                             </h3>
-                            <p class="text-[11px] font-bold {client.saldo_bs !== 0 ? 'text-text-red' : 'text-text-muted'}">{formatCurrency(client.saldo_bs, 'VES')}</p>
+                            <p class="text-[11px] font-bold {client.saldo_bs >= 0 ? 'text-text-green' : 'text-text-red'}">{formatCurrency(client.saldo_bs, 'VES')}</p>
                         </div>
                         <!-- Docs count -->
                         <div class="p-5 rounded-2xl bg-surface-soft border border-border-subtle flex items-center justify-between">
@@ -576,16 +489,13 @@
                                             <th class="px-6 py-4">Origen</th>
                                             <th class="px-6 py-4">Vencimiento</th>
                                             <th class="px-6 py-4 text-center">Estado</th>
-                                            <th class="px-6 py-4 text-right">Monto Original</th>
-                                            <th class="px-6 py-4 text-right">Saldo Pendiente</th>
-                                            <th class="px-6 py-4 text-center">Días Mora</th>
-                                            {#if data.hasOthers}
-                                                <th class="px-6 py-4 text-center">Vendedor</th>
-                                            {/if}
+                                            <th class="px-6 py-4 text-right">Debe (-)</th>
+                                            <th class="px-6 py-4 text-right">Haber (+)</th>
+                                            <th class="px-6 py-4 text-right">Saldo</th>
                                         </tr>
                                     </thead>
                                     <tbody class="divide-y divide-border-subtle text-xs">
-                                        {#each client.documents as doc (doc.nro_doc + doc.co_tipo_doc)}
+                                        {#each client.documents as doc, idx (doc.nro_doc + doc.co_tipo_doc + (doc.nro_orig || '') + (doc.doc_orig || '') + doc.sede_id + idx)}
                                             {@const badge = getDocTypeBadge(doc.co_tipo_doc)}
                                             <tr class="hover:bg-surface-soft transition-colors">
                                                 <!-- Documento / Tipo -->
@@ -643,46 +553,41 @@
                                                     {/if}
                                                 </td>
 
-                                                <!-- Monto Original -->
-                                                <td class="px-6 py-4 text-right whitespace-nowrap font-bold">
-                                                    <div class="flex flex-col items-end">
-                                                        <span class="text-text-base">{formatCurrency(doc.total_usd, 'USD')}</span>
-                                                        <span class="text-[9px] text-text-muted mt-0.5">{formatCurrency(doc.total_bs, 'VES')}</span>
-                                                    </div>
-                                                </td>
-
-                                                <!-- Saldo Pendiente -->
-                                                <td class="px-6 py-4 text-right whitespace-nowrap font-black">
-                                                    <div class="flex flex-col items-end">
-                                                        <span class="{doc.saldo_usd !== 0 ? 'text-text-red' : 'text-text-green'}">
-                                                            {formatCurrency(doc.saldo_usd, 'USD')}
-                                                        </span>
-                                                        <span class="text-[9px] mt-0.5 font-bold {doc.saldo_bs !== 0 ? 'text-text-red' : 'text-text-muted'}">
-                                                            {formatCurrency(doc.saldo_bs, 'VES')}
-                                                        </span>
-                                                    </div>
-                                                </td>
-
-                                                <!-- Mora -->
-                                                <td class="px-6 py-4 text-center whitespace-nowrap">
-                                                    {#if doc.vencido}
-                                                        <span class="px-2 py-0.5 font-bold rounded bg-red-500/10 text-red-500 border border-red-500/20">
-                                                            {doc.dias_vencidos} días
-                                                        </span>
+                                                <!-- Debe (-) -->
+                                                <td class="px-6 py-4 text-right whitespace-nowrap font-bold text-text-muted">
+                                                    {#if doc.debeUsd > 0}
+                                                        <div class="flex flex-col items-end">
+                                                            <span class="text-text-base">{formatCurrency(doc.debeUsd, 'USD')}</span>
+                                                            <span class="text-[9px] text-text-muted mt-0.5">{formatCurrency(doc.debeBs, 'VES')}</span>
+                                                        </div>
                                                     {:else}
-                                                        <span class="px-2 py-0.5 font-bold rounded inline-flex items-center gap-1 bg-green-500/10 text-green-500 border border-green-500/20">
-                                                            <CheckCircle size={8} />
-                                                            Al día
-                                                        </span>
+                                                        <span class="text-text-muted/40 italic font-medium">—</span>
                                                     {/if}
                                                 </td>
 
-                                                <!-- Vendedor -->
-                                                {#if data.hasOthers}
-                                                    <td class="px-6 py-4 text-center whitespace-nowrap font-mono font-bold text-text-muted">
-                                                        {doc.co_ven}
-                                                    </td>
-                                                {/if}
+                                                <!-- Haber (+) -->
+                                                <td class="px-6 py-4 text-right whitespace-nowrap font-bold text-text-muted">
+                                                    {#if doc.haberUsd > 0}
+                                                        <div class="flex flex-col items-end">
+                                                            <span class="text-text-base">{formatCurrency(doc.haberUsd, 'USD')}</span>
+                                                            <span class="text-[9px] text-text-muted mt-0.5">{formatCurrency(doc.haberBs, 'VES')}</span>
+                                                        </div>
+                                                    {:else}
+                                                        <span class="text-text-muted/40 italic font-medium">—</span>
+                                                    {/if}
+                                                </td>
+
+                                                <!-- Saldo -->
+                                                <td class="px-6 py-4 text-right whitespace-nowrap font-black">
+                                                    <div class="flex flex-col items-end">
+                                                        <span class={doc.runningUsd >= 0 ? 'text-text-green' : 'text-text-red'}>
+                                                            {formatCurrency(doc.runningUsd, 'USD')}
+                                                        </span>
+                                                        <span class="text-[9px] mt-0.5 font-bold {doc.runningBs >= 0 ? 'text-text-green' : 'text-text-red'}">
+                                                            {formatCurrency(doc.runningBs, 'VES')}
+                                                        </span>
+                                                    </div>
+                                                </td>
                                             </tr>
                                         {/each}
                                     </tbody>
