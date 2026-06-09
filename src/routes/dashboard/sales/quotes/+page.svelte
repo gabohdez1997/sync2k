@@ -788,10 +788,10 @@
     let ivaBS = 0;
 
     cart.forEach((item) => {
-      // Un ítem es estrictamente exento SOLO si es de la línea 09
+      // Un ítem es estrictamente exento SOLO si es de la sublinea 0901 (Fletes)
       const isStrictlyExempt =
-        (item.co_lin || "").trim() === "09" ||
-        (item.co_art || "").startsWith("09");
+        (item.co_subl || "").trim() === "0901" ||
+        (item.co_art || "").startsWith("0901");
 
       const rate = isStrictlyExempt ? 0 : quoteTaxRate;
 
@@ -2580,8 +2580,8 @@
                       showUSD: showUSD,
                       renglones: cart.map((item) => {
                         const isStrictlyExempt =
-                          (item.co_lin || "").trim() === "09" ||
-                          (item.co_art || "").startsWith("09");
+                          (item.co_subl || "").trim() === "0901" ||
+                          (item.co_art || "").startsWith("0901");
                         const rate = isStrictlyExempt ? 0 : quoteTaxRate;
                         const taxType = rate === 16 ? "1" : "5";
                         return {
