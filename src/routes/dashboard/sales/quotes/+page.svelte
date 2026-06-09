@@ -233,6 +233,7 @@
             return {
               co_art: artId,
               co_lin: String(r.co_lin || "").trim(),
+              co_subl: String(r.co_subl || "").trim(),
               art_des: String(r.art_des || "").trim(),
               qty: Number(r.cantidad || 0),
               precio_ves: Number(r.precio || 0),
@@ -386,6 +387,8 @@
           // Actualizar item en el carrito con RE-ASIGNACIÓN para Svelte kit
           const updatedItem = {
             ...cart[i],
+            co_lin: fresh.co_lin || cart[i].co_lin,
+            co_subl: fresh.co_subl || cart[i].co_subl,
             art_des: fresh.descripcion || fresh.art_des || cart[i].art_des,
             disponibilidad:
               filteredDispo.length > 0
