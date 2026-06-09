@@ -1,6 +1,6 @@
 <!-- src/routes/dashboard/+layout.svelte -->
 <script lang="ts">
-  import { page } from '$app/stores';
+  import { page, navigating } from '$app/stores';
   import type { LayoutData } from './$types';
   import { getThemeConfig, updateThemeConfig, toggleTheme, getTheme, DEFAULT_CONFIG } from '$lib/theme.svelte';
   import { 
@@ -482,6 +482,14 @@
     </header>
 
     <main class="flex-1 p-4 md:p-8 overflow-y-auto relative overscroll-contain touch-auto">
+      {#if $navigating}
+        <div class="fixed inset-0 bg-surface-base/30 backdrop-blur-xs z-50 flex items-center justify-center" transition:fade={{ duration: 150 }}>
+          <div class="glass p-8 rounded-3xl border border-border-subtle shadow-2xl flex flex-col items-center justify-center gap-4 bg-surface-soft/90">
+            <RefreshCw size={36} class="animate-spin text-brand-500" />
+            <p class="text-sm font-black text-text-muted">Cargando datos con el agente Profit...</p>
+          </div>
+        </div>
+      {/if}
       <div class="max-w-7xl mx-auto pb-20 md:pb-0">
         {@render children?.()}
       </div>
