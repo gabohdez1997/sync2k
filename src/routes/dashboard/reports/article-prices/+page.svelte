@@ -141,7 +141,7 @@
 
         // Start with UTF-8 BOM and sep=; directive for Excel
         let csvContent = '\uFEFFsep=;\n';
-        csvContent += 'Código;Descripción;Precio 1 (USD);Margen 1 (%);Precio 2 (USD);Margen 2 (%);Costo (USD)\n';
+        csvContent += 'Código;Descripción;Precio 1 (USD);Margen 1 (%);Precio 2 (USD);Margen 2 (%);Costo (USD);Estatus\n';
 
         for (const item of reportData) {
             // Formula trick to preserve leading zeros in Excel: ="CODE"
@@ -154,8 +154,9 @@
             const precio2 = (Number(item.precio2) || 0).toFixed(2).replace('.', ',');
             const margen2 = (Number(item.margen2) || 0).toFixed(2).replace('.', ',');
             const costo = (Number(item.costo) || 0).toFixed(2).replace('.', ',');
+            const statusLabel = item.anulado ? 'Inactivo' : 'Activo';
 
-            csvContent += `${co_art};${art_des};${precio1};${margen1};${precio2};${margen2};${costo}\n`;
+            csvContent += `${co_art};${art_des};${precio1};${margen1};${precio2};${margen2};${costo};${statusLabel}\n`;
         }
 
         const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -375,6 +376,7 @@
                         <th class="px-6 py-4 font-black text-right w-36 print:px-3 print:py-2">Precio 2</th>
                         <th class="px-6 py-4 font-black text-right w-28 print:px-3 print:py-2">Margen 2</th>
                         <th class="px-6 py-4 font-black text-right w-36 print:px-3 print:py-2">Costo</th>
+                        <th class="px-6 py-4 font-black w-28 print:px-3 print:py-2">Estatus</th>
                     </tr>
                 </thead>
                 <tbody class="text-text-base print:divide-gray-200 print:text-black">
@@ -401,10 +403,17 @@
                             <td class="px-6 py-4 text-right font-black text-emerald-400 print:text-black print:px-3 print:py-2">
                                 {formatUSD(item.costo)}
                             </td>
+                            <td class="px-6 py-4 font-semibold text-xs print:px-3 print:py-2">
+                                {#if item.anulado}
+                                    <span class="px-2.5 py-1 rounded-full bg-red-500/10 text-red-500 border border-red-500/20 font-bold">Inactivo</span>
+                                {:else}
+                                    <span class="px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 font-bold">Activo</span>
+                                {/if}
+                            </td>
                         </tr>
                     {:else}
                         <tr>
-                            <td colspan="7" class="px-6 py-16 text-center text-text-muted font-bold">
+                            <td colspan="8" class="px-6 py-16 text-center text-text-muted font-bold">
                                 {#if isSearching}
                                     <div class="flex flex-col items-center gap-3">
                                         <RefreshCw size={24} class="animate-spin text-brand-500" />
