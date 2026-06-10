@@ -127,6 +127,13 @@
           hasVoid: false,
           onlyRead: true,
         },
+        {
+          id: "reports_article_prices",
+          label: "Artículos con Precios",
+          hasOthers: false,
+          hasVoid: false,
+          onlyRead: true,
+        },
       ],
     },
     {
