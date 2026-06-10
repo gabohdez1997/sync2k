@@ -39,13 +39,15 @@
         const haberUsd = !isDebe ? parseFloat(amtUsd.toFixed(2)) : 0;
         const haberBs = !isDebe ? parseFloat(amtBs.toFixed(2)) : 0;
         
-        totalDebeUsd = parseFloat((totalDebeUsd + debeUsd).toFixed(2));
-        totalDebeBs = parseFloat((totalDebeBs + debeBs).toFixed(2));
-        totalHaberUsd = parseFloat((totalHaberUsd + haberUsd).toFixed(2));
-        totalHaberBs = parseFloat((totalHaberBs + haberBs).toFixed(2));
-        
-        runningUsd = parseFloat((runningUsd + (haberUsd - debeUsd)).toFixed(2));
-        runningBs = parseFloat((runningBs + (haberBs - debeBs)).toFixed(2));
+        if (!d.anulado) {
+            totalDebeUsd = parseFloat((totalDebeUsd + debeUsd).toFixed(2));
+            totalDebeBs = parseFloat((totalDebeBs + debeBs).toFixed(2));
+            totalHaberUsd = parseFloat((totalHaberUsd + haberUsd).toFixed(2));
+            totalHaberBs = parseFloat((totalHaberBs + haberBs).toFixed(2));
+            
+            runningUsd = parseFloat((runningUsd + (haberUsd - debeUsd)).toFixed(2));
+            runningBs = parseFloat((runningBs + (haberBs - debeBs)).toFixed(2));
+        }
         
         return {
             ...d,

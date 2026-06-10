@@ -130,8 +130,10 @@
                 const haberUsd = !isDebe ? parseFloat(amtUsd.toFixed(2)) : 0;
                 const haberBs = !isDebe ? parseFloat(amtBs.toFixed(2)) : 0;
                 
-                runningUsd = parseFloat((runningUsd + (haberUsd - debeUsd)).toFixed(2));
-                runningBs = parseFloat((runningBs + (haberBs - debeBs)).toFixed(2));
+                if (!d.anulado) {
+                    runningUsd = parseFloat((runningUsd + (haberUsd - debeUsd)).toFixed(2));
+                    runningBs = parseFloat((runningBs + (haberBs - debeBs)).toFixed(2));
+                }
                 
                 return {
                     ...d,
