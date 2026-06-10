@@ -18,6 +18,7 @@
     ShoppingCart,
     Loader2,
     FileText,
+    Settings,
   } from "lucide-svelte";
   import type { PageData, ActionData } from "./$types";
 
@@ -130,13 +131,14 @@
     },
     {
       id: "security",
-      label: "Seguridad",
-      icon: ShieldCheck,
+      label: "Sistema",
+      icon: Settings,
       options: [
         { id: "sec_users", label: "Usuarios" },
         { id: "sec_roles", label: "Roles y Permisos" },
         //{ id: "sec_tenants", label: "Empresas" },
         { id: "sec_branches", label: "Sucursales" },
+        { id: "sec_printers", label: "Impresoras" },
         { id: "sec_settings", label: "Parametrización" },
         { id: "sec_audit", label: "Auditoría", onlyRead: true },
       ],

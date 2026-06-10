@@ -36,7 +36,8 @@
     Layers,
     GitBranch,
     Tag,
-    Search
+    Search,
+    Printer
   } from 'lucide-svelte';
   import { slide, fade } from 'svelte/transition';
 
@@ -130,13 +131,14 @@
     },
     {
       id: 'security',
-      label: 'Seguridad',
-      icon: ShieldCheck,
+      label: 'Sistema',
+      icon: Settings,
       subItems: [
         { id: 'sec_users', label: 'Usuarios', href: '/dashboard/users', icon: Users },
         { id: 'sec_roles', label: 'Roles y Permisos', href: '/dashboard/permissions', icon: Key },
         { id: 'sec_tenants', label: 'Empresas', href: '/dashboard/tenants', icon: Building },
         { id: 'sec_branches', label: 'Sucursales', href: '/dashboard/branches', icon: Store },
+        { id: 'sec_printers', label: 'Impresoras', href: '/dashboard/security/printers', icon: Printer },
         //id: 'sec_settings', label: 'Ajustes', href: '/dashboard/settings', icon: Settings },
         { id: 'sec_audit', label: 'Auditoría', href: '/dashboard/audit', icon: ClipboardList },
       ]

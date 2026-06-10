@@ -24,3 +24,7 @@ vite.config.ts.timestamp-*
 
 # Firebase secrets
 firebase/*.json
+
+# Scratch directories
+scratch/
+scripts/run-migration-012.js
