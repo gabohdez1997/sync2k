@@ -51,10 +51,13 @@
         
         if (!filterSearch.trim()) return sorted;
         const s = filterSearch.toLowerCase().trim();
-        return sorted.filter((c: any) => 
-            c.co_us_in.toLowerCase().includes(s) || 
-            c.nombre.toLowerCase().includes(s)
-        );
+        return sorted.filter((c: any) => {
+            const key = (c.co_us_in || '').trim().toUpperCase();
+            const resolved = (data.userMap || {})[key] || '';
+            return c.co_us_in.toLowerCase().includes(s) || 
+                c.nombre.toLowerCase().includes(s) ||
+                resolved.toLowerCase().includes(s);
+        });
     });
 
     // Cajero ganador (#1 del Mes)
@@ -72,6 +75,13 @@
         }
         return { docs, bs, usd };
     });
+
+    // Resolve Profit username to Supabase full name
+    const userMap: Record<string, string> = $derived(data.userMap || {});
+    function resolvedName(cashier: any): string {
+        const key = (cashier.co_us_in || '').trim().toUpperCase();
+        return userMap[key] || cashier.nombre || cashier.co_us_in;
+    }
 
 
 
@@ -243,7 +253,7 @@
                     </span>
                 </div>
                 
-                <h2 class="text-3xl font-black text-text-base tracking-tight">{winner.nombre}</h2>
+                <h2 class="text-3xl font-black text-text-base tracking-tight">{resolvedName(winner)}</h2>
                 <p class="text-sm text-text-muted font-bold">
                     Código de Usuario en Profit: <span class="font-mono text-amber-500 font-black">{winner.co_us_in}</span>
                 </p>
@@ -320,7 +330,7 @@
                                 <td class="px-6 py-4">
                                     <div class="flex items-center gap-3">
                                         <div class="flex flex-col">
-                                            <span class="font-black text-text-base">{cashier.nombre}</span>
+                                            <span class="font-black text-text-base">{resolvedName(cashier)}</span>
                                             <span class="text-[10px] text-text-muted font-mono font-bold mt-0.5">{cashier.co_us_in}</span>
                                         </div>
                                     </div>

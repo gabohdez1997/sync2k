@@ -1,5 +1,6 @@
 import { protectLoad } from '$lib/server/permissions';
 import { AgentClient } from '$lib/server/agent';
+import { supabaseAdmin } from '$lib/server/supabase';
 import type { PageServerLoad } from './$types';
 
 export const load: PageServerLoad = protectLoad('reports_cashier_month', async ({ url, locals, fetch }) => {
@@ -45,6 +46,20 @@ export const load: PageServerLoad = protectLoad('reports_cashier_month', async (
         }
 
         console.log(`[CASHIER MONTH SERVER] Solicitando reporte a sucursal ${selectedBranch.name} con mes: ${month}...`);
+
+        // Fetch Supabase profiles with profit_user to cross-reference names
+        const { data: profiles } = await supabaseAdmin
+            .from('profiles')
+            .select('profit_user, full_name')
+            .not('profit_user', 'is', null);
+
+        const userMap: Record<string, string> = {};
+        for (const p of (profiles || [])) {
+            if (p.profit_user) {
+                userMap[p.profit_user.trim().toUpperCase()] = p.full_name || '';
+            }
+        }
+
         const response = await agentClient.request<any>(`/reportes/cajero-mes?${query.toString()}`);
 
         if (!response || !response.success) {
@@ -61,7 +76,8 @@ export const load: PageServerLoad = protectLoad('reports_cashier_month', async (
             report: response,
             branches: allowedBranches,
             selectedBranchId: urlBranchId || 'all',
-            selectedMonth: month
+            selectedMonth: month,
+            userMap
         };
 
     } catch (err: any) {
