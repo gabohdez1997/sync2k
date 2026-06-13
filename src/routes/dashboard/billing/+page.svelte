@@ -51,6 +51,24 @@
   let orderLinesSelection = $state<Record<number, boolean>>({});
 
   let isSavingInvoice = $state(false);
+  let showUSD = $state(true);
+  let activeTasa = $state(1);
+
+  function toggleCurrency(val: boolean) {
+    showUSD = val;
+  }
+
+  const activeTotals = $derived.by(() => {
+    const multiplier = showUSD ? 1 : activeTasa;
+    const symbol = showUSD ? "$" : "Bs";
+
+    return {
+      symbol,
+      subtotal: invoiceTotals.subtotal * multiplier,
+      tax: invoiceTotals.tax * multiplier,
+      total: invoiceTotals.total * multiplier,
+    };
+  });
 
   // Totals calculations based on active lines
   const invoiceTotals = $derived.by(() => {
@@ -127,10 +145,10 @@
         // Multi-sede endpoint returns array
         selectedOrderDetails = result.data[0];
 
-        // Check all lines by default
+        // Check lines with pending quantity > 0 by default
         const lines = selectedOrderDetails.renglones || [];
         lines.forEach((line: any) => {
-          orderLinesSelection[line.reng_num] = true;
+          orderLinesSelection[line.reng_num] = Number(line.pendiente ?? line.cantidad) > 0;
         });
       } else {
         toast.error(
@@ -147,9 +165,12 @@
   function toggleAllOrderLines() {
     if (!selectedOrderDetails) return;
     const lines = selectedOrderDetails.renglones || [];
-    const allChecked = lines.every((l: any) => orderLinesSelection[l.reng_num]);
+    const selectableLines = lines.filter((l: any) => Number(l.pendiente ?? l.cantidad) > 0);
+    if (selectableLines.length === 0) return;
 
-    lines.forEach((l: any) => {
+    const allChecked = selectableLines.every((l: any) => orderLinesSelection[l.reng_num]);
+
+    selectableLines.forEach((l: any) => {
       orderLinesSelection[l.reng_num] = !allChecked;
     });
   }
@@ -158,12 +179,19 @@
     if (!selectedOrderDetails) return;
 
     const lines = selectedOrderDetails.renglones || [];
+    const tasa = Number(selectedOrderDetails.tasa || 1);
     const selectedLines = lines
-      .filter((l: any) => orderLinesSelection[l.reng_num])
-      .map((l: any) => ({
-        ...l,
-        checked: true,
-      }));
+      .filter((l: any) => orderLinesSelection[l.reng_num] && Number(l.pendiente ?? l.cantidad) > 0)
+      .map((l: any) => {
+        const itemQty = Number(l.pendiente ?? l.cantidad);
+        const usdPrice = Number(l.prec_vta_om || 0) > 0 ? Number(l.prec_vta_om) : Number(l.precio || 0) / tasa;
+        return {
+          ...l,
+          cantidad: itemQty,
+          precio: usdPrice,
+          checked: true,
+        };
+      });
 
     if (selectedLines.length === 0) {
       toast.error("Selecciona al menos un artículo para importar.");
@@ -184,6 +212,7 @@
 
     billingLines = selectedLines;
     originOrderNum = selectedOrderDetails.doc_num;
+    activeTasa = tasa;
 
     toast.success(
       `Pedido ${originOrderNum} importado (${selectedLines.length} artículos)`,
@@ -206,6 +235,7 @@
     if (billingLines.length === 0) {
       selectedClient = null;
       originOrderNum = null;
+      activeTasa = 1;
     }
   }
 
@@ -220,6 +250,9 @@
 
     isSavingInvoice = true;
 
+    const tasa = Number(selectedOrderDetails?.tasa || 1);
+    const multiplier = showUSD ? 1 : tasa;
+
     const simulatedInvoice = {
       doc_num: originOrderNum || "SIM-TICKET",
       co_cli: selectedClient.co_cli,
@@ -228,10 +261,15 @@
       telefonos: selectedClient.telefonos,
       direc1: selectedClient.direc1,
       vendedor: selectedClient.ven_des || selectedClient.co_ven || "---",
-      renglones: activeLines,
-      total_bruto: invoiceTotals.subtotal,
-      monto_imp: invoiceTotals.tax,
-      total_neto: invoiceTotals.total,
+      renglones: activeLines.map((line: any) => ({
+        ...line,
+        precio: Number(line.precio) * multiplier,
+      })),
+      total_bruto: activeTotals.subtotal,
+      monto_imp: activeTotals.tax,
+      total_neto: activeTotals.total,
+      co_mone: showUSD ? "USD" : "BS",
+      tasa: tasa,
     };
 
     try {
@@ -254,6 +292,7 @@
         selectedClient = null;
         billingLines = [];
         originOrderNum = null;
+        activeTasa = 1;
       } else {
         toast.error(
           result.message || "Error al enviar impresión de la factura.",
@@ -264,6 +303,11 @@
     } finally {
       isSavingInvoice = false;
     }
+  }
+
+  function getBranchName(id: string) {
+    const b = data.branches?.find((br: any) => br.id === id);
+    return b ? b.name : "Desconocida";
   }
 </script>
 
@@ -424,37 +468,17 @@
                 <tr
                   class="bg-surface-strong border-b border-border-subtle text-xs font-black uppercase tracking-wider text-text-muted"
                 >
-                  <th class="px-6 py-4 w-12 text-center">Fact.</th>
                   <th class="px-6 py-4 w-12 text-center">Item</th>
                   <th class="px-6 py-4">Artículo</th>
-                  <th class="px-6 py-4 text-center">Almacén</th>
                   <th class="px-6 py-4 text-center">Cantidad</th>
-                  <th class="px-6 py-4 text-right">Precio USD</th>
-                  <th class="px-6 py-4 text-right">Total USD</th>
+                  <th class="px-6 py-4 text-right">Precio {showUSD ? 'USD' : 'Bs'}</th>
+                  <th class="px-6 py-4 text-right">Total {showUSD ? 'USD' : 'Bs'}</th>
                   <th class="px-6 py-4 text-right w-16"></th>
                 </tr>
               </thead>
               <tbody class="divide-y divide-border-subtle text-xs">
                 {#each billingLines as line, idx (line.co_art + idx)}
-                  <tr
-                    class="hover:bg-surface-soft/60 transition-colors {line.checked
-                      ? ''
-                      : 'opacity-40'}"
-                  >
-                    <!-- Checked status toggle -->
-                    <td class="px-6 py-4 text-center">
-                      <button
-                        onclick={() => toggleBillingLine(idx)}
-                        class="p-1 rounded text-brand-500 hover:bg-brand-500/10 transition cursor-pointer"
-                      >
-                        {#if line.checked}
-                          <CheckSquare size={18} />
-                        {:else}
-                          <Square size={18} class="text-text-muted/40" />
-                        {/if}
-                      </button>
-                    </td>
-
+                  <tr class="hover:bg-surface-soft/60 transition-colors">
                     <td class="px-6 py-4 text-center font-mono text-text-muted">
                       {line.reng_num || idx + 1}
                     </td>
@@ -471,22 +495,16 @@
                       </div>
                     </td>
 
-                    <td class="px-6 py-4 text-center font-bold text-text-muted">
-                      {line.co_alma.trim()}
-                    </td>
-
                     <td class="px-6 py-4 text-center font-black text-text-base">
                       {Number(line.cantidad).toFixed(2)}
                     </td>
 
                     <td class="px-6 py-4 text-right font-bold text-text-muted">
-                      $ {Number(line.precio).toFixed(2)}
+                      {activeTotals.symbol} {(Number(line.precio) * (showUSD ? 1 : Number(activeTasa || 1))).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </td>
 
                     <td class="px-6 py-4 text-right font-black text-brand-500">
-                      $ {(Number(line.cantidad) * Number(line.precio)).toFixed(
-                        2,
-                      )}
+                      {activeTotals.symbol} {(Number(line.cantidad) * Number(line.precio) * (showUSD ? 1 : Number(activeTasa || 1))).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </td>
 
                     <!-- Remove row -->
@@ -511,55 +529,112 @@
     <!-- RIGHT COLUMN: TOTALS & PRINT SETTINGS -->
     <div class="xl:col-span-1">
       <div
-        class="glass p-6 rounded-3xl border border-border-subtle shadow-xl space-y-6 sticky top-24"
+        class="glass p-8 rounded-[32px] border border-border-subtle space-y-8 bg-brand-500/[0.03] backdrop-blur-3xl relative overflow-hidden flex flex-col sticky top-24 shadow-xl"
       >
-        <h3
-          class="text-lg font-black tracking-tight text-text-base flex items-center gap-2 border-b border-border-subtle pb-4"
-        >
-          <Receipt size={20} class="text-brand-500" />
-          Resumen de Factura
-        </h3>
-
-        <!-- TOTALS BOARD -->
         <div
-          class="p-5 rounded-2xl bg-surface-soft border border-border-subtle space-y-3 font-bold text-sm"
+          class="absolute -top-12 -right-12 w-48 h-48 bg-brand-500/10 rounded-full blur-[80px]"
+        ></div>
+
+        <div
+          class="flex items-center justify-between border-b border-border-subtle pb-6 relative z-10"
         >
-          <div class="flex justify-between text-text-muted">
-            <span>Subtotal:</span>
-            <span>$ {invoiceTotals.subtotal.toFixed(2)}</span>
-          </div>
-          <div class="flex justify-between text-text-muted">
-            <span>I.V.A.:</span>
-            <span>$ {invoiceTotals.tax.toFixed(2)}</span>
-          </div>
-          <div
-            class="border-t border-border-subtle pt-3 flex justify-between text-base font-black text-text-base"
+          <h4
+            class="text-[10px] font-black uppercase tracking-[0.2em] text-text-muted"
           >
-            <span>TOTAL GENERAL:</span>
-            <span class="text-brand-400"
-              >$ {invoiceTotals.total.toFixed(2)}</span
+            Total Documento
+          </h4>
+          <div
+            class="flex bg-surface-base p-1 rounded-xl border border-border-bold shadow-lg"
+          >
+            <button
+              onclick={() => toggleCurrency(true)}
+              class={`px-5 py-2 rounded-lg text-xs font-black transition-all duration-300 ${showUSD ? "bg-brand-600 text-white shadow-lg scale-105" : "text-text-muted hover:text-text-base"}`}
+              >USD</button
             >
+            <button
+              onclick={() => toggleCurrency(false)}
+              class={`px-5 py-2 rounded-lg text-xs font-black transition-all duration-300 ${!showUSD ? "bg-brand-600 text-white shadow-lg scale-105" : "text-text-muted hover:text-text-base"}`}
+              >BS</button
+            >
+          </div>
+        </div>
+
+        <div class="space-y-6 relative z-10">
+          <div
+            class="flex justify-between items-center text-base font-bold text-text-muted"
+          >
+            <span>Sub-Total</span>
+            <span class="font-mono text-text-base"
+              >{activeTotals.symbol} {activeTotals.subtotal.toLocaleString("de-DE", {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2,
+              })}</span
+            >
+          </div>
+
+          <div
+            class="flex justify-between items-center text-base font-bold text-text-muted"
+          >
+            <span>I.V.A</span>
+            <span class="font-mono text-brand-400"
+              >{activeTotals.symbol} {activeTotals.tax.toLocaleString("de-DE", {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2,
+              })}</span
+            >
+          </div>
+
+          <div
+            class="flex justify-between items-center text-base font-bold text-text-muted border-t border-border-subtle/50 pt-4"
+          >
+            <span>Total Factura</span>
+            <span class="font-mono text-text-base"
+              >{activeTotals.symbol} {activeTotals.total.toLocaleString("de-DE", {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2,
+              })}</span
+            >
+          </div>
+
+          <div
+            class="pt-8 border-t border-border-bold flex flex-col gap-2"
+          >
+            <div class="flex justify-between items-end">
+              <div>
+                <span
+                  class="text-[10px] font-black uppercase tracking-[0.2em] text-brand-400/60 block mb-2"
+                  >Total a Pagar</span
+                >
+                <div
+                  class="text-5xl font-black text-text-base drop-shadow-[0_4px_12px_rgba(var(--brand-rgb),0.3)] tracking-tight leading-none text-brand-400"
+                >
+                  {activeTotals.symbol} {activeTotals.total.toLocaleString("de-DE", {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
+                  })}
+                </div>
+              </div>
+            </div>
           </div>
         </div>
 
         <!-- PRINTER SETTINGS -->
         {#if data.printers.length === 0}
           <div
-            class="p-3 bg-red-500/5 border border-red-500/10 text-red-400 rounded-xl text-xs flex gap-2 items-start mb-3"
+            class="p-4 bg-red-500/5 border border-red-500/10 text-red-400 rounded-2xl text-xs flex gap-2 items-start relative z-10"
           >
             <AlertTriangle size={16} class="shrink-0 mt-0.5" />
             <div>
               <p class="font-bold">Sin Impresoras Disponibles</p>
-              <p class="text-[10px] text-red-500/70 mt-1 font-medium">
-                Debes configurar al menos una impresora en el módulo de Sistema
-                para esta sucursal.
+              <p class="text-[10px] text-red-500/70 mt-1 font-medium leading-relaxed">
+                Debes configurar al menos una impresora en el módulo de Sistema para esta sucursal.
               </p>
             </div>
           </div>
         {/if}
 
         <div
-          class="p-4 bg-amber-500/5 border border-amber-500/10 rounded-2xl flex gap-3 text-amber-500 text-xs"
+          class="p-4 bg-amber-500/5 border border-amber-500/10 rounded-2xl flex gap-3 text-amber-500 text-xs relative z-10"
         >
           <ShieldAlert size={18} class="shrink-0 mt-0.5" />
           <div class="font-bold leading-relaxed">
@@ -568,11 +643,8 @@
             >
               Modo de Pruebas Activo
             </p>
-            <p class="text-text-muted font-medium text-[11px]">
-              Al guardar, la factura no se grabará en la base de datos SQL
-              (saFacturaVenta), pero se enviará de inmediato el ticket de
-              pre-despacho a las impresoras correspondientes según la sub-línea
-              de los artículos.
+            <p class="text-text-muted font-medium text-[11px] leading-relaxed">
+              Al guardar, la factura no se grabará en la base de datos SQL (saFacturaVenta), pero se enviará de inmediato el ticket de pre-despacho a las impresoras correspondientes según la sub-línea de los artículos.
             </p>
           </div>
         </div>
@@ -583,14 +655,17 @@
           disabled={billingLines.length === 0 ||
             data.printers.length === 0 ||
             isSavingInvoice}
-          class="w-full h-14 bg-brand-600 hover:bg-brand-500 disabled:bg-surface-soft text-white disabled:text-text-muted/30 rounded-2xl font-black text-sm uppercase tracking-widest transition-all active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none flex items-center justify-center gap-2 shadow-xl shadow-brand-500/10 hover:shadow-brand-500/30"
+          class="w-full h-20 bg-brand-600 hover:bg-brand-500 disabled:bg-surface-soft text-white disabled:text-text-muted/30 rounded-[24px] font-black text-lg uppercase tracking-[0.2em] transition-all active:scale-[0.97] disabled:opacity-50 disabled:pointer-events-none flex items-center justify-center gap-4 shadow-xl shadow-brand-500/10 hover:shadow-brand-500/30 group relative z-10"
         >
           {#if isSavingInvoice}
-            <RefreshCw size={18} class="animate-spin" />
+            <RefreshCw size={24} class="animate-spin text-brand-400/40" />
+            <span class="animate-pulse">Procesando...</span>
           {:else}
-            <Printer size={18} />
+            <div class="bg-surface-strong/50 p-2.5 rounded-xl group-hover:scale-110 transition-transform">
+              <Printer size={24} />
+            </div>
+            <span>Guardar e Imprimir</span>
           {/if}
-          Guardar e Imprimir Factura
         </button>
       </div>
     </div>
@@ -631,8 +706,17 @@
                 <ChevronLeft size={20} />
               </button>
               <div>
-                <h2 class="text-2xl font-black tracking-tight">
+                <h2 class="text-2xl font-black tracking-tight flex items-center gap-2 flex-wrap">
                   Pedido {selectedOrderDetails.doc_num?.trim()}
+                  {#if String(selectedOrderDetails.status).trim() === '1'}
+                    <span
+                      class="text-[10px] px-2.5 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20 font-bold uppercase tracking-wider"
+                    >Parcialmente Facturado</span>
+                  {:else}
+                    <span
+                      class="text-[10px] px-2.5 py-0.5 rounded-full bg-brand-500/10 text-brand-400 border border-brand-500/20 font-bold uppercase tracking-wider"
+                    >Sin Procesar</span>
+                  {/if}
                 </h2>
                 <p class="text-text-muted text-sm truncate max-w-[400px]">
                   {selectedOrderDetails.cli_des?.trim() ||
@@ -664,27 +748,29 @@
         <div class="p-6 border-b border-border-subtle bg-surface-base">
           <div class="flex flex-col md:flex-row gap-4">
             <!-- Selector de Sucursal -->
-            <div class="w-full md:w-60">
-              <div class="relative group">
-                <Store
-                  size={16}
-                  class="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted group-focus-within:text-brand-500 transition-colors pointer-events-none"
-                />
-                <select
-                  bind:value={filterSede}
-                  onchange={handleBranchChange}
-                  class="w-full h-14 pl-10 pr-10 bg-surface-soft border border-border-subtle rounded-2xl focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none transition-all font-medium text-sm appearance-none cursor-pointer text-text-base"
-                >
-                  {#each data.branches || [] as b}
-                    <option value={b.id}>{b.name}</option>
-                  {/each}
-                </select>
-                <ChevronDown
-                  size={16}
-                  class="absolute right-4 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none"
-                />
+            {#if data.branches && data.branches.length > 1}
+              <div class="w-full md:w-60">
+                <div class="relative group">
+                  <Store
+                    size={16}
+                    class="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted group-focus-within:text-brand-500 transition-colors pointer-events-none"
+                  />
+                  <select
+                    bind:value={filterSede}
+                    onchange={handleBranchChange}
+                    class="w-full h-14 pl-10 pr-10 bg-surface-soft border border-border-subtle rounded-2xl focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none transition-all font-medium text-sm appearance-none cursor-pointer text-text-base"
+                  >
+                    {#each data.branches || [] as b}
+                      <option value={b.id}>{b.name}</option>
+                    {/each}
+                  </select>
+                  <ChevronDown
+                    size={16}
+                    class="absolute right-4 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none"
+                  />
+                </div>
               </div>
-            </div>
+            {/if}
 
             <!-- Entrada de búsqueda -->
             <div class="flex-1 relative group h-14">
@@ -747,7 +833,7 @@
                     <FileText size={20} />
                   </div>
                   <div>
-                    <div class="flex items-center gap-2">
+                    <div class="flex items-center gap-2 flex-wrap">
                       <span class="font-black text-text-base"
                         >{order.doc_num}</span
                       >
@@ -755,6 +841,15 @@
                         class="text-[10px] px-2 py-0.5 rounded-full bg-surface-strong text-text-muted font-bold uppercase"
                         >{getBranchName(order.sede_id) || "N/A"}</span
                       >
+                      {#if String(order.status).trim() === '1'}
+                        <span
+                          class="text-[9px] px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20 font-bold uppercase tracking-wider"
+                        >Parcial</span>
+                      {:else}
+                        <span
+                          class="text-[9px] px-2 py-0.5 rounded-full bg-brand-500/10 text-brand-400 border border-brand-500/20 font-bold uppercase tracking-wider"
+                        >Sin Procesar</span>
+                      {/if}
                     </div>
                     <p
                       class="text-sm text-text-muted font-medium truncate max-w-[300px]"
@@ -765,7 +860,7 @@
                 </div>
                 <div class="text-right">
                   <p class="font-black text-text-base">
-                    $ {Number(order.total_neto).toFixed(2)} USD
+                    $ {(Number(order.total_neto) / Number(order.tasa || 1)).toFixed(2)} USD
                   </p>
                   <p
                     class="text-[10px] text-text-muted font-bold uppercase mt-0.5"
@@ -814,28 +909,31 @@
             <!-- svelte-ignore a11y_no_static_element_interactions -->
             <div
               onclick={() => {
+                if (Number(line.pendiente ?? line.cantidad) <= 0) return;
                 orderLinesSelection[line.reng_num] =
                   !orderLinesSelection[line.reng_num];
               }}
-              class="p-4 rounded-2xl border border-border-subtle hover:border-brand-500/30 transition-all bg-surface-soft/40 flex flex-col md:flex-row md:items-center justify-between gap-4 cursor-pointer"
+              class="p-4 rounded-2xl border border-border-subtle transition-all bg-surface-soft/40 flex flex-col md:flex-row md:items-center justify-between gap-4 {Number(line.pendiente ?? line.cantidad) <= 0 ? 'opacity-40 cursor-not-allowed select-none' : 'hover:border-brand-500/30 cursor-pointer'}"
             >
               <!-- Checkbox e Info del Renglón -->
               <div class="flex items-start gap-3 flex-1 min-w-0">
-                <div
-                  class="relative flex items-center justify-center cursor-pointer mt-1 select-none"
-                >
+                {#if Number(line.pendiente ?? line.cantidad) > 0}
                   <div
-                    class="w-6 h-6 border-2 border-border-bold rounded-lg transition-all flex items-center justify-center text-white {orderLinesSelection[
-                      line.reng_num
-                    ]
-                      ? 'bg-brand-600 border-brand-600'
-                      : 'border-border-bold'}"
+                    class="relative flex items-center justify-center cursor-pointer mt-1 select-none"
                   >
-                    {#if orderLinesSelection[line.reng_num]}
-                      <Check size={14} class="stroke-[3]" />
-                    {/if}
+                    <div
+                      class="w-6 h-6 border-2 border-border-bold rounded-lg transition-all flex items-center justify-center text-white {orderLinesSelection[
+                        line.reng_num
+                      ]
+                        ? 'bg-brand-600 border-brand-600'
+                        : 'border-border-bold'}"
+                    >
+                      {#if orderLinesSelection[line.reng_num]}
+                        <Check size={14} class="stroke-[3]" />
+                      {/if}
+                    </div>
                   </div>
-                </div>
+                {/if}
 
                 <div class="flex-1 min-w-0 ml-1">
                   <div class="flex items-center gap-2 flex-wrap">
@@ -851,10 +949,16 @@
                     {line.art_des?.trim()}
                   </p>
                   <p class="text-[11px] text-text-muted font-semibold mt-1">
-                    Cantidad: <span class="text-text-base font-bold"
-                      >{Number(line.cantidad).toFixed(2)}</span
-                    >
-                    {line.co_uni?.trim()}
+                    {#if Number(line.pendiente ?? line.cantidad) <= 0}
+                      <span class="text-red-500 bg-red-500/10 px-2 py-0.5 rounded border border-red-500/20 font-black uppercase tracking-wider text-[9px]">Totalmente Facturado</span>
+                    {:else if line.pendiente !== undefined && Number(line.pendiente) < Number(line.cantidad)}
+                      Pendiente: <span class="text-text-base font-bold">{Number(line.pendiente).toFixed(2)}</span>
+                      <span class="text-text-muted/60"> (de {Number(line.cantidad).toFixed(2)} orig.)</span>
+                      {line.co_uni?.trim()}
+                    {:else}
+                      Cantidad: <span class="text-text-base font-bold">{Number(line.cantidad).toFixed(2)}</span>
+                      {line.co_uni?.trim()}
+                    {/if}
                   </p>
                 </div>
               </div>
@@ -862,12 +966,10 @@
               <!-- Precio del Renglón -->
               <div class="text-right shrink-0">
                 <p class="font-black text-text-base text-sm">
-                  $ {Number(line.precio).toFixed(2)} USD
+                  $ {(Number(line.prec_vta_om || 0) > 0 ? Number(line.prec_vta_om) : Number(line.precio || 0) / Number(selectedOrderDetails.tasa || 1)).toFixed(2)} USD
                 </p>
                 <p class="text-[10px] text-text-muted font-bold">
-                  Total: $ {Number(
-                    line.total_renglon || line.cantidad * line.precio,
-                  ).toFixed(2)}
+                  Total: $ {((Number(line.prec_vta_om || 0) > 0 ? Number(line.prec_vta_om) : Number(line.precio || 0) / Number(selectedOrderDetails.tasa || 1)) * Number(line.pendiente ?? line.cantidad)).toFixed(2)} USD
                 </p>
               </div>
             </div>

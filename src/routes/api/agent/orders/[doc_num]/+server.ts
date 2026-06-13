@@ -53,6 +53,17 @@ export const GET: RequestHandler = async ({ params, url, locals, fetch: svelteFe
             return json({ success: false, message: response?.message || 'Error al obtener detalle del pedido.' });
         }
 
+        if (response.data && response.data.length > 0) {
+            const order = response.data[0];
+            if (order.anulado) {
+                return json({ success: false, message: 'El pedido seleccionado está anulado y no puede ser facturado.' });
+            }
+            const statusStr = String(order.status).trim();
+            if (statusStr !== '0' && statusStr !== '1') {
+                return json({ success: false, message: 'El pedido seleccionado ya ha sido procesado o facturado por completo.' });
+            }
+        }
+
         return json(response);
     } catch (err: any) {
         console.error('[API ORDER DETAIL LOAD ERROR]:', err);

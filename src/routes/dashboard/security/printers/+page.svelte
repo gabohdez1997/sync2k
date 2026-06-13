@@ -3,7 +3,7 @@
   import { fade, slide, scale } from 'svelte/transition';
   import { 
     Printer, Plus, Edit2, Trash2, ShieldCheck, 
-    RefreshCw, CheckCircle2, AlertTriangle, Store, Play
+    RefreshCw, CheckCircle2, AlertTriangle, Store, Play, Power
   } from 'lucide-svelte';
   import { toast } from 'svelte-sonner';
   import { invalidateAll } from '$app/navigation';
@@ -156,6 +156,29 @@
     }
   }
 
+  async function togglePrinterActive(p: any) {
+    const formData = new FormData();
+    formData.set('printerId', p.id);
+
+    try {
+      const response = await fetch('?/togglePrinter', {
+        method: 'POST',
+        body: formData
+      });
+      const result = await response.json();
+
+      if (result.type === 'success') {
+        toast.success(p.is_active ? 'Impresora desactivada' : 'Impresora activada');
+        await invalidateAll();
+      } else {
+        const errorData = result.data ? JSON.parse(result.data) : {};
+        toast.error(errorData.message || 'Error al cambiar estado de la impresora');
+      }
+    } catch (err: any) {
+      toast.error('Error de servidor: ' + err.message);
+    }
+  }
+
   function getBranchName(id: string) {
     const b = data.branches.find((br: any) => br.id === id);
     return b ? b.name : 'Desconocida';
@@ -208,7 +231,7 @@
               </thead>
               <tbody class="divide-y divide-border-subtle text-sm">
                 {#each data.printers as p (p.id)}
-                  <tr class="hover:bg-surface-soft/60 transition-colors">
+                  <tr class="hover:bg-surface-soft/60 transition-colors {!p.is_active ? 'opacity-60' : ''}">
                     <td class="px-6 py-4">
                       <div class="flex items-center gap-3">
                         <div class="p-2 rounded-lg bg-brand-500/10 text-brand-500">
@@ -231,11 +254,17 @@
                       {/if}
                     </td>
                     <td class="px-6 py-4 text-center">
-                      {#if p.is_active}
-                        <span class="px-2 py-0.5 rounded-md bg-green-500/10 text-green-500 text-[10px] font-black border border-green-500/20">ACTIVA</span>
-                      {:else}
-                        <span class="px-2 py-0.5 rounded-md bg-red-500/10 text-red-500 text-[10px] font-black border border-red-500/20">INACTIVA</span>
-                      {/if}
+                      <button 
+                        onclick={() => togglePrinterActive(p)} 
+                        class="focus:outline-none transition-transform active:scale-95 cursor-pointer"
+                        title={p.is_active ? 'Desactivar Impresora' : 'Activar Impresora'}
+                      >
+                        {#if p.is_active}
+                          <span class="px-2 py-0.5 rounded-md bg-green-500/10 text-green-500 text-[10px] font-black border border-green-500/20">ACTIVA</span>
+                        {:else}
+                          <span class="px-2 py-0.5 rounded-md bg-red-500/10 text-red-500 text-[10px] font-black border border-red-500/20">INACTIVA</span>
+                        {/if}
+                      </button>
                     </td>
                     <td class="px-6 py-4 text-right">
                       <div class="flex items-center justify-end gap-2">
@@ -250,6 +279,13 @@
                           {:else}
                             <Play size={14} fill="currentColor" />
                           {/if}
+                        </button>
+                        <button 
+                          onclick={() => togglePrinterActive(p)}
+                          class="p-2 bg-surface-soft border border-border-subtle {p.is_active ? 'text-green-500 hover:text-green-400' : 'text-text-muted hover:text-text-base'} rounded-lg transition-all active:scale-95 cursor-pointer"
+                          title={p.is_active ? 'Desactivar' : 'Activar'}
+                        >
+                          <Power size={14} />
                         </button>
                         <button 
                           onclick={() => selectPrinterForEdit(p)}

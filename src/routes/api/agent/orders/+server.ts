@@ -53,6 +53,10 @@ export const GET: RequestHandler = async ({ url, locals, fetch: svelteFetch }) =
             return json({ success: false, message: response?.message || 'Error al obtener pedidos del agente.' });
         }
 
+        if (response.data && Array.isArray(response.data)) {
+            response.data = response.data.filter((order: any) => !order.anulado && (String(order.status).trim() === '0' || String(order.status).trim() === '1'));
+        }
+
         return json(response);
     } catch (err: any) {
         console.error('[API ORDERS LOAD ERROR]:', err);

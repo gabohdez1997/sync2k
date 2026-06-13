@@ -125,6 +125,43 @@ export const actions: Actions = {
     return { success: true, savedId };
   }),
 
+  togglePrinter: protectAction('sec_printers', async ({ request, locals }) => {
+    const formData = await request.formData();
+    const printerId = (formData.get('printerId') as string)?.trim();
+
+    if (!printerId) return fail(400, { message: 'ID de impresora requerido.' });
+
+    const { data: current, error: fetchErr } = await supabaseAdmin
+      .from('printers')
+      .select('*')
+      .eq('id', printerId)
+      .single();
+
+    if (fetchErr || !current) return fail(404, { message: 'Impresora no encontrada.' });
+
+    const newActiveState = !current.is_active;
+
+    const { error: updateErr } = await supabaseAdmin
+      .from('printers')
+      .update({ is_active: newActiveState })
+      .eq('id', printerId);
+
+    if (updateErr) return fail(500, { message: updateErr.message });
+
+    await supabaseAdmin.rpc('log_action', {
+      p_user_id: locals.profile?.id ?? null,
+      p_user_email: locals.profile?.email ?? 'system',
+      p_action: 'UPDATE',
+      p_module: 'sec_printers',
+      p_record_id: printerId,
+      p_branch_id: current.branch_id,
+      p_old_data: JSON.stringify(current),
+      p_new_data: JSON.stringify({ ...current, is_active: newActiveState })
+    });
+
+    return { success: true };
+  }),
+
   deletePrinter: protectAction('sec_printers', async ({ request, locals }) => {
     const formData = await request.formData();
     const printerId = (formData.get('printerId') as string)?.trim();
