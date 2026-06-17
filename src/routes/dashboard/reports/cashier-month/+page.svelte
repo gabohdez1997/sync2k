@@ -113,7 +113,7 @@
                 Cajero del Mes
             </h1>
             <p class="text-text-muted text-lg print:text-sm">
-                Clasificación y ventas consolidadas por facturación de caja.
+                Clasificación y ventas consolidadas por facturación.
             </p>
         </div>
         

@@ -214,7 +214,7 @@
           <div class="p-20 text-center flex flex-col items-center justify-center gap-3">
             <Printer size={48} class="text-text-muted/30" />
             <h4 class="text-lg font-bold text-text-muted">No hay impresoras registradas</h4>
-            <p class="text-xs text-text-muted/50 max-w-xs">Registra una impresora térmica ESC/POS con su IP y puerto para habilitar la facturación de caja.</p>
+            <p class="text-xs text-text-muted/50 max-w-xs">Registra una impresora térmica ESC/POS con su IP y puerto para habilitar la facturación.</p>
           </div>
         {:else}
           <div class="overflow-x-auto">

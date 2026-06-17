@@ -62,7 +62,7 @@
       label: "Caja",
       icon: DollarSign,
       options: [
-        { id: "cash_billing", label: "Facturas / NE" },
+        { id: "cash_billing", label: "Facturas / NE", hasOthers: true, hasVoid: true },
         { id: "cash_payments", label: "Cobros" },
         { id: "cash_credits", label: "Devoluciones / NC" },
         { id: "cash_exchange", label: "Tasa Cambiaria" },

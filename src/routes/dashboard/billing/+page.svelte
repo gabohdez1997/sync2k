@@ -25,6 +25,7 @@
     ChevronDown,
     Check,
     Loader2,
+    Clock,
   } from "lucide-svelte";
   import { toast } from "svelte-sonner";
   import { goto } from "$app/navigation";
@@ -179,7 +180,8 @@
     if (!selectedOrderDetails) return;
 
     const lines = selectedOrderDetails.renglones || [];
-    const tasa = Number(selectedOrderDetails.tasa || 1);
+    const docTasa = Number(selectedOrderDetails.tasa || 1);
+    const tasa = docTasa > 1 ? docTasa : Number(selectedOrderDetails.tasa_actual || 1);
     const selectedLines = lines
       .filter((l: any) => orderLinesSelection[l.reng_num] && Number(l.pendiente ?? l.cantidad) > 0)
       .map((l: any) => {
@@ -250,7 +252,7 @@
 
     isSavingInvoice = true;
 
-    const tasa = Number(selectedOrderDetails?.tasa || 1);
+    const tasa = activeTasa;
     const multiplier = showUSD ? 1 : tasa;
 
     const simulatedInvoice = {
@@ -317,10 +319,10 @@
     <div>
       <h1 class="text-4xl font-black tracking-tight flex items-center gap-3">
         <Receipt size={40} class="text-brand-500" />
-        Facturación de Caja
+        Facturas / NE
       </h1>
       <p class="text-text-muted mt-2 text-lg">
-        Importación de pedidos y facturación directa con ticketera ESC/POS.
+        Importación de pedidos y facturación.
       </p>
     </div>
 
@@ -360,6 +362,18 @@
       >
         <ShoppingBag size={18} />
         Importar Pedido
+      </button>
+
+      <button
+        onclick={() => {
+          const params = new URLSearchParams();
+          if (filterSede) params.set("branch_id", filterSede);
+          goto(`/dashboard/billing/history?${params.toString()}`);
+        }}
+        class="flex items-center justify-center gap-2 px-6 h-14 rounded-2xl bg-surface-strong hover:bg-surface-base text-text-base border border-border-subtle transition-all font-bold active:scale-95 shadow-sm shrink-0 cursor-pointer w-full md:w-auto"
+      >
+        <Clock size={18} class="text-brand-400" />
+        Ver Historial
       </button>
     </div>
   </div>
@@ -860,7 +874,7 @@
                 </div>
                 <div class="text-right">
                   <p class="font-black text-text-base">
-                    $ {(Number(order.total_neto) / Number(order.tasa || 1)).toFixed(2)} USD
+                    $ {(Number(order.total_neto) / (Number(order.tasa || 1) > 1 ? Number(order.tasa) : Number(order.tasa_actual || 1))).toFixed(2)} USD
                   </p>
                   <p
                     class="text-[10px] text-text-muted font-bold uppercase mt-0.5"
@@ -966,10 +980,10 @@
               <!-- Precio del Renglón -->
               <div class="text-right shrink-0">
                 <p class="font-black text-text-base text-sm">
-                  $ {(Number(line.prec_vta_om || 0) > 0 ? Number(line.prec_vta_om) : Number(line.precio || 0) / Number(selectedOrderDetails.tasa || 1)).toFixed(2)} USD
+                  $ {(Number(line.prec_vta_om || 0) > 0 ? Number(line.prec_vta_om) : Number(line.precio || 0) / (Number(selectedOrderDetails.tasa || 1) > 1 ? Number(selectedOrderDetails.tasa) : Number(selectedOrderDetails.tasa_actual || 1))).toFixed(2)} USD
                 </p>
                 <p class="text-[10px] text-text-muted font-bold">
-                  Total: $ {((Number(line.prec_vta_om || 0) > 0 ? Number(line.prec_vta_om) : Number(line.precio || 0) / Number(selectedOrderDetails.tasa || 1)) * Number(line.pendiente ?? line.cantidad)).toFixed(2)} USD
+                  Total: $ {((Number(line.prec_vta_om || 0) > 0 ? Number(line.prec_vta_om) : Number(line.precio || 0) / (Number(selectedOrderDetails.tasa || 1) > 1 ? Number(selectedOrderDetails.tasa) : Number(selectedOrderDetails.tasa_actual || 1))) * Number(line.pendiente ?? line.cantidad)).toFixed(2)} USD
                 </p>
               </div>
             </div>

@@ -46,7 +46,7 @@ export const GET: RequestHandler = async ({ url, locals, fetch: svelteFetch }) =
         }, profile, svelteFetch);
 
         console.log('[API /api/agent/orders] Requesting orders from agent...');
-        const response = await agentClient.request<any>(`/pedidos?sede=${branchId}&search=${encodeURIComponent(search)}&limit=50`);
+        const response = await agentClient.request<any>(`/pedidos?sede=${branchId}&search=${encodeURIComponent(search)}&limit=50&status=0,1&anulado=0`);
         console.log('[API /api/agent/orders] Agent response success:', response?.success);
 
         if (!response || !response.success) {
