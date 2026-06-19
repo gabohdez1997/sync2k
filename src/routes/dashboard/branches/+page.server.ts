@@ -217,6 +217,50 @@ export const actions: Actions = {
     return { success: true, savedId };
   }),
 
+  testConnection: protectAction('sec_branches', async ({ request, locals, fetch }) => {
+    const formData = await request.formData();
+    const branchId = (formData.get('branchId') as string)?.trim();
+
+    if (!branchId) return fail(400, { message: 'ID de sucursal requerido.' });
+
+    // Buscar los datos de la sucursal de la base de datos
+    const { data: branch, error: dbErr } = await supabaseAdmin
+      .from('branches')
+      .select('id, name, agent_url, agent_token')
+      .eq('id', branchId)
+      .single();
+
+    if (dbErr || !branch) {
+      return fail(404, { message: `Sucursal no encontrada: ${dbErr?.message || ''}` });
+    }
+
+    if (!branch.agent_url) {
+      return fail(400, { message: 'La sucursal no tiene configurada una URL de agente.' });
+    }
+
+    try {
+      const client = new AgentClient(
+        {
+          slug:          branch.id,
+          agent_url:     branch.agent_url,
+          agent_api_key: branch.agent_token
+        },
+        locals.profile || undefined,
+        fetch
+      );
+
+      const res = await client.testConnection(branch.id);
+      
+      if (!res.success) {
+        return fail(500, { message: res.message || 'Error al conectar con la base de datos SQL del agente.' });
+      }
+
+      return { success: true, message: res.message || 'Conexión exitosa.' };
+    } catch (e: any) {
+      return fail(500, { message: `Error de red o conexión al Agente local: ${e.message}` });
+    }
+  }),
+
   deleteBranch: protectAction('sec_branches', async ({ request, locals }) => {
     const formData  = await request.formData();
     const branchId  = (formData.get('branchId') as string)?.trim();

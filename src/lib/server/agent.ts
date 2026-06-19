@@ -172,6 +172,13 @@ export class AgentClient {
 	}
 
 	/**
+	 * Prueba la conexión SQL a una sede específica
+	 */
+	async testConnection(serverId: string) {
+		return this.request<any>(`/config/test-connection/${encodeURIComponent(serverId)}`);
+	}
+
+	/**
 	 * Actualiza la tasa cambiaria (BCV) en el sistema local
 	 */
 	async updateTasa(tasa: number) {

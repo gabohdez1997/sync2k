@@ -80,3 +80,56 @@ export const GET: RequestHandler = async ({ url, locals, fetch: svelteFetch }) =
         return json({ success: false, message: 'Error de servidor: ' + err.message }, { status: 500 });
     }
 };
+
+export const POST: RequestHandler = async ({ request, locals, fetch: svelteFetch }) => {
+    console.log('[API /api/agent/facturas] HIT POST.');
+    const profile = (locals as any).profile;
+    if (!profile) {
+        console.warn('[API /api/agent/facturas] No profile found in locals.');
+        return json({ success: false, message: 'No autenticado.' }, { status: 401 });
+    }
+
+    if (!hasPermission(profile, 'cash_billing', 'create')) {
+        console.warn('[API /api/agent/facturas] Profile does not have cash_billing create permission.');
+        return json({ success: false, message: 'No tienes permisos de facturación para crear.' }, { status: 403 });
+    }
+
+    try {
+        const body = await request.json();
+        const { branch_id, invoice } = body;
+
+        if (!branch_id || !invoice) {
+            return json({ success: false, message: 'Faltan parámetros obligatorios (branch_id, invoice).' }, { status: 400 });
+        }
+
+        console.log('[API /api/agent/facturas] Fetching branch config for branch_id:', branch_id);
+        const { data: branch, error: bErr } = await supabaseAdmin
+            .from('branches')
+            .select('*')
+            .eq('id', branch_id)
+            .single();
+
+        if (bErr || !branch || !branch.agent_url) {
+            console.error('[API /api/agent/facturas] Branch error or no agent_url:', bErr, branch);
+            return json({ success: false, message: 'Sucursal no válida o agente no configurado.' }, { status: 400 });
+        }
+
+        const agentClient = new AgentClient({
+            slug: branch.id,
+            agent_url: branch.agent_url,
+            agent_api_key: branch.agent_token
+        }, profile, svelteFetch);
+
+        console.log('[API /api/agent/facturas] Sending save request to agent...');
+        const response = await agentClient.request<any>(`/facturas?sede=${branch_id}`, {
+            method: 'POST',
+            body: JSON.stringify(invoice)
+        });
+
+        return json(response);
+    } catch (err: any) {
+        console.error('[API FACTURAS SAVE ERROR]:', err);
+        return json({ success: false, message: 'Error de servidor: ' + err.message }, { status: 500 });
+    }
+};
+

@@ -22,6 +22,7 @@
     Image,
     Map,
     Upload,
+    Radio,
   } from "lucide-svelte";
   import type { PageData, ActionData } from "./$types";
 
@@ -33,6 +34,7 @@
   let isSaving = $state(false);
   let previewUrl = $state<string | null>(null);
   let fileInput: HTMLInputElement | null = $state(null);
+  let testingBranches = $state<Record<string, boolean>>({});
 
   // Estados para Eliminación con Clave
   let showDeleteModal = $state(false);
@@ -276,21 +278,58 @@
           </div>
 
           <div
-            class="mt-6 pt-6 border-t border-white/5 flex items-center justify-between text-[10px] uppercase font-black tracking-widest text-text-muted/50"
+            class="mt-6 pt-6 border-t border-white/5 flex flex-col gap-4"
           >
-            <span>ESTADO AGENTE LOCAL</span>
-            <div
-              class="flex items-center gap-1 {branch.active
-                ? 'text-green-500'
-                : 'text-zinc-500'}"
-            >
+            <div class="flex items-center justify-between text-[10px] uppercase font-black tracking-widest text-text-muted/50">
+              <span>ESTADO AGENTE LOCAL</span>
               <div
-                class="h-1 w-1 rounded-full {branch.active
-                  ? 'bg-green-500 animate-pulse'
-                  : 'bg-zinc-500'}"
-              ></div>
-              {branch.active ? "ACTIVO" : "INACTIVO"}
+                class="flex items-center gap-1 {branch.active
+                  ? 'text-green-500'
+                  : 'text-zinc-500'}"
+              >
+                <div
+                  class="h-1 w-1 rounded-full {branch.active
+                    ? 'bg-green-500 animate-pulse'
+                    : 'bg-zinc-500'}"
+                ></div>
+                {branch.active ? "ACTIVO" : "INACTIVO"}
+              </div>
             </div>
+
+            {#if branch.agent_url}
+              <form
+                method="POST"
+                action="?/testConnection"
+                use:enhance={() => {
+                  testingBranches[branch.id] = true;
+                  return async ({ result }) => {
+                    testingBranches[branch.id] = false;
+                    if (result.type === "success") {
+                      toast.success(result.data?.message || "Conexión exitosa");
+                    } else if (result.type === "failure") {
+                      toast.error(result.data?.message || "Error al conectar");
+                    } else {
+                      toast.error("Error inesperado en la conexión.");
+                    }
+                  };
+                }}
+              >
+                <input type="hidden" name="branchId" value={branch.id} />
+                <button
+                  type="submit"
+                  disabled={testingBranches[branch.id]}
+                  class="w-full flex items-center justify-center gap-2 py-2 rounded-xl text-xs font-bold bg-white/5 hover:bg-brand-500/10 border border-white/10 hover:border-brand-500/30 text-text-muted hover:text-brand-400 transition active:scale-95 disabled:opacity-50 disabled:pointer-events-none"
+                >
+                  {#if testingBranches[branch.id]}
+                    <Loader2 size={14} class="animate-spin text-brand-400" />
+                    <span>Probando Conexión...</span>
+                  {:else}
+                    <Radio size={14} class="shrink-0" />
+                    <span>Probar Conexión</span>
+                  {/if}
+                </button>
+              </form>
+            {/if}
           </div>
         </div>
       {/each}
