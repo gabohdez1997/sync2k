@@ -32,7 +32,7 @@
   let invoiceToVoid = $state<any>(null);
   let voidPassword = $state("");
   let isVoiding = $state(false);
-  let isPrinting = $state<Record<string, boolean>>({});
+
 
   // Filtros locales
   let filterSearch = $state("");
@@ -64,52 +64,7 @@
     showVoidModal = true;
   }
 
-  async function handleReprint(invoice: any) {
-    if (isPrinting[invoice.doc_num]) return;
-    isPrinting[invoice.doc_num] = true;
 
-    const toastId = toast.loading(`Obteniendo detalles de factura ${invoice.doc_num}...`);
-
-    try {
-      // 1. Fetch full details from agent
-      const resDetail = await fetch(
-        `/api/agent/facturas/${invoice.doc_num}?branch_id=${data.selectedBranchId}`,
-      );
-      const detailResult = await resDetail.json();
-
-      if (!detailResult.success || !detailResult.data || detailResult.data.length === 0) {
-        throw new Error(detailResult.message || "No se pudo obtener el detalle de la factura.");
-      }
-
-      const fullInvoice = detailResult.data[0];
-
-      // 2. Call print proxy endpoint
-      toast.loading("Enviando ticket a las impresoras...", { id: toastId });
-      const printRes = await fetch("/api/agent/billing/print", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          branch_id: data.selectedBranchId,
-          invoice: {
-            ...fullInvoice,
-            invoice_num: invoice.doc_num, // Pass invoice number for receipt header/footer reference
-          },
-        }),
-      });
-
-      const printResult = await printRes.json();
-
-      if (printResult.success) {
-        toast.success(printResult.message || "Ticket reimpreso con éxito.", { id: toastId });
-      } else {
-        toast.error(printResult.message || "Fallo al enviar a imprimir.", { id: toastId });
-      }
-    } catch (err: any) {
-      toast.error("Error al reimprimir: " + err.message, { id: toastId });
-    } finally {
-      isPrinting[invoice.doc_num] = false;
-    }
-  }
 </script>
 
 <div class="space-y-6 animate-in fade-in duration-500" in:fade>
@@ -250,11 +205,16 @@
                   >
                 </td>
                 <td class="px-6 py-5">
-                  <span
-                    class="px-2.5 py-1 rounded-lg bg-surface-soft border border-border-subtle text-xs font-black text-brand-500 group-hover:bg-brand-500 group-hover:border-brand-500 group-hover:text-white transition-all"
-                  >
-                    {invoice.doc_num}
-                  </span>
+                  <div class="flex flex-col gap-1 items-start">
+                    <span
+                      class="px-2.5 py-1 rounded-lg bg-surface-soft border border-border-subtle text-xs font-black text-brand-500 group-hover:bg-brand-500 group-hover:border-brand-500 group-hover:text-white transition-all"
+                    >
+                      {invoice.doc_num}
+                    </span>
+                    <span class="text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded-md {Number(invoice.monto_imp) > 0 ? 'bg-purple-500/10 text-purple-400 border border-purple-500/20' : 'bg-amber-500/10 text-amber-400 border border-amber-500/20'}">
+                      {Number(invoice.monto_imp) > 0 ? 'Factura' : 'Nota de Entrega'}
+                    </span>
+                  </div>
                 </td>
                 <td class="px-6 py-5">
                   <div class="flex flex-col max-w-[240px]">
@@ -319,19 +279,15 @@
                 </td>
                 <td class="px-6 py-5">
                   <div class="flex items-center justify-center gap-2">
-                    <!-- Reimprimir -->
-                    <button
-                      onclick={() => handleReprint(invoice)}
-                      disabled={isPrinting[invoice.doc_num]}
-                      class="p-2 text-text-muted hover:text-brand-500 hover:bg-brand-500/10 rounded-xl transition-all disabled:opacity-40 cursor-pointer"
-                      title="Reimprimir Ticket"
+                    <!-- Reimprimir Factura -->
+                    <a
+                      href="/dashboard/billing/{invoice.doc_num}/print?branch_id={data.selectedBranchId}"
+                      target="_blank"
+                      class="p-2 text-text-muted hover:text-brand-500 hover:bg-brand-500/10 rounded-xl transition-all cursor-pointer flex items-center justify-center"
+                      title={Number(invoice.monto_imp) > 0 ? 'Reimprimir Factura' : 'Reimprimir Nota de Entrega'}
                     >
-                      {#if isPrinting[invoice.doc_num]}
-                        <Loader2 size={18} class="animate-spin text-brand-500" />
-                      {:else}
-                        <Printer size={18} />
-                      {/if}
-                    </button>
+                      <Printer size={18} />
+                    </a>
 
                     <!-- Anular -->
                     {#if data.canVoid && !invoice.anulado}
