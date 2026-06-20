@@ -78,6 +78,9 @@
       symbol,
       subtotal: invoiceTotals.subtotal * multiplier,
       tax: invoiceTotals.tax * multiplier,
+      retencion: invoiceTotals.retencion * multiplier,
+      porc_esp: invoiceTotals.porc_esp,
+      totalFactura: invoiceTotals.totalFactura * multiplier,
       total: invoiceTotals.total * multiplier,
     };
   });
@@ -99,8 +102,12 @@
         tax += lineTax;
       }
     }
-    const total = subtotal + tax;
-    return { subtotal, tax, total };
+    const porcEsp = selectedClient?.porc_esp ? Number(selectedClient.porc_esp) : 0;
+    const retencion = tax * (porcEsp / 100);
+    const totalFactura = subtotal + tax;
+    const total = totalFactura - retencion;
+
+    return { subtotal, tax, retencion, porc_esp: porcEsp, totalFactura, total };
   });
 
   function handleBranchChange() {
@@ -198,6 +205,9 @@
             co_cond: orderDetails.co_cond,
             co_ven: orderDetails.co_ven,
             ven_des: orderDetails.ven_des,
+            porc_esp: Number(orderDetails.porc_esp) || 0,
+            contribu_e: orderDetails.contribu_e,
+            contribuyente: !!orderDetails.contribu_e,
           };
           const orderDesc = (orderDetails.descrip || "").trim() || (orderDetails.comentario || "").trim() || "Sin descripción";
 
@@ -222,6 +232,9 @@
               co_cond: orderDetails.co_cond,
               co_ven: orderDetails.co_ven,
               ven_des: orderDetails.ven_des,
+              porc_esp: Number(orderDetails.porc_esp) || 0,
+              contribu_e: orderDetails.contribu_e,
+              contribuyente: !!orderDetails.contribu_e,
             };
             activeTasa = tasa;
             billingLines = newLines;
@@ -529,6 +542,19 @@
                 {selectedClient.telefonos || "---"}
               </p>
             </div>
+            <div class="md:col-span-3 space-y-1 pt-2 border-t border-border-subtle/30">
+              <span
+                class="text-[9px] font-black uppercase tracking-widest text-text-muted"
+                >Estatus Fiscal</span
+              >
+              <p class="text-xs font-bold text-brand-400">
+                {selectedClient.porc_esp > 0
+                  ? `Contribuyente Especial (${selectedClient.porc_esp}%)`
+                  : selectedClient.contribuyente
+                    ? "Contribuyente Especial"
+                    : "No Contribuyente"}
+              </p>
+            </div>
           </div>
         {/if}
       </div>
@@ -703,12 +729,27 @@
           >
             <span>Total Factura</span>
             <span class="font-mono text-text-base"
-              >{activeTotals.symbol} {activeTotals.total.toLocaleString("de-DE", {
+              >{activeTotals.symbol} {activeTotals.totalFactura.toLocaleString("de-DE", {
                 minimumFractionDigits: 2,
                 maximumFractionDigits: 2,
               })}</span
             >
           </div>
+
+          {#if activeTotals.retencion > 0}
+            <div
+              class="flex justify-between items-center text-base font-bold text-amber-500/90"
+              transition:slide
+            >
+              <span>Retención ({activeTotals.porc_esp}%)</span>
+              <span class="font-mono"
+                >- {activeTotals.symbol} {activeTotals.retencion.toLocaleString("de-DE", {
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2,
+                })}</span
+              >
+            </div>
+          {/if}
 
           <div
             class="pt-8 border-t border-border-bold flex flex-col gap-2"
