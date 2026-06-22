@@ -338,6 +338,8 @@
         tipo_doc: 'PCLI',
         num_doc: line.doc_num,
         rowguid_doc: line.rowguid,
+        co_subl: line.co_subl,
+        co_lin: line.co_lin,
       })),
     };
 
