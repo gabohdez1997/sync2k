@@ -4,7 +4,7 @@
         Wallet, FileText, Calendar, DollarSign, Clock, AlertTriangle, 
         ChevronLeft, ChevronRight, Store, Search, Filter, FileDown,
         TrendingDown, TrendingUp, CheckCircle, RefreshCw, Loader2,
-        User, Eye, X, FileSpreadsheet
+        User, Eye, X, FileSpreadsheet, ClipboardList
     } from 'lucide-svelte';
     import { goto } from '$app/navigation';
     import { page } from '$app/stores';
@@ -204,7 +204,7 @@
     <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
         <div class="flex flex-col gap-2">
             <h1 class="text-4xl font-black tracking-tight flex items-center gap-3">
-                <FileSpreadsheet size={40} class="text-brand-500" />
+                <ClipboardList size={40} class="text-brand-500" />
                 Cuenta Detallada (Historial y Documentos)
             </h1>
             <p class="text-text-muted text-lg">

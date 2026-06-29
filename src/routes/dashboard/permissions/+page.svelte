@@ -19,6 +19,7 @@
     Loader2,
     FileText,
     Settings,
+    Key,
   } from "lucide-svelte";
   import type { PageData, ActionData } from "./$types";
 
@@ -130,6 +131,13 @@
         {
           id: "reports_article_prices",
           label: "Artículos con Precios",
+          hasOthers: false,
+          hasVoid: false,
+          onlyRead: true,
+        },
+        {
+          id: "reports_exchange_diff",
+          label: "Diferencial Cambiario",
           hasOthers: false,
           hasVoid: false,
           onlyRead: true,
@@ -392,7 +400,7 @@
   <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
     <div>
       <h1 class="text-4xl font-black tracking-tight flex items-center gap-3">
-        <ShieldCheck size={40} class="text-brand-500" />
+        <Key size={40} class="text-brand-500" />
         Roles y Permisos
       </h1>
       <p class="text-text-muted mt-2 text-lg">

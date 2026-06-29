@@ -1053,7 +1053,7 @@
   >
     <div class="flex flex-col gap-2">
       <h1 class="text-4xl font-black tracking-tight flex items-center gap-3">
-        <ShoppingBag size={40} class="text-brand-500" />
+        <ShoppingCart size={40} class="text-brand-500" />
         {data.preloadedOrder ? `Editar Pedido` : "Nuevo Pedido"}
       </h1>
       <p class="text-text-muted text-lg">

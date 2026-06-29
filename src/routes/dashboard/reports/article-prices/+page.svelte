@@ -323,7 +323,7 @@
             <h1
                 class="text-4xl font-black tracking-tight flex items-center gap-3 print:text-2xl"
             >
-                <FileText
+                <Tag
                     size={40}
                     class="text-brand-500 print:h-8 print:w-8"
                 />

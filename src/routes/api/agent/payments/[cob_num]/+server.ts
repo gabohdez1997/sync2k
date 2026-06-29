@@ -1,12 +1,17 @@
-// src/routes/api/agent/tasa/+server.ts
+// src/routes/api/agent/payments/[cob_num]/+server.ts
 import { json } from '@sveltejs/kit';
 import { AgentClient } from '$lib/server/agent';
 import type { RequestHandler } from './$types';
 
-export const GET: RequestHandler = async ({ url, locals, fetch }) => {
+export const GET: RequestHandler = async ({ params, url, locals, fetch }) => {
 	try {
 		const profile = locals.profile;
 		if (!profile) return json({ error: 'Sesión no válida' }, { status: 401 });
+
+		const { cob_num } = params;
+		if (!cob_num) {
+			return json({ error: 'Número de cobro obligatorio' }, { status: 400 });
+		}
 
 		const branchId = url.searchParams.get('branch_id');
 		const allowedBranches = profile.allowed_branches || [];
@@ -22,17 +27,15 @@ export const GET: RequestHandler = async ({ url, locals, fetch }) => {
 			agent_api_key: branch.agent_token
 		}, profile, fetch);
 
-		const tasaRes = await agentClient.request<any>('/catalogos/tasa');
-		const data = (tasaRes as any).data || (Array.isArray(tasaRes) ? tasaRes : []);
-		
-		let tasa = null;
-		if (data.length > 0) {
-			tasa = data[0].tasa;
-		}
+		const endpoint = `/cobros/${encodeURIComponent(cob_num)}`;
+		const resData = await agentClient.request<any>(endpoint);
 
-		return json({ success: true, tasa });
+		return json({
+			success: resData.success !== false,
+			data: resData.data || null
+		});
 	} catch (e: any) {
-		console.error('[API TASA] Error:', e.message);
+		console.error(`[API PAYMENT DETAIL] Error para cobro ${params.cob_num}:`, e.message);
 		return json({ error: e.message }, { status: 500 });
 	}
 };

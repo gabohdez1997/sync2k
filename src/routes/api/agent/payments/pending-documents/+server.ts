@@ -1,4 +1,4 @@
-// src/routes/api/agent/tasa/+server.ts
+// src/routes/api/agent/payments/pending-documents/+server.ts
 import { json } from '@sveltejs/kit';
 import { AgentClient } from '$lib/server/agent';
 import type { RequestHandler } from './$types';
@@ -22,17 +22,23 @@ export const GET: RequestHandler = async ({ url, locals, fetch }) => {
 			agent_api_key: branch.agent_token
 		}, profile, fetch);
 
-		const tasaRes = await agentClient.request<any>('/catalogos/tasa');
-		const data = (tasaRes as any).data || (Array.isArray(tasaRes) ? tasaRes : []);
-		
-		let tasa = null;
-		if (data.length > 0) {
-			tasa = data[0].tasa;
-		}
+		const search = url.searchParams.get('search') || '';
+		const page = url.searchParams.get('page') || '1';
+		const limit = url.searchParams.get('limit') || '50';
 
-		return json({ success: true, tasa });
+		const params = new URLSearchParams();
+		if (search) params.set('search', search);
+		params.set('page', page);
+		params.set('limit', limit);
+
+		const resData = await agentClient.request<any>(`/cobros/facturas/pendientes?${params.toString()}`);
+
+		return json({
+			success: resData.success !== false,
+			data: resData.data || []
+		});
 	} catch (e: any) {
-		console.error('[API TASA] Error:', e.message);
+		console.error('[API PENDING DOCUMENTS GET] Error:', e.message);
 		return json({ error: e.message }, { status: 500 });
 	}
 };

@@ -37,7 +37,9 @@
     GitBranch,
     Tag,
     Search,
-    Printer
+    Printer,
+    Award,
+    ArrowRightLeft
   } from 'lucide-svelte';
   import { slide, fade } from 'svelte/transition';
 
@@ -77,7 +79,7 @@
       subItems: [
         { id: 'sales_customers', label: 'Clientes', href: '/dashboard/sales/customers', icon: Users },
         { id: 'sales_quotes', label: 'Cotizaciones', href: '/dashboard/sales/quotes', icon: FileText },
-        { id: 'sales_orders', label: 'Pedidos', href: '/dashboard/sales/orders', icon: ClipboardList },
+        { id: 'sales_orders', label: 'Pedidos', href: '/dashboard/sales/orders', icon: ShoppingCart },
         { id: 'sales_price_checker', label: 'Consultor de Precios', href: '/dashboard/sales/price-checker', icon: Search },
       ]
     },
@@ -126,8 +128,9 @@
         { id: 'reports_receivables', label: 'Cuentas por Cobrar', href: '/dashboard/reports/receivables', icon: Wallet },
         { id: 'reports_payables', label: 'Cuentas por Pagar', href: '/dashboard/reports/payables', icon: Wallet },
         { id: 'reports_detailed_account', label: 'Cuenta Detallada', href: '/dashboard/reports/detailed-account', icon: ClipboardList },
-        { id: 'reports_cashier_month', label: 'Cajero del Mes', href: '/dashboard/reports/cashier-month', icon: ClipboardList },
-        { id: 'reports_article_prices', label: 'Artículos con Precios', href: '/dashboard/reports/article-prices', icon: Tag }
+        { id: 'reports_cashier_month', label: 'Cajero del Mes', href: '/dashboard/reports/cashier-month', icon: Award },
+        { id: 'reports_article_prices', label: 'Artículos con Precios', href: '/dashboard/reports/article-prices', icon: Tag },
+        { id: 'reports_exchange_diff', label: 'Diferencial Cambiario', href: '/dashboard/reports/exchange-diff', icon: ArrowRightLeft }
       ]
     },
     {

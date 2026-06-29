@@ -230,7 +230,7 @@
   <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
     <div>
       <h1 class="text-4xl font-black tracking-tight flex items-center gap-3">
-        <QrCode size={40} class="text-brand-500" />
+        <Search size={40} class="text-brand-500" />
         Consultor de Precios
       </h1>
     </div>
