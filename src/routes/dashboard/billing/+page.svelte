@@ -52,6 +52,16 @@
   const originOrderNum = $derived(uniqueOrigins.join(", "));
   const hasMultipleOrigins = $derived(uniqueOrigins.length > 1);
 
+  const activeCoVen = $derived.by(() => {
+    const firstLine = billingLines.find((l) => l.checked);
+    return firstLine ? firstLine.co_ven : (selectedClient?.co_ven || null);
+  });
+
+  const activeVenDes = $derived.by(() => {
+    const firstLine = billingLines.find((l) => l.checked);
+    return firstLine ? firstLine.ven_des : (selectedClient?.ven_des || null);
+  });
+
   let importedOrdersInfo = $state<Record<string, { descrip: string }>>({});
 
   // Search/Import Modal State
@@ -184,6 +194,8 @@
               cantidad: itemQty,
               precio: usdPrice,
               checked: true,
+              co_ven: orderDetails.co_ven,
+              ven_des: orderDetails.ven_des,
             };
           });
 
@@ -320,7 +332,7 @@
     // Construir la factura en USD según requerimiento
     const invoiceData = {
       co_cli: selectedClient.co_cli,
-      co_ven: selectedClient.co_ven,
+      co_ven: activeCoVen,
       co_cond: selectedClient.co_cond,
       descrip: `FACTURA WEB - PEDIDO: ${originOrderNum}`,
       comentario: `Importado de pedidos: ${originOrderNum}`,
@@ -383,7 +395,7 @@
                 rif: selectedClient.rif,
                 telefonos: selectedClient.telefonos,
                 direc1: selectedClient.direc1,
-                vendedor: selectedClient.ven_des || selectedClient.co_ven || "---",
+                vendedor: activeVenDes || activeCoVen || "---",
               },
             }),
           });
