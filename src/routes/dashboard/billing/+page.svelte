@@ -128,6 +128,34 @@
   }
 
   // --- SEARCH ORDERS FLOW ---
+  async function openImportModal() {
+    if (!filterSede) {
+      toast.error("Seleccione una sucursal primero");
+      return;
+    }
+    showImportModal = true;
+    importSearchQuery = "";
+    isSearchingOrders = true;
+    foundOrders = [];
+
+    try {
+      const response = await fetch(
+        `/api/agent/orders?branch_id=${filterSede}&search=`,
+      );
+      const result = await response.json();
+
+      if (result.success) {
+        foundOrders = result.data || [];
+      } else {
+        toast.error(result.message || "Error al buscar pedidos.");
+      }
+    } catch (err: any) {
+      toast.error("Error de red: " + err.message);
+    } finally {
+      isSearchingOrders = false;
+    }
+  }
+
   async function searchOrders() {
     if (!filterSede) {
       toast.error("Selecciona una sucursal primero");
@@ -467,13 +495,7 @@
       {/if}
 
       <button
-        onclick={() => {
-          if (!filterSede) {
-            toast.error("Seleccione una sucursal primero");
-            return;
-          }
-          showImportModal = true;
-        }}
+        onclick={openImportModal}
         class="flex items-center justify-center gap-2 px-6 h-14 rounded-2xl bg-brand-500/10 hover:bg-brand-500/20 text-brand-400 border border-brand-500/30 transition-all font-bold active:scale-95 shadow-sm shrink-0 cursor-pointer w-full sm:w-auto"
       >
         <ShoppingBag size={18} />
@@ -894,68 +916,25 @@
         </button>
       </div>
 
-      <!-- Search form/bar in modal -->
-      <div class="p-6 border-b border-border-subtle bg-surface-base">
-        <div class="flex flex-col md:flex-row gap-4">
-          <!-- Selector de Sucursal -->
-          {#if data.branches && data.branches.length > 1}
-            <div class="w-full md:w-60">
-              <div class="relative group">
-                <Store
-                  size={16}
-                  class="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted group-focus-within:text-brand-500 transition-colors pointer-events-none"
-                />
-                <select
-                  bind:value={filterSede}
-                  onchange={handleBranchChange}
-                  class="w-full h-14 pl-10 pr-10 bg-surface-soft border border-border-subtle rounded-2xl focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none transition-all font-medium text-sm appearance-none cursor-pointer text-text-base"
-                >
-                  {#each data.branches || [] as b}
-                    <option value={b.id}>{b.name}</option>
-                  {/each}
-                </select>
-                <ChevronDown
-                  size={16}
-                  class="absolute right-4 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none"
-                />
-              </div>
-            </div>
+      <!-- Contenido Modal -->
+      <div class="flex-1 overflow-y-auto p-6 space-y-6 no-scrollbar min-h-[300px] custom-scrollbar">
+        <!-- Buscador -->
+        <div class="relative">
+          <Search size={18} class="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted" />
+          <input 
+            type="text" 
+            placeholder="Buscar por nro. pedido, RIF o nombre de cliente..." 
+            bind:value={importSearchQuery}
+            oninput={searchOrders}
+            class="w-full bg-surface-soft border border-border-subtle pl-12 pr-4 py-3.5 rounded-2xl text-sm text-text-base placeholder-text-muted/50 focus:border-brand-500/50 focus:ring-0 focus:outline-hidden transition-all font-medium"
+          />
+          {#if isSearchingOrders}
+            <RefreshCw size={16} class="animate-spin absolute right-4 top-1/2 -translate-y-1/2 text-brand-500" />
           {/if}
-
-          <!-- Entrada de búsqueda -->
-          <div class="flex-1 relative group h-14">
-            <input
-              type="text"
-              bind:value={importSearchQuery}
-              onkeydown={(e) => {
-                if (e.key === "Enter") searchOrders();
-              }}
-              placeholder="Buscar por Nro de Pedido, RIF o Cliente..."
-              class="w-full h-full bg-surface-base pl-6 pr-14 rounded-2xl border border-border-subtle focus:border-brand-500/30 outline-none transition-all font-bold text-sm placeholder:font-normal placeholder:text-text-secondary/30"
-            />
-            <button
-              type="button"
-              onclick={searchOrders}
-              disabled={isSearchingOrders}
-              class="absolute right-1 top-1 bottom-1 w-12 flex items-center justify-center bg-surface-soft hover:bg-surface-strong text-brand-400 rounded-xl transition-all border border-border-subtle active:scale-95 disabled:opacity-50 cursor-pointer"
-              title="Buscar"
-            >
-              {#if isSearchingOrders}
-                <div
-                  class="w-4.5 h-4.5 border-2 border-brand-500/20 border-t-brand-500 rounded-full animate-spin"
-                ></div>
-              {:else}
-                <Search size={18} />
-              {/if}
-            </button>
-          </div>
         </div>
-      </div>
 
-      <!-- Orders results list -->
-      <div
-        class="flex-1 overflow-y-auto p-4 space-y-3 no-scrollbar min-h-[300px]"
-      >
+        <!-- Resultados -->
+        <div class="space-y-3">
         {#if isSearchingOrders}
           <div class="flex flex-col items-center justify-center py-20 gap-4">
             <Loader2 size={40} class="animate-spin text-brand-500" />
@@ -968,7 +947,7 @@
             class="flex flex-col items-center justify-center py-20 gap-3 text-text-muted opacity-50 bg-surface-base"
           >
             <FileText size={48} />
-            <p class="font-bold">Realiza una búsqueda de pedidos arriba</p>
+            <p class="font-bold">No se encontraron pedidos pendientes</p>
           </div>
         {:else}
           {#each foundOrders as order (order.doc_num + order.sede_id)}
@@ -1021,22 +1000,9 @@
             </button>
           {/each}
         {/if}
+        </div>
       </div>
 
-      <!-- View 1 Footer -->
-      <div
-        class="p-6 border-t border-border-subtle bg-surface-soft/40 flex justify-end"
-      >
-        <button
-          type="button"
-          onclick={() => {
-            showImportModal = false;
-          }}
-          class="h-14 px-8 rounded-2xl bg-surface-strong hover:bg-surface-base border border-border-subtle font-bold text-sm tracking-wide transition-all active:scale-[0.97] cursor-pointer text-text-base"
-        >
-          Cancelar
-        </button>
-      </div>
     </div>
 
     {#if isLoadingOrderDetail}

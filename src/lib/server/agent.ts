@@ -26,7 +26,7 @@ export class AgentClient {
 	private profitUser: string | null = null;
 
 	constructor(
-		company: { slug: string; agent_url?: string; agent_api_key?: string }, 
+		company: { slug: string; agent_url?: string; agent_api_key?: string; agent_token?: string }, 
 		sqlCreds?: { profit_user?: string | null, profit_pass?: string | null },
 		fetchFn?: typeof fetch
 	) {
@@ -40,7 +40,7 @@ export class AgentClient {
 			? rawUrl 
 			: `${rawUrl}/api/v1`;
 			
-		this.apiKey = company.agent_api_key || env.PRIVATE_AGENT_API_KEY || '';
+		this.apiKey = company.agent_api_key || company.agent_token || env.PRIVATE_AGENT_API_KEY || '';
 
 		if (sqlCreds?.profit_user && sqlCreds?.profit_pass) {
 			this.sqlAuth = Buffer.from(`${sqlCreds.profit_user}:${sqlCreds.profit_pass}`).toString('base64');

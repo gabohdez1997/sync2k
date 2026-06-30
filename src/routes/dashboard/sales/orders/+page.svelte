@@ -32,6 +32,7 @@
     FileText,
     Trash2,
     Loader2,
+    RefreshCw,
     Info,
     ShoppingCart,
     Globe,
@@ -189,6 +190,42 @@
     }
   });
 
+  async function openImportModal() {
+    const targetBranch = importBranch || selectedBranch;
+    if (!targetBranch) {
+      toast.error("Seleccione una sucursal primero");
+      return;
+    }
+    showImportModal = true;
+    importSearch = "";
+    isSearchingQuotes = true;
+    importQuotesList = []; // Limpiar antes de buscar
+
+    const formData = new FormData();
+    formData.append("branch_id", targetBranch);
+    formData.append("search", "");
+
+    try {
+      const response = await fetch("?/searchQuotes", {
+        method: "POST",
+        body: formData,
+      });
+      const result = deserialize(await response.text());
+
+      if (result.type === "success") {
+        const payload = result.data as any;
+        importQuotesList = payload?.quotes || [];
+      } else {
+        const errorMsg = (result.data as any)?.message || "Error al buscar cotizaciones";
+        toast.error(errorMsg);
+      }
+    } catch (e: any) {
+      console.error("[IMPORT] Error:", e);
+    } finally {
+      isSearchingQuotes = false;
+    }
+  }
+
   async function searchQuotesForImport() {
     const targetBranch = importBranch || selectedBranch;
     if (!targetBranch) {
@@ -207,28 +244,18 @@
         method: "POST",
         body: formData,
       });
-      const result = await response.json();
+      const result = deserialize(await response.text());
       
       console.log("🔍 [IMPORT] Resultado búsqueda:", result);
 
       if (result.type === "success") {
-        // En SvelteKit 2, si la acción devuelve un objeto, result.data es el objeto
-        // Pero si se usa fetch manual a la acción, a veces viene como string JSON o como el objeto directamente
-        let payload = result.data;
-        if (typeof payload === "string") {
-          try {
-            const parsed = JSON.parse(payload);
-            // SvelteKit suele envolver en un array ["success", { ... }]
-            payload = Array.isArray(parsed) ? parsed[1] : parsed;
-          } catch(e) { console.error("Error parsing result.data", e); }
-        }
-        
+        const payload = result.data as any;
         importQuotesList = payload?.quotes || [];
-        if (importQuotesList.length === 0) {
+        if (importQuotesList.length === 0 && importSearch) {
           toast.info("No se encontraron cotizaciones con ese criterio.");
         }
       } else {
-        const errorMsg = result.data?.message || "Error al buscar cotizaciones";
+        const errorMsg = (result.data as any)?.message || "Error al buscar cotizaciones";
         toast.error(errorMsg);
       }
     } catch (e: any) {
@@ -1085,13 +1112,7 @@
     <div class="flex flex-col md:flex-row items-center gap-3 w-full md:w-auto">
       {#if !data.preloadedOrder}
         <button
-          onclick={() => {
-            if (!selectedBranch) {
-              toast.error("Seleccione una sucursal primero");
-              return;
-            }
-            showImportModal = true;
-          }}
+          onclick={openImportModal}
           class="flex items-center justify-center gap-2 px-5 py-3 h-14 rounded-2xl bg-brand-500/10 hover:bg-brand-500/20 text-brand-400 border border-brand-500/30 transition-all font-bold active:scale-95 shadow-sm shrink-0 w-full md:w-auto"
         >
           <FileText size={18} />
@@ -2934,80 +2955,25 @@
       </div>
 
       {#if !selectedImportQuote}
-        <div class="p-6 border-b border-border-subtle bg-surface-base">
-          <form
-            method="POST"
-            action="?/searchQuotes"
-            use:enhance={() => {
-              isSearchingQuotes = true;
-              importQuotesList = [];
-              return async ({ result }) => {
-                isSearchingQuotes = false;
-                if (result.type === "success") {
-                  const data = result.data as any;
-                  importQuotesList = data?.quotes || [];
-                  if (importQuotesList.length === 0) {
-                    toast.info("No se encontraron cotizaciones.");
-                  }
-                } else if (result.type === "failure") {
-                  toast.error(
-                    (result.data as any)?.message || "Error en la búsqueda",
-                  );
-                }
-              };
-            }}
-            class="flex flex-col md:flex-row gap-4"
-          >
-            <!-- Selector de Sucursal -->
-            <div class="w-full md:w-60">
-              <div class="relative group">
-                <Store
-                  size={16}
-                  class="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted group-focus-within:text-brand-500 transition-colors pointer-events-none"
-                />
-                <select
-                  name="branch_id"
-                  bind:value={importBranch}
-                  class="w-full h-14 pl-10 pr-4 bg-surface-soft border border-border-subtle rounded-2xl focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none transition-all font-medium text-sm appearance-none cursor-pointer"
-                >
-                  {#each data.branches || [] as b}
-                    <option value={b.id}>{b.name}</option>
-                  {/each}
-                </select>
-                <ChevronDown
-                  size={16}
-                  class="absolute right-4 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none"
-                />
-              </div>
-            </div>
+        <!-- Contenido Modal -->
+        <div class="flex-1 overflow-y-auto p-6 space-y-6 no-scrollbar min-h-[300px] custom-scrollbar">
+          <!-- Buscador -->
+          <div class="relative">
+            <Search size={18} class="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted" />
+            <input 
+              type="text" 
+              placeholder="Buscar por nro. cotización o nombre de cliente..." 
+              bind:value={importSearch}
+              oninput={searchQuotesForImport}
+              class="w-full bg-surface-soft border border-border-subtle pl-12 pr-4 py-3.5 rounded-2xl text-sm text-text-base placeholder-text-muted/50 focus:border-brand-500/50 focus:ring-0 focus:outline-hidden transition-all font-medium"
+            />
+            {#if isSearchingQuotes}
+              <RefreshCw size={16} class="animate-spin absolute right-4 top-1/2 -translate-y-1/2 text-brand-500" />
+            {/if}
+          </div>
 
-            <div class="flex-1 relative group h-14">
-              <input
-                type="text"
-                name="search"
-                bind:value={importSearch}
-                placeholder="Buscar por Nro de Cotización o Cliente..."
-                class="w-full h-full bg-surface-base pl-6 pr-14 rounded-2xl border border-border-subtle focus:border-brand-500/30 outline-none transition-all font-bold text-sm placeholder:font-normal placeholder:text-text-secondary/30"
-              />
-              <button
-                type="submit"
-                disabled={isSearchingQuotes}
-                class="absolute right-1 top-1 bottom-1 w-12 flex items-center justify-center bg-surface-soft hover:bg-surface-strong text-brand-400 rounded-xl transition-all border border-border-subtle active:scale-95 disabled:opacity-50 cursor-pointer"
-                title="Buscar"
-              >
-                {#if isSearchingQuotes}
-                  <div class="w-4 h-4 border-2 border-brand-500/20 border-t-brand-500 rounded-full animate-spin"></div>
-                {:else}
-                  <Search size={18} />
-                {/if}
-              </button>
-            </div>
-          </form>
-        </div>
-
-        <div
-          class="flex-1 overflow-y-auto p-4 space-y-3 no-scrollbar min-h-[300px]"
-        >
+          <!-- Resultados -->
+          <div class="space-y-3">
           {#if isSearchingQuotes}
             <div class="flex flex-col items-center justify-center py-20 gap-4">
               <Loader2 size={40} class="animate-spin text-brand-500" />
@@ -3070,6 +3036,7 @@
               </button>
             {/each}
           {/if}
+          </div>
         </div>
       {:else}
         <!-- Partial selection screen -->

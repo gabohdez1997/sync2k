@@ -117,7 +117,7 @@
 
   <!-- SEARCH & FILTERS -->
   <div
-    class="glass p-4 rounded-3xl border border-white/5 shadow-2xl grid grid-cols-1 md:grid-cols-2 gap-4 items-center mb-6 w-full"
+    class="glass p-4 rounded-3xl border border-white/5 shadow-2xl grid grid-cols-1 md:grid-cols-2 gap-4 items-center mb-6 w-full relative z-20"
   >
     {#if data.branches && data.branches.length > 1}
       <div class="w-full">

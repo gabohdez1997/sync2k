@@ -159,7 +159,7 @@
     </div>
 
     <!-- SEARCH & FILTERS ROW -->
-    <div class="glass p-4 rounded-3xl border border-white/5 shadow-2xl grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 items-center relative z-10 mb-8 w-full">
+    <div class="glass p-4 rounded-3xl border border-white/5 shadow-2xl grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 items-center relative z-20 mb-8 w-full">
         {#if data.branches && data.branches.length > 1}
             <div class="w-full">
                 <Combobox

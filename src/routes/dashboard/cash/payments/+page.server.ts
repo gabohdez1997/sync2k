@@ -10,9 +10,11 @@ export const load: PageServerLoad = protectLoad('cash_payments', async ({ url, l
 	if (allowedBranches.length === 0) {
 		return {
 			branches: [],
-			payments: [],
 			selectedBranchId: '',
-			pagination: { total: 0, page: 1, limit: 12, totalPages: 0 },
+			cajas: [],
+			cuentasBancarias: [],
+			bancos: [],
+			tarjetasCredito: [],
 			error: 'No tienes sucursales asignadas.'
 		};
 	}
@@ -21,51 +23,47 @@ export const load: PageServerLoad = protectLoad('cash_payments', async ({ url, l
 	const selectedBranch = urlBranchId ? allowedBranches.find((b: any) => b.id === urlBranchId) : allowedBranches[0];
 	const selectedBranchId = selectedBranch ? selectedBranch.id : '';
 
-	let payments: any[] = [];
-	let pagination = { total: 0, page: 1, limit: 12, totalPages: 0 };
+	let cajas: any[] = [];
+	let cuentasBancarias: any[] = [];
+	let bancos: any[] = [];
+	let tarjetasCredito: any[] = [];
 	let errorMsg = '';
 
 	if (selectedBranchId) {
 		try {
-			const page = url.searchParams.get('page') || '1';
-			const limit = url.searchParams.get('limit') || '12';
-			const search = url.searchParams.get('search') || '';
-			const co_cli = url.searchParams.get('co_cli') || '';
-			const fec_d = url.searchParams.get('fec_d') || '';
-			const fec_h = url.searchParams.get('fec_h') || '';
-
-			const qParams = new URLSearchParams();
-			qParams.set('branch_id', selectedBranchId);
-			qParams.set('page', page);
-			qParams.set('limit', limit);
-			if (search) qParams.set('search', search);
-			if (co_cli) qParams.set('co_cli', co_cli);
-			if (fec_d) qParams.set('fec_d', fec_d);
-			if (fec_h) qParams.set('fec_h', fec_h);
-
-			const res = await fetch(`/api/agent/payments?${qParams.toString()}`);
-			if (res.ok) {
-				const resData = await res.json();
-				if (resData.success) {
-					payments = resData.data || [];
-					pagination = resData.pagination || pagination;
-				} else {
-					errorMsg = resData.message || 'Error al obtener cobros del agente.';
+			const fetchCatalog = async (name: string) => {
+				const res = await fetch(`/api/agent/catalogos/${name}?branch_id=${selectedBranchId}`);
+				if (res.ok) {
+					const jsonRes = await res.json();
+					return jsonRes.success && jsonRes.data ? jsonRes.data : [];
 				}
-			} else {
-				errorMsg = `El agente retornó código de error: ${res.status}`;
-			}
+				return [];
+			};
+
+			const [cRes, cbRes, bRes, tRes] = await Promise.all([
+				fetchCatalog('cajas'),
+				fetchCatalog('cuentas_bancarias'),
+				fetchCatalog('bancos'),
+				fetchCatalog('tarjetas_credito')
+			]);
+
+			cajas = cRes;
+			cuentasBancarias = cbRes;
+			bancos = bRes;
+			tarjetasCredito = tRes;
 		} catch (err: any) {
-			errorMsg = `Error de red o conexión: ${err.message}`;
+			errorMsg = `Error al cargar catálogos desde el agente: ${err.message}`;
 		}
 	}
 
 	return {
-		title: 'Gestión de Cobros',
+		title: 'Registrar Cobro',
 		branches: allowedBranches,
 		selectedBranchId,
-		payments,
-		pagination,
+		cajas,
+		cuentasBancarias,
+		bancos,
+		tarjetasCredito,
 		error: errorMsg || null
 	};
 });
