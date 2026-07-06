@@ -5,7 +5,7 @@
   import { 
     Wallet, Search, Filter, Plus, Calendar, Eye, X, 
     AlertCircle, RefreshCw, Printer, AlertTriangle, Building, CreditCard, Landmark, CheckCircle,
-    FileText
+    FileText, ChevronLeft, ChevronRight
   } from 'lucide-svelte';
   import { fade } from 'svelte/transition';
 
@@ -283,28 +283,28 @@
 
       <!-- PAGINACIÓN -->
       {#if data.pagination && data.pagination.totalPages > 1}
-        <div class="border-t border-white/5 px-6 py-4 flex items-center justify-between bg-white/[0.01]">
-          <div class="text-xs text-text-muted">
-            Mostrando <span class="font-bold text-text-base">{data.payments.length}</span> cobros de <span class="font-bold text-text-base">{data.pagination.total}</span>
-          </div>
+        <div
+          class="px-8 py-6 bg-white/[0.02] border-t border-white/5 flex items-center justify-between"
+        >
+          <p class="text-[10px] font-black uppercase tracking-[0.2em] text-text-muted">
+            Página <span class="text-text-base">{data.pagination.page}</span> de
+            <span class="text-text-base">{data.pagination.totalPages}</span> (Total: {data.pagination.total})
+          </p>
 
-          <div class="flex gap-2">
-            <button 
-              disabled={data.pagination.page <= 1}
+          <div class="flex items-center gap-2">
+            <button
+              disabled={data.pagination.page === 1}
               onclick={() => applyFilters(data.pagination.page - 1)}
-              class="px-4 py-2 rounded-xl text-xs font-bold bg-white/5 border border-white/5 text-text-base disabled:opacity-30 disabled:pointer-events-none hover:bg-white/10 transition-all"
+              class="h-10 w-10 flex items-center justify-center rounded-xl bg-white/5 hover:bg-white/10 disabled:opacity-30 disabled:pointer-events-none transition-all border border-white/5 text-text-muted cursor-pointer"
             >
-              Anterior
+              <ChevronLeft size={20} />
             </button>
-            <div class="flex items-center px-4 text-xs font-bold text-text-muted">
-              Pág. {data.pagination.page} de {data.pagination.totalPages}
-            </div>
-            <button 
-              disabled={data.pagination.page >= data.pagination.totalPages}
+            <button
+              disabled={data.pagination.page === data.pagination.totalPages}
               onclick={() => applyFilters(data.pagination.page + 1)}
-              class="px-4 py-2 rounded-xl text-xs font-bold bg-white/5 border border-white/5 text-text-base disabled:opacity-30 disabled:pointer-events-none hover:bg-white/10 transition-all"
+              class="h-10 w-10 flex items-center justify-center rounded-xl bg-white/5 hover:bg-white/10 disabled:opacity-30 disabled:pointer-events-none transition-all border border-white/5 text-text-muted cursor-pointer"
             >
-              Siguiente
+              <ChevronRight size={20} />
             </button>
           </div>
         </div>
@@ -405,6 +405,7 @@
                     <th class="px-4 py-3">Tipo Doc</th>
                     <th class="px-4 py-3">Nro Documento</th>
                     <th class="px-4 py-3 text-right">Abono Cobrado</th>
+                    <th class="px-4 py-3 text-right">IGTF (3%)</th>
                     <th class="px-4 py-3 text-right">Retención IVA</th>
                     <th class="px-4 py-3 text-right">Retención ISLR</th>
                   </tr>
@@ -422,6 +423,18 @@
                         <div class="text-[10px] text-text-muted/60">
                           Bs. {Number(r.mont_cob).toLocaleString('de-DE', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
                         </div>
+                      </td>
+                      <td class="px-4 py-3.5 text-right">
+                        {#if r.otros1 > 0}
+                          <div class="font-bold text-brand-400">
+                            {Number(r.otros1 / (detailData.tasa > 0 ? detailData.tasa : 1)).toLocaleString('de-DE', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+                          </div>
+                          <div class="text-[10px] text-text-muted/60">
+                            Bs. {Number(r.otros1).toLocaleString('de-DE', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+                          </div>
+                        {:else}
+                          <span class="text-text-muted/50">—</span>
+                        {/if}
                       </td>
                       <td class="px-4 py-3.5 text-right">
                         {#if r.monto_retencion_iva > 0}
@@ -575,7 +588,6 @@
                 </div>
               {/if}
             </div>
-           Populated if needed -->
           {/if}
         {/if}
       </div>

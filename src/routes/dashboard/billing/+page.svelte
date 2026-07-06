@@ -75,6 +75,8 @@
   let isSavingInvoice = $state(false);
   let showUSD = $state(true);
   let activeTasa = $state(1);
+  let enableIgtf = $state(false);
+  let igtfMontoDivisa = $state<number | null>(null);
 
   function toggleCurrency(val: boolean) {
     showUSD = val;
@@ -91,6 +93,7 @@
       retencion: invoiceTotals.retencion * multiplier,
       porc_esp: invoiceTotals.porc_esp,
       totalFactura: invoiceTotals.totalFactura * multiplier,
+      igtfUsd: invoiceTotals.igtfUsd * multiplier,
       total: invoiceTotals.total * multiplier,
     };
   });
@@ -115,9 +118,11 @@
     const porcEsp = selectedClient?.porc_esp ? Number(selectedClient.porc_esp) : 0;
     const retencion = tax * (porcEsp / 100);
     const totalFactura = subtotal + tax;
-    const total = totalFactura - retencion;
 
-    return { subtotal, tax, retencion, porc_esp: porcEsp, totalFactura, total };
+    const currentIgtfUsd = enableIgtf && Number(igtfMontoDivisa || 0) > 0 ? Number(igtfMontoDivisa) * 0.03 : 0;
+    const total = totalFactura - retencion + currentIgtfUsd;
+
+    return { subtotal, tax, retencion, porc_esp: porcEsp, totalFactura, total, igtfUsd: currentIgtfUsd };
   });
 
   function handleBranchChange() {
@@ -365,6 +370,7 @@
       descrip: `FACTURA WEB - PEDIDO: ${originOrderNum}`,
       comentario: `Importado de pedidos: ${originOrderNum}`,
       tasa: tasa,
+      igtf_monto_divisa: enableIgtf ? Number(igtfMontoDivisa || 0) : 0,
       renglones: activeLines.map((line: any) => ({
         co_art: line.co_art,
         art_des: line.art_des,
@@ -407,6 +413,8 @@
       toast.success(`Factura Nro. ${realDocNum} guardada exitosamente en la base de datos.`);
 
       // 2. Si existen impresoras activas, proceder a imprimir el ticket de predespacho para almacén
+      // DESACTIVADO POR REQUERIMIENTO: SE IMPRIMIRÁ LUEGO
+      /*
       if (data.printers && data.printers.length > 0) {
         toast.info("Enviando ticket de predespacho a almacén...");
         try {
@@ -438,12 +446,18 @@
           toast.warning(`La factura se guardó pero ocurrió un error al imprimir: ${printErr.message}`);
         }
       }
+      */
 
       // Reset billing form en caso de éxito
       selectedClient = null;
       billingLines = [];
       activeTasa = 1;
       importedOrdersInfo = {};
+      enableIgtf = false;
+      igtfMontoDivisa = null;
+
+      // Redirigir al creador de Cobros precargando la factura generada
+      goto(`/dashboard/cash/payments?branch_id=${filterSede}&import_invoice=${realDocNum}`);
     } catch (err: any) {
       toast.error(err.message || "Error al procesar la factura.");
     } finally {
@@ -786,6 +800,60 @@
               >
             </div>
           {/if}
+
+          <!-- IGTF Switch and Amount input -->
+          <div class="border-t border-border-subtle/50 pt-4 space-y-4">
+            <div class="flex items-center justify-between">
+              <span class="text-sm font-bold text-text-muted flex items-center gap-2">
+                <Landmark size={16} class="text-brand-500" />
+                Aplicar IGTF (3%)
+              </span>
+              <button
+                type="button"
+                onclick={() => {
+                  enableIgtf = !enableIgtf;
+                  if (!enableIgtf) igtfMontoDivisa = null;
+                }}
+                class={`w-12 h-6 flex items-center rounded-full p-1 cursor-pointer transition-all duration-300 ${
+                  enableIgtf ? 'bg-brand-600' : 'bg-surface-strong'
+                }`}
+              >
+                <div
+                  class={`bg-white w-4 h-4 rounded-full shadow-md transform transition-all duration-300 ${
+                    enableIgtf ? 'translate-x-6' : 'translate-x-0'
+                  }`}
+                ></div>
+              </button>
+            </div>
+
+            {#if enableIgtf}
+              <div class="space-y-2" transition:slide>
+                <div class="flex items-center justify-between text-xs text-text-muted">
+                  <span>Monto en divisa a cancelar:</span>
+                </div>
+                <div class="relative">
+                  <span class="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-text-muted">$</span>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    placeholder="Monto en USD..."
+                    bind:value={igtfMontoDivisa}
+                    class="w-full bg-surface-soft border border-border-subtle pl-7 pr-4 py-2.5 rounded-xl text-xs text-text-base placeholder-text-muted/50 focus:border-brand-500/50 focus:ring-0 focus:outline-hidden transition-all font-mono"
+                  />
+                </div>
+                {#if activeTotals.igtfUsd > 0}
+                  <div class="flex justify-between items-center text-xs font-bold text-brand-400 mt-2 font-mono" transition:fade>
+                    <span>Impuesto IGTF (3%):</span>
+                    <span>{activeTotals.symbol} {activeTotals.igtfUsd.toLocaleString("de-DE", {
+                      minimumFractionDigits: 2,
+                      maximumFractionDigits: 2,
+                    })}</span>
+                  </div>
+                {/if}
+              </div>
+            {/if}
+          </div>
 
           <div
             class="pt-8 border-t border-border-bold flex flex-col gap-2"

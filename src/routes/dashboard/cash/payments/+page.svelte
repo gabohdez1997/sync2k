@@ -58,6 +58,16 @@
     Object.values(docInputs).reduce((acc, curr) => acc + (Number(curr.reten_islr) || 0), 0)
   );
 
+  let totalIgtf = $derived(
+    documentos.reduce((acc, doc) => {
+      if (checkedDocs[doc.nro_doc.trim()]) {
+        const docTasa = doc.tasa > 0 ? doc.tasa : 1;
+        return acc + ((doc.otros1 || 0) / docTasa);
+      }
+      return acc;
+    }, 0)
+  );
+
   let totalInstrumentosPago = $derived(
     formasPago.reduce((acc, curr) => acc + (Number(curr.mont_doc) || 0), 0)
   );
@@ -73,6 +83,38 @@
   $effect(() => {
     selectedBranch = data.selectedBranchId;
     loadExchangeRate();
+  });
+
+  // Cargar factura precargada si viene por URL
+  $effect(() => {
+    const importInvoiceNum = $page.url.searchParams.get('import_invoice');
+    if (importInvoiceNum && selectedBranch) {
+      // Evitar bucles de recarga infinitos eliminando el parámetro de la URL
+      const queryParams = new URLSearchParams($page.url.searchParams);
+      queryParams.delete('import_invoice');
+      goto(`?${queryParams.toString()}`, { replaceState: true, keepFocus: true });
+
+      // Cargar los datos de la factura
+      fetch(`/api/agent/payments/pending-documents?branch_id=${selectedBranch}&search=${encodeURIComponent(importInvoiceNum)}`)
+        .then(res => res.json())
+        .then(resJson => {
+          if (resJson.success && resJson.data && resJson.data.length > 0) {
+            const invoice = resJson.data.find((d: any) => d.nro_doc.trim() === importInvoiceNum.trim() && d.co_tipo_doc.trim() === 'FACT');
+            if (invoice) {
+              selectInvoice(invoice);
+              toast.success(`Factura Nro. ${importInvoiceNum} precargada para cobro.`);
+            } else {
+              toast.error(`No se encontró la factura Nro. ${importInvoiceNum} pendiente de cobro en esta sucursal.`);
+            }
+          } else {
+            toast.error(`No se pudo precargar la factura Nro. ${importInvoiceNum}.`);
+          }
+        })
+        .catch(err => {
+          console.error(err);
+          toast.error('Error al conectar para precargar la factura.');
+        });
+    }
   });
 
   async function loadExchangeRate() {
@@ -196,7 +238,8 @@
           const docTasa = doc.tasa > 0 ? doc.tasa : 1;
           const totalNetoUsd = doc.total_neto / docTasa;
           const montoImpUsd = doc.monto_imp / docTasa;
-          const baseImpUsd = Math.round((totalNetoUsd - montoImpUsd) * 100) / 100;
+          const otros1Usd = (doc.otros1 || 0) / docTasa;
+          const baseImpUsd = Math.round((totalNetoUsd - montoImpUsd - otros1Usd) * 100) / 100;
           
           checkedDocs[doc.nro_doc.trim()] = isTargetDoc;
           
@@ -244,7 +287,7 @@
         const porc = Number(selectedClient.porc_esp) || 75;
         const montoImpUsd = doc.monto_imp / docTasa;
         input.reten_iva = Math.round((montoImpUsd * (porc / 100)) * 100) / 100;
-        input.base_imponible_iva = Math.round(((doc.total_neto - doc.monto_imp) / docTasa) * 100) / 100;
+        input.base_imponible_iva = Math.round(((doc.total_neto - doc.monto_imp - (doc.otros1 || 0)) / docTasa) * 100) / 100;
         input.alicuota_iva = 16;
         input.showIvaDetails = true;
       }
@@ -340,14 +383,20 @@
           co_tipo_doc: doc.co_tipo_doc,
           nro_doc: doc.nro_doc,
           mont_cob: Math.round((inp.mont_cob * tasaCobro) * 100) / 100,
-          monto_retencion_iva: Math.round((inp.reten_iva * tasaCobro) * 100) / 100,
-          monto_retencion: Math.round((inp.reten_islr * tasaCobro) * 100) / 100,
+          monto_retencion_iva: Math.round((inp.reten_iva * (doc.tasa > 0 ? doc.tasa : tasaCobro)) * 100) / 100,
+          monto_retencion: Math.round((inp.reten_islr * (doc.tasa > 0 ? doc.tasa : tasaCobro)) * 100) / 100,
           parent_doc: !isParent ? parentDocNo : null
         };
       });
 
     if (renglones.length === 0) {
       toast.error('Debe registrar al menos un abono o retención en los documentos.');
+      saving = false;
+      return;
+    }
+
+    if (formasPago.length === 0) {
+      toast.error('Debe registrar al menos un instrumento de pago (Efectivo, Transferencia, etc.) para procesar el cobro.');
       saving = false;
       return;
     }
@@ -368,8 +417,8 @@
           numero_documento: doc.nro_doc,
           numero_control_documento: doc.n_control,
           monto_documento: doc.total_neto,
-          base_imponible: Math.round((inp.base_imponible_iva * tasaCobro) * 100) / 100,
-          monto_ret_imp: Math.round((inp.reten_iva * tasaCobro) * 100) / 100,
+          base_imponible: Math.round((inp.base_imponible_iva * (doc.tasa > 0 ? doc.tasa : tasaCobro)) * 100) / 100,
+          monto_ret_imp: Math.round((inp.reten_iva * (doc.tasa > 0 ? doc.tasa : tasaCobro)) * 100) / 100,
           numero_documento_afectado: doc.nro_doc,
           num_comprobante: inp.num_comprobante_iva || 'S/N',
           monto_excento: 0,
@@ -385,7 +434,7 @@
           nro_doc_asoc: doc.nro_doc,
           co_islr: inp.co_islr,
           monto: doc.total_neto - doc.monto_imp,
-          monto_reten: Math.round((inp.reten_islr * tasaCobro) * 100) / 100,
+          monto_reten: Math.round((inp.reten_islr * (doc.tasa > 0 ? doc.tasa : tasaCobro)) * 100) / 100,
           monto_obj: doc.total_neto - doc.monto_imp,
           sustraendo: 0,
           porc_retn: inp.porc_islr
@@ -429,9 +478,10 @@
 
       if (res.ok) {
         const resJson = await res.json();
-        if (resJson.success && resJson.data && resJson.data.doc_num) {
+        const docNum = resJson.data?.doc_num || resJson.results?.[0]?.doc_num;
+        if (resJson.success && docNum) {
           saveSuccess = true;
-          generatedDocNum = resJson.data.doc_num;
+          generatedDocNum = docNum;
           toast.success('¡Cobro guardado con éxito!');
         } else {
           saveError = resJson.message || 'Error al procesar el cobro.';
@@ -632,25 +682,25 @@
                         />
                         <div>
                           <div class="flex items-center gap-2">
-                            <span class="bg-white/5 border border-white/5 px-2 py-0.5 rounded-md font-bold text-[10px] text-text-muted uppercase">{doc.co_tipo_doc}</span>
+                            <span class="bg-white/5 border border-white/5 px-2 py-0.5 rounded-md font-bold text-xs text-text-muted uppercase">{doc.co_tipo_doc}</span>
                             <span class="font-black text-text-base text-base">{doc.nro_doc}</span>
                           </div>
-                          <div class="text-[10px] text-text-muted/60 mt-1 flex flex-wrap gap-x-2 gap-y-0.5">
+                          <div class="text-xs text-text-muted/85 mt-1.5 flex flex-wrap gap-x-2 gap-y-0.5">
                             <span>Control: {doc.n_control?.trim() || 'N/A'}</span>
                             <span>•</span>
                             <span>Emisión: {new Date(doc.fec_emis).toLocaleDateString('es-VE')}</span>
                             <span>•</span>
-                            <span class="text-brand-400 font-semibold">Tasa Doc: {Number(doc.tasa).toFixed(2)}</span>
+                            <span class="text-brand-400 font-bold">Tasa Doc: {Number(doc.tasa).toFixed(2)}</span>
                           </div>
                         </div>
                       </div>
 
                       <div class="text-left sm:text-right shrink-0">
-                        <span class="text-[10px] text-text-muted font-bold block uppercase tracking-wider">Saldo Pendiente</span>
+                        <span class="text-xs text-text-muted font-black block uppercase tracking-wider">Saldo Pendiente</span>
                         <span class="text-lg font-black text-brand-500">
                           {#if doc.co_tipo_doc.trim() === 'N/CR'}-{/if}$ {(doc.saldo / (doc.tasa > 0 ? doc.tasa : 1)).toLocaleString('de-DE', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
                         </span>
-                        <span class="block text-[10px] text-text-muted/60 mt-0.5">
+                        <span class="block text-xs text-text-muted font-bold mt-1">
                           Bs. {#if doc.co_tipo_doc.trim() === 'N/CR'}-{/if}{Number(doc.saldo).toLocaleString('de-DE', {minimumFractionDigits: 2})}
                         </span>
                       </div>
@@ -661,7 +711,7 @@
                       <div class="border-t border-border-subtle/50 pt-4 space-y-4 transition-all duration-200">
                         <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
                           <div>
-                            <label class="block text-[10px] font-bold text-text-muted uppercase mb-1">Base Imponible ($)</label>
+                            <label class="block text-xs font-black text-text-muted uppercase mb-1.5">Base Imponible ($)</label>
                             <input 
                               type="number" 
                               step="0.01" 
@@ -669,13 +719,13 @@
                               readonly
                               class="w-full bg-surface-soft border border-border-subtle px-3 py-2 rounded-xl text-sm text-text-base text-right font-bold cursor-not-allowed opacity-90"
                             />
-                            <span class="block text-[9px] text-text-muted/60 text-right mt-1">
+                            <span class="block text-xs text-text-muted font-bold text-right mt-1.5">
                               Bs. {(input.base_imponible_iva * currentExchangeRate).toLocaleString('de-DE', {minimumFractionDigits: 2})}
                             </span>
                           </div>
 
                           <div>
-                            <label class="block text-[10px] font-bold text-text-muted uppercase mb-1">Monto IVA ($)</label>
+                            <label class="block text-xs font-black text-text-muted uppercase mb-1.5">Monto IVA ($)</label>
                             <input 
                               type="number" 
                               step="0.01" 
@@ -683,17 +733,17 @@
                               readonly
                               class="w-full bg-surface-soft border border-border-subtle px-3 py-2 rounded-xl text-sm text-text-base text-right font-bold cursor-not-allowed opacity-90"
                             />
-                            <span class="block text-[9px] text-text-muted/60 text-right mt-1">
+                            <span class="block text-xs text-text-muted font-bold text-right mt-1.5">
                               Bs. {Number(doc.monto_imp).toLocaleString('de-DE', {minimumFractionDigits: 2})}
                             </span>
                           </div>
 
                           <div>
-                            <div class="flex justify-between items-center mb-1">
-                              <label class="block text-[10px] font-bold text-text-muted uppercase">Reten. IVA ($)</label>
+                            <div class="flex justify-between items-center mb-1.5">
+                              <label class="block text-xs font-black text-text-muted uppercase">Reten. IVA ($)</label>
                               <button 
                                 onclick={() => (input.showIvaDetails = !input.showIvaDetails)} 
-                                class="text-[9px] text-brand-500 font-bold hover:underline"
+                                class="text-xs text-brand-500 font-bold hover:underline"
                               >
                                 {input.showIvaDetails ? 'Cerrar' : 'Editar'}
                               </button>
@@ -705,17 +755,17 @@
                               readonly
                               class="w-full bg-surface-soft border border-border-subtle px-3 py-2 rounded-xl text-sm font-bold text-green-400 text-right cursor-not-allowed opacity-90"
                             />
-                            <span class="block text-[9px] text-green-500/60 text-right mt-1 font-bold">
+                            <span class="block text-xs text-green-500 font-black text-right mt-1.5">
                               Bs. {((input.reten_iva || 0) * currentExchangeRate).toLocaleString('de-DE', {minimumFractionDigits: 2})}
                             </span>
                           </div>
 
                           <div>
-                            <div class="flex justify-between items-center mb-1">
-                              <label class="block text-[10px] font-bold text-text-muted uppercase">Reten. ISLR ($)</label>
+                            <div class="flex justify-between items-center mb-1.5">
+                              <label class="block text-xs font-black text-text-muted uppercase">Reten. ISLR ($)</label>
                               <button 
                                 onclick={() => (input.showIslrDetails = !input.showIslrDetails)} 
-                                class="text-[9px] text-brand-500 font-bold hover:underline"
+                                class="text-xs text-brand-500 font-bold hover:underline"
                               >
                                 {input.showIslrDetails ? 'Cerrar' : 'Editar'}
                               </button>
@@ -727,7 +777,7 @@
                               readonly
                               class="w-full bg-surface-soft border border-border-subtle px-3 py-2 rounded-xl text-sm font-bold text-amber-400 text-right cursor-not-allowed opacity-90"
                             />
-                            <span class="block text-[9px] text-amber-400/60 text-right mt-1 font-bold">
+                            <span class="block text-xs text-amber-400 font-black text-right mt-1.5">
                               Bs. {((input.reten_islr || 0) * currentExchangeRate).toLocaleString('de-DE', {minimumFractionDigits: 2})}
                             </span>
                           </div>
@@ -827,6 +877,24 @@
                           </div>
                         {/if}
 
+                        <!-- Alerta IGTF -->
+                        {#if doc.otros1 > 0}
+                          <div class="flex items-center justify-between bg-brand-500/5 border border-brand-500/10 p-3.5 rounded-2xl text-xs animate-in slide-in-from-top-2 duration-150 mb-3">
+                            <span class="font-bold text-brand-400 flex items-center gap-1.5">
+                              <Landmark size={14} />
+                              Impuesto IGTF (3%) Incluido:
+                            </span>
+                            <div class="text-right">
+                              <span class="font-mono font-black text-brand-400">
+                                $ {Number(doc.otros1 / (doc.tasa > 0 ? doc.tasa : 1)).toLocaleString('de-DE', {minimumFractionDigits: 2})}
+                              </span>
+                              <span class="block text-xs text-text-muted font-bold mt-1">
+                                Bs. {Number(doc.otros1).toLocaleString('de-DE', {minimumFractionDigits: 2})}
+                              </span>
+                            </div>
+                          </div>
+                        {/if}
+
                         <!-- Neto Cobrado Calculado -->
                         {#if doc.co_tipo_doc.trim() !== 'N/CR'}
                           <div class="flex items-center justify-between border-t border-border-subtle/40 pt-3">
@@ -835,7 +903,7 @@
                               <span class="text-base font-black text-brand-500">
                                 $ {input.mont_cob.toLocaleString('de-DE', {minimumFractionDigits: 2})}
                               </span>
-                              <span class="block text-[9px] text-text-muted/60 mt-0.5">
+                              <span class="block text-xs text-text-muted font-bold mt-1">
                                 Bs. {(input.mont_cob * currentExchangeRate).toLocaleString('de-DE', {minimumFractionDigits: 2})}
                               </span>
                             </div>
@@ -878,6 +946,12 @@
               <span>Retenciones ISLR</span>
               <span class="font-mono text-amber-300">$ {totalRetenidoIslr.toLocaleString('de-DE', {minimumFractionDigits: 2})}</span>
             </div>
+            {#if totalIgtf > 0}
+              <div class="flex justify-between items-center text-base font-bold text-brand-400" transition:slide>
+                <span>Impuesto IGTF (3%)</span>
+                <span class="font-mono">$ {totalIgtf.toLocaleString('de-DE', {minimumFractionDigits: 2})}</span>
+              </div>
+            {/if}
             <div class="flex justify-between items-center text-base font-bold text-text-muted border-t border-border-subtle/50 pt-4">
               <span>Instrumentos Recibidos</span>
               <span class="font-mono text-text-base">$ {totalInstrumentosPago.toLocaleString('de-DE', {minimumFractionDigits: 2})}</span>
