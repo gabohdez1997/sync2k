@@ -413,8 +413,6 @@
       toast.success(`Factura Nro. ${realDocNum} guardada exitosamente en la base de datos.`);
 
       // 2. Si existen impresoras activas, proceder a imprimir el ticket de predespacho para almacén
-      // DESACTIVADO POR REQUERIMIENTO: SE IMPRIMIRÁ LUEGO
-      /*
       if (data.printers && data.printers.length > 0) {
         toast.info("Enviando ticket de predespacho a almacén...");
         try {
@@ -446,7 +444,6 @@
           toast.warning(`La factura se guardó pero ocurrió un error al imprimir: ${printErr.message}`);
         }
       }
-      */
 
       // Reset billing form en caso de éxito
       selectedClient = null;
@@ -455,9 +452,6 @@
       importedOrdersInfo = {};
       enableIgtf = false;
       igtfMontoDivisa = null;
-
-      // Redirigir al creador de Cobros precargando la factura generada
-      goto(`/dashboard/cash/payments?branch_id=${filterSede}&import_invoice=${realDocNum}`);
     } catch (err: any) {
       toast.error(err.message || "Error al procesar la factura.");
     } finally {
