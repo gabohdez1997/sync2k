@@ -44,8 +44,9 @@ export const load: PageServerLoad = protectLoad('inv_articles', async ({ url, lo
 			
 			const baseParams = new URLSearchParams();
 			baseParams.set('sede_id', selectedBranch.id);
-            baseParams.set('sede', selectedBranch.profit_branch_code || selectedBranch.id);
+			baseParams.set('sede', selectedBranch.profit_branch_code || selectedBranch.id);
 			if (warehouseId) baseParams.set('co_alma', warehouseId);
+			baseParams.set('in_stock', 'all');
 
 			const results = await Promise.allSettled(
 				codes.map(code => {
@@ -72,6 +73,7 @@ export const load: PageServerLoad = protectLoad('inv_articles', async ({ url, lo
 
 			const params = new URLSearchParams();
 			params.set('limit', '500');
+			params.set('in_stock', 'all');
 
 			if (searchTerm) {
 				params.set('search', searchTerm);
