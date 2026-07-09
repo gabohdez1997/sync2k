@@ -416,8 +416,6 @@
       toast.success(`Factura Nro. ${realDocNum} guardada exitosamente en la base de datos.`);
 
       // 2. Si existen impresoras activas, proceder a imprimir el ticket de predespacho para almacén
-      // DESACTIVADO POR REQUERIMIENTO: SE IMPRIMIRÁ LUEGO
-      /*
       if (data.printers && data.printers.length > 0) {
         toast.info("Enviando ticket de predespacho a almacén...");
         try {
@@ -449,7 +447,7 @@
           toast.warning(`La factura se guardó pero ocurrió un error al imprimir: ${printErr.message}`);
         }
       }
-      */
+
 
       const clientCond = String(selectedClient?.co_cond || '').trim().toUpperCase();
       const isContado = clientCond === '01' || clientCond === 'CONTADO';
