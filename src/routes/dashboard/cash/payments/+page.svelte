@@ -434,6 +434,24 @@
     }
   }
 
+  function getRowCurrency(fp: any) {
+    if (fp.forma_pag === "EF" || fp.forma_pag === "TJ" || fp.forma_pag === "CT") {
+      if (fp.cod_caja) {
+        const caja = data.cajas?.find((c: any) => c.cod_caja?.trim() === fp.cod_caja?.trim());
+        const mone = caja?.co_mone?.trim()?.toUpperCase() || 'BS';
+        return (mone === 'VES' || mone === 'BS') ? 'BS' : 'USD';
+      }
+    } else if (fp.forma_pag === "TE" || fp.forma_pag === "DP" || fp.forma_pag === "CH") {
+      if (fp.cod_cta) {
+        const cta = data.cuentasBancarias?.find((c: any) => c.cod_cta?.trim() === fp.cod_cta?.trim());
+        const mone = cta?.co_mone?.trim()?.toUpperCase() || 'BS';
+        return (mone === 'VES' || mone === 'BS') ? 'BS' : 'USD';
+      }
+    }
+    return 'BS';
+  }
+
+
   let saving = $state(false);
   let saveError = $state<string | null>(null);
   let saveSuccess = $state(false);
@@ -506,13 +524,14 @@
       return;
     }
 
-    if (formasPago.length === 0) {
+    if (totalCobradoNeto > 0 && formasPago.length === 0) {
       toast.error(
         "Debe registrar al menos un instrumento de pago (Efectivo, Transferencia, etc.) para procesar el cobro.",
       );
       saving = false;
       return;
     }
+
 
     const retenciones_iva = documentos
       .filter((doc) => docInputs[doc.nro_doc].reten_iva > 0)
@@ -1623,23 +1642,34 @@
                     <div>
                       <span
                         class="text-[9px] text-text-muted font-bold block mb-1 uppercase"
-                        >Monto Instrumento (USD)</span
+                        >Monto Instrumento ({getRowCurrency(fp) === 'BS' ? 'Bs.' : 'USD'})</span
                       >
                       <input
                         type="number"
                         step="0.01"
                         placeholder="0.00"
-                        bind:value={fp.mont_doc}
+                        value={getRowCurrency(fp) === 'BS' ? Math.round((fp.mont_doc * currentExchangeRate) * 100) / 100 : fp.mont_doc}
+                        oninput={(e) => {
+                          const val = Number(e.currentTarget.value) || 0;
+                          if (getRowCurrency(fp) === 'BS') {
+                            fp.mont_doc = Math.round((val / currentExchangeRate) * 1000000) / 1000000;
+                          } else {
+                            fp.mont_doc = val;
+                          }
+                        }}
                         class="w-full h-12 px-4 bg-surface-soft border border-border-subtle rounded-xl focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none transition-all font-black text-xs text-text-base text-right"
                       />
                       <span
                         class="block text-[9px] text-text-muted/60 text-right mt-1 font-bold"
                       >
-                        Bs. {(
-                          (fp.mont_doc || 0) * currentExchangeRate
-                        ).toLocaleString("de-DE", { minimumFractionDigits: 2 })}
+                        {getRowCurrency(fp) === 'BS' ? 'Equivalente USD:' : 'Equivalente Bs.:'} {(
+                          getRowCurrency(fp) === 'BS'
+                            ? (fp.mont_doc || 0)
+                            : (fp.mont_doc || 0) * currentExchangeRate
+                        ).toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </span>
                     </div>
+
                   </div>
                 </div>
               {/each}
