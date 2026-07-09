@@ -496,9 +496,12 @@
         const fullAbonoUsd = Math.round((saldoUsd - (inp.reten_iva || 0) - (inp.reten_islr || 0)) * 100) / 100;
         
         let montCobBs;
-        if (Math.abs(inp.mont_cob - fullAbonoUsd) < 0.005) {
+        if (Math.abs(Math.abs(inp.mont_cob) - fullAbonoUsd) < 0.005) {
           // Si es pago completo, mont_cob en Bs es exactamente el saldo restante del documento menos retenciones
           montCobBs = Math.round((doc.saldo - retIvaBs - retIslrBs) * 100) / 100;
+          if (inp.mont_cob < 0) {
+            montCobBs = -montCobBs;
+          }
         } else {
           // Si es abono parcial, se calcula multiplicando por la tasa del cobro
           montCobBs = Math.round(inp.mont_cob * tasaCobro * 100) / 100;
@@ -630,10 +633,15 @@
     // Remover la propiedad temporal _moneda antes de enviar
     formas_pago_cleaned.forEach((fp) => delete fp._moneda);
 
+    const selectedDocList = documentos.filter((doc) => checkedDocs[doc.nro_doc.trim()]);
+    const firstSelectedDoc = selectedDocList[0];
+    const collectionCurrency = firstSelectedDoc ? firstSelectedDoc.co_mone?.trim()?.toUpperCase() : (selectedClient.co_mone?.trim()?.toUpperCase() || "USD");
+    const safeCollectionCurrency = collectionCurrency === "US$" ? "USD" : collectionCurrency;
+
     const payload = {
       co_cli: selectedClient.co_cli,
       co_ven: selectedClient.co_ven,
-      co_mone: selectedClient.co_mone || "US$",
+      co_mone: safeCollectionCurrency,
       tasa: tasaCobro,
       monto: totalDocBs,
       descrip: `COBRO CLIENTE ${selectedClient.co_cli}`,
@@ -642,6 +650,7 @@
       retenciones_iva,
       retenciones_islr,
     };
+
 
     try {
       const res = await fetch(
