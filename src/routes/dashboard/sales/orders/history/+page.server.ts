@@ -266,6 +266,72 @@ export const actions = {
         return { success: true, message: res?.message || 'Pedido anulado correctamente.' };
     }),
 
+    processOrder: protectAction('sales_orders', async ({ request, locals, fetch }) => {
+        const formData = await request.formData();
+        const doc_num = String(formData.get('doc_num') || '').trim();
+        const branch_id = String(formData.get('branch_id') || '').trim();
+        const password = String(formData.get('password') || '');
+        const profile = (locals as any).profile;
+
+        if (!hasPermission(profile, 'sales_orders', 'void')) {
+            return fail(403, { success: false, message: 'No tienes permiso para liberar pedidos.' });
+        }
+
+        if (!doc_num) return fail(400, { success: false, message: 'Documento no válido.' });
+        if (!branch_id) return fail(400, { success: false, message: 'Sucursal no válida.' });
+        if (!password) {
+            return fail(400, { success: false, message: 'La contraseña es requerida para confirmar la liberación.' });
+        }
+
+        const email = locals.session?.user?.email;
+        if (!email) return fail(401, { success: false, message: 'Sesión no válida.' });
+
+        const { error: authErr } = await locals.supabase.auth.signInWithPassword({ email, password });
+        if (authErr) return fail(401, { success: false, message: 'Contraseña de confirmación incorrecta.' });
+
+        const branch = profile.allowed_branches?.find((b: any) => b.id === branch_id);
+        if (!branch) return fail(403, { success: false, message: 'Sucursal no autorizada.' });
+
+        const agentClient = new AgentClient(branch, profile, fetch);
+
+        const detailRes: any = await agentClient.request(`/pedidos/${doc_num}`);
+        const detailRaw = Array.isArray(detailRes?.data) ? detailRes.data[0] : detailRes?.data;
+        const order = detailRaw && Array.isArray(detailRaw) ? detailRaw[0] : detailRaw;
+        const rawStatus = String(order?.status ?? '').trim();
+        const isAnulada = Boolean(order?.anulado);
+
+        if (isAnulada || rawStatus !== '1') {
+            return fail(400, {
+                success: false,
+                message: `Solo se pueden procesar/liberar pedidos en estado "Parcialmente procesada".`
+            });
+        }
+
+        const res: any = await agentClient.request(`/pedidos/${doc_num}/procesar`, { method: 'POST' });
+
+        if (!res?.success) {
+            return fail(500, { success: false, message: res?.message || 'No se pudo liberar el pedido.' });
+        }
+
+        try {
+            await locals.supabase.from('audit_log').insert({
+                action: 'PROCESS',
+                module: 'sales_orders',
+                record_id: doc_num,
+                user_email: email,
+                branch_id: branch.id,
+                metadata: {
+                    message: `Pedido ${doc_num} procesado/liberado con éxito`,
+                    doc_num: doc_num
+                }
+            });
+        } catch (auditError) {
+            console.error('Error al guardar log de auditoría de procesamiento:', auditError);
+        }
+
+        return { success: true, message: res?.message || 'Pedido liberado correctamente.' };
+    }),
+
     voidAllOrders: protectAction('sales_orders', async ({ request, locals, fetch }) => {
         const formData = await request.formData();
         const branch_id = String(formData.get('branch_id') || '').trim();
@@ -305,7 +371,9 @@ export const actions = {
             const fetchParams = new URLSearchParams({
                 limit: '1000',
                 page: '1',
-                co_ven: sellerCode || ''
+                co_ven: sellerCode || '',
+                status: '0,1',
+                anulado: 'false'
             });
 
             const listRes: any = await agentClient.request(`/pedidos?${fetchParams.toString()}`);
@@ -314,10 +382,10 @@ export const actions = {
             }
 
             const allDocs = listRes.data || [];
-            const unprocessedDocs = allDocs.filter((d: any) => String(d.status).trim() === '0' && !d.anulado);
+            const targetDocs = allDocs.filter((d: any) => (String(d.status).trim() === '0' || String(d.status).trim() === '1') && !d.anulado);
 
-            if (unprocessedDocs.length === 0) {
-                return { success: true, message: 'No hay pedidos sin procesar para anular en esta sucursal.' };
+            if (targetDocs.length === 0) {
+                return { success: true, message: 'No hay pedidos pendientes o parcialmente procesados para anular/liberar en esta sucursal.' };
             }
 
             let successCount = 0;
@@ -325,20 +393,26 @@ export const actions = {
             const errors: string[] = [];
 
             // Procesamiento secuencial seguro para evitar bloqueos/deadlocks en Profit
-            for (const doc of unprocessedDocs) {
+            for (const doc of targetDocs) {
                 try {
-                    const res: any = await agentClient.request(`/pedidos/${doc.doc_num}/anular`, { method: 'POST' });
+                    const statusStr = String(doc.status).trim();
+                    const isPartial = statusStr === '1';
+                    const endpoint = isPartial ? `/pedidos/${doc.doc_num}/procesar` : `/pedidos/${doc.doc_num}/anular`;
+                    const actionName = isPartial ? 'procesado/liberado' : 'anulado';
+                    const logActionName = isPartial ? 'PROCESS' : 'VOID';
+
+                    const res: any = await agentClient.request(endpoint, { method: 'POST' });
                     if (res?.success) {
                         successCount++;
                         // Registro de auditoría
                         await locals.supabase.from('audit_log').insert({
-                            action: 'VOID',
+                            action: logActionName,
                             module: 'sales_orders',
                             record_id: doc.doc_num,
                             user_email: email,
                             branch_id: branch.id,
                             metadata: {
-                                message: `Pedido ${doc.doc_num} anulado en proceso masivo`,
+                                message: `Pedido ${doc.doc_num} ${actionName} en proceso masivo`,
                                 doc_num: doc.doc_num,
                                 batch: true
                             }
@@ -356,11 +430,11 @@ export const actions = {
             if (failCount > 0) {
                 return { 
                     success: true, 
-                    message: `Se anularon ${successCount} pedidos. Fallaron ${failCount} documentos: ${errors.join(', ')}` 
+                    message: `Se procesaron ${successCount} pedidos. Fallaron ${failCount} documentos: ${errors.join(', ')}` 
                 };
             }
 
-            return { success: true, message: `Se anularon correctamente las ${successCount} pedidos sin procesar.` };
+            return { success: true, message: `Se procesaron correctamente los ${successCount} pedidos pendientes o parciales.` };
         } catch (e: any) {
             return fail(500, { success: false, message: 'Error de comunicación con el Agente: ' + e.message });
         }

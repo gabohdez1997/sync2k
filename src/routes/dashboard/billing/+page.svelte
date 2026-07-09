@@ -31,6 +31,7 @@
   import { goto } from "$app/navigation";
   import { page } from "$app/stores";
   import dayjs from "dayjs";
+  import ImportItemCard from "$lib/components/ui/ImportItemCard.svelte";
 
   let { data } = $props();
 
@@ -39,6 +40,8 @@
 
   let selectedClient = $state<any>(null);
   let billingLines = $state<any[]>([]);
+  let saveSuccess = $state(false);
+  let generatedDocNum = $state("");
   const uniqueOrigins = $derived.by(() => {
     const origins = new Set();
     for (const line of billingLines) {
@@ -413,6 +416,8 @@
       toast.success(`Factura Nro. ${realDocNum} guardada exitosamente en la base de datos.`);
 
       // 2. Si existen impresoras activas, proceder a imprimir el ticket de predespacho para almacén
+      // DESACTIVADO POR REQUERIMIENTO: SE IMPRIMIRÁ LUEGO
+      /*
       if (data.printers && data.printers.length > 0) {
         toast.info("Enviando ticket de predespacho a almacén...");
         try {
@@ -444,14 +449,27 @@
           toast.warning(`La factura se guardó pero ocurrió un error al imprimir: ${printErr.message}`);
         }
       }
+      */
 
-      // Reset billing form en caso de éxito
-      selectedClient = null;
-      billingLines = [];
-      activeTasa = 1;
-      importedOrdersInfo = {};
-      enableIgtf = false;
-      igtfMontoDivisa = null;
+      const clientCond = String(selectedClient?.co_cond || '').trim().toUpperCase();
+      const isContado = clientCond === '01' || clientCond === 'CONTADO';
+
+      if (isContado) {
+        // Reset billing form en caso de éxito
+        selectedClient = null;
+        billingLines = [];
+        activeTasa = 1;
+        importedOrdersInfo = {};
+        enableIgtf = false;
+        igtfMontoDivisa = null;
+
+        // Redirigir al creador de Cobros precargando la factura generada
+        goto(`/dashboard/cash/payments?branch_id=${filterSede}&import_invoice=${realDocNum}`);
+      } else {
+        // Factura a Crédito: Mostrar pantalla de éxito
+        generatedDocNum = realDocNum;
+        saveSuccess = true;
+      }
     } catch (err: any) {
       toast.error(err.message || "Error al procesar la factura.");
     } finally {
@@ -465,7 +483,57 @@
   }
 </script>
 
-<div class="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
+{#if saveSuccess}
+  <div
+    class="glass p-12 rounded-[40px] border border-green-500/20 max-w-xl mx-auto flex flex-col items-center justify-center text-center space-y-6 mt-12"
+    in:fade
+  >
+    <div
+      class="h-20 w-20 rounded-3xl bg-green-500/10 flex items-center justify-center text-green-400 shadow-lg shadow-green-500/10"
+    >
+      <Check size={48} />
+    </div>
+    <div class="space-y-2">
+      <h2 class="text-3xl font-black text-text-base">¡Factura Registrada!</h2>
+      <p class="text-text-muted">
+        La factura a crédito ha sido guardada exitosamente en Profit Plus.
+      </p>
+    </div>
+    <div class="bg-white/5 px-6 py-4 rounded-2xl border border-white/5">
+      <span
+        class="text-xs text-text-muted/60 uppercase font-bold tracking-wider"
+        >Factura Generada</span
+      >
+      <div class="text-2xl font-black text-brand-500 mt-1">
+        {generatedDocNum}
+      </div>
+    </div>
+    <div class="flex gap-4 w-full">
+      <a
+        href="/dashboard/billing/history?branch_id={filterSede}"
+        class="flex-1 text-center bg-white/5 hover:bg-white/10 text-text-base px-6 py-3.5 rounded-2xl font-bold transition-all text-sm flex items-center justify-center border border-white/10"
+      >
+        Ver Historial
+      </a>
+      <button
+        onclick={() => {
+          saveSuccess = false;
+          // reset form variables
+          selectedClient = null;
+          billingLines = [];
+          activeTasa = 1;
+          importedOrdersInfo = {};
+          enableIgtf = false;
+          igtfMontoDivisa = null;
+        }}
+        class="flex-1 bg-brand-600 hover:bg-brand-500 text-white px-6 py-3.5 rounded-2xl font-bold transition-all shadow-lg shadow-brand-500/20 text-sm"
+      >
+        Facturar Otro Pedido
+      </button>
+    </div>
+  </div>
+{:else}
+  <div class="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
   <!-- TOP HEADER -->
   <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
     <div>
@@ -586,18 +654,29 @@
                 {selectedClient.telefonos || "---"}
               </p>
             </div>
-            <div class="md:col-span-3 space-y-1 pt-2 border-t border-border-subtle/30">
-              <span
-                class="text-[9px] font-black uppercase tracking-widest text-text-muted"
-                >Estatus Fiscal</span
-              >
-              <p class="text-xs font-bold text-brand-400">
-                {selectedClient.porc_esp > 0
-                  ? `Contribuyente Especial (${selectedClient.porc_esp}%)`
-                  : selectedClient.contribuyente
-                    ? "Contribuyente Especial"
-                    : "No Contribuyente"}
-              </p>
+             <div class="md:col-span-3 grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 border-t border-border-subtle/30">
+              <div class="space-y-1">
+                <span
+                  class="text-[9px] font-black uppercase tracking-widest text-text-muted"
+                  >Estatus Fiscal</span
+                >
+                <p class="text-xs font-bold text-brand-400">
+                  {selectedClient.porc_esp > 0
+                    ? `Contribuyente Especial (${selectedClient.porc_esp}%)`
+                    : selectedClient.contribuyente
+                      ? "Contribuyente Especial"
+                      : "No Contribuyente"}
+                </p>
+              </div>
+              <div class="space-y-1">
+                <span
+                  class="text-[9px] font-black uppercase tracking-widest text-text-muted"
+                  >Vendedor del Pedido</span
+                >
+                <p class="text-xs font-bold text-text-base">
+                  {activeVenDes || activeCoVen || "Sin asignar"}
+                </p>
+              </div>
             </div>
           </div>
         {/if}
@@ -937,7 +1016,8 @@
       </div>
     </div>
   </div>
-</div>
+  </div>
+{/if}
 
 {#if showImportModal}
   <div
@@ -1013,53 +1093,25 @@
           </div>
         {:else}
           {#each foundOrders as order (order.doc_num + order.sede_id)}
-            <button
+            {@const isParcial = String(order.status).trim() === '1'}
+            {@const docTasa = Number(order.tasa || 1) > 1 ? Number(order.tasa) : Number(order.tasa_actual || 1)}
+            {@const rawUsd = Number(order.total_neto) / docTasa}
+            {@const formattedUsd = rawUsd.toLocaleString('de-DE', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+            {@const formattedBs = Number(order.total_neto).toLocaleString('de-DE', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+            
+            <ImportItemCard
+              docType="PED"
+              docNum={order.doc_num}
+              statusLabel={isParcial ? 'Parcial' : 'Sin Procesar'}
+              statusClass={isParcial ? 'bg-amber-500/10 text-amber-400 border-amber-500/20' : 'bg-brand-500/10 text-brand-400 border-brand-500/20'}
+              clientName={order.cli_des || order.co_cli}
+              clientRif={order.co_cli}
+              dateEmis={dayjs(order.fec_emis).format("DD/MM/YYYY")}
+              amountUsd={formattedUsd}
+              amountBs={formattedBs}
+              branchName={getBranchName(order.sede_id) || "N/A"}
               onclick={() => loadOrderDetailAndImport(order)}
-              class="w-full p-4 rounded-2xl bg-surface-soft border border-border-subtle hover:border-brand-500/50 hover:bg-surface-strong transition-all flex items-center justify-between group text-left cursor-pointer"
-            >
-              <div class="flex items-center gap-4">
-                <div
-                  class="bg-surface-strong p-3 rounded-xl group-hover:bg-brand-500/10 group-hover:text-brand-400 transition-colors"
-                >
-                  <FileText size={20} />
-                </div>
-                <div>
-                  <div class="flex items-center gap-2 flex-wrap">
-                    <span class="font-black text-text-base"
-                      >{order.doc_num}</span
-                    >
-                    <span
-                      class="text-[10px] px-2 py-0.5 rounded-full bg-surface-strong text-text-muted font-bold uppercase"
-                      >{getBranchName(order.sede_id) || "N/A"}</span
-                    >
-                    {#if String(order.status).trim() === '1'}
-                      <span
-                        class="text-[9px] px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20 font-bold uppercase tracking-wider"
-                      >Parcial</span>
-                    {:else}
-                      <span
-                        class="text-[9px] px-2 py-0.5 rounded-full bg-brand-500/10 text-brand-400 border border-brand-500/20 font-bold uppercase tracking-wider"
-                      >Sin Procesar</span>
-                    {/if}
-                  </div>
-                  <p
-                    class="text-sm text-text-muted font-medium truncate max-w-[300px]"
-                  >
-                    {order.cli_des || order.co_cli}
-                  </p>
-                </div>
-              </div>
-              <div class="text-right">
-                <p class="font-black text-text-base">
-                  $ {(Number(order.total_neto) / (Number(order.tasa || 1) > 1 ? Number(order.tasa) : Number(order.tasa_actual || 1))).toFixed(2)} USD
-                </p>
-                <p
-                  class="text-[10px] text-text-muted font-bold uppercase mt-0.5"
-                >
-                  {dayjs(order.fec_emis).format("DD/MM/YYYY")}
-                </p>
-              </div>
-            </button>
+            />
           {/each}
         {/if}
         </div>

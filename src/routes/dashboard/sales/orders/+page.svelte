@@ -52,6 +52,7 @@
   import BarcodeScanner from "$lib/components/ui/BarcodeScanner.svelte";
   import dayjs from "dayjs";
   import "dayjs/locale/es";
+  import ImportItemCard from "$lib/components/ui/ImportItemCard.svelte";
   import type { PageData } from "./$types";
 
   dayjs.locale("es");
@@ -2990,50 +2991,22 @@
             </div>
           {:else}
             {#each importQuotesList as q}
-              <button
+              {@const docTasa = Number(q.tasa || 1)}
+              {@const rawUsd = Number(q.total_neto) / docTasa}
+              {@const formattedUsd = rawUsd.toLocaleString('de-DE', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+              {@const formattedBs = Number(q.total_neto).toLocaleString('de-DE', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+              
+              <ImportItemCard
+                docType="COT"
+                docNum={q.doc_num}
+                clientName={q.cli_des || q.co_cli}
+                clientRif={q.co_cli}
+                dateEmis={new Date(q.fec_emis).toLocaleDateString('es-VE')}
+                amountUsd={formattedUsd}
+                amountBs={formattedBs}
+                branchName={q.sede_nombre}
                 onclick={() => loadQuoteIntoPedido(q.doc_num)}
-                disabled={isLoadingQuoteDetail}
-                class="w-full p-4 rounded-2xl bg-surface-soft border border-border-subtle hover:border-brand-500/50 hover:bg-surface-strong transition-all flex items-center justify-between group text-left"
-              >
-                <div class="flex items-center gap-4">
-                  <div
-                    class="bg-surface-strong p-3 rounded-xl group-hover:bg-brand-500/10 group-hover:text-brand-400 transition-colors"
-                  >
-                    <FileText size={20} />
-                  </div>
-                  <div>
-                    <div class="flex items-center gap-2">
-                      <span class="font-black text-text-base">{q.doc_num}</span>
-                      <span
-                        class="text-[10px] px-2 py-0.5 rounded-full bg-surface-strong text-text-muted font-bold uppercase"
-                        >{q.sede_nombre || "N/A"}</span
-                      >
-                    </div>
-                    <p
-                      class="text-sm text-text-muted font-medium truncate max-w-[300px]"
-                    >
-                      {q.cli_des || q.co_cli}
-                    </p>
-                  </div>
-                </div>
-                <div class="text-right">
-                  <p class="font-black text-text-base">
-                    {#if q.co_mone === 'BS'}
-                      Bs {Number(q.total_neto).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    {:else}
-                      $ {(Number(q.total_neto) / Number(q.tasa || 1)).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD
-                    {/if}
-                  </p>
-                  {#if q.co_mone !== 'BS'}
-                    <p class="text-[10px] text-text-muted font-bold">
-                      Ref. Bs {Number(q.total_neto).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    </p>
-                  {/if}
-                  <p class="text-[10px] text-text-muted font-bold uppercase mt-0.5">
-                    {new Date(q.fec_emis).toLocaleDateString()}
-                  </p>
-                </div>
-              </button>
+              />
             {/each}
           {/if}
           </div>
@@ -3076,7 +3049,7 @@
                   </div>
                   <p class="text-sm font-bold text-text-base mt-1.5 truncate leading-tight">{r.art_des?.trim() || r.des_art?.trim() || 'Sin descripción'}</p>
                   <p class="text-[11px] text-text-muted font-semibold mt-1">
-                    Pendiente: <span class="text-text-base font-bold">{Number(r.pendiente || 0)}</span> / Original: <span class="text-text-muted">{Number(r.cantidad || r.total_art || 0)}</span> {r.unidad?.trim() || r.co_uni?.trim()}
+                    Pendiente: <span class="text-text-base font-bold">{Number(r.pendiente || 0)}</span> / Cotizado: <span class="text-text-muted">{Number(r.cantidad || r.total_art || 0)}</span> {r.unidad?.trim() || r.co_uni?.trim()}
                   </p>
                 </div>
               </div>

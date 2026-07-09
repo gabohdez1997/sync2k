@@ -63,8 +63,8 @@
       label: "Caja",
       icon: DollarSign,
       options: [
-        { id: "cash_billing", label: "Facturas / NE", hasOthers: true, hasVoid: true },
-        { id: "cash_payments", label: "Cobros" },
+        { id: "cash_billing", label: "Facturas / NE", hasOthers: true, hasVoid: true, excludeDelete: true },
+        { id: "cash_payments", label: "Cobros", hasOthers: true, hasVoid: true, excludeDelete: true },
         { id: "cash_credits", label: "Devoluciones / NC" },
         { id: "cash_exchange", label: "Tasa Cambiaria" },
       ],
@@ -326,6 +326,7 @@
       .find((o) => o.id === optionId);
     const supportsOthers = (option as any)?.hasOthers || false;
     const supportsVoid = (option as any)?.hasVoid || false;
+    const excludesDelete = (option as any)?.excludeDelete || false;
     const onlyRead = (option as any)?.onlyRead || false;
     const onlyReadAndEdit = (option as any)?.onlyReadAndEdit || false;
 
@@ -355,16 +356,16 @@
         !p.read ||
         !p.create ||
         !p.update ||
-        !p.delete ||
+        (!excludesDelete && !p.delete) ||
         (supportsOthers && !p.others) ||
         (supportsVoid && !p.void);
       rolePermissions[optionId] = {
         read: anyOff,
         create: anyOff,
         update: anyOff,
-        delete: anyOff,
-        void: anyOff,
-        others: anyOff,
+        delete: excludesDelete ? false : anyOff,
+        void: supportsVoid ? anyOff : false,
+        others: supportsOthers ? anyOff : false,
       };
     }
   }
@@ -851,7 +852,7 @@
                                   : rolePermissions[opt.id].read &&
                                     rolePermissions[opt.id].create &&
                                     rolePermissions[opt.id].update &&
-                                    rolePermissions[opt.id].delete &&
+                                    (opt.excludeDelete ? true : rolePermissions[opt.id].delete) &&
                                     (opt.hasOthers
                                       ? rolePermissions[opt.id].others
                                       : true) &&
@@ -862,7 +863,7 @@
                               ? 'bg-brand-500 border-brand-500'
                               : 'hover:bg-brand-500/10'}"
                           >
-                            {#if opt.onlyRead ? rolePermissions[opt.id].read && (opt.hasOthers ? rolePermissions[opt.id].others : true) : opt.onlyReadAndEdit ? rolePermissions[opt.id].read && rolePermissions[opt.id].update && (opt.hasOthers ? rolePermissions[opt.id].others : true) : rolePermissions[opt.id].read && rolePermissions[opt.id].create && rolePermissions[opt.id].update && rolePermissions[opt.id].delete && (opt.hasOthers ? rolePermissions[opt.id].others : true) && (opt.hasVoid ? rolePermissions[opt.id].void : true)}
+                            {#if opt.onlyRead ? rolePermissions[opt.id].read && (opt.hasOthers ? rolePermissions[opt.id].others : true) : opt.onlyReadAndEdit ? rolePermissions[opt.id].read && rolePermissions[opt.id].update && (opt.hasOthers ? rolePermissions[opt.id].others : true) : rolePermissions[opt.id].read && rolePermissions[opt.id].create && rolePermissions[opt.id].update && (opt.excludeDelete ? true : rolePermissions[opt.id].delete) && (opt.hasOthers ? rolePermissions[opt.id].others : true) && (opt.hasVoid ? rolePermissions[opt.id].void : true)}
                               <div in:fade={{ duration: 100 }}>
                                 <Check
                                   size={14}
@@ -881,7 +882,7 @@
                         <td
                           class="px-6 py-4 text-center border-b border-border-subtle"
                         >
-                          {#if opt.onlyRead ? action === "read" || (action === "others" && opt.hasOthers) : opt.onlyReadAndEdit ? action === "read" || action === "update" || (action === "others" && opt.hasOthers) : (opt.id !== "cash_exchange" && (action !== "others" || opt.hasOthers) && (action !== "void" || opt.hasVoid)) || (opt.id === "cash_exchange" && action === "update")}
+                          {#if opt.onlyRead ? action === "read" || (action === "others" && opt.hasOthers) : opt.onlyReadAndEdit ? action === "read" || action === "update" || (action === "others" && opt.hasOthers) : (opt.id !== "cash_exchange" && (action !== "others" || opt.hasOthers) && (action !== "void" || opt.hasVoid) && (action !== "delete" || !opt.excludeDelete)) || (opt.id === "cash_exchange" && action === "update")}
                             <label
                               class="relative inline-flex items-center cursor-pointer justify-center"
                             >

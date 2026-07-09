@@ -4,7 +4,7 @@
         Hash, DollarSign, Edit2, Trash2, 
         FileDown, ChevronLeft, ChevronRight,
         Plus, Clock, MoreVertical, Store,
-        Printer, Trash, AlertCircle, FileText, Lock, Loader2, Check,
+        Printer, Trash, AlertCircle, FileText, Lock, Loader2, Check, CheckSquare,
         Ban
     } from 'lucide-svelte';
     import { goto } from '$app/navigation';
@@ -30,6 +30,11 @@
     let orderToVoid = $state<any>(null);
     let voidPassword = $state('');
     let isVoiding = $state(false);
+
+    let showProcessModal = $state(false);
+    let orderToProcess = $state<any>(null);
+    let processPassword = $state('');
+    let isProcessing = $state(false);
 
     let showVoidAllModal = $state(false);
     let voidAllPassword = $state('');
@@ -98,6 +103,12 @@
         orderToVoid = order;
         voidPassword = '';
         showVoidModal = true;
+    }
+
+    function openProcessModal(order: any) {
+        orderToProcess = order;
+        processPassword = '';
+        showProcessModal = true;
     }
 </script>
 
@@ -216,27 +227,33 @@
                             {@const status = getStatus(quote)}
                             <tr class="hover:bg-brand-500/5 transition-colors group">
                                 <td class="px-6 py-5">
-                                    <div class="flex flex-col space-y-1.5">
+                                    <div class="flex flex-col space-y-2">
                                         <div class="flex items-center gap-2" title="Fecha de Creación">
-                                            <span class="text-[9px] font-black uppercase tracking-wider text-brand-400 bg-brand-500/10 px-1.5 py-0.5 rounded leading-none shrink-0">Creación</span>
-                                            <span class="text-xs font-bold text-text-base">{dayjs(quote.fec_reg || quote.fec_emis).format('DD/MM/YYYY hh:mm A')}</span>
+                                            <span class="text-[9px] font-black uppercase tracking-wider text-brand-400 bg-brand-500/10 px-1.5 py-0.5 rounded leading-none shrink-0 w-14 text-center">Creación</span>
+                                            <div class="flex flex-col">
+                                                <span class="text-xs font-bold text-text-base leading-tight">{dayjs(quote.fec_reg || quote.fec_emis).format('DD/MM/YYYY')}</span>
+                                                <span class="text-[10px] text-text-muted/70 leading-none">{dayjs(quote.fec_reg || quote.fec_emis).format('hh:mm A')}</span>
+                                            </div>
                                         </div>
                                         {#if quote.fec_us_mo}
                                             <div class="flex items-center gap-2" title="Fecha de Última Modificación">
-                                                <span class="text-[9px] font-black uppercase tracking-wider text-amber-400 bg-amber-500/10 px-1.5 py-0.5 rounded leading-none shrink-0">Edición</span>
-                                                <span class="text-xs font-bold text-text-base">{dayjs(quote.fec_us_mo).format('DD/MM/YYYY hh:mm A')}</span>
+                                                <span class="text-[9px] font-black uppercase tracking-wider text-amber-400 bg-amber-500/10 px-1.5 py-0.5 rounded leading-none shrink-0 w-14 text-center">Edición</span>
+                                                <div class="flex flex-col">
+                                                    <span class="text-xs font-bold text-text-base leading-tight">{dayjs(quote.fec_us_mo).format('DD/MM/YYYY')}</span>
+                                                    <span class="text-[10px] text-text-muted/70 leading-none">{dayjs(quote.fec_us_mo).format('hh:mm A')}</span>
+                                                </div>
                                             </div>
                                         {:else}
                                             <div class="flex items-center gap-2 opacity-40">
-                                                <span class="text-[9px] font-black uppercase tracking-wider text-text-muted bg-white/5 px-1.5 py-0.5 rounded leading-none shrink-0">Edición</span>
-                                                <span class="text-[10px] font-bold text-text-muted font-mono">Sin modificar</span>
+                                                <span class="text-[9px] font-black uppercase tracking-wider text-text-muted bg-white/5 px-1.5 py-0.5 rounded leading-none shrink-0 w-14 text-center">Edición</span>
+                                                <span class="text-[10px] font-bold text-text-muted font-mono leading-none">Sin modificar</span>
                                             </div>
                                         {/if}
                                     </div>
                                 </td>
                                 <td class="px-6 py-5">
                                     <div class="flex items-center gap-2">
-                                        <span class="px-2 py-1 rounded-md bg-surface-soft border border-border-subtle text-xs font-black text-brand-500 group-hover:bg-brand-500 group-hover:border-brand-500 group-hover:text-white transition-all">
+                                        <span class="px-2 py-1 rounded-md bg-surface-soft border border-border-subtle text-xs font-black text-brand-500 group-hover:bg-brand-500 group-hover:border-brand-500 group-hover:text-white transition-all whitespace-nowrap">
                                             {quote.doc_num}
                                         </span>
                                     </div>
@@ -247,34 +264,39 @@
                                         <span class="text-[10px] text-text-muted font-black tracking-widest">{quote.co_cli}</span>
                                     </div>
                                 </td>
-                                <td class="px-6 py-5 text-right">
-                                    <div class="flex flex-col items-end">
-                                        <span class="text-sm font-black text-text-base">
-                                            {#if quote.co_mone === 'BS'}
-                                                Bs {Number(quote.total_neto).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                            {:else}
-                                                $ {(Number(quote.total_neto) / Number(quote.tasa || 1)).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                            {/if}
-                                        </span>
-                                        {#if quote.co_mone !== 'BS'}
-                                            <span class="text-[10px] text-text-muted font-bold">Ref. Bs {Number(quote.total_neto).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                                        {/if}
-                                    </div>
-                                </td>
-                                {#if data.canSeeOthers}
-                                    <td class="px-6 py-5 text-center">
-                                        <span class="px-3 py-1 rounded-full bg-blue-500/10 text-blue-500 border border-blue-500/20 text-xs font-bold uppercase tracking-widest">
-                                            {quote.co_ven || '---'}
-                                        </span>
-                                    </td>
-                                {/if}
+                                <td class="px-6 py-5 text-right font-bold whitespace-nowrap">
+                                     <div class="text-base text-text-base">
+                                         <span class="text-text-muted text-xs font-medium mr-1">USD</span>
+                                         {(Number(quote.total_neto) / Number(quote.tasa || 1)).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                     </div>
+                                     <div class="text-xs text-text-muted/60 mt-0.5">
+                                         <span>Bs. </span>
+                                         {Number(quote.total_neto).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                         <span class="text-[10px] text-text-muted/40 ml-1">(Tasa: {Number(quote.tasa || 1).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})</span>
+                                     </div>
+                                 </td>
+                                 {#if data.canSeeOthers}
+                                     <td class="px-6 py-5 text-center">
+                                         <div class="relative group/tooltip inline-block">
+                                             <span
+                                                 class="px-3 py-1 rounded-full bg-blue-500/10 text-blue-500 border border-blue-500/20 text-xs font-bold uppercase tracking-wider cursor-help"
+                                             >
+                                                 {quote.co_ven || '---'}
+                                             </span>
+                                             <div class="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover/tooltip:block bg-surface-raised border border-border-subtle px-3 py-1.5 rounded-xl text-xs font-black uppercase tracking-wider text-text-base whitespace-nowrap shadow-2xl z-30 pointer-events-none transition-all">
+                                                 {String(quote.ven_des || quote.co_ven || '---').toUpperCase()}
+                                                 <div class="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-border-subtle"></div>
+                                             </div>
+                                         </div>
+                                     </td>
+                                 {/if}
                                 <td class="px-6 py-5 text-center">
-                                    <span class="px-3 py-1 rounded-full border text-[10px] font-black uppercase tracking-widest {status.class}">
+                                    <span class="px-3 py-1 rounded-full border text-[10px] font-black uppercase tracking-widest whitespace-nowrap {status.class}">
                                         {status.label}
                                     </span>
                                 </td>
                                 <td class="px-6 py-5">
-                                    <div class="flex items-center justify-center gap-2">
+                                    <div class="flex items-center justify-center gap-2 whitespace-nowrap">
                                         <!-- Editar -->
                                         {#if data.canUpdate && canEditOrder(quote)}
                                             <button 
@@ -302,6 +324,16 @@
                                                 class="p-2 text-text-muted hover:text-amber-500 hover:bg-amber-500/10 rounded-xl transition-all" title="Anular"
                                             >
                                                 <Ban size={18} />
+                                            </button>
+                                        {/if}
+
+                                        <!-- Procesar (liberar comprometido de pedidos parciales) -->
+                                        {#if data.canVoid && !quote.anulado && String(quote.status ?? '').trim() === '1'}
+                                            <button 
+                                                onclick={() => openProcessModal(quote)}
+                                                class="p-2 text-text-muted hover:text-green-500 hover:bg-green-500/10 rounded-xl transition-all" title="Liberar Comprometidos / Cerrar Pedido"
+                                            >
+                                                <CheckSquare size={18} />
                                             </button>
                                         {/if}
 
@@ -601,6 +633,131 @@
                             {:else}
                                 <Check size={18} />
                                 Anular
+                            {/if}
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+{/if}
+
+{#if showProcessModal}
+    <div class="fixed inset-0 z-[60] flex items-center justify-center p-4">
+        <div
+            class="absolute inset-0 bg-black/90 backdrop-blur-md"
+            onclick={() => !isProcessing && (showProcessModal = false)}
+            onkeydown={(e) =>
+                e.key === "Escape" && !isProcessing && (showProcessModal = false)}
+            role="button"
+            tabindex="-1"
+        ></div>
+
+        <div
+            class="glass w-full max-w-md rounded-[40px] border border-white/10 shadow-2xl relative z-10 overflow-hidden"
+            transition:slide
+        >
+            <div class="p-8 text-center space-y-6">
+                <div
+                    class="h-20 w-20 rounded-3xl bg-green-500/20 text-green-400 flex items-center justify-center mx-auto shadow-lg shadow-green-500/10"
+                >
+                    <CheckSquare size={40} />
+                </div>
+
+                <div class="space-y-2">
+                    <h2 class="text-2xl font-black tracking-tight">Liberar Mercadería</h2>
+                    <p class="text-text-muted text-sm px-4">
+                        ¿Estás seguro de que deseas liberar los artículos comprometidos restantes del pedido
+                        <span class="text-text-base font-bold">{orderToProcess?.doc_num}</span>?
+                        Esta acción marcará el pedido como Totalmente Procesado, liberando del inventario comprometido las cantidades que no llegaron a facturarse.
+                    </p>
+                    {#if orderToProcess}
+                        {@const qStatus = getStatus(orderToProcess)}
+                        <div class="text-left p-4 rounded-2xl bg-white/5 border border-white/10 space-y-2">
+                            <p class="text-xs text-text-muted"><span class="font-bold">Cliente:</span> {orderToProcess.cli_des || orderToProcess.co_cli}</p>
+                            <p class="text-xs text-text-muted"><span class="font-bold">Fecha:</span> {dayjs(orderToProcess.fec_emis).format('DD/MM/YYYY HH:mm')}</p>
+                            <p class="text-xs text-text-muted">
+                                <span class="font-bold">Monto Original:</span>
+                                {orderToProcess.co_mone === 'BS'
+                                    ? `Bs ${Number(orderToProcess.total_neto || 0).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                                    : `$ ${(Number(orderToProcess.total_neto || 0) / Number(orderToProcess.tasa || 1)).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                                }
+                            </p>
+                            <p class="text-xs text-text-muted flex items-center gap-2">
+                                <span class="font-bold">Estatus:</span>
+                                <span class="px-2 py-0.5 rounded-full border text-[10px] font-black uppercase tracking-widest {qStatus.class}">
+                                    {qStatus.label}
+                                </span>
+                            </p>
+                        </div>
+                    {/if}
+                </div>
+
+                <form
+                    method="POST"
+                    action="?/processOrder"
+                    use:enhance={() => {
+                        isProcessing = true;
+                        return async ({ result, update }) => {
+                            await update();
+                            isProcessing = false;
+
+                            if (result.type === 'success') {
+                                showProcessModal = false;
+                                toast.success((result as any).data?.message || 'Comprometidos liberados con éxito');
+                            } else if (result.type === 'failure' && (result as any).data?.message) {
+                                toast.error((result as any).data.message);
+                            } else {
+                                toast.error('Error al liberar el pedido');
+                            }
+                        };
+                    }}
+                    class="space-y-4 pt-4"
+                >
+                    <input type="hidden" name="doc_num" value={orderToProcess?.doc_num} />
+                    <input type="hidden" name="branch_id" value={data.selectedBranchId} />
+
+                    <div class="space-y-2 text-left">
+                        <label
+                            class="text-[10px] font-black uppercase tracking-widest text-text-muted ml-1"
+                            for="process-pass">Contraseña de Confirmación</label
+                        >
+                        <div class="relative">
+                            <Lock
+                                size={18}
+                                class="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted opacity-40"
+                            />
+                            <input
+                                id="process-pass"
+                                type="password"
+                                name="password"
+                                bind:value={processPassword}
+                                required
+                                placeholder="Introduzca su contraseña"
+                                class="w-full h-14 bg-white/5 border border-white/10 rounded-2xl pl-12 pr-5 focus:border-green-500/50 outline-none transition-all"
+                            />
+                        </div>
+                    </div>
+
+                    <div class="flex gap-3 pt-4">
+                        <button
+                            type="button"
+                            onclick={() => (showProcessModal = false)}
+                            disabled={isProcessing}
+                            class="flex-1 h-14 rounded-2xl font-bold bg-white/5 hover:bg-white/10 transition-all text-text-muted disabled:opacity-50"
+                        >
+                            Cancelar
+                        </button>
+                        <button
+                            type="submit"
+                            disabled={isProcessing || !processPassword}
+                            class="flex-1 h-14 rounded-2xl font-bold bg-green-600 hover:bg-green-500 text-white shadow-lg shadow-green-500/20 transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2"
+                        >
+                            {#if isProcessing}
+                                <Loader2 size={18} class="animate-spin" />
+                            {:else}
+                                <Check size={18} />
+                                Liberar
                             {/if}
                         </button>
                     </div>

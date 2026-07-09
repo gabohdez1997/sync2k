@@ -1,6 +1,7 @@
 import { protectLoad, protectAction } from '$lib/server/permissions';
 import { AgentClient } from '$lib/server/agent';
 import { hasPermission } from '$lib/server/auth';
+import { supabaseAdmin } from '$lib/server/supabase';
 import { fail } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
 
@@ -73,8 +74,31 @@ export const load: PageServerLoad = protectLoad('cash_billing', async ({ url, lo
             };
         }
 
+        let invoices = res.data || [];
+        let cashiersMap: Record<string, string> = {};
+
+        const { data: profilesData } = await supabaseAdmin
+            .from('profiles')
+            .select('profit_user, full_name');
+
+        if (profilesData) {
+            profilesData.forEach((p: any) => {
+                if (p.profit_user) {
+                    cashiersMap[p.profit_user.trim().toLowerCase()] = p.full_name;
+                }
+            });
+        }
+
+        invoices = invoices.map((inv: any) => {
+            const code = (inv.co_us_in || '').trim().toLowerCase();
+            return {
+                ...inv,
+                cashier_name: cashiersMap[code] || inv.co_us_in
+            };
+        });
+
         return {
-            invoices: res.data || [],
+            invoices,
             pagination: {
                 total: (res as any).total_items || 0,
                 pages: (res as any).total_pages || 1,

@@ -216,27 +216,33 @@
                             {@const status = getStatus(quote)}
                             <tr class="hover:bg-brand-500/5 transition-colors group">
                                 <td class="px-6 py-5">
-                                    <div class="flex flex-col space-y-1.5">
+                                    <div class="flex flex-col space-y-2">
                                         <div class="flex items-center gap-2" title="Fecha de Creación">
-                                            <span class="text-[9px] font-black uppercase tracking-wider text-brand-400 bg-brand-500/10 px-1.5 py-0.5 rounded leading-none shrink-0">Creación</span>
-                                            <span class="text-xs font-bold text-text-base">{dayjs(quote.fec_reg || quote.fec_emis).format('DD/MM/YYYY hh:mm A')}</span>
+                                            <span class="text-[9px] font-black uppercase tracking-wider text-brand-400 bg-brand-500/10 px-1.5 py-0.5 rounded leading-none shrink-0 w-14 text-center">Creación</span>
+                                            <div class="flex flex-col">
+                                                <span class="text-xs font-bold text-text-base leading-tight">{dayjs(quote.fec_reg || quote.fec_emis).format('DD/MM/YYYY')}</span>
+                                                <span class="text-[10px] text-text-muted/70 leading-none">{dayjs(quote.fec_reg || quote.fec_emis).format('hh:mm A')}</span>
+                                            </div>
                                         </div>
                                         {#if quote.fec_us_mo}
                                             <div class="flex items-center gap-2" title="Fecha de Última Modificación">
-                                                <span class="text-[9px] font-black uppercase tracking-wider text-amber-400 bg-amber-500/10 px-1.5 py-0.5 rounded leading-none shrink-0">Edición</span>
-                                                <span class="text-xs font-bold text-text-base">{dayjs(quote.fec_us_mo).format('DD/MM/YYYY hh:mm A')}</span>
+                                                <span class="text-[9px] font-black uppercase tracking-wider text-amber-400 bg-amber-500/10 px-1.5 py-0.5 rounded leading-none shrink-0 w-14 text-center">Edición</span>
+                                                <div class="flex flex-col">
+                                                    <span class="text-xs font-bold text-text-base leading-tight">{dayjs(quote.fec_us_mo).format('DD/MM/YYYY')}</span>
+                                                    <span class="text-[10px] text-text-muted/70 leading-none">{dayjs(quote.fec_us_mo).format('hh:mm A')}</span>
+                                                </div>
                                             </div>
                                         {:else}
                                             <div class="flex items-center gap-2 opacity-40">
-                                                <span class="text-[9px] font-black uppercase tracking-wider text-text-muted bg-white/5 px-1.5 py-0.5 rounded leading-none shrink-0">Edición</span>
-                                                <span class="text-[10px] font-bold text-text-muted font-mono">Sin modificar</span>
+                                                <span class="text-[9px] font-black uppercase tracking-wider text-text-muted bg-white/5 px-1.5 py-0.5 rounded leading-none shrink-0 w-14 text-center">Edición</span>
+                                                <span class="text-[10px] font-bold text-text-muted font-mono leading-none">Sin modificar</span>
                                             </div>
                                         {/if}
                                     </div>
                                 </td>
                                 <td class="px-6 py-5">
                                     <div class="flex items-center gap-2">
-                                        <span class="px-2 py-1 rounded-md bg-surface-soft border border-border-subtle text-xs font-black text-brand-500 group-hover:bg-brand-500 group-hover:border-brand-500 group-hover:text-white transition-all">
+                                        <span class="px-2 py-1 rounded-md bg-surface-soft border border-border-subtle text-xs font-black text-brand-500 group-hover:bg-brand-500 group-hover:border-brand-500 group-hover:text-white transition-all whitespace-nowrap">
                                             {quote.doc_num}
                                         </span>
                                     </div>
@@ -247,34 +253,39 @@
                                         <span class="text-[10px] text-text-muted font-black tracking-widest">{quote.co_cli}</span>
                                     </div>
                                 </td>
-                                <td class="px-6 py-5 text-right">
-                                    <div class="flex flex-col items-end">
-                                        <span class="text-sm font-black text-text-base">
-                                            {#if quote.co_mone === 'BS'}
-                                                Bs {Number(quote.total_neto).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                            {:else}
-                                                $ {(Number(quote.total_neto) / Number(quote.tasa || 1)).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                            {/if}
-                                        </span>
-                                        {#if quote.co_mone !== 'BS'}
-                                            <span class="text-[10px] text-text-muted font-bold">Ref. Bs {Number(quote.total_neto).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                                        {/if}
+                                <td class="px-6 py-5 text-right font-bold whitespace-nowrap">
+                                    <div class="text-base text-text-base">
+                                        <span class="text-text-muted text-xs font-medium mr-1">USD</span>
+                                        {(Number(quote.total_neto) / Number(quote.tasa || 1)).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                    </div>
+                                    <div class="text-xs text-text-muted/60 mt-0.5">
+                                        <span>Bs. </span>
+                                        {Number(quote.total_neto).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                        <span class="text-[10px] text-text-muted/40 ml-1">(Tasa: {Number(quote.tasa || 1).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})</span>
                                     </div>
                                 </td>
                                 {#if data.canSeeOthers}
                                     <td class="px-6 py-5 text-center">
-                                        <span class="px-3 py-1 rounded-full bg-blue-500/10 text-blue-500 border border-blue-500/20 text-xs font-bold uppercase tracking-widest">
-                                            {quote.co_ven || '---'}
-                                        </span>
+                                        <div class="relative group/tooltip inline-block">
+                                            <span
+                                                class="px-3 py-1 rounded-full bg-blue-500/10 text-blue-500 border border-blue-500/20 text-xs font-bold uppercase tracking-wider cursor-help"
+                                            >
+                                                {quote.co_ven || '---'}
+                                            </span>
+                                            <div class="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover/tooltip:block bg-surface-raised border border-border-subtle px-3 py-1.5 rounded-xl text-xs font-black uppercase tracking-wider text-text-base whitespace-nowrap shadow-2xl z-30 pointer-events-none transition-all">
+                                                {String(quote.ven_des || quote.co_ven || '---').toUpperCase()}
+                                                <div class="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-border-subtle"></div>
+                                            </div>
+                                        </div>
                                     </td>
                                 {/if}
                                 <td class="px-6 py-5 text-center">
-                                    <span class="px-3 py-1 rounded-full border text-[10px] font-black uppercase tracking-widest {status.class}">
+                                    <span class="px-3 py-1 rounded-full border text-[10px] font-black uppercase tracking-widest whitespace-nowrap {status.class}">
                                         {status.label}
                                     </span>
                                 </td>
                                 <td class="px-6 py-5">
-                                    <div class="flex items-center justify-center gap-2">
+                                    <div class="flex items-center justify-center gap-2 whitespace-nowrap">
                                         <!-- Editar -->
                                         {#if data.canUpdate && canEditQuote(quote)}
                                             <button 

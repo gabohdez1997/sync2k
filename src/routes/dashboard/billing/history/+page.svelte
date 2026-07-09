@@ -169,7 +169,12 @@
               <th
                 class="px-6 py-5 text-xs font-black uppercase tracking-[0.1em] text-text-muted text-center"
                 >Cajero</th
-              >{/if}
+              >
+            {/if}
+            <th
+              class="px-6 py-5 text-xs font-black uppercase tracking-[0.1em] text-text-muted text-center"
+              >Vendedor</th
+            >
             <th
               class="px-6 py-5 text-xs font-black uppercase tracking-[0.1em] text-text-muted text-center"
               >Estatus</th
@@ -183,7 +188,7 @@
         <tbody class="divide-y divide-border-subtle/30">
           {#if !data.invoices || data.invoices.length === 0}
             <tr>
-              <td colspan={data.canSeeOthers ? 7 : 6} class="px-6 py-32 text-center">
+              <td colspan={data.canSeeOthers ? 8 : 7} class="px-6 py-32 text-center">
                 <FileText size={48} class="mx-auto text-text-muted/20 mb-4" />
                 <p class="text-text-muted font-bold text-lg">No se encontraron facturas</p>
                 <button
@@ -200,9 +205,12 @@
             {#each data.invoices as invoice}
               <tr class="hover:bg-brand-500/5 transition-colors group">
                 <td class="px-6 py-5">
-                  <span class="text-xs font-bold text-text-base"
-                    >{dayjs(invoice.fec_emis).format("DD/MM/YYYY hh:mm A")}</span
-                  >
+                  <div class="text-xs font-bold text-text-base">
+                    {dayjs(invoice.fec_emis).format("DD/MM/YYYY")}
+                  </div>
+                  <div class="text-xs text-text-muted/60 mt-0.5">
+                    {dayjs(invoice.fec_emis).format("hh:mm A")}
+                  </div>
                 </td>
                 <td class="px-6 py-5">
                   <div class="flex flex-col gap-1 items-start">
@@ -226,42 +234,45 @@
                     >
                   </div>
                 </td>
-                <td class="px-6 py-5 text-right font-mono">
-                  <div class="flex flex-col items-end">
-                    <span class="text-sm font-black text-text-base">
-                      {#if invoice.co_mone === "BS"}
-                        Bs {Number(invoice.total_neto).toLocaleString("de-DE", {
-                          minimumFractionDigits: 2,
-                          maximumFractionDigits: 2,
-                        })}
-                      {:else}
-                        $ {(
-                          Number(invoice.total_neto) / Number(invoice.tasa || 1)
-                        ).toLocaleString("de-DE", {
-                          minimumFractionDigits: 2,
-                          maximumFractionDigits: 2,
-                        })} USD
-                      {/if}
-                    </span>
-                    {#if invoice.co_mone !== "BS"}
-                      <span class="text-[9px] text-text-muted font-bold"
-                        >Ref. Bs {Number(invoice.total_neto).toLocaleString("de-DE", {
-                          minimumFractionDigits: 2,
-                          maximumFractionDigits: 2,
-                        })}</span
-                      >
-                    {/if}
+                <td class="px-6 py-5 text-right font-bold">
+                  <div class="text-base text-text-base">
+                    <span class="text-text-muted text-xs font-medium mr-1">USD</span>
+                    {(Number(invoice.total_neto) / Number(invoice.tasa || 1)).toLocaleString('de-DE', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+                  </div>
+                  <div class="text-xs text-text-muted/60 mt-0.5">
+                    <span>Bs. </span>
+                    {Number(invoice.total_neto).toLocaleString('de-DE', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+                    <span class="text-[10px] text-text-muted/40 ml-1">(Tasa: {Number(invoice.tasa || 1).toLocaleString('de-DE', {minimumFractionDigits: 2, maximumFractionDigits: 2})})</span>
                   </div>
                 </td>
                 {#if data.canSeeOthers}
                   <td class="px-6 py-5 text-center">
-                    <span
-                      class="px-3 py-1 rounded-full bg-blue-500/10 text-blue-500 border border-blue-500/20 text-xs font-bold uppercase tracking-wider"
-                    >
-                      {invoice.co_us_in || "---"}
-                    </span>
+                    <div class="relative group/tooltip inline-block">
+                      <span
+                        class="px-3 py-1 rounded-full bg-blue-500/10 text-blue-500 border border-blue-500/20 text-xs font-bold uppercase tracking-wider cursor-help"
+                      >
+                        {invoice.co_us_in || "---"}
+                      </span>
+                      <div class="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover/tooltip:block bg-surface-raised border border-border-subtle px-3 py-1.5 rounded-xl text-xs font-black uppercase tracking-wider text-text-base whitespace-nowrap shadow-2xl z-30 pointer-events-none transition-all">
+                        {String(invoice.cashier_name || invoice.co_us_in || "---").toUpperCase()}
+                        <div class="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-border-subtle"></div>
+                      </div>
+                    </div>
                   </td>
                 {/if}
+                <td class="px-6 py-5 text-center">
+                  <div class="relative group/tooltip inline-block">
+                    <span
+                      class="px-3 py-1 rounded-full bg-blue-500/10 text-blue-500 border border-blue-500/20 text-xs font-bold uppercase tracking-wider cursor-help"
+                    >
+                      {invoice.co_ven || "---"}
+                    </span>
+                    <div class="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover/tooltip:block bg-surface-raised border border-border-subtle px-3 py-1.5 rounded-xl text-xs font-black uppercase tracking-wider text-text-base whitespace-nowrap shadow-2xl z-30 pointer-events-none transition-all">
+                      {String(invoice.ven_des || invoice.co_ven || "---").toUpperCase()}
+                      <div class="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-border-subtle"></div>
+                    </div>
+                  </div>
+                </td>
                 <td class="px-6 py-5 text-center">
                   {#if invoice.anulado}
                     <span
