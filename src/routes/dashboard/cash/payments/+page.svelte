@@ -289,17 +289,17 @@
 
   async function selectInvoice(inv: any) {
     selectedClient = {
-      co_cli: inv.co_cli.trim(),
-      descripcion: inv.cli_des.trim(),
-      rif: inv.rif.trim(),
+      co_cli: inv.co_cli ? inv.co_cli.trim() : "",
+      descripcion: inv.cli_des ? inv.cli_des.trim() : "",
+      rif: inv.rif ? inv.rif.trim() : "",
       contribu_e: !!inv.contribu_e,
       porc_esp: inv.porc_esp || 75,
-      co_ven: inv.co_ven.trim(),
-      co_mone: inv.co_mone.trim(),
+      co_ven: inv.co_ven ? inv.co_ven.trim() : "",
+      co_mone: inv.co_mone ? inv.co_mone.trim() : "USD",
       direc1: "",
       telefonos: "",
     };
-    co_cli = inv.co_cli.trim();
+    co_cli = selectedClient.co_cli;
     showImportModal = false;
     checkedDocs = {};
     formasPago = [];
@@ -511,6 +511,24 @@
       fp.mont_doc = Math.round((fp.mont_doc_bs / (currentExchangeRate > 0 ? currentExchangeRate : 1)) * 100) / 100;
     } else {
       fp.mont_doc = fp.mont_doc || Math.round((fp.mont_doc_bs / (currentExchangeRate > 0 ? currentExchangeRate : 1)) * 100) / 100;
+      fp.mont_doc_bs = Math.round(fp.mont_doc * currentExchangeRate * 100) / 100;
+    }
+  }
+
+  function handleCajaCtaChange(index: number) {
+    const fp = formasPago[index];
+    const isBs = getRowCurrency(fp) === 'BS';
+    if (isBs) {
+      fp.mont_doc_bs = fp.mont_doc_bs || Math.round(fp.mont_doc * currentExchangeRate * 100) / 100;
+      if (Math.abs(diferenciaCuadreBs + fp.mont_doc_bs) < 5.00 && diferenciaCuadreBs !== 0) {
+        fp.mont_doc_bs = Math.round((fp.mont_doc_bs + diferenciaCuadreBs) * 100) / 100;
+      }
+      fp.mont_doc = Math.round((fp.mont_doc_bs / (currentExchangeRate > 0 ? currentExchangeRate : 1)) * 100) / 100;
+    } else {
+      fp.mont_doc = fp.mont_doc || Math.round((fp.mont_doc_bs / (currentExchangeRate > 0 ? currentExchangeRate : 1)) * 100) / 100;
+      if (Math.abs(diferenciaCuadre + fp.mont_doc) < 0.05 && diferenciaCuadre !== 0) {
+        fp.mont_doc = Math.round((fp.mont_doc + diferenciaCuadre) * 100) / 100;
+      }
       fp.mont_doc_bs = Math.round(fp.mont_doc * currentExchangeRate * 100) / 100;
     }
   }
@@ -1622,6 +1640,7 @@
                         >
                         <select
                           bind:value={fp.cod_caja}
+                          onchange={() => handleCajaCtaChange(index)}
                           class="w-full h-12 px-4 bg-surface-soft border border-border-subtle rounded-xl focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none transition-all font-medium text-xs cursor-pointer text-text-base"
                         >
                           {#each data.cajas as c}
@@ -1643,6 +1662,7 @@
                           >
                           <select
                             bind:value={fp.cod_cta}
+                            onchange={() => handleCajaCtaChange(index)}
                             class="w-full h-12 px-2 bg-surface-soft border border-border-subtle rounded-xl focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none transition-all font-medium text-[10px] cursor-pointer text-text-base"
                           >
                             {#each data.cuentasBancarias as cb}
