@@ -505,14 +505,7 @@
       fp.co_ban = data.bancos[0]?.co_ban || "";
       fp.co_tar = "";
     }
-    const isBs = getRowCurrency(fp) === 'BS';
-    if (isBs) {
-      fp.mont_doc_bs = fp.mont_doc_bs || Math.round(fp.mont_doc * currentExchangeRate * 100) / 100;
-      fp.mont_doc = Math.round((fp.mont_doc_bs / (currentExchangeRate > 0 ? currentExchangeRate : 1)) * 100) / 100;
-    } else {
-      fp.mont_doc = fp.mont_doc || Math.round((fp.mont_doc_bs / (currentExchangeRate > 0 ? currentExchangeRate : 1)) * 100) / 100;
-      fp.mont_doc_bs = Math.round(fp.mont_doc * currentExchangeRate * 100) / 100;
-    }
+    handleCajaCtaChange(index);
   }
 
   function handleCajaCtaChange(index: number) {
