@@ -564,6 +564,38 @@
       return;
     }
 
+    // 1. Validar y limpiar retenciones de IVA/ISLR según si están habilitadas las secciones o no
+    for (const doc of documentos) {
+      if (checkedDocs[doc.nro_doc]) {
+        const inp = docInputs[doc.nro_doc];
+        if (inp.showIvaDetails && inp.reten_iva_bs > 0) {
+          const compNum = (inp.num_comprobante_iva || "").trim();
+          if (!compNum || compNum.toUpperCase() === "S/N" || compNum.toUpperCase() === "SN") {
+            toast.error(
+              `Debe ingresar el número de comprobante para la retención de IVA del documento ${doc.nro_doc}.`
+            );
+            saving = false;
+            return;
+          }
+        } else if (!inp.showIvaDetails) {
+          // Si está oculta, limpiar montos de retención para que no se cobren ni guarden
+          if (inp.reten_iva_bs > 0 || inp.reten_iva > 0) {
+            inp.reten_iva_bs = 0;
+            inp.reten_iva = 0;
+            recalculateDocAmounts(doc.nro_doc, doc);
+          }
+        }
+
+        if (!inp.showIslrDetails) {
+          if (inp.reten_islr_bs > 0 || inp.reten_islr > 0) {
+            inp.reten_islr_bs = 0;
+            inp.reten_islr = 0;
+            recalculateDocAmounts(doc.nro_doc, doc);
+          }
+        }
+      }
+    }
+
     saving = true;
     saveError = null;
 
@@ -635,8 +667,9 @@
     }
 
 
+
     const retenciones_iva = documentos
-      .filter((doc) => docInputs[doc.nro_doc].reten_iva > 0)
+      .filter((doc) => checkedDocs[doc.nro_doc] && docInputs[doc.nro_doc].reten_iva_bs > 0)
       .map((doc) => {
         const inp = docInputs[doc.nro_doc];
         const today = new Date();
@@ -655,14 +688,14 @@
           base_imponible: inp.base_imponible_iva_bs || 0,
           monto_ret_imp: inp.reten_iva_bs || 0,
           numero_documento_afectado: doc.nro_doc,
-          num_comprobante: inp.num_comprobante_iva || "S/N",
+          num_comprobante: inp.num_comprobante_iva ? inp.num_comprobante_iva.trim() : "",
           monto_excento: 0,
           alicuota: inp.alicuota_iva,
         };
       });
 
     const retenciones_islr = documentos
-      .filter((doc) => docInputs[doc.nro_doc].reten_islr > 0)
+      .filter((doc) => checkedDocs[doc.nro_doc] && docInputs[doc.nro_doc].reten_islr_bs > 0)
       .map((doc) => {
         const inp = docInputs[doc.nro_doc];
         return {
@@ -1150,9 +1183,17 @@
                                 >Reten. IVA ($)</label
                               >
                               <button
-                                onclick={() =>
-                                  (input.showIvaDetails =
-                                    !input.showIvaDetails)}
+                                onclick={() => {
+                                  input.showIvaDetails = !input.showIvaDetails;
+                                  if (!input.showIvaDetails) {
+                                    input.reten_iva_bs = 0;
+                                    input.reten_iva = 0;
+                                    input.manual_override_iva = true;
+                                  } else {
+                                    input.manual_override_iva = false;
+                                  }
+                                  recalculateDocAmounts(doc.nro_doc.trim(), doc);
+                                }}
                                 class="text-xs text-brand-500 font-bold hover:underline"
                               >
                                 {input.showIvaDetails ? "Cerrar" : "Editar"}
@@ -1185,9 +1226,17 @@
                                 >Reten. ISLR ($)</label
                               >
                               <button
-                                onclick={() =>
-                                  (input.showIslrDetails =
-                                    !input.showIslrDetails)}
+                                onclick={() => {
+                                  input.showIslrDetails = !input.showIslrDetails;
+                                  if (!input.showIslrDetails) {
+                                    input.reten_islr_bs = 0;
+                                    input.reten_islr = 0;
+                                    input.manual_override_islr = true;
+                                  } else {
+                                    input.manual_override_islr = false;
+                                  }
+                                  recalculateDocAmounts(doc.nro_doc.trim(), doc);
+                                }}
                                 class="text-xs text-brand-500 font-bold hover:underline"
                               >
                                 {input.showIslrDetails ? "Cerrar" : "Editar"}
@@ -1222,7 +1271,13 @@
                                 >Datos Comprobante Retención IVA</span
                               >
                               <button
-                                onclick={() => (input.showIvaDetails = false)}
+                                onclick={() => {
+                                  input.showIvaDetails = false;
+                                  input.reten_iva_bs = 0;
+                                  input.reten_iva = 0;
+                                  input.manual_override_iva = true;
+                                  recalculateDocAmounts(doc.nro_doc.trim(), doc);
+                                }}
                                 class="text-text-muted hover:text-text-base"
                                 ><X size={14} /></button
                               >
@@ -1296,7 +1351,13 @@
                                 >Datos Retención ISLR / Municipal</span
                               >
                               <button
-                                onclick={() => (input.showIslrDetails = false)}
+                                onclick={() => {
+                                  input.showIslrDetails = false;
+                                  input.reten_islr_bs = 0;
+                                  input.reten_islr = 0;
+                                  input.manual_override_islr = true;
+                                  recalculateDocAmounts(doc.nro_doc.trim(), doc);
+                                }}
                                 class="text-text-muted hover:text-text-base"
                                 ><X size={14} /></button
                               >
