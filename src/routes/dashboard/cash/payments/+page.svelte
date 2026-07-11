@@ -513,13 +513,13 @@
     const isBs = getRowCurrency(fp) === 'BS';
     if (isBs) {
       fp.mont_doc_bs = fp.mont_doc_bs || Math.round(fp.mont_doc * currentExchangeRate * 100) / 100;
-      if (Math.abs(diferenciaCuadreBs + fp.mont_doc_bs) < 5.00 && diferenciaCuadreBs !== 0) {
+      if (Math.abs(diferenciaCuadreBs) < 10.00 && diferenciaCuadreBs !== 0) {
         fp.mont_doc_bs = Math.round((fp.mont_doc_bs + diferenciaCuadreBs) * 100) / 100;
       }
       fp.mont_doc = Math.round((fp.mont_doc_bs / (currentExchangeRate > 0 ? currentExchangeRate : 1)) * 100) / 100;
     } else {
       fp.mont_doc = fp.mont_doc || Math.round((fp.mont_doc_bs / (currentExchangeRate > 0 ? currentExchangeRate : 1)) * 100) / 100;
-      if (Math.abs(diferenciaCuadre + fp.mont_doc) < 0.05 && diferenciaCuadre !== 0) {
+      if (Math.abs(diferenciaCuadre) < 0.20 && diferenciaCuadre !== 0) {
         fp.mont_doc = Math.round((fp.mont_doc + diferenciaCuadre) * 100) / 100;
       }
       fp.mont_doc_bs = Math.round(fp.mont_doc * currentExchangeRate * 100) / 100;
