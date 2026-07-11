@@ -1,6 +1,6 @@
-// src/routes/api/agent/payments/+server.ts
 import { json } from '@sveltejs/kit';
 import { AgentClient } from '$lib/server/agent';
+import { supabaseAdmin } from '$lib/server/supabase';
 import type { RequestHandler } from './$types';
 
 export const GET: RequestHandler = async ({ url, locals, fetch }) => {
@@ -81,6 +81,27 @@ export const POST: RequestHandler = async ({ request, url, locals, fetch }) => {
 			method: 'POST',
 			body: JSON.stringify(body)
 		});
+
+		if (resData && (resData.success || resData.success !== false)) {
+			try {
+				const docNum = resData.data?.doc_num || resData.doc_num || resData.results?.[0]?.doc_num || '';
+				await supabaseAdmin.from('audit_log').insert({
+					action: 'CREATE',
+					module: 'cash_payments',
+					record_id: docNum,
+					user_email: profile.email ?? 'system',
+					branch_id: branchId || branch.id,
+					metadata: {
+						message: `Cobro ${docNum} creado con éxito`,
+						doc_num: docNum,
+						client_code: body.co_cli,
+						total_monto: body.monto
+					}
+				});
+			} catch (auditError) {
+				console.error('Error al guardar log de auditoría de cobro:', auditError);
+			}
+		}
 
 		return json(resData);
 	} catch (e: any) {

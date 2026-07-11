@@ -126,6 +126,27 @@ export const POST: RequestHandler = async ({ request, locals, fetch: svelteFetch
             body: JSON.stringify(invoice)
         });
 
+        if (response && response.success !== false) {
+            try {
+                const docNum = response.results?.[0]?.doc_num || response.doc_num || '';
+                await supabaseAdmin.from('audit_log').insert({
+                    action: 'CREATE',
+                    module: 'cash_billing',
+                    record_id: docNum,
+                    user_email: profile.email ?? 'system',
+                    branch_id: branch_id,
+                    metadata: {
+                        message: `Factura ${docNum} creada con éxito`,
+                        doc_num: docNum,
+                        client_code: invoice.co_cli,
+                        total_neto: invoice.total_neto
+                    }
+                });
+            } catch (auditError) {
+                console.error('Error al guardar log de auditoría de creación de factura:', auditError);
+            }
+        }
+
         return json(response);
     } catch (err: any) {
         console.error('[API FACTURAS SAVE ERROR]:', err);
