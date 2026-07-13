@@ -305,7 +305,7 @@
         background: #fff;
         width: 21.59cm;
         height: 27.94cm;
-        padding: 0.6cm 0.8cm; /* Márgenes mínimos para maximizar espacio */
+        padding: 0.6cm 0.8cm 1.0cm 0.8cm; /* Aumentado margen inferior para evitar solapamientos con pie de página */
         box-sizing: border-box;
         box-shadow: 0 15px 50px rgba(0, 0, 0, 0.3);
         display: flex;
@@ -370,7 +370,7 @@
     .bs-total .val { font-size: 16px; font-weight: 900; }
     .usd-reference { margin-top: 2px; padding-top: 2px; border-top: 1px dashed #ddd; display: flex; justify-content: space-between; font-size: 8.5px; font-weight: bold; }
 
-    .page-footer { position: absolute; bottom: 0.3cm; left: 0; right: 0; text-align: center; font-size: 8px; font-weight: bold; color: #777; border-top: 1px solid #eee; padding-top: 3px; margin: 0 0.8cm; }
+    .page-footer { position: absolute; bottom: 0.3cm; left: 0; right: 0; text-align: center; font-size: 8px; font-weight: bold; color: #777; margin: 0 0.8cm; }
 
     @media print {
         :global(html, body) { background: #fff !important; overflow: hidden !important; }
