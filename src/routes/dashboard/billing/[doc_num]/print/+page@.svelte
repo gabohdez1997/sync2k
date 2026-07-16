@@ -31,7 +31,29 @@
     const rawImp = Number(invoice.monto_imp || 0);
     const rawNeto = Number(invoice.total_neto || 0);
     const hasIVA = rawImp > 0;
-    const docTitle = hasIVA ? "Factura" : "Nota de Entrega";
+
+    let defaultBranchCode = "";
+    if (branch && branch.profit_branch_codes) {
+        let codes = branch.profit_branch_codes;
+        if (typeof codes === "string") {
+            try { codes = JSON.parse(codes); } catch (e) {}
+        }
+        if (Array.isArray(codes)) {
+            const found = codes.find(
+                (c: any) =>
+                    c.is_default === true ||
+                    String(c.is_default) === "true" ||
+                    c.default === true
+            );
+            if (found) defaultBranchCode = found.code;
+        }
+    }
+
+    const invoiceSucu = String(invoice.co_sucu_in || "").trim().toUpperCase();
+    const cleanDefaultSucu = String(defaultBranchCode || "").trim().toUpperCase();
+    const isFiscalSucu = cleanDefaultSucu && invoiceSucu === cleanDefaultSucu;
+
+    const docTitle = isFiscalSucu || hasIVA ? "Factura" : "Nota de Entrega";
     
     // USD Mode
     const tasaDoc = Number(invoice.tasa || 1);

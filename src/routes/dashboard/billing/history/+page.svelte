@@ -58,6 +58,30 @@
     goto(`?${params.toString()}`);
   }
 
+  function isFiscalInvoice(invoice: any) {
+    if (Number(invoice.monto_imp) > 0) return true;
+    
+    // Buscar configuración de la sede de esta factura
+    const bConfig = data.branches?.find((b: any) => String(b.id).toLowerCase() === String(invoice.sede_id).toLowerCase());
+    if (!bConfig) return false;
+    
+    let codes = bConfig.profit_branch_codes;
+    if (typeof codes === "string") {
+      try { codes = JSON.parse(codes); } catch (e) {}
+    }
+    if (!Array.isArray(codes)) return false;
+    
+    const found = codes.find(
+      (c: any) =>
+        c.is_default === true ||
+        String(c.is_default) === "true" ||
+        c.default === true
+    );
+    if (!found) return false;
+    
+    return String(invoice.co_sucu_in || '').trim().toUpperCase() === String(found.code).trim().toUpperCase();
+  }
+
   function openVoidModal(invoice: any) {
     invoiceToVoid = invoice;
     voidPassword = "";
@@ -219,8 +243,8 @@
                     >
                       {invoice.doc_num}
                     </span>
-                    <span class="text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded-md {Number(invoice.monto_imp) > 0 ? 'bg-purple-500/10 text-purple-400 border border-purple-500/20' : 'bg-amber-500/10 text-amber-400 border border-amber-500/20'}">
-                      {Number(invoice.monto_imp) > 0 ? 'Factura' : 'Nota de Entrega'}
+                    <span class="text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded-md {isFiscalInvoice(invoice) ? 'bg-purple-500/10 text-purple-400 border border-purple-500/20' : 'bg-amber-500/10 text-amber-400 border border-amber-500/20'}">
+                      {isFiscalInvoice(invoice) ? 'Factura' : 'Nota de Entrega'}
                     </span>
                   </div>
                 </td>
@@ -295,7 +319,7 @@
                       href="/dashboard/billing/{invoice.doc_num}/print?branch_id={data.selectedBranchId}"
                       target="_blank"
                       class="p-2 text-text-muted hover:text-brand-500 hover:bg-brand-500/10 rounded-xl transition-all cursor-pointer flex items-center justify-center"
-                      title={Number(invoice.monto_imp) > 0 ? 'Reimprimir Factura' : 'Reimprimir Nota de Entrega'}
+                      title={isFiscalInvoice(invoice) ? 'Reimprimir Factura' : 'Reimprimir Nota de Entrega'}
                     >
                       <Printer size={18} />
                     </a>
@@ -305,7 +329,7 @@
                       <button
                         onclick={() => openVoidModal(invoice)}
                         class="p-2 text-text-muted hover:text-red-500 hover:bg-red-500/10 rounded-xl transition-all cursor-pointer"
-                        title="Anular Factura"
+                        title={isFiscalInvoice(invoice) ? 'Anular Factura' : 'Anular Nota de Entrega'}
                       >
                         <Ban size={18} />
                       </button>

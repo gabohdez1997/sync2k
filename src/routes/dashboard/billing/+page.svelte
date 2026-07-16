@@ -81,6 +81,63 @@
   let enableIgtf = $state(false);
   let igtfMontoDivisa = $state<number | null>(null);
 
+  // Branch Confirmation Modal State for Service items
+  let showServiceSucuModal = $state(false);
+  let pendingSaveResolve = $state<((value: string | null) => void) | null>(null);
+
+  const selectedBranchConfig = $derived(
+    data.branches?.find(
+      (b: any) => String(b.id).toLowerCase() === String(filterSede).toLowerCase()
+    )
+  );
+
+  const profitBranchCodes = $derived.by(() => {
+    if (!selectedBranchConfig?.profit_branch_codes) return [];
+    let codes = selectedBranchConfig.profit_branch_codes;
+    if (typeof codes === "string") {
+      try {
+        codes = JSON.parse(codes);
+      } catch (e) {
+        return [];
+      }
+    }
+    return Array.isArray(codes) ? codes : [];
+  });
+
+  const defaultBranchCode = $derived.by(() => {
+    const found = profitBranchCodes.find(
+      (c: any) =>
+        c.is_default === true ||
+        String(c.is_default) === "true" ||
+        c.default === true
+    );
+    return found ? found.code : "";
+  });
+
+  const nonDefaultBranchCode = $derived.by(() => {
+    const found = profitBranchCodes.find(
+      (c: any) =>
+        c.is_default === false ||
+        String(c.is_default) === "false" ||
+        !c.is_default
+    );
+    return found ? found.code : "";
+  });
+
+  async function askServiceSucuConfirmation(): Promise<string | null> {
+    return new Promise((resolve) => {
+      showServiceSucuModal = true;
+      pendingSaveResolve = resolve;
+    });
+  }
+
+  $effect(() => {
+    console.log("🏢 [BILLING] filterSede:", filterSede);
+    console.log("🏢 [BILLING] selectedBranchConfig:", selectedBranchConfig);
+    console.log("🏢 [BILLING] defaultBranchCode:", defaultBranchCode);
+    console.log("🏢 [BILLING] nonDefaultBranchCode:", nonDefaultBranchCode);
+  });
+
   function toggleCurrency(val: boolean) {
     showUSD = val;
   }
@@ -361,6 +418,22 @@
       return;
     }
 
+    // --- CHECK SINGLE SERVICE FORCE BRANCH ---
+    let forceSucu: string | null = null;
+    const isSingleService = activeLines.length === 1 && (
+      activeLines[0].co_lin === '09' || 
+      String(activeLines[0].co_art || '').trim().startsWith('09')
+    );
+
+    if (isSingleService) {
+      const choice = await askServiceSucuConfirmation();
+      if (choice === null) {
+        // User cancelled the operation
+        return;
+      }
+      forceSucu = choice;
+    }
+
     isSavingInvoice = true;
 
     const tasa = activeTasa;
@@ -374,6 +447,7 @@
       comentario: `Importado de pedidos: ${originOrderNum}`,
       tasa: tasa,
       igtf_monto_divisa: enableIgtf ? Number(igtfMontoDivisa || 0) : 0,
+      force_sucu: forceSucu,
       renglones: activeLines.map((line: any) => ({
         co_art: line.co_art,
         art_des: line.art_des,
@@ -1138,3 +1212,72 @@
     {/if}
   </div>
 {/if}
+
+{#if showServiceSucuModal}
+  <div
+    class="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
+    in:fade
+  >
+    <!-- svelte-ignore a11y_click_events_have_key_events -->
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <div
+      class="fixed inset-0"
+      onclick={() => {
+        showServiceSucuModal = false;
+        if (pendingSaveResolve) pendingSaveResolve(null);
+      }}
+    ></div>
+
+    <div
+      class="w-full max-w-md bg-surface-base border border-border-subtle rounded-[32px] shadow-2xl p-8 space-y-6 text-center relative z-[130]"
+      in:scale={{ duration: 200, start: 0.95 }}
+    >
+      <div class="h-16 w-16 rounded-2xl bg-brand-500/10 flex items-center justify-center text-brand-400 mx-auto">
+        <Receipt size={32} />
+      </div>
+      
+      <div class="space-y-2">
+        <h3 class="text-xl font-black text-text-base">Emisión de Documento</h3>
+        <p class="text-xs text-text-muted leading-relaxed">
+          El pedido contiene únicamente un renglón de servicio (exento). ¿Desea emitir el documento como Fiscal?
+        </p>
+        {#if selectedBranchConfig}
+          <p class="text-[10px] text-text-muted/60 font-mono">
+            Sede: {selectedBranchConfig.name} | Fiscal ({defaultBranchCode || 'N/A'}) - Nota ({nonDefaultBranchCode || 'N/A'})
+          </p>
+        {/if}
+      </div>
+
+      <div class="flex flex-col gap-3">
+        <button
+          onclick={() => {
+            showServiceSucuModal = false;
+            if (pendingSaveResolve) pendingSaveResolve(defaultBranchCode);
+          }}
+          class="w-full h-12 bg-brand-600 hover:bg-brand-500 text-white rounded-xl font-bold transition-all text-sm flex items-center justify-center gap-2 cursor-pointer border-none"
+        >
+          SÍ (Fiscal - {defaultBranchCode})
+        </button>
+        <button
+          onclick={() => {
+            showServiceSucuModal = false;
+            if (pendingSaveResolve) pendingSaveResolve(nonDefaultBranchCode || defaultBranchCode);
+          }}
+          class="w-full h-12 bg-surface-strong hover:bg-surface-base text-text-base border border-border-subtle rounded-xl font-bold transition-all text-sm flex items-center justify-center gap-2 cursor-pointer"
+        >
+          NO (Nota de Entrega - {nonDefaultBranchCode || defaultBranchCode})
+        </button>
+        <button
+          onclick={() => {
+            showServiceSucuModal = false;
+            if (pendingSaveResolve) pendingSaveResolve(null);
+          }}
+          class="w-full h-12 bg-transparent hover:bg-white/5 text-text-muted rounded-xl font-bold transition-all text-sm cursor-pointer border-none"
+        >
+          Cancelar
+        </button>
+      </div>
+    </div>
+  </div>
+{/if}
+

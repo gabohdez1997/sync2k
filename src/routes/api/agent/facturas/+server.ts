@@ -120,7 +120,7 @@ export const POST: RequestHandler = async ({ request, locals, fetch: svelteFetch
             agent_api_key: branch.agent_token
         }, profile, svelteFetch);
 
-        console.log('[API /api/agent/facturas] Sending save request to agent...');
+        console.log('[API /api/agent/facturas] Sending save request to agent. Invoice payload:', JSON.stringify(invoice, null, 2));
         const response = await agentClient.request<any>(`/facturas?sede=${branch_id}`, {
             method: 'POST',
             body: JSON.stringify(invoice)
