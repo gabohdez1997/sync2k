@@ -63,8 +63,57 @@
     >
   >({});
 
-  // Formas de Pago agregadas
   let formasPago = $state<any[]>([]);
+
+  // Reactivo: Auto-distribuir el total de instrumentos de pago a las facturas seleccionadas
+  $effect(() => {
+    // Total de instrumentos de pago en Bs y USD a distribuir
+    let remainingPaymentBs = totalInstrumentosPagoBs;
+    let remainingPaymentUsd = totalInstrumentosPago;
+
+    // Procesar todos los documentos cargados
+    for (const doc of documentos) {
+      const nro = doc.nro_doc.trim();
+      const inp = docInputs[nro];
+      if (!inp) continue;
+
+      if (!checkedDocs[nro]) {
+        inp.mont_cob = 0;
+        inp.mont_cob_bs = 0;
+        continue;
+      }
+
+      const docTasa = doc.tasa > 0 ? doc.tasa : 1;
+      const isNC = doc.co_tipo_doc.trim() === "N/CR";
+
+      if (isNC) {
+        // Notas de Crédito restan saldo (abono negativo)
+        const saldoUsd = Math.round((doc.saldo / docTasa) * 100) / 100;
+        inp.mont_cob_bs = -doc.saldo;
+        inp.mont_cob = -saldoUsd;
+      } else {
+        // Documentos normales (Facturas, etc.)
+        const retIvaBs = Number(inp.reten_iva_bs) || 0;
+        const retIslrBs = Number(inp.reten_islr_bs) || 0;
+        
+        const retIvaUsd = Number(inp.reten_iva) || 0;
+        const retIslrUsd = Number(inp.reten_islr) || 0;
+
+        const maxAbonoBs = Math.max(0, Math.round((doc.saldo - retIvaBs - retIslrBs) * 100) / 100);
+        const maxAbonoUsd = Math.max(0, Math.round(((doc.saldo / docTasa) - retIvaUsd - retIslrUsd) * 100) / 100);
+
+        // Si tenemos saldo de pago, lo aplicamos
+        const appliedBs = Math.min(remainingPaymentBs, maxAbonoBs);
+        const appliedUsd = Math.min(remainingPaymentUsd, maxAbonoUsd);
+
+        inp.mont_cob_bs = Math.round(appliedBs * 100) / 100;
+        inp.mont_cob = Math.round(appliedUsd * 100) / 100;
+
+        remainingPaymentBs = Math.max(0, Math.round((remainingPaymentBs - appliedBs) * 100) / 100);
+        remainingPaymentUsd = Math.max(0, Math.round((remainingPaymentUsd - appliedUsd) * 100) / 100);
+      }
+    }
+  });
 
   // Modal toggle
   let showImportModal = $state(false);
@@ -112,6 +161,34 @@
     ),
   );
 
+  let totalRetenidoIvaVista = $derived(
+    documentos.reduce((acc, doc) => {
+      if (checkedDocs[doc.nro_doc.trim()]) {
+        const docTasa = doc.tasa > 0 ? doc.tasa : 1;
+        const inp = docInputs[doc.nro_doc.trim()];
+        if (inp) {
+          const porcIva = selectedClient ? (Number(selectedClient.porc_esp) || 0) : 0;
+          const theoreticalRetIvaBs = Math.round((doc.monto_imp || 0) * (porcIva / 100) * 100) / 100;
+          const theoreticalRetIvaUsd = Math.round((theoreticalRetIvaBs / docTasa) * 100) / 100;
+          return acc + Math.max(inp.reten_iva || 0, theoreticalRetIvaUsd);
+        }
+      }
+      return acc;
+    }, 0)
+  );
+
+  let totalRetenidoIslrVista = $derived(
+    documentos.reduce((acc, doc) => {
+      if (checkedDocs[doc.nro_doc.trim()]) {
+        const inp = docInputs[doc.nro_doc.trim()];
+        if (inp) {
+          return acc + (inp.reten_islr || 0);
+        }
+      }
+      return acc;
+    }, 0)
+  );
+
   let totalIgtfBs = $derived(
     documentos.reduce((acc, doc) => {
       if (checkedDocs[doc.nro_doc.trim()]) {
@@ -141,6 +218,28 @@
 
   let totalInstrumentosPago = $derived(
     formasPago.reduce((acc, curr) => acc + (Number(curr.mont_doc) || 0), 0),
+  );
+
+  let saldoPendientePorCobrar = $derived(
+    documentos.reduce((acc, doc) => {
+      if (checkedDocs[doc.nro_doc.trim()]) {
+        const docTasa = doc.tasa > 0 ? doc.tasa : 1;
+        const saldoUsd = doc.saldo / docTasa;
+        const inp = docInputs[doc.nro_doc.trim()];
+        if (inp) {
+          const porcIva = selectedClient ? (Number(selectedClient.porc_esp) || 0) : 0;
+          const theoreticalRetIvaBs = Math.round((doc.monto_imp || 0) * (porcIva / 100) * 100) / 100;
+          const theoreticalRetIvaUsd = Math.round((theoreticalRetIvaBs / docTasa) * 100) / 100;
+          
+          const appliedRetIva = Math.max(inp.reten_iva || 0, theoreticalRetIvaUsd);
+          const appliedRetIslr = inp.reten_islr || 0;
+          
+          return acc + saldoUsd - appliedRetIva - appliedRetIslr;
+        }
+        return acc + saldoUsd;
+      }
+      return acc;
+    }, 0) - totalCobradoNeto
   );
 
   let diferenciaCuadreBs = $derived(
@@ -366,6 +465,7 @@
             showIslrDetails: false,
             manual_override_iva: false,
             manual_override_islr: false,
+            manual_override_abono: false,
           };
 
           if (isTargetDoc) {
@@ -391,56 +491,49 @@
     if (!input) return;
 
     const docTasa = doc.tasa > 0 ? doc.tasa : 1;
-    const saldoUsd = Math.round((doc.saldo / docTasa) * 100) / 100;
-    const isNC = doc.co_tipo_doc.trim() === "N/CR";
 
     if (checkedDocs[nroDoc]) {
-      if (
-        selectedClient?.contribu_e &&
-        doc.monto_imp > 0 &&
-        input.reten_iva === 0 &&
-        !input.manual_override_iva
-      ) {
-        const porc = Number(selectedClient.porc_esp) || 75;
-        input.reten_iva_bs = Math.round(doc.monto_imp * (porc / 100) * 100) / 100;
-        input.reten_iva = Math.round((input.reten_iva_bs / docTasa) * 100) / 100;
+      // Retención de IVA
+      if (input.showIvaDetails) {
+        if (!input.manual_override_iva && input.reten_iva === 0) {
+          const porc = Number(selectedClient.porc_esp) || 75;
+          input.reten_iva_bs = Math.round(doc.monto_imp * (porc / 100) * 100) / 100;
+          input.reten_iva = Math.round((input.reten_iva_bs / docTasa) * 100) / 100;
 
-        input.base_imponible_iva_bs = doc.total_neto - doc.monto_imp - (doc.otros1 || 0);
-        input.base_imponible_iva =
-          Math.round((input.base_imponible_iva_bs / docTasa) * 100) / 100;
-        input.alicuota_iva = 16;
-        input.showIvaDetails = true;
-      } else if (input.manual_override_iva) {
-        input.reten_iva_bs = Math.round((input.reten_iva || 0) * docTasa * 100) / 100;
-      }
-
-      if (input.manual_override_islr) {
-        input.reten_islr_bs = Math.round((input.reten_islr || 0) * docTasa * 100) / 100;
-      }
-
-      if (isNC) {
-        input.mont_cob_bs = -doc.saldo;
-        input.mont_cob = -saldoUsd;
-        input.reten_iva_bs = 0;
-        input.reten_iva = 0;
-        input.reten_islr_bs = 0;
-        input.reten_islr = 0;
+          input.base_imponible_iva_bs = doc.total_neto - doc.monto_imp - (doc.otros1 || 0);
+          input.base_imponible_iva =
+            Math.round((input.base_imponible_iva_bs / docTasa) * 100) / 100;
+          input.alicuota_iva = 16;
+        } else if (input.manual_override_iva) {
+          input.reten_iva_bs = Math.round((input.reten_iva || 0) * docTasa * 100) / 100;
+        }
       } else {
-        input.reten_iva_bs = input.reten_iva_bs || 0;
-        input.reten_islr_bs = input.reten_islr_bs || 0;
+        input.reten_iva = 0;
+        input.reten_iva_bs = 0;
+        input.num_comprobante_iva = "";
+      }
 
-        input.mont_cob_bs = Math.round((doc.saldo - input.reten_iva_bs - input.reten_islr_bs) * 100) / 100;
-        input.mont_cob = Math.round((input.mont_cob_bs / docTasa) * 100) / 100;
+      // Retención de ISLR
+      if (input.showIslrDetails) {
+        if (!input.manual_override_islr && input.reten_islr === 0) {
+          const baseImpBs = doc.total_neto - doc.monto_imp;
+          input.reten_islr_bs = Math.round(baseImpBs * (input.porc_islr / 100) * 100) / 100;
+          input.reten_islr = Math.round((input.reten_islr_bs / docTasa) * 100) / 100;
+        } else if (input.manual_override_islr) {
+          input.reten_islr_bs = Math.round((input.reten_islr || 0) * docTasa * 100) / 100;
+        }
+      } else {
+        input.reten_islr = 0;
+        input.reten_islr_bs = 0;
       }
     } else {
-      input.mont_cob = 0;
-      input.mont_cob_bs = 0;
       input.reten_iva = 0;
       input.reten_iva_bs = 0;
       input.manual_override_iva = false;
       input.reten_islr = 0;
       input.reten_islr_bs = 0;
       input.manual_override_islr = false;
+      input.manual_override_abono = false;
       input.showIvaDetails = false;
       input.showIslrDetails = false;
     }
@@ -550,13 +643,6 @@
   let generatedDocNum = $state("");
 
   async function saveCobro() {
-    if (diferenciaCuadre !== 0) {
-      toast.error(
-        "El cobro no está cuadrado. La diferencia de cuadre debe ser exactamente 0.",
-      );
-      return;
-    }
-
     // 1. Validar y limpiar retenciones de IVA/ISLR según si están habilitadas las secciones o no
     for (const doc of documentos) {
       if (checkedDocs[doc.nro_doc]) {
@@ -1195,7 +1281,11 @@
                             <input
                               type="number"
                               step="0.01"
-                              bind:value={input.reten_iva}
+                              value={input.showIvaDetails ? input.reten_iva : (() => {
+                                const porcIva = selectedClient ? (Number(selectedClient.porc_esp) || 0) : 0;
+                                const theoreticalRetIvaBs = Math.round((doc.monto_imp || 0) * (porcIva / 100) * 100) / 100;
+                                return Math.round((theoreticalRetIvaBs / (doc.tasa > 0 ? doc.tasa : 1)) * 100) / 100;
+                              })()}
                               readonly
                               class="w-full bg-surface-soft border border-border-subtle px-3 py-2 rounded-xl text-sm font-bold text-green-400 text-right cursor-not-allowed opacity-90"
                             />
@@ -1203,7 +1293,10 @@
                               class="block text-xs text-green-500 font-black text-right mt-1.5"
                             >
                               Bs. {(
-                                input.reten_iva_bs || 0
+                                input.showIvaDetails ? (input.reten_iva_bs || 0) : (() => {
+                                  const porcIva = selectedClient ? (Number(selectedClient.porc_esp) || 0) : 0;
+                                  return Math.round((doc.monto_imp || 0) * (porcIva / 100) * 100) / 100;
+                                })()
                               ).toLocaleString("de-DE", {
                                 minimumFractionDigits: 2,
                               })}
@@ -1444,29 +1537,29 @@
                           </div>
                         {/if}
 
-                        <!-- Neto Cobrado Calculado -->
-                        {#if doc.co_tipo_doc.trim() !== "N/CR"}
+                        <!-- Neto Cobrado Calculado (Solo Lectura) -->
+                        {#if doc.co_tipo_doc.trim() !== "N/CR" && input.mont_cob > 0}
                           <div
-                            class="flex items-center justify-between border-t border-border-subtle/40 pt-3"
+                            class="flex flex-col sm:flex-row sm:items-center justify-between border-t border-border-subtle/40 pt-3 gap-3"
                           >
                             <span class="text-xs text-text-muted font-bold"
-                              >Monto Neto a cobrar por este documento (Abono):</span
+                              >Monto Abonado por este documento:</span
                             >
-                            <div class="text-right">
-                              <span class="text-base font-black text-brand-500">
-                                $ {input.mont_cob.toLocaleString("de-DE", {
-                                  minimumFractionDigits: 2,
-                                })}
+                            <div class="flex items-center gap-3">
+                              <span class="text-sm font-bold text-brand-400 font-mono">
+                                $ {input.mont_cob.toLocaleString("de-DE", { minimumFractionDigits: 2 })}
                               </span>
-                              <span
-                                class="block text-xs text-text-muted font-bold mt-1"
-                              >
-                                Bs. {(
-                                  input.mont_cob_bs || 0
-                                ).toLocaleString("de-DE", {
-                                  minimumFractionDigits: 2,
-                                })}
-                              </span>
+                              <div class="text-right shrink-0 min-w-[120px]">
+                                <span
+                                  class="block text-xs text-text-muted font-bold"
+                                >
+                                  Bs. {(
+                                    input.mont_cob_bs || 0
+                                  ).toLocaleString("de-DE", {
+                                    minimumFractionDigits: 2,
+                                  })}
+                                </span>
+                              </div>
                             </div>
                           </div>
                         {/if}
@@ -1517,7 +1610,7 @@
             >
               <span>Retenciones IVA</span>
               <span class="font-mono text-green-400"
-                >$ {totalRetenidoIva.toLocaleString("de-DE", {
+                >$ {totalRetenidoIvaVista.toLocaleString("de-DE", {
                   minimumFractionDigits: 2,
                 })}</span
               >
@@ -1527,7 +1620,7 @@
             >
               <span>Retenciones ISLR</span>
               <span class="font-mono text-amber-300"
-                >$ {totalRetenidoIslr.toLocaleString("de-DE", {
+                >$ {totalRetenidoIslrVista.toLocaleString("de-DE", {
                   minimumFractionDigits: 2,
                 })}</span
               >
@@ -1583,12 +1676,12 @@
               <div>
                 <span
                   class="text-[10px] font-black uppercase tracking-[0.2em] text-brand-400/60 block mb-2"
-                  >Total Neto Cobrado</span
+                  >Saldo pendiente por cobrar</span
                 >
                 <div
                   class="text-5xl font-black text-text-base drop-shadow-[0_4px_12px_rgba(var(--brand-rgb),0.3)] tracking-tight leading-none text-brand-400"
                 >
-                  $ {totalCobradoNeto.toLocaleString("de-DE", {
+                  $ {saldoPendientePorCobrar.toLocaleString("de-DE", {
                     minimumFractionDigits: 2,
                     maximumFractionDigits: 2,
                   })}
@@ -1834,7 +1927,8 @@
         <!-- BOTÓN DE GUARDADO H-20 DIRECTO -->
         {#if selectedClient}
           <button
-            disabled={diferenciaCuadre !== 0 ||
+            disabled={formasPago.length === 0 ||
+              totalInstrumentosPago <= 0 ||
               saving ||
               !documentos.some((doc) => checkedDocs[doc.nro_doc])}
             onclick={saveCobro}

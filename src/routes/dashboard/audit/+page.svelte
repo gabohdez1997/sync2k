@@ -292,7 +292,7 @@
               <td class="px-8 py-5 text-right">
                 <button 
                   onclick={() => { selectedLog = log; showDetailModal = true; }}
-                  class="h-10 w-10 flex items-center justify-center rounded-xl bg-white/5 hover:bg-brand-500/10 text-text-muted hover:text-brand-400 transition-all active:scale-95"
+                  class="p-2 text-text-muted hover:text-brand-500 hover:bg-brand-500/10 rounded-xl transition-all cursor-pointer inline-flex items-center justify-center"
                   title="Ver detalles completos"
                 >
                   <Eye size={18} />
