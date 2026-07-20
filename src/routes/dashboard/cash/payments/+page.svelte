@@ -166,8 +166,8 @@
       if (checkedDocs[doc.nro_doc.trim()]) {
         const docTasa = doc.tasa > 0 ? doc.tasa : 1;
         const inp = docInputs[doc.nro_doc.trim()];
-        if (inp) {
-          const porcIva = selectedClient ? (Number(selectedClient.porc_esp) || 0) : 0;
+        if (inp && inp.showIvaDetails) {
+          const porcIva = (selectedClient && selectedClient.contribu_e) ? (Number(selectedClient.porc_esp) || 0) : 0;
           const theoreticalRetIvaBs = Math.round((doc.monto_imp || 0) * (porcIva / 100) * 100) / 100;
           const theoreticalRetIvaUsd = Math.round((theoreticalRetIvaBs / docTasa) * 100) / 100;
           return acc + Math.max(inp.reten_iva || 0, theoreticalRetIvaUsd);
@@ -181,7 +181,7 @@
     documentos.reduce((acc, doc) => {
       if (checkedDocs[doc.nro_doc.trim()]) {
         const inp = docInputs[doc.nro_doc.trim()];
-        if (inp) {
+        if (inp && inp.showIslrDetails) {
           return acc + (inp.reten_islr || 0);
         }
       }
@@ -220,26 +220,50 @@
     formasPago.reduce((acc, curr) => acc + (Number(curr.mont_doc) || 0), 0),
   );
 
-  let saldoPendientePorCobrar = $derived(
+  // Monto neto esperado a cobrar en efectivo/instrumentos (saldo - retenciones) independiente de los instrumentos
+  let expectedNetPayBs = $derived(
+    documentos.reduce((acc, doc) => {
+      if (checkedDocs[doc.nro_doc.trim()]) {
+        const isNC = doc.co_tipo_doc.trim() === "N/CR";
+        if (isNC) return acc - doc.saldo;
+        const inp = docInputs[doc.nro_doc.trim()];
+        if (inp) {
+          const porcIva = (selectedClient && selectedClient.contribu_e) ? (Number(selectedClient.porc_esp) || 0) : 0;
+          const theoreticalRetIvaBs = Math.round((doc.monto_imp || 0) * (porcIva / 100) * 100) / 100;
+          const appliedRetIvaBs = inp.showIvaDetails ? Math.max(inp.reten_iva_bs || 0, theoreticalRetIvaBs) : 0;
+          const appliedRetIslrBs = inp.showIslrDetails ? (inp.reten_islr_bs || 0) : 0;
+          return acc + doc.saldo - appliedRetIvaBs - appliedRetIslrBs;
+        }
+        return acc + doc.saldo;
+      }
+      return acc;
+    }, 0)
+  );
+
+  let expectedNetPayUsd = $derived(
     documentos.reduce((acc, doc) => {
       if (checkedDocs[doc.nro_doc.trim()]) {
         const docTasa = doc.tasa > 0 ? doc.tasa : 1;
-        const saldoUsd = doc.saldo / docTasa;
+        const isNC = doc.co_tipo_doc.trim() === "N/CR";
+        if (isNC) return acc - Math.round((doc.saldo / docTasa) * 100) / 100;
         const inp = docInputs[doc.nro_doc.trim()];
         if (inp) {
-          const porcIva = selectedClient ? (Number(selectedClient.porc_esp) || 0) : 0;
+          const porcIva = (selectedClient && selectedClient.contribu_e) ? (Number(selectedClient.porc_esp) || 0) : 0;
           const theoreticalRetIvaBs = Math.round((doc.monto_imp || 0) * (porcIva / 100) * 100) / 100;
           const theoreticalRetIvaUsd = Math.round((theoreticalRetIvaBs / docTasa) * 100) / 100;
-          
-          const appliedRetIva = Math.max(inp.reten_iva || 0, theoreticalRetIvaUsd);
-          const appliedRetIslr = inp.reten_islr || 0;
-          
+          const appliedRetIva = inp.showIvaDetails ? Math.max(inp.reten_iva || 0, theoreticalRetIvaUsd) : 0;
+          const appliedRetIslr = inp.showIslrDetails ? (inp.reten_islr || 0) : 0;
+          const saldoUsd = Math.round((doc.saldo / docTasa) * 100) / 100;
           return acc + saldoUsd - appliedRetIva - appliedRetIslr;
         }
-        return acc + saldoUsd;
+        return acc + Math.round((doc.saldo / docTasa) * 100) / 100;
       }
       return acc;
-    }, 0) - totalCobradoNeto
+    }, 0)
+  );
+
+  let saldoPendientePorCobrar = $derived(
+    Math.max(0, Math.round((expectedNetPayUsd - totalInstrumentosPago) * 100) / 100)
   );
 
   let diferenciaCuadreBs = $derived(
@@ -392,7 +416,7 @@
       descripcion: inv.cli_des ? inv.cli_des.trim() : "",
       rif: inv.rif ? inv.rif.trim() : "",
       contribu_e: !!inv.contribu_e,
-      porc_esp: inv.porc_esp || 75,
+      porc_esp: inv.contribu_e ? (inv.porc_esp || 75) : 0,
       co_ven: inv.co_ven ? inv.co_ven.trim() : "",
       co_mone: inv.co_mone ? inv.co_mone.trim() : "USD",
       direc1: "",
@@ -548,6 +572,9 @@
   }
 
   function addFormaPago() {
+    // Calcular el monto pendiente = neto esperado - instrumentos ya agregados
+    const pendingBs = Math.max(0, Math.round((expectedNetPayBs - totalInstrumentosPagoBs) * 100) / 100);
+    const pendingUsd = Math.max(0, Math.round((expectedNetPayUsd - totalInstrumentosPago) * 100) / 100);
     const initialFp = {
       forma_pag: "EF",
       cod_caja: data.cajas[0]?.cod_caja || "",
@@ -561,10 +588,10 @@
     };
     const isBs = getRowCurrency(initialFp) === 'BS';
     if (isBs) {
-      initialFp.mont_doc_bs = diferenciaCuadreBs > 0 ? diferenciaCuadreBs : 0;
-      initialFp.mont_doc = Math.round((initialFp.mont_doc_bs / currentExchangeRate) * 100) / 100;
+      initialFp.mont_doc_bs = pendingBs;
+      initialFp.mont_doc = Math.round((initialFp.mont_doc_bs / (currentExchangeRate > 0 ? currentExchangeRate : 1)) * 100) / 100;
     } else {
-      initialFp.mont_doc = diferenciaCuadre > 0 ? diferenciaCuadre : 0;
+      initialFp.mont_doc = pendingUsd;
       initialFp.mont_doc_bs = Math.round(initialFp.mont_doc * currentExchangeRate * 100) / 100;
     }
     formasPago.push(initialFp);
@@ -1282,7 +1309,7 @@
                               type="number"
                               step="0.01"
                               value={input.showIvaDetails ? input.reten_iva : (() => {
-                                const porcIva = selectedClient ? (Number(selectedClient.porc_esp) || 0) : 0;
+                                const porcIva = (selectedClient && selectedClient.contribu_e) ? (Number(selectedClient.porc_esp) || 0) : 0;
                                 const theoreticalRetIvaBs = Math.round((doc.monto_imp || 0) * (porcIva / 100) * 100) / 100;
                                 return Math.round((theoreticalRetIvaBs / (doc.tasa > 0 ? doc.tasa : 1)) * 100) / 100;
                               })()}
@@ -1294,7 +1321,7 @@
                             >
                               Bs. {(
                                 input.showIvaDetails ? (input.reten_iva_bs || 0) : (() => {
-                                  const porcIva = selectedClient ? (Number(selectedClient.porc_esp) || 0) : 0;
+                                  const porcIva = (selectedClient && selectedClient.contribu_e) ? (Number(selectedClient.porc_esp) || 0) : 0;
                                   return Math.round((doc.monto_imp || 0) * (porcIva / 100) * 100) / 100;
                                 })()
                               ).toLocaleString("de-DE", {
@@ -1927,8 +1954,7 @@
         <!-- BOTÓN DE GUARDADO H-20 DIRECTO -->
         {#if selectedClient}
           <button
-            disabled={formasPago.length === 0 ||
-              totalInstrumentosPago <= 0 ||
+            disabled={(expectedNetPayUsd > 0 && (formasPago.length === 0 || totalInstrumentosPago <= 0)) ||
               saving ||
               !documentos.some((doc) => checkedDocs[doc.nro_doc])}
             onclick={saveCobro}
