@@ -8,6 +8,27 @@
 
 	onMount(() => {
 		initTheme();
+
+		const handleChunkError = (event: ErrorEvent | PromiseRejectionEvent) => {
+			const errorMsg = 'reason' in event ? event.reason?.message : event.message;
+			if (
+				errorMsg &&
+				(errorMsg.includes('Failed to fetch dynamically imported module') ||
+					errorMsg.includes('Importing a module script failed') ||
+					errorMsg.includes('_app/immutable'))
+			) {
+				console.warn('Nueva versión detectada en producción. Recargando aplicación...');
+				window.location.reload();
+			}
+		};
+
+		window.addEventListener('error', handleChunkError);
+		window.addEventListener('unhandledrejection', handleChunkError);
+
+		return () => {
+			window.removeEventListener('error', handleChunkError);
+			window.removeEventListener('unhandledrejection', handleChunkError);
+		};
 	});
 </script>
 
