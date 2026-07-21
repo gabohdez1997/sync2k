@@ -7,7 +7,10 @@ const config = {
 	preprocess: vitePreprocess(),
 
 	kit: {
-		adapter: adapter()
+		adapter: adapter(),
+		version: {
+			pollInterval: 60000
+		}
 	},
 
 	vitePlugin: {
