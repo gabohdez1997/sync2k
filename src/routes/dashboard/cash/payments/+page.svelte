@@ -1,5 +1,6 @@
 <!-- src/routes/dashboard/cash/payments/+page.svelte -->
 <script lang="ts">
+  import { fade, slide } from "svelte/transition";
   import { page } from "$app/stores";
   import { goto } from "$app/navigation";
   import {
@@ -25,7 +26,6 @@
     ShoppingBag,
     Clock,
   } from "lucide-svelte";
-  import { fade } from "svelte/transition";
   import { toast } from "svelte-sonner";
   import ImportItemCard from "$lib/components/ui/ImportItemCard.svelte";
 
@@ -118,19 +118,70 @@
   // Modal toggle
   let showImportModal = $state(false);
 
+  // Monto neto esperado a cobrar en efectivo/instrumentos (saldo - retenciones + diferencial N/DB) independiente de los instrumentos
+  let expectedNetPayBs = $derived(
+    Math.round(
+      documentos.reduce((acc, doc) => {
+        if (checkedDocs[doc.nro_doc.trim()]) {
+          const isNC = doc.co_tipo_doc.trim() === "N/CR";
+          if (isNC) return acc - doc.saldo;
+          const inp = docInputs[doc.nro_doc.trim()];
+          if (inp) {
+            const porcIva = (selectedClient && selectedClient.contribu_e) ? (Number(selectedClient.porc_esp) || 0) : 0;
+            const theoreticalRetIvaBs = Math.round((doc.monto_imp || 0) * (porcIva / 100) * 100) / 100;
+            const appliedRetIvaBs = inp.showIvaDetails ? Math.max(inp.reten_iva_bs || 0, theoreticalRetIvaBs) : 0;
+            const appliedRetIslrBs = inp.showIslrDetails ? (inp.reten_islr_bs || 0) : 0;
+
+            // Cálculo del diferencial cambiario N/DB si la factura es de una fecha anterior
+            const docFecEmisStr = doc.fec_emis ? new Date(doc.fec_emis).toISOString().split('T')[0] : '';
+            const todayStr = new Date().toISOString().split('T')[0];
+            const isPreviousDateDoc = docFecEmisStr && docFecEmisStr < todayStr;
+            const docTasa = doc.tasa > 0 ? doc.tasa : 1;
+            let diffBs = 0;
+            if (isPreviousDateDoc && doc.saldo > 0 && currentExchangeRate > docTasa) {
+              const saldoUsd = doc.saldo / docTasa;
+              const montoBsActual = Math.round((saldoUsd * currentExchangeRate) * 100) / 100;
+              diffBs = Math.max(0, Math.round((montoBsActual - doc.saldo) * 100) / 100);
+            }
+
+            return acc + doc.saldo - appliedRetIvaBs - appliedRetIslrBs + diffBs;
+          }
+          return acc + doc.saldo;
+        }
+        return acc;
+      }, 0) * 100
+    ) / 100
+  );
+
+  let expectedNetPayUsd = $derived(
+    documentos.reduce((acc, doc) => {
+      if (checkedDocs[doc.nro_doc.trim()]) {
+        const docTasa = doc.tasa > 0 ? doc.tasa : 1;
+        const isNC = doc.co_tipo_doc.trim() === "N/CR";
+        if (isNC) return acc - Math.round((doc.saldo / docTasa) * 100) / 100;
+        const inp = docInputs[doc.nro_doc.trim()];
+        if (inp) {
+          const porcIva = (selectedClient && selectedClient.contribu_e) ? (Number(selectedClient.porc_esp) || 0) : 0;
+          const theoreticalRetIvaBs = Math.round((doc.monto_imp || 0) * (porcIva / 100) * 100) / 100;
+          const theoreticalRetIvaUsd = Math.round((theoreticalRetIvaBs / docTasa) * 100) / 100;
+          const appliedRetIva = inp.showIvaDetails ? Math.max(inp.reten_iva || 0, theoreticalRetIvaUsd) : 0;
+          const appliedRetIslr = inp.showIslrDetails ? (inp.reten_islr || 0) : 0;
+          const saldoUsd = Math.round((doc.saldo / docTasa) * 100) / 100;
+          return acc + saldoUsd - appliedRetIva - appliedRetIslr;
+        }
+        return acc + Math.round((doc.saldo / docTasa) * 100) / 100;
+      }
+      return acc;
+    }, 0)
+  );
+
   // Totales derivativos
   let totalCobradoNetoBs = $derived(
-    Object.values(docInputs).reduce(
-      (acc, curr) => acc + (Number(curr.mont_cob_bs) || 0),
-      0,
-    ),
+    expectedNetPayBs
   );
 
   let totalCobradoNeto = $derived(
-    Object.values(docInputs).reduce(
-      (acc, curr) => acc + (Number(curr.mont_cob) || 0),
-      0,
-    ),
+    expectedNetPayUsd
   );
 
   let totalRetenidoIvaBs = $derived(
@@ -218,48 +269,6 @@
 
   let totalInstrumentosPago = $derived(
     formasPago.reduce((acc, curr) => acc + (Number(curr.mont_doc) || 0), 0),
-  );
-
-  // Monto neto esperado a cobrar en efectivo/instrumentos (saldo - retenciones) independiente de los instrumentos
-  let expectedNetPayBs = $derived(
-    documentos.reduce((acc, doc) => {
-      if (checkedDocs[doc.nro_doc.trim()]) {
-        const isNC = doc.co_tipo_doc.trim() === "N/CR";
-        if (isNC) return acc - doc.saldo;
-        const inp = docInputs[doc.nro_doc.trim()];
-        if (inp) {
-          const porcIva = (selectedClient && selectedClient.contribu_e) ? (Number(selectedClient.porc_esp) || 0) : 0;
-          const theoreticalRetIvaBs = Math.round((doc.monto_imp || 0) * (porcIva / 100) * 100) / 100;
-          const appliedRetIvaBs = inp.showIvaDetails ? Math.max(inp.reten_iva_bs || 0, theoreticalRetIvaBs) : 0;
-          const appliedRetIslrBs = inp.showIslrDetails ? (inp.reten_islr_bs || 0) : 0;
-          return acc + doc.saldo - appliedRetIvaBs - appliedRetIslrBs;
-        }
-        return acc + doc.saldo;
-      }
-      return acc;
-    }, 0)
-  );
-
-  let expectedNetPayUsd = $derived(
-    documentos.reduce((acc, doc) => {
-      if (checkedDocs[doc.nro_doc.trim()]) {
-        const docTasa = doc.tasa > 0 ? doc.tasa : 1;
-        const isNC = doc.co_tipo_doc.trim() === "N/CR";
-        if (isNC) return acc - Math.round((doc.saldo / docTasa) * 100) / 100;
-        const inp = docInputs[doc.nro_doc.trim()];
-        if (inp) {
-          const porcIva = (selectedClient && selectedClient.contribu_e) ? (Number(selectedClient.porc_esp) || 0) : 0;
-          const theoreticalRetIvaBs = Math.round((doc.monto_imp || 0) * (porcIva / 100) * 100) / 100;
-          const theoreticalRetIvaUsd = Math.round((theoreticalRetIvaBs / docTasa) * 100) / 100;
-          const appliedRetIva = inp.showIvaDetails ? Math.max(inp.reten_iva || 0, theoreticalRetIvaUsd) : 0;
-          const appliedRetIslr = inp.showIslrDetails ? (inp.reten_islr || 0) : 0;
-          const saldoUsd = Math.round((doc.saldo / docTasa) * 100) / 100;
-          return acc + saldoUsd - appliedRetIva - appliedRetIslr;
-        }
-        return acc + Math.round((doc.saldo / docTasa) * 100) / 100;
-      }
-      return acc;
-    }, 0)
   );
 
   let saldoPendientePorCobrar = $derived(
@@ -517,10 +526,20 @@
     const docTasa = doc.tasa > 0 ? doc.tasa : 1;
 
     if (checkedDocs[nroDoc]) {
+      // Auto-enable retenciones si es contribuyente especial y tiene IVA
+      if (
+        selectedClient?.contribu_e &&
+        doc.monto_imp > 0 &&
+        !input.manual_override_iva &&
+        !input.showIvaDetails
+      ) {
+        input.showIvaDetails = true;
+      }
+
       // Retención de IVA
       if (input.showIvaDetails) {
         if (!input.manual_override_iva && input.reten_iva === 0) {
-          const porc = Number(selectedClient.porc_esp) || 75;
+          const porc = (selectedClient && selectedClient.contribu_e) ? (Number(selectedClient.porc_esp) || 75) : 0;
           input.reten_iva_bs = Math.round(doc.monto_imp * (porc / 100) * 100) / 100;
           input.reten_iva = Math.round((input.reten_iva_bs / docTasa) * 100) / 100;
 
@@ -631,18 +650,24 @@
   function handleCajaCtaChange(index: number) {
     const fp = formasPago[index];
     const isBs = getRowCurrency(fp) === 'BS';
-    if (isBs) {
-      fp.mont_doc_bs = fp.mont_doc_bs || Math.round(fp.mont_doc * currentExchangeRate * 100) / 100;
-      if (Math.abs(diferenciaCuadreBs) < 10.00 && diferenciaCuadreBs !== 0) {
-        fp.mont_doc_bs = Math.round((fp.mont_doc_bs + diferenciaCuadreBs) * 100) / 100;
+    const rate = currentExchangeRate > 0 ? currentExchangeRate : 1;
+
+    if (formasPago.length === 1) {
+      if (isBs) {
+        fp.mont_doc_bs = Math.round(expectedNetPayBs * 100) / 100;
+        fp.mont_doc = Math.round((fp.mont_doc_bs / rate) * 100) / 100;
+      } else {
+        fp.mont_doc = Math.round(expectedNetPayUsd * 100) / 100;
+        fp.mont_doc_bs = Math.round(fp.mont_doc * rate * 100) / 100;
       }
-      fp.mont_doc = Math.round((fp.mont_doc_bs / (currentExchangeRate > 0 ? currentExchangeRate : 1)) * 100) / 100;
     } else {
-      fp.mont_doc = fp.mont_doc || Math.round((fp.mont_doc_bs / (currentExchangeRate > 0 ? currentExchangeRate : 1)) * 100) / 100;
-      if (Math.abs(diferenciaCuadre) < 0.20 && diferenciaCuadre !== 0) {
-        fp.mont_doc = Math.round((fp.mont_doc + diferenciaCuadre) * 100) / 100;
+      if (isBs) {
+        fp.mont_doc_bs = Math.round(fp.mont_doc * rate * 100) / 100;
+        fp.mont_doc = Math.round((fp.mont_doc_bs / rate) * 100) / 100;
+      } else {
+        fp.mont_doc = Math.round((fp.mont_doc_bs / rate) * 100) / 100;
+        fp.mont_doc_bs = Math.round(fp.mont_doc * rate * 100) / 100;
       }
-      fp.mont_doc_bs = Math.round(fp.mont_doc * currentExchangeRate * 100) / 100;
     }
   }
 
@@ -1564,6 +1589,39 @@
                           </div>
                         {/if}
 
+                        <!-- Alerta Diferencial Cambiario (N/DB) para facturas de días anteriores -->
+                        {#if doc.co_tipo_doc.trim() !== "N/CR"}
+                          {@const docFecEmisStr = doc.fec_emis ? new Date(doc.fec_emis).toISOString().split('T')[0] : ''}
+                          {@const todayStr = new Date().toISOString().split('T')[0]}
+                          {@const isPreviousDateDoc = docFecEmisStr && docFecEmisStr < todayStr}
+                          {@const docTasa = doc.tasa > 0 ? doc.tasa : 1}
+                          {@const diffBs = (isPreviousDateDoc && doc.saldo > 0 && currentExchangeRate > docTasa) 
+                            ? Math.max(0, Math.round(((doc.saldo / docTasa * currentExchangeRate) - doc.saldo) * 100) / 100)
+                            : 0}
+                          {#if isPreviousDateDoc && diffBs > 0}
+                            <div
+                              class="flex items-center justify-between bg-blue-500/10 border border-blue-500/20 p-3.5 rounded-2xl text-xs animate-in slide-in-from-top-2 duration-150 mb-3"
+                            >
+                              <span
+                                class="font-bold text-blue-400 flex items-center gap-1.5"
+                              >
+                                <RefreshCw size={14} />
+                                Diferencial Cambiario (N/DB a generar):
+                              </span>
+                              <div class="text-right">
+                                <span class="font-mono font-black text-blue-400">
+                                  {diffBs >= 0 ? '+' : '-'}Bs. {Math.abs(diffBs).toLocaleString("de-DE", { minimumFractionDigits: 2 })}
+                                </span>
+                                <span
+                                  class="block text-xs text-text-muted font-bold mt-0.5"
+                                >
+                                  {diffBs >= 0 ? '+' : '-'} $ {Math.abs(Number(diffBs / currentExchangeRate)).toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                </span>
+                              </div>
+                            </div>
+                          {/if}
+                        {/if}
+
                         <!-- Neto Cobrado Calculado (Solo Lectura) -->
                         {#if doc.co_tipo_doc.trim() !== "N/CR" && input.mont_cob > 0}
                           <div
@@ -1920,7 +1978,7 @@
                         type="number"
                         step="0.01"
                         placeholder="0.00"
-                        value={getRowCurrency(fp) === 'BS' ? (fp.mont_doc_bs || 0) : fp.mont_doc}
+                        value={getRowCurrency(fp) === 'BS' ? (Math.round((fp.mont_doc_bs || 0) * 100) / 100) : (Math.round((fp.mont_doc || 0) * 100) / 100)}
                         oninput={(e) => {
                           const val = Number(e.currentTarget.value) || 0;
                           if (getRowCurrency(fp) === 'BS') {

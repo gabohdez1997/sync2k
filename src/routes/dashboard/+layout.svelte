@@ -130,6 +130,7 @@
         { id: 'reports_detailed_account', label: 'Cuenta Detallada', href: '/dashboard/reports/detailed-account', icon: ClipboardList },
         { id: 'reports_cashier_month', label: 'Cajero del Mes', href: '/dashboard/reports/cashier-month', icon: Award },
         { id: 'reports_article_prices', label: 'Artículos con Precios', href: '/dashboard/reports/article-prices', icon: Tag },
+        { id: 'reports_article_sales', label: 'Cantidad Real Vendida', href: '/dashboard/reports/article-sales', icon: ShoppingBag },
         { id: 'reports_exchange_diff', label: 'Diferencial Cambiario', href: '/dashboard/reports/exchange-diff', icon: ArrowRightLeft }
       ]
     },

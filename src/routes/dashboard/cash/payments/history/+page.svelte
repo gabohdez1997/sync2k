@@ -81,9 +81,32 @@
   }
 
   async function openEditDirectly(cobNum: string) {
-    await openDetail(cobNum);
-    if (detailData && !detailData.anulado && data.canEdit) {
-      await startEditing();
+    isEditingPayment = true;
+    detailModalOpen = true;
+    loadingDetail = true;
+    detailError = null;
+    detailData = null;
+    try {
+      const res = await fetch(`/api/agent/payments/${cobNum}?branch_id=${data.selectedBranchId}`);
+      if (res.ok) {
+        const resJson = await res.json();
+        if (resJson.success && resJson.data && resJson.data.length > 0) {
+          detailData = resJson.data[0];
+          if (!detailData.anulado && data.canEdit) {
+            await startEditing();
+          } else {
+            isEditingPayment = false;
+          }
+        } else {
+          detailError = resJson.message || 'No se pudo obtener el detalle del cobro.';
+        }
+      } else {
+        detailError = `Error al consultar: ${res.statusText}`;
+      }
+    } catch (e: any) {
+      detailError = `Error de red: ${e.message}`;
+    } finally {
+      loadingDetail = false;
     }
   }
 
@@ -890,7 +913,7 @@
         {#if loadingDetail}
           <div class="flex flex-col items-center justify-center py-20 gap-4">
             <RefreshCw size={40} class="animate-spin text-brand-500" />
-            <p class="text-sm font-bold text-text-muted">Buscando información en la sede local...</p>
+            <p class="text-sm font-bold text-text-muted">{isEditingPayment ? 'Preparando formulario de edición...' : 'Buscando información en la sede local...'}</p>
           </div>
         {:else if detailError}
           <div class="bg-red-500/10 border border-red-500/20 rounded-2xl p-6 flex gap-4 text-red-400">
