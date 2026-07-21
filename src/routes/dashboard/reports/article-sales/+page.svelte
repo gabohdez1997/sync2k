@@ -175,7 +175,7 @@
         // Start with UTF-8 BOM and sep=; directive for Excel
         let csvContent = '\uFEFFsep=;\n';
         csvContent +=
-            "Código;Descripción;Línea;Categoría;Cant. Facturada;Cant. Devuelta;Cant. Real Vendida;Estatus\n";
+            "Código;Descripción;Modelo;Referencia;Cant. Facturada;Cant. Devuelta;Cant. Real Vendida;Estatus\n";
 
         for (const item of filteredReportData) {
             const co_art = `="${String(item.co_art || "")
@@ -184,8 +184,8 @@
             const art_des = `"${String(item.art_des || "")
                 .trim()
                 .replace(/"/g, '""')}"`;
-            const co_lin = `"${String(item.co_lin || "").trim()}"`;
-            const co_cat = `"${String(item.co_cat || "").trim()}"`;
+            const modelo = `"${String(item.modelo || "").trim()}"`;
+            const referencia = `"${String(item.referencia || "").trim()}"`;
 
             // Format decimals using commas for Spanish Excel compatibility
             const cant_facturada = (Number(item.cant_facturada) || 0)
@@ -199,7 +199,7 @@
                 .replace(".", ",");
             const statusLabel = item.anulado ? "Inactivo" : "Activo";
 
-            csvContent += `${co_art};${art_des};${co_lin};${co_cat};${cant_facturada};${cant_devuelta};${cant_real_vendida};${statusLabel}\n`;
+            csvContent += `${co_art};${art_des};${modelo};${referencia};${cant_facturada};${cant_devuelta};${cant_real_vendida};${statusLabel}\n`;
         }
 
         const blob = new Blob([csvContent], {
@@ -589,8 +589,8 @@
                     <tr class="border-b border-border-subtle bg-surface-soft/40">
                         <th class="py-5 px-6 font-black text-text-muted uppercase tracking-widest w-32">Código</th>
                         <th class="py-5 px-6 font-black text-text-muted uppercase tracking-widest">Descripción</th>
-                        <th class="py-5 px-6 font-black text-text-muted uppercase tracking-widest w-40">Línea</th>
-                        <th class="py-5 px-6 font-black text-text-muted uppercase tracking-widest w-40">Categoría</th>
+                        <th class="py-5 px-6 font-black text-text-muted uppercase tracking-widest w-40">Modelo</th>
+                        <th class="py-5 px-6 font-black text-text-muted uppercase tracking-widest w-40">Referencia</th>
                         <th class="py-5 px-6 font-black text-text-muted uppercase tracking-widest text-right w-36">Cant. Facturada</th>
                         <th class="py-5 px-6 font-black text-text-muted uppercase tracking-widest text-right w-36">Cant. Devuelta</th>
                         <th class="py-5 px-6 font-black text-text-muted uppercase tracking-widest text-right w-40">Cant. Real Vendida</th>
@@ -610,8 +610,8 @@
                             <tr class="hover:bg-white/[0.02] transition-colors group">
                                 <td class="py-4 px-6 font-mono text-text-base text-[11px]">{item.co_art}</td>
                                 <td class="py-4 px-6 text-text-base group-hover:text-brand-400 transition-colors">{item.art_des}</td>
-                                <td class="py-4 px-6 text-text-muted/80">{item.co_lin}</td>
-                                <td class="py-4 px-6 text-text-muted/80">{item.co_cat}</td>
+                                <td class="py-4 px-6 text-text-muted/80">{item.modelo || '-'}</td>
+                                <td class="py-4 px-6 text-text-muted/80">{item.referencia || '-'}</td>
                                 <td class="py-4 px-6 text-right text-text-base font-mono">{formatQuantity(item.cant_facturada)}</td>
                                 <td class="py-4 px-6 text-right text-red-400 font-mono {Number(item.cant_devuelta) > 0 ? 'bg-red-500/5' : ''}">
                                     {formatQuantity(item.cant_devuelta)}
