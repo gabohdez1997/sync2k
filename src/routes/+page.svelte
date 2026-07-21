@@ -131,7 +131,7 @@
 
     <!-- Card -->
     <div class="premium-card p-10">
-      <form onsubmit={handleLogin} method="POST" class="space-y-6">
+      <form onsubmit={handleLogin} class="space-y-6">
         <!-- Email -->
         <div class="space-y-1.5">
           <label

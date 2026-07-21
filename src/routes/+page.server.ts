@@ -1,4 +1,4 @@
-import type { PageServerLoad } from './$types';
+import type { PageServerLoad, Actions } from './$types';
 import { getSystemSettings } from '$lib/server/settings';
 import { redirect } from '@sveltejs/kit';
 
@@ -14,4 +14,10 @@ export const load: PageServerLoad = async ({ locals, fetch }) => {
 	return {
 		systemSettings
 	};
+};
+
+export const actions: Actions = {
+	default: async () => {
+		redirect(303, '/dashboard');
+	}
 };
