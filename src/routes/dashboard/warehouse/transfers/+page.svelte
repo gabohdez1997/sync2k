@@ -139,6 +139,30 @@
     </div>
   </div>
 
+  <!-- BANNER ALERTA RECEPCION PENDIENTE -->
+  {#if metrics.inTransit > 0}
+    <div class="glass p-4 rounded-2xl border border-amber-500/30 bg-amber-500/10 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 text-amber-300 shadow-xl">
+      <div class="flex items-center gap-3">
+        <div class="h-10 w-10 rounded-xl bg-amber-500/20 flex items-center justify-center text-amber-400 shrink-0 border border-amber-500/30">
+          <Truck size={22} class="animate-bounce" />
+        </div>
+        <div>
+          <div class="font-black text-amber-300 uppercase tracking-widest text-xs">Recepción de Traslado Pendiente</div>
+          <p class="text-xs font-semibold text-amber-200/90 mt-0.5">
+            Hay {metrics.inTransit} {metrics.inTransit === 1 ? 'traslado' : 'traslados'} en tránsito esperando confirmación para ingresar la mercancía al inventario.
+          </p>
+        </div>
+      </div>
+      <button
+        type="button"
+        onclick={() => (activeTab = 'incoming')}
+        class="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-black font-black text-xs uppercase tracking-widest transition-all shrink-0 cursor-pointer shadow-lg shadow-amber-500/20"
+      >
+        Ver Pendientes ({metrics.inTransit})
+      </button>
+    </div>
+  {/if}
+
   <!-- METRICAS -->
   <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
     <div class="glass p-6 rounded-3xl border border-white/5 shadow-xl relative overflow-hidden">

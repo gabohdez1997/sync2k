@@ -164,6 +164,28 @@ export const actions: Actions = {
 				console.error('[TRANSFERS NEW] Error guardando renglones en BD:', itemsErr);
 			}
 
+			// 5. Registrar en Auditoría
+			try {
+				const { logAction } = await import('$lib/server/audit');
+				await logAction({
+					uid: profile.id || null,
+					user_email: profile.email,
+					action: 'CREATE',
+					module: 'inv_transfers',
+					record_id: transferRecord.id,
+					new_data: {
+						transfer_number: transferNumber,
+						source_branch_id,
+						target_branch_id,
+						source_ajue_num: sourceAjueNum,
+						items_count: items.length
+					},
+					branch_id: source_branch_id
+				});
+			} catch (auditErr) {
+				console.error('[AUDIT] Error al guardar auditoria de traslado:', auditErr);
+			}
+
 			console.log(`✅ [TRANSFERS NEW SUCCESS] Traslado ${transferNumber} creado con éxito. Ajuste Salida: ${sourceAjueNum}`);
 
 		} catch (e: any) {

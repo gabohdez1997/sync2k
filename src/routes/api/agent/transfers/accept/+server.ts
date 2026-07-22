@@ -105,6 +105,23 @@ export const POST: RequestHandler = async ({ request, fetch, locals }) => {
 			console.error('[TRANSFERS ACCEPT] Error actualizando BD:', updateErr);
 		}
 
+		// 6. Registrar en Auditoría
+		try {
+			const { logAction } = await import('$lib/server/audit');
+			await logAction({
+				uid: profile.id || null,
+				user_email: profile.email,
+				action: 'UPDATE',
+				module: 'inv_transfers',
+				record_id: transfer_id,
+				old_data: { status: 'TRANSITO' },
+				new_data: { status: 'ACEPTADO', target_ajue_num: targetAjueNum },
+				branch_id: transfer.target_branch_id
+			});
+		} catch (auditErr) {
+			console.error('[AUDIT] Error al guardar auditoria de aceptacion:', auditErr);
+		}
+
 		return json({
 			success: true,
 			message: `Traslado ${transfer.transfer_number} aceptado con éxito. Ajuste de Entrada: ${targetAjueNum}`,
