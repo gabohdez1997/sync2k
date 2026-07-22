@@ -4,7 +4,7 @@
   import { 
     ArrowRightLeft, Plus, Minus, Search, Trash2, Store, 
     Box, Check, AlertCircle, RefreshCw, ChevronRight, ChevronLeft, ChevronDown,
-    ShoppingBag, Package, Clock, Tag, Layers, Loader2
+    ShoppingBag, Package, Clock, Tag, Layers, Loader2, ShoppingCart
   } from "lucide-svelte";
   import { fade, slide, scale } from "svelte/transition";
   import { toast } from "svelte-sonner";
@@ -86,13 +86,29 @@
     );
   });
 
+  function isDecimalAllowed(article: any) {
+    if (!article) return false;
+    const configStr = String(data.selectedBranchConfig?.allow_decimals_units || 'MTS, MTS2, KG, M, MT, M2, M3');
+    const allowed = configStr.split(',').map((s: string) => s.trim().toUpperCase());
+    const co_uni = String(article?.co_uni || '').trim().toUpperCase();
+    const unidad = String(article?.unidad || article?.uni_venta || '').trim().toUpperCase();
+    return allowed.some(a => a && (co_uni.includes(a) || unidad.includes(a)));
+  }
+
+  function getStep(article: any) {
+    return isDecimalAllowed(article) ? 0.5 : 1;
+  }
+
   // Inicializar estados para nuevos artículos (EXACTO A COTIZACIONES)
   $effect(() => {
     if (localArticles && localArticles.length > 0) {
       localArticles.forEach((art) => {
         const co = (art.co_art || art.codigo || '').trim();
         if (!co) return;
-        if (qtyPerArticle[co] === undefined) qtyPerArticle[co] = 1;
+        const step = getStep(art);
+        if (qtyPerArticle[co] === undefined || qtyPerArticle[co] < step) {
+          qtyPerArticle[co] = step;
+        }
         if (selectedWarehouses[co] === undefined && art.disponibilidad?.length > 0) {
           selectedWarehouses[co] = art.disponibilidad[0].co_alma;
         }
@@ -119,7 +135,8 @@
     const almaCode = selectedWarehouses[code] || article.disponibilidad?.[0]?.co_alma || '01';
     const curAlm = article.disponibilidad?.find((a: any) => a.co_alma === almaCode) || article.disponibilidad?.[0];
     const currentStock = Number(curAlm?.stock ?? article.stock_global ?? article.stock ?? 0);
-    const qtyToAdd = qtyPerArticle[code] || 1;
+    const step = getStep(article);
+    const qtyToAdd = qtyPerArticle[code] || step;
 
     const existingIndex = selectedItems.findIndex(i => i.co_art === code && i.co_alma_source === almaCode);
     if (existingIndex >= 0) {
@@ -508,47 +525,70 @@
                     </div>
                   </div>
 
-                  <!-- Fila de Acción: Cantidad + Agregar (EXACTO A COTIZACIONES) -->
+                  <!-- Fila de Acción: Cantidad + Agregar con Icono de Carrito -->
                   <div class="flex items-center gap-2 mt-4">
                     <!-- Selector Cantidad -->
                     <div class="flex-1 flex items-center bg-surface-soft rounded-xl border border-border-bold h-11 focus-within:border-brand-500/30 transition-all overflow-hidden">
                       <button
                         type="button"
                         onclick={() => {
-                          const cur = qtyPerArticle[code] || 1;
-                          qtyPerArticle[code] = Math.max(1, cur - 1);
+                          const step = getStep(article);
+                          const cur = qtyPerArticle[code] || step;
+                          qtyPerArticle[code] = Math.max(step, Math.round((cur - step) * 10) / 10);
                         }}
-                        class="w-10 h-full flex items-center justify-center text-text-muted hover:text-brand-400 transition-colors bg-surface-soft"
+                        class="w-10 h-full flex items-center justify-center text-text-muted hover:text-brand-400 transition-colors bg-surface-soft shrink-0"
                         title="Restar"><Minus size={12} /></button>
                       <input
                         type="number"
-                        min="1"
+                        step={getStep(article)}
+                        min={getStep(article)}
                         bind:value={qtyPerArticle[code]}
+                        onfocus={(e) => (e.currentTarget as HTMLInputElement).select()}
+                        oninput={(e) => {
+                          const step = getStep(article);
+                          const stock = curAlm?.stock || 0;
+                          let val = parseFloat((e.currentTarget as HTMLInputElement).value);
+                          if (isNaN(val) || val < step) return;
+                          if (stock > 0 && val > stock) {
+                            toast.warning(`Cantidad ajustada al stock (${stock})`);
+                            qtyPerArticle[code] = Math.floor(stock / step) * step || step;
+                          }
+                        }}
+                        onblur={(e) => {
+                          const step = getStep(article);
+                          const v = parseFloat((e.currentTarget as HTMLInputElement).value);
+                          if (isNaN(v) || v < step) {
+                            qtyPerArticle[code] = step;
+                          } else {
+                            qtyPerArticle[code] = Math.round(v / step) * step;
+                          }
+                        }}
                         class="w-full flex-1 text-center text-base font-black bg-transparent outline-none no-arrows text-brand-400 px-1"
                       />
                       <button
                         type="button"
                         onclick={() => {
+                          const step = getStep(article);
                           const stock = curAlm?.stock || 0;
-                          const currentQty = qtyPerArticle[code] || 1;
-                          if (stock > 0 && currentQty + 1 > stock) {
+                          const currentQty = qtyPerArticle[code] || step;
+                          if (stock > 0 && currentQty + step > stock) {
                             toast.error('Alcanzó el límite de stock disponible');
                           } else {
-                            qtyPerArticle[code] = currentQty + 1;
+                            qtyPerArticle[code] = Math.round((currentQty + step) * 10) / 10;
                           }
                         }}
-                        class="w-10 h-full flex items-center justify-center text-text-muted hover:text-brand-400 transition-colors bg-surface-soft"
+                        class="w-10 h-full flex items-center justify-center text-text-muted hover:text-brand-400 transition-colors bg-surface-soft shrink-0"
                         title="Sumar"><Plus size={12} /></button>
                     </div>
 
-                    <!-- Botón Agregar -->
+                    <!-- Botón Agregar con Icono de Carrito de Compras -->
                     <button
                       type="button"
                       onclick={() => addItem(article)}
-                      class="h-11 px-4 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-1.5 cursor-pointer active:scale-95 whitespace-nowrap {isAdded ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'bg-brand-600 hover:bg-brand-500 text-white shadow-lg shadow-brand-500/20'}"
+                      class="h-11 w-12 rounded-xl text-white transition-all flex items-center justify-center cursor-pointer active:scale-95 shrink-0 {isAdded ? 'bg-emerald-500 hover:bg-emerald-600 shadow-lg shadow-emerald-500/20' : 'bg-brand-600 hover:bg-brand-500 shadow-lg shadow-brand-500/20'}"
+                      title={isAdded ? 'Agregar más al traslado' : 'Agregar al traslado'}
                     >
-                      <Plus size={14} />
-                      {isAdded ? '+' : 'Agregar'}
+                      <ShoppingCart size={18} />
                     </button>
                   </div>
                 </div>
@@ -664,9 +704,10 @@
                       <td class="p-4 text-center">
                         <input 
                           type="number"
-                          min="1"
+                          step={getStep(item)}
+                          min={getStep(item)}
                           bind:value={item.total_art}
-                          class="w-20 h-9 bg-white/5 border border-white/10 rounded-xl text-center font-mono font-black text-sm text-text-base focus:outline-none focus:ring-2 focus:ring-brand-500"
+                          class="w-20 h-9 bg-white/5 border border-white/10 rounded-xl text-center font-mono font-black text-sm text-text-base focus:outline-none focus:ring-2 focus:ring-brand-500 no-arrows"
                         />
                       </td>
                       <td class="p-4 text-center">
@@ -718,3 +759,17 @@
 
   </form>
 </div>
+
+<style>
+  /* Chrome, Safari, Edge, Opera */
+  input::-webkit-outer-spin-button,
+  input::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+
+  /* Firefox */
+  input[type="number"] {
+    -moz-appearance: textfield;
+  }
+</style>
