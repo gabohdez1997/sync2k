@@ -482,7 +482,9 @@
               price_selected: {
                 precio: Number(r.prec_vta_om || 0),
                 precio_ves: Number(r.precio || 0),
+                id_precio: String(r.co_precio || "01").trim(),
               },
+              co_precio: String(r.co_precio || "01").trim(),
               disponibilidad: [
                 {
                   co_alma: almaId,
@@ -492,6 +494,7 @@
               ],
               precios: [
                 {
+                  id_precio: String(r.co_precio || "01").trim(),
                   precio: Number(r.prec_vta_om || 0),
                   precio_ves: Number(r.precio || 0),
                   moneda: String(q.co_mone || "BS"),
@@ -557,17 +560,16 @@
     untrack(() => {
       const draft = {
         cart: _cart,
-        selectedClient: _client,
-        activeTab: _tab,
-        rifInput: _rif,
+              rifInput: _rif,
       };
       localStorage.setItem("profit_order_draft", JSON.stringify(draft));
     });
   });
+
   async function rehydrateCart() {
     if (!browser || !cart.length) return;
 
-    console.log("ðŸ’§ Rehidratando existencias y precios del carrito...");
+    console.log("💧 Rehidratando existencias y precios del carrito...");
     const branchId = selectedBranch;
 
     for (let i = 0; i < cart.length; i++) {
@@ -579,43 +581,90 @@
         );
         const d = await res.json();
 
-        console.log(`ðŸ” Rehidratando ${co}...`, d);
+        console.log(`🔍 Rehidratando ${co}...`, d);
 
         if (d.success && d.data && d.data.length > 0) {
-          // Buscar el match exacto por si la búsqueda trajo parecidos
           const fresh =
             d.data.find((a: any) => a.co_art?.trim() === co) || d.data[0];
 
-          // --- FILTRADO DE ALMACENES POR PERMISO ---
+          // --- FILTRADO DE ALMACENES POR PERMISO Y STOCK DISPONIBLE (> 0 o seleccionado) ---
           const allowedIds = (data.context?.warehouses || []).map((w: any) =>
-            w.co_alma?.trim(),
+            String(w.co_alma || "").trim().toUpperCase(),
           );
-          const filteredDispo = (fresh.disponibilidad || []).filter(
-            (disp: any) => allowedIds.includes(disp.co_alma?.trim()),
+          let validDispo = (fresh.disponibilidad || []).filter(
+            (disp: any) =>
+              allowedIds.includes(String(disp.co_alma || "").trim().toUpperCase()) && Number(disp.stock || 0) > 0,
           );
+
+          const currentAlmaCode = String(item.co_alma_selected || "01").trim().toUpperCase();
+          const hasCurrentInDispo = validDispo.some(
+            (d: any) => String(d.co_alma || "").trim().toUpperCase() === currentAlmaCode,
+          );
+
+          if (!hasCurrentInDispo) {
+            const freshSel = fresh.disponibilidad?.find(
+              (d: any) => String(d.co_alma || "").trim().toUpperCase() === currentAlmaCode,
+            );
+            const contextSel = data.context?.warehouses?.find(
+              (w: any) => String(w.co_alma || "").trim().toUpperCase() === currentAlmaCode,
+            );
+            const cartSel = cart[i]?.disponibilidad?.find(
+              (d: any) => String(d.co_alma || "").trim().toUpperCase() === currentAlmaCode,
+            );
+
+            const desAlma = String(
+              freshSel?.des_alma || contextSel?.des_alma || contextSel?.nombre || cartSel?.des_alma || item.co_alma_selected || currentAlmaCode,
+            ).trim();
+            const stockVal = Number(freshSel?.stock ?? cartSel?.stock ?? 0);
+
+            validDispo.unshift({
+              co_alma: item.co_alma_selected || currentAlmaCode,
+              des_alma: desAlma,
+              stock: stockVal,
+            });
+          }
+
+          // Enriquecer descripciones si sólo viene el código
+          validDispo = validDispo.map((disp: any) => {
+            const code = String(disp.co_alma || "").trim().toUpperCase();
+            const ctxAlma = data.context?.warehouses?.find(
+              (w: any) => String(w.co_alma || "").trim().toUpperCase() === code,
+            );
+            const rawDes = String(disp.des_alma || "").trim();
+            const finalDes = rawDes && rawDes !== code ? rawDes : String(ctxAlma?.des_alma || ctxAlma?.nombre || code).trim();
+            return {
+              ...disp,
+              des_alma: finalDes,
+            };
+          });
 
           // --- BUSCAR ÍNDICE DE PRECIO QUE COINCIDA CON EL PEDIDO ---
-          let matchedPriceIndex = 0;
-          if (fresh.precios && fresh.precios.length > 0) {
+          let matchedPriceIndex = -1;
+          const targetIdPrecio = String(
+            cart[i].price_selected?.id_precio ||
+            cart[i].price_selected?.co_precio ||
+            cart[i].co_precio ||
+            ""
+          ).trim();
+
+          if (targetIdPrecio && fresh.precios && fresh.precios.length > 0) {
+            matchedPriceIndex = fresh.precios.findIndex(
+              (p: any) => String(p.id_precio || p.co_precio || "").trim() === targetIdPrecio,
+            );
+          }
+
+          if (matchedPriceIndex === -1 && fresh.precios && fresh.precios.length > 0) {
             const targetOM = Number(cart[i].price_selected?.precio || 0);
             const targetVES = Number(cart[i].price_selected?.precio_ves || 0);
-            
-            console.log(`âš–ï¸ Buscando coincidencia para ${co}: OM=${targetOM}, VES=${targetVES}`);
 
-            // Intentar buscar match por cualquiera de las dos monedas (con margen de error de 0.01)
-            const idx = fresh.precios.findIndex((p: any) => {
+            matchedPriceIndex = fresh.precios.findIndex((p: any) => {
               const matchOM = targetOM > 0 && Math.abs(Number(p.precio) - targetOM) < 0.05;
               const matchVES = targetVES > 0 && Math.abs(Number(p.precio_ves) - targetVES) < 0.05;
               return matchOM || matchVES;
             });
-
-            if (idx !== -1) {
-               matchedPriceIndex = idx;
-               console.log(`ðŸŽ¯ Match encontrado en Tipo ${idx + 1} para ${co}`);
-            } else {
-               console.warn(`âš ï¸ No se encontró match de precio exacto para ${co}. Usando Tipo 1.`);
-            }
           }
+
+          if (matchedPriceIndex === -1) matchedPriceIndex = 0;
 
           // Actualizar estados reactivos globales
           selectedItemPriceIndex[co] = matchedPriceIndex;
@@ -626,11 +675,8 @@
             co_lin: fresh.co_lin || cart[i].co_lin,
             co_subl: fresh.co_subl || cart[i].co_subl,
             art_des: fresh.descripcion || fresh.art_des || cart[i].art_des,
-            disponibilidad:
-              filteredDispo.length > 0
-                ? filteredDispo
-                : fresh.disponibilidad || cart[i].disponibilidad,
-            precios: fresh.precios || cart[i].precios,
+            disponibilidad: validDispo,
+            precios: fresh.precios && fresh.precios.length > 0 ? fresh.precios : cart[i].precios,
             unidad: fresh.unidad || cart[i].unidad,
             porc_imp:
               fresh.tipo_imp === "7" ? 0 : (fresh.porc_imp ?? cart[i].porc_imp),
@@ -641,10 +687,10 @@
           };
 
           cart[i] = updatedItem;
-          console.log(`âœ… Artículo ${co} REHIDRATADO exitosamente.`);
+          console.log(`✅ Artículo ${co} REHIDRATADO exitosamente.`);
         }
       } catch (e) {
-        console.error(`âŒ Error rehidratando ${item.co_art}:`, e);
+        console.error(`❌ Error rehidratando ${item.co_art}:`, e);
       }
     }
   }
@@ -2848,7 +2894,7 @@
                               0,
                           co_alma: item.co_alma_selected,
                           co_uni: item.co_uni || item.unidad,
-                          co_precio: item.price_selected?.id_precio || "01",
+                          co_precio: item.price_selected?.id_precio || item.price_selected?.co_precio || item.co_precio || "01",
                           tipo_imp: taxType,
                           porc_imp: rate,
                           tipo_doc: item.tipo_doc || null,

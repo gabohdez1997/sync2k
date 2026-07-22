@@ -1,0 +1,47 @@
+import type { PageServerLoad } from './$types';
+import { protectLoad } from '$lib/server/permissions';
+import { supabaseAdmin } from '$lib/server/supabase';
+
+export const load: PageServerLoad = protectLoad('inv_transfers', async ({ url, locals }) => {
+	const profile = (locals as any).profile;
+	const selectedBranchId = url.searchParams.get('branch_id') || profile?.branch_id || 'all';
+
+	// Cargar sedes activas
+	const { data: dbBranches, error: bErr } = await supabaseAdmin
+		.from('branches')
+		.select('*')
+		.eq('active', true)
+		.order('name');
+
+	if (bErr) {
+		console.error('[TRASLADOS] Error al cargar sucursales:', bErr);
+	}
+
+	// Cargar traslados desde Supabase / PG
+	let query = supabaseAdmin
+		.from('stock_transfers')
+		.select(`
+			*,
+			source_branch:branches!stock_transfers_source_branch_id_fkey(id, name),
+			target_branch:branches!stock_transfers_target_branch_id_fkey(id, name),
+			items:stock_transfer_items(*)
+		`)
+		.order('created_at', { ascending: false });
+
+	if (selectedBranchId && selectedBranchId !== 'all') {
+		query = query.or(`source_branch_id.eq.${selectedBranchId},target_branch_id.eq.${selectedBranchId}`);
+	}
+
+	const { data: transfers, error: tErr } = await query;
+
+	if (tErr) {
+		console.error('[TRASLADOS] Error al cargar traslados:', tErr);
+	}
+
+	return {
+		title: 'Traslado de Artículos entre Sedes',
+		branches: dbBranches || [],
+		selectedBranchId,
+		transfers: transfers || []
+	};
+});

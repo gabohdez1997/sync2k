@@ -56,7 +56,12 @@ export const load: PageServerLoad = protectLoad('sales_orders', async ({ url, lo
 		const isAdmin = profileWarehouses.length === 0;
 		const branchWarehouseList = warehouseList.filter((a: any) => {
 			const co_sucu = a.co_sucu || a.co_sucur || a.sede_id || a.co_sede;
-			return co_sucu === selectedBranch.profit_branch_code || !co_sucu;
+			if (!co_sucu) return true;
+			if (co_sucu === selectedBranch.id) return true;
+			if (Array.isArray(selectedBranch.profit_branch_codes)) {
+				return selectedBranch.profit_branch_codes.some((c: any) => (typeof c === 'string' ? c : c.code) === co_sucu);
+			}
+			return true;
 		});
 
 		const allowedWarehousesForBranch = isAdmin ? branchWarehouseList : branchWarehouseList.filter((a: any) => {

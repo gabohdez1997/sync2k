@@ -22,6 +22,7 @@
     RotateCcw,
     Truck,
     XCircle,
+    ArrowRightLeft,
     Menu,
     X,
     LogOut,
@@ -38,8 +39,7 @@
     Tag,
     Search,
     Printer,
-    Award,
-    ArrowRightLeft
+    Award
   } from 'lucide-svelte';
   import { slide, fade } from 'svelte/transition';
 
@@ -100,6 +100,7 @@
       icon: Package,
       subItems: [
         { id: 'sec_articles', label: 'Ubicaciones', href: '/dashboard/warehouse/locations', icon: MapPin },
+        { id: 'inv_transfers', label: 'Traslados', href: '/dashboard/warehouse/transfers', icon: ArrowRightLeft },
         { id: 'inv_shipping', label: 'Despacho', href: '/dashboard/inventory/shipping', icon: Truck },
         { id: 'inv_void', label: 'Anulación', href: '/dashboard/inventory/void', icon: XCircle },
       ]

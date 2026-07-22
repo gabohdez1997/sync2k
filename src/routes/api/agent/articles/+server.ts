@@ -65,7 +65,7 @@ export const GET: RequestHandler = async ({ url, locals, fetch }) => {
 			agentParams.set('search', rawSearch);
 		}
 
-		if (isServiceSearch) {
+		if (isServiceSearch || rawCoArt || params.get('in_stock') === 'all') {
 			agentParams.set('in_stock', 'all');
 		}
 
