@@ -1,7 +1,7 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { getSupabaseAdmin } from '$lib/server/supabase';
-import { agentFetch } from '$lib/server/agent';
+import { supabaseAdmin } from '$lib/server/supabase';
+import { AgentClient } from '$lib/server/agent';
 
 export const POST: RequestHandler = async ({ request, fetch, locals }) => {
 	const user = locals.user;
@@ -15,8 +15,6 @@ export const POST: RequestHandler = async ({ request, fetch, locals }) => {
 		if (!transfer_id) {
 			return json({ success: false, message: 'transfer_id es requerido' }, { status: 400 });
 		}
-
-		const supabaseAdmin = getSupabaseAdmin(fetch);
 
 		// 1. Cargar datos del traslado
 		const { data: transfer, error: fetchErr } = await supabaseAdmin
@@ -40,7 +38,18 @@ export const POST: RequestHandler = async ({ request, fetch, locals }) => {
 			return json({ success: false, message: 'El traslado no contiene renglones de artículos.' }, { status: 400 });
 		}
 
-		// 2. Preparar renglones para Ajuste de ENTRADA ('01') en la Sede Destino
+		// 2. Obtener la sucursal de destino desde Supabase
+		const { data: targetBranch, error: branchErr } = await supabaseAdmin
+			.from('branches')
+			.select('*')
+			.eq('id', transfer.target_branch_id)
+			.single();
+
+		if (branchErr || !targetBranch || !targetBranch.agent_url) {
+			return json({ success: false, message: 'Sucursal de destino no encontrada o no configurada.' }, { status: 404 });
+		}
+
+		// 3. Preparar renglones para Ajuste de ENTRADA ('01') en la Sede Destino
 		const renglones = transfer.items.map((it: any) => ({
 			co_art: it.co_art,
 			co_alma: it.co_alma_target || '01',
@@ -48,7 +57,6 @@ export const POST: RequestHandler = async ({ request, fetch, locals }) => {
 			cost_unit: Number(it.costo_unit || 0)
 		}));
 
-		// 3. Invocar al Agente de la Sede Destino para crear saAjuste (ENTRADA)
 		const agentPayload = {
 			branch_id: transfer.target_branch_id,
 			tipo: 'ENT',
@@ -58,15 +66,19 @@ export const POST: RequestHandler = async ({ request, fetch, locals }) => {
 			renglones
 		};
 
-		const agentRes = await agentFetch(fetch, '/api/v1/ajustes', {
+		// 4. Invocar al Agente de la Sede Destino
+		const agentClient = new AgentClient({
+			slug: targetBranch.id,
+			agent_url: targetBranch.agent_url,
+			agent_api_key: targetBranch.agent_token
+		}, profile, fetch);
+
+		const resJson: any = await agentClient.request('/ajustes', {
 			method: 'POST',
-			headers: { 'Content-Type': 'application/json' },
 			body: JSON.stringify(agentPayload)
-		}, transfer.target_branch_id);
+		});
 
-		const resJson = await agentRes.json();
-
-		if (!agentRes.ok || !resJson.success) {
+		if (!resJson.success) {
 			console.error('[TRANSFERS ACCEPT] Error en Agente Destino:', resJson);
 			return json({
 				success: false,
@@ -74,9 +86,9 @@ export const POST: RequestHandler = async ({ request, fetch, locals }) => {
 			}, { status: 500 });
 		}
 
-		const targetAjueNum = resJson.ajue_num;
+		const targetAjueNum = resJson.ajue_num || resJson.data?.ajue_num;
 
-		// 4. Actualizar estado del traslado en Supabase
+		// 5. Actualizar estado del traslado en Supabase
 		const nowStr = new Date().toISOString();
 		const { error: updateErr } = await supabaseAdmin
 			.from('stock_transfers')
