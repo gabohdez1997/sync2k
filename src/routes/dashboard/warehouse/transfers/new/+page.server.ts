@@ -1,7 +1,7 @@
 import type { PageServerLoad, Actions } from './$types';
 import { protectLoad, protectAction } from '$lib/server/permissions';
 import { supabaseAdmin } from '$lib/server/supabase';
-import { AgentClient, agentFetch } from '$lib/server/agent';
+import { AgentClient } from '$lib/server/agent';
 import { fail, redirect } from '@sveltejs/kit';
 
 export const load: PageServerLoad = protectLoad('inv_transfers', async ({ locals, fetch, url }) => {
