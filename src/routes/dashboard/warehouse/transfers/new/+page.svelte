@@ -4,7 +4,7 @@
   import { 
     ArrowRightLeft, Plus, Minus, Search, Trash2, Store, 
     Box, Check, AlertCircle, RefreshCw, ChevronRight, ChevronLeft, ChevronDown,
-    ShoppingBag, Package, Clock, Tag, Layers, Loader2, ShoppingCart
+    ShoppingBag, Package, Clock, Tag, Layers, Loader2, Truck
   } from "lucide-svelte";
   import { fade, slide, scale } from "svelte/transition";
   import { toast } from "svelte-sonner";
@@ -99,6 +99,21 @@
     return isDecimalAllowed(article) ? 0.5 : 1;
   }
 
+  function getFilteredDisponibilidad(article: any) {
+    const rawList = article?.disponibilidad || [];
+    const allowed: string[] = data.allowedWarehouses || data.context?.allowedWarehouses || [];
+    const isAdmin = data.isAdmin ?? data.context?.isAdmin ?? (allowed.length === 0);
+
+    if (isAdmin || allowed.length === 0) {
+      return rawList;
+    }
+
+    return rawList.filter((alm: any) => {
+      const almaId = String(alm.co_alma || alm.id || '').trim();
+      return allowed.some((w: string) => String(w).trim() === almaId);
+    });
+  }
+
   // Inicializar estados para nuevos artículos (EXACTO A COTIZACIONES)
   $effect(() => {
     if (localArticles && localArticles.length > 0) {
@@ -109,8 +124,9 @@
         if (qtyPerArticle[co] === undefined || qtyPerArticle[co] < step) {
           qtyPerArticle[co] = step;
         }
-        if (selectedWarehouses[co] === undefined && art.disponibilidad?.length > 0) {
-          selectedWarehouses[co] = art.disponibilidad[0].co_alma;
+        const validDispo = getFilteredDisponibilidad(art);
+        if (selectedWarehouses[co] === undefined && validDispo?.length > 0) {
+          selectedWarehouses[co] = validDispo[0].co_alma;
         }
       });
     }
@@ -130,10 +146,54 @@
     fetchArticles();
   }
 
+  // Almacenes de la Sede Destino
+  let targetWarehouses = $state<any[]>([]);
+  let loadingTargetWarehouses = $state(false);
+
+  $effect(() => {
+    if (targetBranchId) {
+      loadingTargetWarehouses = true;
+      fetch(`/api/agent/warehouses?branch_id=${targetBranchId}`)
+        .then((res) => res.json())
+        .then((d) => {
+          if (d.warehouses && Array.isArray(d.warehouses)) {
+            targetWarehouses = d.warehouses;
+            if (targetWarehouses.length > 0) {
+              const defaultTargetAlma = targetWarehouses[0].co_alma;
+              selectedItems.forEach((it) => {
+                if (!it.co_alma_target || it.co_alma_target === '01') {
+                  it.co_alma_target = defaultTargetAlma;
+                }
+              });
+            }
+          } else {
+            targetWarehouses = [];
+          }
+        })
+        .catch((err) => {
+          console.error('Error fetching target branch warehouses:', err);
+          targetWarehouses = [];
+        })
+        .finally(() => {
+          loadingTargetWarehouses = false;
+        });
+    } else {
+      targetWarehouses = [];
+    }
+  });
+
   function addItem(article: any) {
     const code = (article.co_art || article.codigo || '').trim();
-    const almaCode = selectedWarehouses[code] || article.disponibilidad?.[0]?.co_alma || '01';
-    const curAlm = article.disponibilidad?.find((a: any) => a.co_alma === almaCode) || article.disponibilidad?.[0];
+    const artDesc = (article.art_des || article.descripcion || article.co_art || article.codigo || '').trim();
+    const validDispo = getFilteredDisponibilidad(article);
+
+    if (!validDispo || validDispo.length === 0) {
+      toast.error(`No posee permisos para los almacenes origen con disponibilidad de "${artDesc}".`);
+      return;
+    }
+
+    const almaCode = selectedWarehouses[code] || validDispo[0]?.co_alma || '01';
+    const curAlm = validDispo.find((a: any) => String(a.co_alma).trim() === String(almaCode).trim()) || validDispo[0];
     const currentStock = Number(curAlm?.stock ?? article.stock_global ?? article.stock ?? 0);
     const step = getStep(article);
     const qtyToAdd = qtyPerArticle[code] || step;
@@ -142,27 +202,79 @@
     if (existingIndex >= 0) {
       const newQty = selectedItems[existingIndex].total_art + qtyToAdd;
       if (currentStock > 0 && newQty > currentStock) {
-        toast.error(`Stock insuficiente. Disponible en origen: ${currentStock}`);
+        toast.error(`Stock insuficiente para "${artDesc}". Disponible en origen: ${currentStock}`);
         return;
       }
       selectedItems[existingIndex].total_art = newQty;
-      toast.success(`Actualizado: ${code} (Cantidad: ${newQty})`);
+      toast.success(`Actualizado: "${artDesc}" (${newQty} ud)`);
     } else {
       if (currentStock > 0 && qtyToAdd > currentStock) {
-        toast.error(`Stock insuficiente. Disponible en origen: ${currentStock}`);
+        toast.error(`Stock insuficiente para "${artDesc}". Disponible en origen: ${currentStock}`);
         return;
       }
       selectedItems.push({
         co_art: code,
-        art_des: (article.art_des || article.descripcion || '').trim(),
+        art_des: artDesc,
         stock_origen: currentStock,
         co_alma_source: almaCode,
-        co_alma_target: '01',
+        co_alma_target: targetWarehouses[0]?.co_alma || '01',
         total_art: qtyToAdd,
-        costo_unit: Number(article.costo || 0)
+        costo_unit: Number(article.costo || 0),
+        article,
+        disponibilidad: JSON.parse(JSON.stringify(validDispo))
       });
-      toast.success(`Agregado al traslado: ${code}`);
+      toast.success(`Agregado al traslado: "${artDesc}" (${qtyToAdd} ud)`);
     }
+  }
+
+  function getItemStock(item: any, coAlma?: string): number {
+    const targetAlma = String(coAlma || item.co_alma_source || '').trim();
+    const art = displayArticles.find((a: any) => String(a.co_art || a.codigo || '').trim() === String(item.co_art || '').trim()) || item.article;
+    const avail = art?.disponibilidad || item.disponibilidad || [];
+    const matched = avail.find((a: any) => String(a.co_alma || a.id || '').trim() === targetAlma);
+    if (matched && matched.stock !== undefined && matched.stock !== null) {
+      return Number(matched.stock);
+    }
+    return Number(item.stock_origen || 0);
+  }
+
+  function updateItemSourceWarehouse(index: number, newCoAlma: string) {
+    const item = selectedItems[index];
+    if (!item) return;
+    const cleanAlma = String(newCoAlma || '').trim();
+    item.co_alma_source = cleanAlma;
+
+    const realStock = getItemStock(item, cleanAlma);
+    item.stock_origen = realStock;
+
+    if (item.total_art > realStock) {
+      const maxAllowed = realStock > 0 ? realStock : getStep(item);
+      item.total_art = maxAllowed;
+      toast.warning(`Cantidad de "${item.art_des}" ajustada a ${maxAllowed} por disponibilidad en el almacén ${cleanAlma}`);
+    }
+    if (realStock === 0) {
+      toast.error(`El almacén ${cleanAlma} no tiene stock disponible para "${item.art_des}"`);
+    }
+  }
+
+  function updateItemQty(index: number, newQty: number) {
+    const item = selectedItems[index];
+    if (!item) return;
+    const step = getStep(item);
+    const realStock = getItemStock(item, item.co_alma_source);
+    item.stock_origen = realStock;
+
+    if (isNaN(newQty) || newQty < step) {
+      item.total_art = step;
+      return;
+    }
+    if (newQty > realStock) {
+      const maxAllowed = realStock > 0 ? realStock : step;
+      item.total_art = maxAllowed;
+      toast.error(`Stock insuficiente para "${item.art_des}". Cantidad ajustada a la disponible (${maxAllowed} ud)`);
+      return;
+    }
+    item.total_art = Math.round(newQty * 10) / 10;
   }
 
   function removeItem(index: number) {
@@ -185,6 +297,14 @@
         toast.error('Debe incluir al menos un artículo en el traslado.');
         return;
       }
+      // Validar stock de todos los artículos antes de pasar al resumen final
+      for (const item of selectedItems) {
+        const stock = getItemStock(item, item.co_alma_source);
+        if (item.total_art > stock) {
+          toast.error(`La cantidad de "${item.art_des}" (${item.total_art}) excede el stock disponible en ${item.co_alma_source} (${stock})`);
+          return;
+        }
+      }
     }
     activeTab = step;
   }
@@ -198,7 +318,10 @@
            targetBranchId && 
            sourceBranchId !== targetBranchId && 
            selectedItems.length > 0 && 
-           selectedItems.every(i => i.total_art > 0);
+           selectedItems.every(i => {
+             const stock = getItemStock(i, i.co_alma_source);
+             return i.total_art > 0 && i.total_art <= stock;
+           });
   });
 
   let sourceBranchName = $derived.by(() => {
@@ -210,9 +333,7 @@
   });
 </script>
 
-<svelte:head>
-  <title>{data.title} — GalpeApp</title>
-</svelte:head>
+
 
 <div class="flex flex-col gap-8 min-h-svh pb-20" in:fade={{ duration: 150 }}>
 
@@ -302,7 +423,15 @@
 
   <form 
     method="POST" 
-    use:enhance={() => {
+    use:enhance={({ cancel }) => {
+      for (const item of selectedItems) {
+        const stock = getItemStock(item, item.co_alma_source);
+        if (item.total_art > stock) {
+          toast.error(`No se puede procesar: "${item.art_des}" (${item.total_art} ud) excede el stock disponible en ${item.co_alma_source} (${stock} ud).`);
+          cancel();
+          return;
+        }
+      }
       isSubmitting = true;
       return async ({ update }) => {
         isSubmitting = false;
@@ -477,8 +606,9 @@
           <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
             {#each displayArticles as article}
               {@const code = (article.co_art || article.codigo || '').trim()}
+              {@const validDispo = getFilteredDisponibilidad(article)}
               {@const curAlmId = selectedWarehouses[code]}
-              {@const curAlm = article.disponibilidad?.find((a: any) => a.co_alma === curAlmId) || article.disponibilidad?.[0]}
+              {@const curAlm = validDispo.find((a: any) => String(a.co_alma).trim() === String(curAlmId).trim()) || validDispo[0]}
               {@const isAdded = selectedItems.some(i => i.co_art === code)}
 
               <div class="glass p-4 rounded-3xl border border-border-subtle hover:border-brand-500/30 transition-all flex flex-col group relative overflow-hidden">
@@ -511,17 +641,23 @@
                     </div>
 
                     <div class="relative group">
-                      <select
-                        bind:value={selectedWarehouses[code]}
-                        class="w-full h-11 bg-surface-soft hover:bg-surface-strong rounded-xl px-4 text-xs font-black outline-none border border-border-subtle appearance-none transition-all cursor-pointer text-text-muted hover:text-text-base"
-                      >
-                        {#each article.disponibilidad || [] as alm}
-                          <option value={alm.co_alma} class="bg-surface-dark text-white text-sm">
-                            {alm.des_alma || alm.co_alma}
-                          </option>
-                        {/each}
-                      </select>
-                      <ChevronDown size={14} class="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted opacity-50 pointer-events-none" />
+                      {#if validDispo.length === 0}
+                        <div class="w-full h-11 bg-red-500/10 border border-red-500/30 rounded-xl px-3 flex items-center text-[10px] font-black text-red-400 uppercase">
+                          Sin almacén permitido
+                        </div>
+                      {:else}
+                        <select
+                          bind:value={selectedWarehouses[code]}
+                          class="w-full h-11 bg-surface-soft hover:bg-surface-strong rounded-xl px-4 text-xs font-black outline-none border border-border-subtle appearance-none transition-all cursor-pointer text-text-muted hover:text-text-base"
+                        >
+                          {#each validDispo as alm}
+                            <option value={alm.co_alma} class="bg-surface-dark text-white text-sm">
+                              {alm.des_alma || alm.co_alma}
+                            </option>
+                          {/each}
+                        </select>
+                        <ChevronDown size={14} class="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted opacity-50 pointer-events-none" />
+                      {/if}
                     </div>
                   </div>
 
@@ -581,14 +717,15 @@
                         title="Sumar"><Plus size={12} /></button>
                     </div>
 
-                    <!-- Botón Agregar con Icono de Carrito de Compras -->
+                    <!-- Botón Agregar con Icono de Camión (Traslado) -->
                     <button
                       type="button"
+                      disabled={validDispo.length === 0}
                       onclick={() => addItem(article)}
-                      class="h-11 w-12 rounded-xl text-white transition-all flex items-center justify-center cursor-pointer active:scale-95 shrink-0 {isAdded ? 'bg-emerald-500 hover:bg-emerald-600 shadow-lg shadow-emerald-500/20' : 'bg-brand-600 hover:bg-brand-500 shadow-lg shadow-brand-500/20'}"
-                      title={isAdded ? 'Agregar más al traslado' : 'Agregar al traslado'}
+                      class="h-11 w-12 rounded-xl text-white transition-all flex items-center justify-center cursor-pointer active:scale-95 shrink-0 disabled:opacity-30 disabled:cursor-not-allowed {isAdded ? 'bg-emerald-500 hover:bg-emerald-600 shadow-lg shadow-emerald-500/20' : 'bg-brand-600 hover:bg-brand-500 shadow-lg shadow-brand-500/20'}"
+                      title={validDispo.length === 0 ? 'Sin permisos en almacenes origen' : isAdded ? 'Agregar más al traslado' : 'Agregar al traslado'}
                     >
-                      <ShoppingCart size={18} />
+                      <Truck size={18} />
                     </button>
                   </div>
                 </div>
@@ -598,159 +735,348 @@
           </div>
         {/if}
 
-        <!-- BARRA DE NAVEGACIÓN INFERIOR PESTAÑA 2 -->
-        <div class="glass p-6 rounded-3xl border border-white/5 flex items-center justify-between gap-4 mt-8">
-          <button 
-            type="button"
-            onclick={() => activeTab = 0}
-            class="px-6 py-4 rounded-2xl bg-white/5 hover:bg-white/10 text-xs font-bold text-text-muted hover:text-text-base transition-all flex items-center gap-2 cursor-pointer"
-          >
-            <ChevronLeft size={18} />
-            Anterior
-          </button>
-
-          <div class="flex items-center gap-4">
-            {#if selectedItems.length > 0}
-              <span class="px-4 py-2 rounded-xl bg-brand-500/10 border border-brand-500/20 font-mono font-bold text-xs text-brand-400">
-                {selectedItems.length} artículos agregados ({totalUnits} ud)
-              </span>
-            {/if}
-
-            <button 
+        <!-- Paginación Footer (EXACTO A COTIZACIONES) -->
+        {#if localPagination && localPagination.totalPages > 1}
+          <div class="flex justify-center gap-4 mt-8 pb-10">
+            <button
               type="button"
-              onclick={() => goToStep(2)}
-              disabled={selectedItems.length === 0}
-              class="px-8 py-4 rounded-2xl bg-brand-600 hover:bg-brand-500 text-white font-black text-xs uppercase tracking-widest shadow-xl shadow-brand-500/20 hover:shadow-brand-500/40 transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50"
+              disabled={localPagination.page <= 1}
+              onclick={() => {
+                localPagination.page -= 1;
+                fetchArticles();
+              }}
+              class="h-12 px-6 rounded-2xl bg-surface-soft border border-border-subtle font-bold text-sm text-text-base disabled:opacity-30 transition-all hover:bg-surface-strong cursor-pointer"
+              >Anterior</button
             >
-              Continuar a Confirmar
-              <ChevronRight size={18} />
-            </button>
+            <div
+              class="h-12 px-6 rounded-2xl bg-brand-500/10 border border-brand-500/20 flex items-center font-black text-brand-400 font-mono text-sm"
+            >
+              {localPagination.page} / {localPagination.totalPages}
+            </div>
+            <button
+              type="button"
+              disabled={localPagination.page >= localPagination.totalPages}
+              onclick={() => {
+                localPagination.page += 1;
+                fetchArticles();
+              }}
+              class="h-12 px-6 rounded-2xl bg-surface-soft border border-border-subtle font-bold text-sm text-text-base disabled:opacity-30 transition-all hover:bg-surface-strong cursor-pointer"
+              >Siguiente</button
+            >
           </div>
-        </div>
+        {/if}
+
+        <!-- Floating Transfer Cart Pill (EXACTO A COTIZACIONES) -->
+        {#if selectedItems.length > 0}
+          <div
+            class="fixed bottom-8 left-1/2 -translate-x-1/2 z-40 w-[calc(100%-2rem)] max-w-md"
+            transition:slide
+          >
+            <div
+              class="p-4 rounded-[32px] border border-brand-400/25 bg-brand-600 shadow-2xl flex items-center justify-between gap-4 text-white"
+            >
+              <div class="flex items-center gap-4">
+                <div
+                  class="h-12 w-12 rounded-2xl bg-white/15 text-white flex items-center justify-center relative shadow-sm border border-white/10 shrink-0"
+                >
+                  <Truck size={24} />
+                  <span
+                    class="absolute -top-2 -right-2 bg-red-500 text-white text-[10px] w-6 h-6 rounded-full flex items-center justify-center font-black border-2 border-brand-600"
+                    >{selectedItems.length}</span
+                  >
+                </div>
+                <div>
+                  <div
+                    class="text-[10px] font-black uppercase tracking-widest text-white/70"
+                  >
+                    Traslado en curso
+                  </div>
+                  <div class="text-sm font-black text-white">
+                    {selectedItems.length} {selectedItems.length === 1 ? 'artículo' : 'artículos'} ({totalUnits} ud)
+                  </div>
+                </div>
+              </div>
+              <button
+                type="button"
+                onclick={() => goToStep(2)}
+                class="bg-white text-brand-600 hover:bg-brand-50 h-12 px-6 rounded-2xl font-black uppercase text-xs tracking-widest shadow-xl hover:scale-105 active:scale-95 transition-all cursor-pointer shrink-0"
+              >
+                Confirmar
+              </button>
+            </div>
+          </div>
+        {/if}
 
       </div>
     {/if}
 
     <!-- ========================================== -->
-    <!-- PASO 3: RESUMEN Y ARTICULOS EN TRASLADO (AQUÍ VA LA CARD DE ÍTEMS AGREGADOS) -->
+    <!-- PASO 3: CONFIRMACIÓN Y GUARDADO DE TRASLADO -->
     <!-- ========================================== -->
     {#if activeTab === 2}
-      <div class="space-y-6 max-w-4xl mx-auto" transition:fade={{ duration: 150 }}>
-        
-        <!-- SUBTITULOS FUERA DE LA CARD -->
-        <div class="text-center space-y-2">
-          <h2 class="text-3xl font-black text-text-base">Confirmación del Traslado</h2>
-          <p class="text-text-muted text-sm max-w-md mx-auto">Revisa la mercancía agregada antes de generar el Ajuste de Salida en la Sede Origen.</p>
+      <div in:fade class="max-w-4xl mx-auto space-y-8 pb-32 px-4">
+        <!-- Subtítulo -->
+        <div class="text-center">
+          <h2 class="text-3xl font-black tracking-tight text-text-base uppercase italic">
+            Cierre de Traslado
+          </h2>
+          <p class="text-text-muted mt-2 font-medium">
+            Revise los detalles de las sedes, almacenes y renglones antes de procesar el documento.
+          </p>
         </div>
 
-        <div class="glass p-6 md:p-8 rounded-[32px] border border-white/5 shadow-2xl space-y-8">
-          <!-- Cards Resumen de Sedes -->
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div class="bg-white/5 p-5 rounded-2xl border border-white/5 space-y-1">
-              <span class="text-xs text-text-muted uppercase font-bold tracking-wider">Sede Origen (Salida)</span>
-              <div class="text-lg font-black text-amber-400">{sourceBranchName}</div>
+        <div class="flex flex-col gap-8">
+          <!-- CARD 1: MEMBRETE (Sede Origen, Sede Destino, Motivo) -->
+          <div class="glass p-8 rounded-[40px] border border-border-bold space-y-8 relative overflow-hidden bg-surface-soft/20">
+            <div class="absolute top-0 right-0 w-64 h-64 bg-brand-500/5 rounded-full blur-[100px] -mr-32 -mt-32"></div>
+
+            <div class="flex items-center justify-between border-b border-border-subtle pb-6 relative z-10">
+              <div class="flex items-center gap-3">
+                <Store size={20} class="text-brand-400" />
+                <h4 class="text-[10px] font-black uppercase tracking-[0.2em] text-text-muted">
+                  Membrete del Traslado
+                </h4>
+              </div>
+              <button
+                type="button"
+                onclick={() => (activeTab = 0)}
+                class="px-4 py-2 rounded-xl bg-surface-soft hover:bg-surface-strong text-[10px] font-black uppercase text-brand-400 tracking-widest transition-all border border-border-subtle cursor-pointer"
+              >
+                Cambiar Sedes
+              </button>
             </div>
 
-            <div class="bg-white/5 p-5 rounded-2xl border border-white/5 space-y-1">
-              <span class="text-xs text-text-muted uppercase font-bold tracking-wider">Sede Destino (Recepción)</span>
-              <div class="text-lg font-black text-emerald-400">{targetBranchName}</div>
+            <div class="space-y-6 relative z-10 w-full">
+              <!-- Sedes -->
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-6 border-b border-border-subtle pb-6">
+                <div class="space-y-1">
+                  <span class="text-[10px] font-black uppercase tracking-widest text-text-muted block">Sede Origen (Salida)</span>
+                  <span class="text-2xl font-black text-brand-400">{sourceBranchName}</span>
+                </div>
+                <div class="space-y-1">
+                  <span class="text-[10px] font-black uppercase tracking-widest text-text-muted block">Sede Destino (Recepción)</span>
+                  <span class="text-2xl font-black text-brand-400">{targetBranchName}</span>
+                </div>
+              </div>
+
+              <!-- Motivo -->
+              <div class="space-y-2 pt-2">
+                <label class="text-[10px] font-black uppercase tracking-widest text-text-muted block ml-1">
+                  Motivo / Observaciones del Traslado
+                </label>
+                <input
+                  type="text"
+                  bind:value={motivo}
+                  placeholder="Escribe el motivo del traslado..."
+                  class="w-full h-12 bg-surface-base px-4 rounded-xl border border-border-subtle focus:border-brand-500/40 outline-none text-sm font-bold text-text-base transition-all"
+                />
+              </div>
             </div>
           </div>
 
-          <!-- Motivo -->
-          <div class="bg-white/5 p-5 rounded-2xl border border-white/5 space-y-1">
-            <span class="text-xs text-text-muted uppercase font-bold tracking-wider">Motivo / Observaciones</span>
-            <div class="text-sm font-semibold text-text-base">{motivo || 'Sin observaciones'}</div>
-          </div>
-
-          <!-- TABLA COMPLETA DE ARTÍCULOS EN TRASLADO (AQUÍ ESTÁ LA DETALLADA) -->
-          <div class="space-y-3">
-            <div class="flex items-center justify-between">
-              <h4 class="text-xs font-black uppercase tracking-widest text-text-muted">Artículos Incluidos en el Traslado ({selectedItems.length})</h4>
-              <span class="text-xs font-mono font-bold text-brand-400">Total Unidades: {totalUnits}</span>
+          <!-- CARD 2: DETALLE DE RENGLONES (REPLICANDO DISEÑO EXACTO DE COTIZACIONES) -->
+          <div class="glass rounded-[32px] border border-border-subtle overflow-hidden">
+            <div class="p-8 border-b border-border-subtle flex items-center justify-between bg-surface-soft/50">
+              <div class="flex items-center gap-3">
+                <Package size={20} class="text-text-muted" />
+                <h4 class="text-[10px] font-black uppercase tracking-[0.2em] text-text-muted">
+                  Renglones ({selectedItems.length})
+                </h4>
+              </div>
+              <button
+                type="button"
+                onclick={() => (activeTab = 1)}
+                class="px-4 py-2 rounded-xl bg-surface-soft hover:bg-surface-strong text-[10px] font-black uppercase text-brand-400 tracking-widest transition-all border border-border-subtle cursor-pointer"
+              >
+                Agregar Articulo
+              </button>
             </div>
 
-            <div class="border border-white/5 rounded-2xl overflow-hidden">
-              <table class="w-full text-left text-xs">
-                <thead>
-                  <tr class="bg-white/5 text-text-muted font-bold border-b border-white/5">
-                    <th class="p-4">Código</th>
-                    <th class="p-4">Descripción</th>
-                    <th class="p-4 text-center">Almacén Origen</th>
-                    <th class="p-4 text-center">Almacén Destino</th>
-                    <th class="p-4 text-center w-32">Cantidad</th>
-                    <th class="p-4 text-center">Eliminar</th>
-                  </tr>
-                </thead>
-                <tbody class="divide-y divide-white/5 font-semibold">
-                  {#each selectedItems as item, idx}
-                    <tr class="hover:bg-white/[0.02]">
-                      <td class="p-4 font-mono text-brand-400 font-bold">{item.co_art}</td>
-                      <td class="p-4 text-text-base">{item.art_des}</td>
-                      <td class="p-4 text-center font-mono">
-                        <input 
-                          type="text" 
-                          bind:value={item.co_alma_source}
-                          class="w-14 h-8 bg-white/5 border border-white/5 rounded text-center text-text-base focus:outline-none focus:ring-1 focus:ring-brand-500"
-                        />
-                      </td>
-                      <td class="p-4 text-center font-mono">
-                        <input 
-                          type="text" 
-                          bind:value={item.co_alma_target}
-                          class="w-14 h-8 bg-white/5 border border-white/5 rounded text-center text-text-base focus:outline-none focus:ring-1 focus:ring-brand-500"
-                        />
-                      </td>
-                      <td class="p-4 text-center">
-                        <input 
-                          type="number"
-                          step={getStep(item)}
-                          min={getStep(item)}
-                          bind:value={item.total_art}
-                          class="w-20 h-9 bg-white/5 border border-white/10 rounded-xl text-center font-mono font-black text-sm text-text-base focus:outline-none focus:ring-2 focus:ring-brand-500 no-arrows"
-                        />
-                      </td>
-                      <td class="p-4 text-center">
-                        <button 
-                          type="button"
-                          onclick={() => removeItem(idx)}
-                          class="p-2 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-400 transition-all cursor-pointer"
-                          title="Eliminar ítem"
+            <div class="divide-y border-border-subtle">
+              {#each selectedItems as item, idx}
+                {@const artObj = displayArticles.find((a: any) => (a.co_art || a.codigo || '').trim() === item.co_art) || item.article}
+                {@const rawAvail = getFilteredDisponibilidad(artObj)}
+                {@const availList = (() => {
+                  let list = Array.isArray(rawAvail) ? [...rawAvail] : [];
+                  if (item.co_alma_source && !list.some((a: any) => (a.co_alma || a.id) === item.co_alma_source)) {
+                    const realAlma = data.context?.warehouses?.find((w: any) => (w.co_alma || w.id) === item.co_alma_source);
+                    list.unshift({
+                      co_alma: item.co_alma_source,
+                      des_alma: String(realAlma?.des_alma || realAlma?.des_sub || realAlma?.nombre || item.co_alma_source).trim(),
+                      stock: item.stock_origen || 0
+                    });
+                  }
+                  return list;
+                })()}
+
+                <div class="p-8 flex flex-col lg:flex-row items-start lg:items-center gap-8 transition-all hover:bg-surface-soft group relative border-b border-border-subtle last:border-0">
+                  
+                  <!-- Identidad del Producto y Selector de Cantidad -->
+                  <div class="flex items-center gap-6 shrink-0 w-full lg:w-auto">
+                    <div class="h-16 w-16 rounded-2xl bg-surface-soft flex items-center justify-center text-brand-400 relative group-hover:scale-110 transition-transform duration-500 shrink-0">
+                      <div class="absolute inset-0 bg-brand-500/10 rounded-2xl blur-lg opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                      <Package size={28} />
+                    </div>
+
+                    <!-- Controles de Cantidad (- qty +) -->
+                    <div class="flex items-center bg-surface-base/40 rounded-xl border border-border-subtle h-12 overflow-hidden shadow-inner shrink-0">
+                      <button
+                        type="button"
+                        onclick={() => updateItemQty(idx, item.total_art - getStep(item))}
+                        class="w-10 h-full flex items-center justify-center text-text-muted hover:text-brand-400 hover:bg-surface-soft transition-all cursor-pointer"
+                        title="Restar"
+                      >
+                        <Minus size={14} />
+                      </button>
+                      <input
+                        type="number"
+                        min={getStep(item)}
+                        max={getItemStock(item, item.co_alma_source)}
+                        step={getStep(item)}
+                        bind:value={item.total_art}
+                        oninput={(e) => {
+                          const inputEl = e.currentTarget as HTMLInputElement;
+                          const v = parseFloat(inputEl.value);
+                          if (!isNaN(v)) {
+                            updateItemQty(idx, v);
+                            if (inputEl.value !== String(item.total_art)) {
+                              inputEl.value = String(item.total_art);
+                            }
+                          }
+                        }}
+                        onblur={(e) => {
+                          const inputEl = e.currentTarget as HTMLInputElement;
+                          const v = parseFloat(inputEl.value);
+                          updateItemQty(idx, isNaN(v) ? getStep(item) : v);
+                          inputEl.value = String(item.total_art);
+                        }}
+                        class="w-14 text-center text-base font-black bg-transparent outline-none no-arrows text-brand-400"
+                      />
+                      <button
+                        type="button"
+                        onclick={() => updateItemQty(idx, item.total_art + getStep(item))}
+                        class="w-10 h-full flex items-center justify-center text-text-muted hover:text-brand-400 hover:bg-surface-soft transition-all cursor-pointer"
+                        title="Sumar"
+                      >
+                        <Plus size={14} />
+                      </button>
+                    </div>
+                  </div>
+
+                  <!-- Detalles del Artículo y Selects de Almacén -->
+                  <div class="flex-1 min-w-0 space-y-4 w-full">
+                    <div class="space-y-1">
+                      <div class="text-lg font-black text-text-base leading-tight">
+                        {item.art_des}
+                      </div>
+                      <div class="flex items-center gap-4 text-[11px] font-bold uppercase tracking-[0.15em]">
+                        <span class="text-brand-400 font-mono">{item.co_art}</span>
+                        <span class="h-1 w-1 rounded-full bg-border-subtle"></span>
+                        <span class="text-text-muted">{item.co_uni || "UND"}</span>
+                      </div>
+                    </div>
+
+                    <!-- Selects de Almacén Origen y Destino -->
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      <!-- Select Almacén Origen -->
+                      <div class="relative group/sel">
+                        <label class="text-[9px] font-black uppercase tracking-wider text-text-muted block mb-1">
+                          Almacén Origen (Salida)
+                        </label>
+                        <select
+                          value={item.co_alma_source}
+                          onchange={(e) => updateItemSourceWarehouse(idx, e.currentTarget.value)}
+                          class="w-full h-11 bg-surface-soft rounded-xl px-4 text-sm font-black outline-none border border-border-subtle appearance-none cursor-pointer focus:border-brand-500/30 transition-all hover:bg-surface-strong text-text-base pr-8"
                         >
-                          <Trash2 size={16} />
-                        </button>
-                      </td>
-                    </tr>
-                  {/each}
-                </tbody>
-              </table>
+                          {#each availList as alm}
+                            <option value={alm.co_alma} class="bg-surface-dark text-white">
+                              {alm.des_alma || alm.co_alma} ({alm.stock ?? item.stock_origen ?? 0})
+                            </option>
+                          {/each}
+                        </select>
+                        <ChevronDown size={14} class="absolute right-3 bottom-3 text-text-muted opacity-50 pointer-events-none" />
+                      </div>
+
+                      <!-- Select Almacén Destino -->
+                      <div class="relative group/sel">
+                        <label class="text-[9px] font-black uppercase tracking-wider text-text-muted block mb-1">
+                          Almacén Destino (Entrada)
+                        </label>
+                        <select
+                          bind:value={item.co_alma_target}
+                          class="w-full h-11 bg-surface-soft rounded-xl px-4 text-sm font-black outline-none border border-border-subtle appearance-none cursor-pointer focus:border-brand-500/30 transition-all hover:bg-surface-strong text-text-base pr-8"
+                        >
+                          {#if targetWarehouses.length === 0}
+                            <option value="01" class="bg-surface-dark text-white">ALMACEN PRINCIPAL (01)</option>
+                          {:else}
+                            {#each targetWarehouses as alm}
+                              <option value={alm.co_alma} class="bg-surface-dark text-white">
+                                {alm.des_alma || alm.des_sub || alm.nombre || alm.co_alma}
+                              </option>
+                            {/each}
+                          {/if}
+                        </select>
+                        <ChevronDown size={14} class="absolute right-3 bottom-3 text-text-muted opacity-50 pointer-events-none" />
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Botón Eliminar Renglón -->
+                  <button
+                    type="button"
+                    onclick={() => removeItem(idx)}
+                    class="h-10 w-10 rounded-xl bg-surface-soft hover:bg-red-500/10 text-text-muted hover:text-red-400 transition-all flex items-center justify-center border border-border-subtle shrink-0 cursor-pointer lg:self-center"
+                    title="Eliminar ítem"
+                  >
+                    <Trash2 size={18} />
+                  </button>
+
+                </div>
+              {/each}
             </div>
           </div>
 
-          <!-- Acciones Finales -->
-          <div class="pt-6 border-t border-white/5 flex items-center justify-between">
-            <button 
-              type="button"
-              onclick={() => activeTab = 1}
-              class="px-6 py-4 rounded-2xl bg-white/5 hover:bg-white/10 text-text-muted font-bold text-xs uppercase tracking-wider transition-all flex items-center gap-1 cursor-pointer"
-            >
-              <ChevronLeft size={16} />
-              Volver a Artículos
-            </button>
-
-            <button 
+          <!-- BOTONES DE ACCIÓN (3 BOTONES EXACTO A COTIZACIONES) -->
+          <div class="pt-6 space-y-4 relative z-10">
+            <!-- Botón Principal: Registrar y Enviar Traslado -->
+            <button
               type="submit"
               disabled={!isFormValid || isSubmitting}
-              class="px-10 py-4 rounded-2xl bg-brand-600 hover:bg-brand-500 text-white font-black text-xs uppercase tracking-widest shadow-xl shadow-brand-500/20 hover:shadow-brand-500/40 transition-all active:scale-95 flex items-center gap-3 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+              class="w-full h-20 bg-brand-600 hover:bg-brand-500 text-white rounded-[24px] font-black text-xl uppercase tracking-[0.2em] shadow-[0_20px_40px_-10px_rgba(var(--brand-rgb),0.3)] active:scale-[0.97] transition-all flex items-center justify-center gap-4 disabled:opacity-50 disabled:grayscale cursor-pointer group"
             >
               {#if isSubmitting}
-                <RefreshCw size={18} class="animate-spin" />
-                Generando Ajuste de Salida...
+                <Loader2 size={32} class="animate-spin text-brand-400/40" />
+                <span class="animate-pulse">Generando Ajuste...</span>
               {:else}
-                <Check size={18} />
+                <div class="bg-surface-strong/50 p-2.5 rounded-xl group-hover:scale-110 transition-transform">
+                  <Check size={28} />
+                </div>
                 Registrar y Enviar Traslado
               {/if}
             </button>
+
+            <!-- Botones Secundarios: Descartar todo | Volver a Edición -->
+            <div class="grid grid-cols-2 gap-4">
+              <button
+                type="button"
+                onclick={() => {
+                  selectedItems = [];
+                  activeTab = 0;
+                  toast.info('Traslado descartado');
+                }}
+                class="h-14 rounded-2xl text-text-muted hover:bg-red-500/10 hover:text-red-400 transition-all text-xs font-black uppercase tracking-widest border border-border-subtle cursor-pointer"
+              >
+                Descartar todo
+              </button>
+
+              <button
+                type="button"
+                onclick={() => (activeTab = 1)}
+                class="h-14 rounded-2xl text-brand-400 hover:bg-brand-500/10 transition-all text-xs font-black uppercase tracking-widest border border-brand-500/15 cursor-pointer"
+              >
+                Volver a Edición
+              </button>
+            </div>
           </div>
 
         </div>

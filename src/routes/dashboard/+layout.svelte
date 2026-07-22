@@ -234,10 +234,47 @@
       return { ...group, subItems: allowedSubs };
     }).filter(Boolean);
   });
+
+  // Construir mapa de rutas -> etiquetas exactas del menú
+  const menuTitleMap = $derived.by(() => {
+    const map = new Map<string, string>();
+    for (const group of navGroups) {
+      if (group.href) map.set(group.href, group.label);
+      if (group.subItems) {
+        for (const sub of group.subItems) {
+          if (sub.href) map.set(sub.href, sub.label);
+        }
+      }
+    }
+    return map;
+  });
+
+  const pageTitle = $derived.by(() => {
+    const path = $page.url.pathname;
+    
+    // 1. Coincidencia exacta con un item del menú
+    if (menuTitleMap.has(path)) {
+      return menuTitleMap.get(path)!;
+    }
+
+    // 2. Si la página provee un título específico en data.title (ej. impresiones, edición puntual)
+    if ($page.data.title) {
+      return $page.data.title;
+    }
+
+    // 3. Coincidencia por prefijo de menú
+    for (const [href, label] of menuTitleMap.entries()) {
+      if (href !== '/dashboard' && path.startsWith(href)) {
+        return label;
+      }
+    }
+
+    return 'Dashboard';
+  });
 </script>
 
 <svelte:head>
-  <title>{data.systemSettings?.app_title ?? 'GalpeApp'}</title>
+  <title>{pageTitle} — {data.systemSettings?.app_title ?? 'GalpeApp'}</title>
 </svelte:head>
 
 <div class="h-svh bg-surface-base flex flex-col md:flex-row font-sans text-text-base transition-colors duration-500 overflow-hidden">

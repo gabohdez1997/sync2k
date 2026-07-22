@@ -44,13 +44,20 @@ export const load: PageServerLoad = protectLoad('inv_transfers', async ({ locals
 		}
 	}
 
+	const profileWarehouses: string[] = profile?.allowed_warehouses || [];
+	const isAdmin = profileWarehouses.length === 0 || profile?.role === 'admin' || (Array.isArray(profile?.roles) && profile.roles.includes('admin'));
+
 	return {
 		title: 'Nuevo Traslado entre Sedes',
 		branches: dbBranches || [],
 		userBranchId: profile?.branch_id,
+		allowedWarehouses: profileWarehouses,
+		isAdmin,
 		context: {
 			lineas,
-			categorias
+			categorias,
+			allowedWarehouses: profileWarehouses,
+			isAdmin
 		}
 	};
 });

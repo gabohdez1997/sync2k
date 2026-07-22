@@ -48,8 +48,20 @@ export const GET: RequestHandler = async ({ url, locals }) => {
 			return json({ error: resData.message || 'Error del Agente' }, { status: 500 });
 		}
 
-		const warehouses = (resData as any)?.data || (Array.isArray(resData) ? resData : []);
-		return json({ warehouses: Array.isArray(warehouses) ? warehouses : [] });
+		let warehouses = (resData as any)?.data || (Array.isArray(resData) ? resData : []);
+		if (!Array.isArray(warehouses)) warehouses = [];
+
+		const profileWarehouses: string[] = locals.profile?.allowed_warehouses || [];
+		const isAdmin = profileWarehouses.length === 0 || locals.profile?.role === 'admin' || (Array.isArray(locals.profile?.roles) && locals.profile.roles.includes('admin'));
+
+		if (!isAdmin && profileWarehouses.length > 0) {
+			warehouses = warehouses.filter((a: any) => {
+				const almaId = String(a.co_alma || a.id || a.warehouse_id || '').trim();
+				return profileWarehouses.some(pw => String(pw).trim() === almaId);
+			});
+		}
+
+		return json({ warehouses });
 
 	} catch (err: any) {
 		console.error('[API WAREHOUSES] Error:', err.message);
