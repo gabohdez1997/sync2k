@@ -237,6 +237,37 @@
     }
   }
 
+  // Cargar disponibilidad de stock en tiempo real para items precargados en modo edición
+  $effect(() => {
+    if (data.editingTransfer && selectedItems.length > 0 && sourceBranchId) {
+      selectedItems.forEach(async (it) => {
+        if (it.disponibilidad === undefined && !it._loadingStock) {
+          it._loadingStock = true;
+          try {
+            const res = await fetch(`/api/agent/articles?branch_id=${sourceBranchId}&search=${encodeURIComponent(it.co_art)}`);
+            const d = await res.json();
+            if (d.success && d.data && d.data.length > 0) {
+              const matchedArt = d.data.find((a: any) => String(a.co_art || a.codigo || '').trim() === String(it.co_art).trim()) || d.data[0];
+              if (matchedArt) {
+                const dispo = getFilteredDisponibilidad(matchedArt);
+                it.disponibilidad = dispo;
+                it.article = matchedArt;
+                const matchedAlm = dispo.find((a: any) => String(a.co_alma || a.id || '').trim() === String(it.co_alma_source).trim());
+                if (matchedAlm) {
+                  it.stock_origen = Number(matchedAlm.stock);
+                }
+              }
+            }
+          } catch (e) {
+            console.error('Error cargando stock de item en edición:', e);
+          } finally {
+            it._loadingStock = false;
+          }
+        }
+      });
+    }
+  });
+
   function getItemStock(item: any, coAlma?: string): number {
     const targetAlma = String(coAlma || item.co_alma_source || '').trim();
     const art = displayArticles.find((a: any) => String(a.co_art || a.codigo || '').trim() === String(item.co_art || '').trim()) || item.article;
@@ -245,7 +276,13 @@
     if (matched && matched.stock !== undefined && matched.stock !== null) {
       return Number(matched.stock);
     }
-    return Number(item.stock_origen || 0);
+    if (item.stock_origen !== undefined && item.stock_origen !== null) {
+      return Number(item.stock_origen);
+    }
+    if (data.editingTransfer) {
+      return Number(item.total_art || 1);
+    }
+    return 0;
   }
 
   function updateItemSourceWarehouse(index: number, newCoAlma: string) {

@@ -415,7 +415,7 @@ import dayjs from "dayjs";
                       <Eye size={18} />
                     </button>
 
-                    {#if (data.canEdit || data.canCreate) && item.status === 'TRANSITO'}
+                    {#if (data.canEdit || data.canCreate) && item.status === 'TRANSITO' && (selectedBranch === 'all' ? item.source_branch_id === data.userBranchId : item.source_branch_id === selectedBranch)}
                       <a 
                         href="/dashboard/warehouse/transfers/new?id={item.id}"
                         class="p-2 rounded-xl bg-surface-soft hover:bg-amber-500/10 text-text-muted hover:text-amber-500 border border-border-subtle transition-all cursor-pointer flex items-center justify-center"
@@ -616,7 +616,7 @@ import dayjs from "dayjs";
 
         <!-- ACCIONES MODAL DETALLE -->
         <div class="pt-2 flex flex-col sm:flex-row items-center justify-end gap-3">
-          {#if (data.canEdit || data.canCreate) && selectedTransfer.status === 'TRANSITO'}
+          {#if (data.canEdit || data.canCreate) && selectedTransfer.status === 'TRANSITO' && (selectedBranch === 'all' ? selectedTransfer.source_branch_id === data.userBranchId : selectedTransfer.source_branch_id === selectedBranch)}
             <a
               href="/dashboard/warehouse/transfers/new?id={selectedTransfer.id}"
               class="w-full sm:w-auto h-12 px-6 rounded-2xl font-bold bg-amber-500/20 hover:bg-amber-500/30 text-amber-400 border border-amber-500/30 transition-all flex items-center justify-center gap-2 text-xs cursor-pointer"
