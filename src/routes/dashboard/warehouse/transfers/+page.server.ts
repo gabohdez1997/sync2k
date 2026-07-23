@@ -8,7 +8,7 @@ export const load: PageServerLoad = protectLoad('inv_transfers', async ({ url, l
 
 	const canCreate = hasPermission(profile, 'inv_transfers', 'create');
 	const canEdit = hasPermission(profile, 'inv_transfers', 'edit');
-	const canVoid = hasPermission(profile, 'inv_transfers', 'void');
+	const canVoid = hasPermission(profile, 'inv_transfers', 'delete');
 
 	// Cargar sedes activas
 	const { data: dbBranches, error: bErr } = await supabaseAdmin
