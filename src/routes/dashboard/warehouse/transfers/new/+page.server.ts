@@ -246,8 +246,7 @@ export const actions: Actions = {
 				transferRecord = insertedRec;
 			}
 
-			if (insertErr || !transferRecord) {
-				console.error('[TRANSFERS NEW] Error guardando encabezado en BD:', insertErr);
+			if (!transferRecord) {
 				return fail(500, { error: 'Error interno al registrar el traslado en la base de datos.' });
 			}
 
