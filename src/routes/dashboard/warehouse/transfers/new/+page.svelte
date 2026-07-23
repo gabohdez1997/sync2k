@@ -17,9 +17,9 @@
   let activeTab = $state(0); // 0: Sedes, 1: Artículos, 2: Confirmación
 
   // --- FORMULARIO PRINCIPAL ---
-  let sourceBranchId = $state(data.userBranchId || (data.branches[0]?.id ?? ''));
-  let targetBranchId = $state('');
-  let motivo = $state('Traslado de inventario entre sedes');
+  let sourceBranchId = $state(data.editingTransfer?.source_branch_id || data.userBranchId || (data.branches[0]?.id ?? ''));
+  let targetBranchId = $state(data.editingTransfer?.target_branch_id || '');
+  let motivo = $state(data.editingTransfer?.motivo || 'Traslado de inventario entre sedes');
 
   // --- BUSQUEDA Y FILTROS DE ARTICULOS (EXACTO A COTIZACIONES) ---
   let searchTerm = $state('');
@@ -43,29 +43,18 @@
   let qtyPerArticle = $state<Record<string, number>>({});
 
   // --- CARRITO / ARTICULOS SELECCIONADOS ---
-  let selectedItems = $state<any[]>([]);
+  const initialItems = (data.editingTransfer?.items || []).map((it: any) => ({
+    co_art: it.co_art,
+    art_des: it.art_des,
+    co_alma_source: it.co_alma_source || '01',
+    co_alma_target: it.co_alma_target || '01',
+    total_art: Number(it.total_art),
+    costo_unit: Number(it.costo_unit || 0),
+    co_uni: it.co_uni || 'UND'
+  }));
+
+  let selectedItems = $state<any[]>(initialItems);
   let isSubmitting = $state(false);
-
-  // Pre-cargar datos si estamos en modo edición
-  $effect(() => {
-    if (data.editingTransfer) {
-      sourceBranchId = data.editingTransfer.source_branch_id || sourceBranchId;
-      targetBranchId = data.editingTransfer.target_branch_id || targetBranchId;
-      motivo = data.editingTransfer.motivo || motivo;
-
-      if (data.editingTransfer.items && data.editingTransfer.items.length > 0 && selectedItems.length === 0) {
-        selectedItems = data.editingTransfer.items.map((it: any) => ({
-          co_art: it.co_art,
-          art_des: it.art_des,
-          co_alma_source: it.co_alma_source || '01',
-          co_alma_target: it.co_alma_target || '01',
-          total_art: Number(it.total_art),
-          costo_unit: Number(it.costo_unit || 0),
-          co_uni: it.co_uni || 'UND'
-        }));
-      }
-    }
-  });
 
   // === FETCH ARTICLES (REPLICADO DE COTIZACIONES) ===
   async function fetchArticles() {

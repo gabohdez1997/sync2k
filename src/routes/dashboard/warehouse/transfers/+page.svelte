@@ -415,7 +415,7 @@ import dayjs from "dayjs";
                       <Eye size={18} />
                     </button>
 
-                    {#if data.canEdit && item.status === 'TRANSITO'}
+                    {#if (data.canEdit || data.canCreate) && item.status === 'TRANSITO'}
                       <a 
                         href="/dashboard/warehouse/transfers/new?id={item.id}"
                         class="p-2 rounded-xl bg-surface-soft hover:bg-amber-500/10 text-text-muted hover:text-amber-500 border border-border-subtle transition-all cursor-pointer flex items-center justify-center"
@@ -614,12 +614,44 @@ import dayjs from "dayjs";
           </div>
         </div>
 
-        <!-- ACCIONES MODAL DETALLE (SOLO BOTÓN CERRAR) -->
-        <div class="pt-2">
+        <!-- ACCIONES MODAL DETALLE -->
+        <div class="pt-2 flex flex-col sm:flex-row items-center justify-end gap-3">
+          {#if (data.canEdit || data.canCreate) && selectedTransfer.status === 'TRANSITO'}
+            <a
+              href="/dashboard/warehouse/transfers/new?id={selectedTransfer.id}"
+              class="w-full sm:w-auto h-12 px-6 rounded-2xl font-bold bg-amber-500/20 hover:bg-amber-500/30 text-amber-400 border border-amber-500/30 transition-all flex items-center justify-center gap-2 text-xs cursor-pointer"
+            >
+              <Pencil size={16} />
+              Editar Ajuste Salida
+            </a>
+          {/if}
+
+          {#if data.canVoid && selectedTransfer.status === 'ACEPTADO'}
+            <button 
+              type="button"
+              onclick={() => { detailModalOpen = false; promptVoidEntry(selectedTransfer); }}
+              class="w-full sm:w-auto h-12 px-6 rounded-2xl font-bold bg-amber-500/20 hover:bg-amber-500/30 text-amber-400 border border-amber-500/30 transition-all flex items-center justify-center gap-2 text-xs cursor-pointer"
+            >
+              <Ban size={16} />
+              Anular Ingreso
+            </button>
+          {/if}
+
+          {#if selectedTransfer.status === 'TRANSITO' && (selectedBranch === 'all' || selectedTransfer.target_branch_id === selectedBranch)}
+            <button 
+              type="button"
+              onclick={() => { detailModalOpen = false; promptAcceptTransfer(selectedTransfer); }}
+              class="w-full sm:w-auto h-12 px-6 rounded-2xl font-bold bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 border border-emerald-500/30 transition-all flex items-center justify-center gap-2 text-xs cursor-pointer"
+            >
+              <Check size={16} />
+              Ingresar Inventario
+            </button>
+          {/if}
+
           <button
             type="button"
             onclick={() => (detailModalOpen = false)}
-            class="w-full h-14 rounded-2xl font-bold bg-surface-soft hover:bg-surface-strong transition-all text-text-muted hover:text-text-base border border-border-subtle cursor-pointer"
+            class="w-full sm:w-auto h-12 px-6 rounded-2xl font-bold bg-surface-soft hover:bg-surface-strong text-text-muted hover:text-text-base border border-border-subtle transition-all text-xs cursor-pointer"
           >
             Cerrar
           </button>

@@ -160,6 +160,8 @@ export const actions: Actions = {
 			}, profile, fetch);
 
 			let transferRecord: any = null;
+			let sourceAjueNum = '';
+			let transferNumber = '';
 
 			if (editing_id) {
 				// MODO EDICIÓN
@@ -172,6 +174,9 @@ export const actions: Actions = {
 				if (!existingTransfer || existingTransfer.status !== 'TRANSITO') {
 					return fail(400, { error: 'El traslado no existe o ya fue aceptado.' });
 				}
+
+				sourceAjueNum = existingTransfer.source_ajue_num;
+				transferNumber = existingTransfer.transfer_number;
 
 				const resJson: any = await agentClient.request(`/ajustes/${encodeURIComponent(existingTransfer.source_ajue_num)}`, {
 					method: 'PUT',
@@ -217,12 +222,12 @@ export const actions: Actions = {
 					return fail(400, { error: resJson?.message || 'Error al generar el Ajuste de Salida en la Sede Origen.' });
 				}
 
-				const sourceAjueNum = resJson.ajue_num || resJson.data?.ajue_num;
+				sourceAjueNum = resJson.ajue_num || resJson.data?.ajue_num;
 
 				const now = new Date();
 				const dateCode = now.getFullYear().toString() + String(now.getMonth() + 1).padStart(2, '0') + String(now.getDate()).padStart(2, '0');
 				const randomSuffix = Math.floor(1000 + Math.random() * 9000);
-				const transferNumber = `TR-${dateCode}-${randomSuffix}`;
+				transferNumber = `TR-${dateCode}-${randomSuffix}`;
 
 				const { data: insertedRec, error: insertErr } = await supabaseAdmin
 					.from('stock_transfers')
