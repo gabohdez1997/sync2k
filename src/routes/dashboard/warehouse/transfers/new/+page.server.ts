@@ -119,7 +119,18 @@ export const actions: Actions = {
 				return fail(400, { error: 'Sede origen no encontrada o no configurada con agente.' });
 			}
 
-			const sourceSucuCode = (Array.isArray(sourceBranch.profit_branch_codes) ? sourceBranch.profit_branch_codes[0] : sourceBranch.profit_branch_codes) || '01';
+			let sourceSucuCode = '01';
+			if (Array.isArray(sourceBranch.profit_branch_codes) && sourceBranch.profit_branch_codes.length > 0) {
+				const def = sourceBranch.profit_branch_codes.find((c: any) => c && typeof c === 'object' && c.is_default);
+				if (def && def.code) {
+					sourceSucuCode = def.code;
+				} else {
+					const first = sourceBranch.profit_branch_codes[0];
+					sourceSucuCode = typeof first === 'string' ? first : (first.code || '01');
+				}
+			} else if (typeof sourceBranch.profit_branch_codes === 'string' && sourceBranch.profit_branch_codes.trim()) {
+				sourceSucuCode = sourceBranch.profit_branch_codes.trim();
+			}
 			const userProfitCode = (profile.profit_user || '').trim().toUpperCase() || (profile.email || 'PROFIT').split('@')[0].toUpperCase().substring(0, 6);
 
 			const agentRenglones = items.map((it: any) => ({

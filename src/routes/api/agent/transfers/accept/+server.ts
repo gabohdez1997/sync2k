@@ -79,7 +79,18 @@ export const POST: RequestHandler = async ({ request, fetch, locals }) => {
 			return json({ success: false, message: 'Sucursal de destino no encontrada o no configurada.' }, { status: 404 });
 		}
 
-		const targetSucuCode = (Array.isArray(targetBranch.profit_branch_codes) ? targetBranch.profit_branch_codes[0] : targetBranch.profit_branch_codes) || '01';
+		let targetSucuCode = '01';
+		if (Array.isArray(targetBranch.profit_branch_codes) && targetBranch.profit_branch_codes.length > 0) {
+			const def = targetBranch.profit_branch_codes.find((c: any) => c && typeof c === 'object' && c.is_default);
+			if (def && def.code) {
+				targetSucuCode = def.code;
+			} else {
+				const first = targetBranch.profit_branch_codes[0];
+				targetSucuCode = typeof first === 'string' ? first : (first.code || '01');
+			}
+		} else if (typeof targetBranch.profit_branch_codes === 'string' && targetBranch.profit_branch_codes.trim()) {
+			targetSucuCode = targetBranch.profit_branch_codes.trim();
+		}
 		const userProfitCode = (profile.profit_user || '').trim().toUpperCase() || (profile.email || 'PROFIT').split('@')[0].toUpperCase().substring(0, 6);
 
 		// 3. Preparar renglones para Ajuste de ENTRADA ('01') en la Sede Destino
