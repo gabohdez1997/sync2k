@@ -192,10 +192,31 @@ import dayjs from "dayjs";
     }
   }
 
-  function promptVoidEntry(transfer: any) {
+  async function promptVoidEntry(transfer: any) {
     transferToVoidEntry = transfer;
     voidEntryPassword = '';
     showVoidEntryModal = true;
+
+    // Cargar nombres reales de los almacenes desde el Agente Profit para la sede destino
+    const branchesToFetch = Array.from(new Set([transfer.source_branch_id, transfer.target_branch_id].filter(Boolean)));
+    await Promise.all(branchesToFetch.map(async (bId) => {
+      try {
+        const res = await fetch(`/api/agent/warehouses?branch_id=${bId}`);
+        const resData = await res.json();
+        const list = resData.warehouses || (Array.isArray(resData) ? resData : []);
+        if (Array.isArray(list)) {
+          list.forEach((w: any) => {
+            const code = String(w.co_alma || w.id || w.warehouse_id || '').trim();
+            const name = String(w.des_alma || w.nombre || w.descripcion || '').trim();
+            if (code && name) {
+              warehouseNames[code] = name;
+            }
+          });
+        }
+      } catch (e) {
+        console.warn(`[TRANSFERS] Error cargando almacenes para sede ${bId}:`, e);
+      }
+    }));
   }
 
   async function executeVoidEntry(e?: Event) {
