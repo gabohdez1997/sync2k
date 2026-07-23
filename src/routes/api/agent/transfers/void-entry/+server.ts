@@ -46,10 +46,13 @@ export const POST: RequestHandler = async ({ request, fetch, locals }) => {
 			return json({ success: false, message: 'Contraseña de confirmación incorrecta.' }, { status: 400 });
 		}
 
-		// 1. Cargar datos del traslado
+		// 1. Cargar datos del traslado desde Supabase
 		const { data: transfer, error: fetchErr } = await supabaseAdmin
 			.from('stock_transfers')
-			.select('*')
+			.select(`
+				*,
+				items:stock_transfer_items(*)
+			`)
 			.eq('id', transfer_id)
 			.single();
 
@@ -58,11 +61,11 @@ export const POST: RequestHandler = async ({ request, fetch, locals }) => {
 		}
 
 		if (transfer.status !== 'ACEPTADO') {
-			return json({ success: false, message: 'Solo se pueden anular ingresos de traslados en estado ACEPTADO.' }, { status: 400 });
+			return json({ success: false, message: 'El traslado no se encuentra en estado ACEPTADO.' }, { status: 400 });
 		}
 
 		if (!transfer.target_ajue_num) {
-			return json({ success: false, message: 'El traslado no tiene un correlativo de ajuste de entrada asociado.' }, { status: 400 });
+			return json({ success: false, message: 'El traslado no posee un número de ajuste de entrada asociado en la sede destino.' }, { status: 400 });
 		}
 
 		// 2. Obtener la sucursal de destino desde Supabase
@@ -73,76 +76,81 @@ export const POST: RequestHandler = async ({ request, fetch, locals }) => {
 			.single();
 
 		if (branchErr || !targetBranch || !targetBranch.agent_url) {
-			return json({ success: false, message: 'Sucursal de destino no encontrada o no configurada.' }, { status: 404 });
+			return json({ success: false, message: 'Sucursal de destino no encontrada o no configurada con agente.' }, { status: 404 });
 		}
 
 		const userProfitCode = (profile.profit_user || '').trim().toUpperCase() || (profile.email || 'PROFIT').split('@')[0].toUpperCase().substring(0, 6);
 
-		// 3. Invocar al Agente de la Sede Destino para anular saAjuste
+		// 3. Invocar al agente de la Sede Destino para anular el Ajuste de Entrada (POST /ajustes/:ajue_num/anular)
 		const agentClient = new AgentClient({
 			slug: targetBranch.id,
 			agent_url: targetBranch.agent_url,
 			agent_api_key: targetBranch.agent_token
 		}, profile, fetch);
 
-		const resJson: any = await agentClient.request(`/ajustes/${encodeURIComponent(transfer.target_ajue_num)}/anular`, {
+		const agentRes = await agentClient.request<any>(`/ajustes/${encodeURIComponent(transfer.target_ajue_num)}/anular`, {
 			method: 'POST',
 			body: JSON.stringify({
 				branch_id: transfer.target_branch_id,
-				profit_user: userProfitCode
+				profit_user: userProfitCode,
+				co_us_in: userProfitCode
 			})
 		});
 
-		if (!resJson.success) {
-			console.error('[VOID ENTRY TRANSFER] Error en Agente Destino:', resJson);
+		if (!agentRes || !agentRes.success) {
+			console.error('[VOID ENTRY TRANSFER] Error anulando ajuste en Agente Destino:', agentRes);
 			return json({
 				success: false,
-				message: resJson.message || 'Error al anular el Ajuste de Entrada en la Sede Destino.'
+				message: agentRes?.message || 'Error al anular el Ajuste de Entrada en la Sede Destino.'
 			}, { status: 400 });
 		}
 
-		// 4. Revertir estado del traslado en Supabase Cloud a 'TRANSITO' y limpiar target_ajue_num
-		const nowStr = new Date().toISOString();
+		// 4. Actualizar el traslado en Supabase para colocarlo como PENDIENTE (TRANSITO)
 		const { error: updateErr } = await supabaseAdmin
 			.from('stock_transfers')
 			.update({
-				target_ajue_num: null,
 				status: 'TRANSITO',
+				target_ajue_num: null,
 				accepted_by: null,
 				accepted_at: null,
-				updated_at: nowStr
+				updated_at: new Date().toISOString()
 			})
 			.eq('id', transfer_id);
 
 		if (updateErr) {
-			console.error('[VOID ENTRY TRANSFER] Error actualizando BD:', updateErr);
-			return json({ success: false, message: 'Error al actualizar el estado del traslado en el servidor.' }, { status: 500 });
+			console.error('[VOID ENTRY TRANSFER] Error actualizando estado en Supabase:', updateErr);
+			return json({ success: false, message: 'Ajuste anulado en destino pero falló la actualización del estado en la nube.' }, { status: 500 });
 		}
 
-		// 5. Registrar en Auditoría
+		// 5. Registrar en auditoría
 		try {
 			const { logAction } = await import('$lib/server/audit');
 			await logAction({
 				uid: profile.id || null,
 				user_email: profile.email,
-				action: 'UPDATE',
+				action: 'VOID_ENTRY',
 				module: 'inv_transfers',
-				record_id: transfer_id,
-				old_data: { status: 'ACEPTADO', target_ajue_num: transfer.target_ajue_num },
-				new_data: { status: 'TRANSITO', target_ajue_num: null },
+				record_id: transfer.id,
+				new_data: {
+					transfer_number: transfer.transfer_number,
+					voided_target_ajue_num: transfer.target_ajue_num,
+					status: 'TRANSITO'
+				},
 				branch_id: transfer.target_branch_id
 			});
 		} catch (auditErr) {
-			console.error('[AUDIT] Error al guardar auditoria de anulación de ingreso:', auditErr);
+			console.error('[AUDIT] Error guardando auditoria de anulación de ingreso:', auditErr);
 		}
+
+		console.log(`✅ [VOID ENTRY SUCCESS] Ingreso de traslado ${transfer.transfer_number} anulado con éxito. Ajuste Destino ${transfer.target_ajue_num} revertido.`);
 
 		return json({
 			success: true,
-			message: `Ingreso del traslado ${transfer.transfer_number} anulado con éxito. El traslado vuelve a estar PENDIENTE.`
+			message: `Ingreso del traslado ${transfer.transfer_number} anulado con éxito en la Sede Destino. El traslado vuelve a estar PENDIENTE.`
 		});
 
 	} catch (e: any) {
-		console.error('[VOID ENTRY TRANSFER CRITICAL]:', e);
-		return json({ success: false, message: `Error interno: ${e.message}` }, { status: 500 });
+		console.error('[VOID ENTRY TRANSFER CRITICAL ERROR]:', e);
+		return json({ success: false, message: e.message || 'Error interno al procesar la anulación del ingreso.' }, { status: 500 });
 	}
 };

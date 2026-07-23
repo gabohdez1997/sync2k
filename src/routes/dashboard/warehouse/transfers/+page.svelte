@@ -425,7 +425,7 @@ import dayjs from "dayjs";
                       </a>
                     {/if}
 
-                    {#if data.canVoid && item.status === 'ACEPTADO'}
+                    {#if data.canVoid && item.status === 'ACEPTADO' && (selectedBranch === 'all' ? item.target_branch_id === data.userBranchId : item.target_branch_id === selectedBranch)}
                       <button 
                         onclick={() => promptVoidEntry(item)}
                         class="p-2 rounded-xl bg-surface-soft hover:bg-amber-500/10 text-text-muted hover:text-amber-500 border border-border-subtle transition-all cursor-pointer flex items-center justify-center"
@@ -626,7 +626,7 @@ import dayjs from "dayjs";
             </a>
           {/if}
 
-          {#if data.canVoid && selectedTransfer.status === 'ACEPTADO'}
+          {#if data.canVoid && selectedTransfer.status === 'ACEPTADO' && (selectedBranch === 'all' ? selectedTransfer.target_branch_id === data.userBranchId : selectedTransfer.target_branch_id === selectedBranch)}
             <button 
               type="button"
               onclick={() => { detailModalOpen = false; promptVoidEntry(selectedTransfer); }}
@@ -866,6 +866,41 @@ import dayjs from "dayjs";
         <div class="flex justify-between">
           <span class="text-text-muted">Total Renglones:</span>
           <span class="font-bold text-amber-500">{transferToVoidEntry.items?.length || 0} artículos</span>
+        </div>
+      </div>
+
+      <!-- PREVISUALIZACIÓN ARTÍCULOS A REVERTIR -->
+      <div class="space-y-2 text-left">
+        <div class="flex items-center justify-between">
+          <span class="text-[10px] font-black uppercase tracking-widest text-text-muted">
+            Artículos a Revertir ({(transferToVoidEntry.items || []).length})
+          </span>
+        </div>
+        <div class="border border-border-subtle rounded-2xl overflow-hidden max-h-56 overflow-y-auto custom-scrollbar bg-surface-base/50">
+          <table class="w-full text-left text-xs">
+            <thead>
+              <tr class="bg-surface-soft border-b border-border-subtle text-text-muted font-bold text-[10px] uppercase tracking-wider">
+                <th class="p-3">Código</th>
+                <th class="p-3">Descripción</th>
+                <th class="p-3 text-center">Almacén Destino</th>
+                <th class="p-3 text-right">Cantidad / Unidad</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-border-subtle/50 font-semibold text-[11px]">
+              {#each transferToVoidEntry.items || [] as item}
+                {@const tgtName = warehouseNames[item.co_alma_target] ? `${warehouseNames[item.co_alma_target]} (${item.co_alma_target})` : `Almacén ${item.co_alma_target}`}
+                <tr class="hover:bg-surface-soft/50">
+                  <td class="p-3 font-mono text-brand-500 font-bold whitespace-nowrap">{item.co_art}</td>
+                  <td class="p-3 text-text-base leading-relaxed break-words">{item.art_des}</td>
+                  <td class="p-3 text-center font-mono text-amber-500 font-bold text-[11px]">{tgtName}</td>
+                  <td class="p-3 text-right font-mono font-black text-amber-500 text-xs whitespace-nowrap">
+                    {Number(item.total_art).toFixed(2)}
+                    <span class="text-[10px] text-amber-600 font-bold ml-1 uppercase">{item.co_uni || 'UND'}</span>
+                  </td>
+                </tr>
+              {/each}
+            </tbody>
+          </table>
         </div>
       </div>
 

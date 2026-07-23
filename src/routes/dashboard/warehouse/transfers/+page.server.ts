@@ -61,6 +61,7 @@ export const load: PageServerLoad = protectLoad('inv_transfers', async ({ url, l
 		transfers: transfers || [],
 		canCreate,
 		canEdit,
-		canVoid
+		canVoid,
+		userBranchId: profile?.branch_id || null
 	};
 });
