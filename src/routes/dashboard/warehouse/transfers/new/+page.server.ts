@@ -47,12 +47,33 @@ export const load: PageServerLoad = protectLoad('inv_transfers', async ({ locals
 	const profileWarehouses: string[] = profile?.allowed_warehouses || [];
 	const isAdmin = profileWarehouses.length === 0 || profile?.role === 'admin' || (Array.isArray(profile?.roles) && profile.roles.includes('admin'));
 
+	const editingId = url.searchParams.get('id');
+	let editingTransfer: any = null;
+
+	if (editingId) {
+		const { data: extTransfer, error: extErr } = await supabaseAdmin
+			.from('stock_transfers')
+			.select(`
+				*,
+				items:stock_transfer_items(*)
+			`)
+			.eq('id', editingId)
+			.single();
+
+		if (!extErr && extTransfer) {
+			if (extTransfer.status === 'TRANSITO') {
+				editingTransfer = extTransfer;
+			}
+		}
+	}
+
 	return {
-		title: 'Nuevo Traslado entre Sedes',
+		title: editingTransfer ? `Editar Traslado ${editingTransfer.transfer_number}` : 'Nuevo Traslado entre Sedes',
 		branches: dbBranches || [],
 		userBranchId: profile?.branch_id,
 		allowedWarehouses: profileWarehouses,
 		isAdmin,
+		editingTransfer,
 		context: {
 			lineas,
 			categorias,
@@ -68,6 +89,7 @@ export const actions: Actions = {
 
 		try {
 			const formData = await request.formData();
+			const editing_id = formData.get('editing_id')?.toString();
 			const source_branch_id = formData.get('source_branch_id')?.toString();
 			const target_branch_id = formData.get('target_branch_id')?.toString();
 			const motivo = formData.get('motivo')?.toString() || 'Traslado entre sedes';
@@ -86,7 +108,7 @@ export const actions: Actions = {
 				return fail(400, { error: 'Debe agregar al menos un artículo al traslado.' });
 			}
 
-			// 1. Invocar al Agente Profit de la Sede Origen para crear saAjuste (SALIDA)
+			// Cargar sucursal de origen
 			const { data: sourceBranch, error: branchErr } = await supabaseAdmin
 				.from('branches')
 				.select('*')
@@ -126,38 +148,92 @@ export const actions: Actions = {
 				agent_api_key: sourceBranch.agent_token
 			}, profile, fetch);
 
-			const resJson: any = await agentClient.request('/ajustes', {
-				method: 'POST',
-				body: JSON.stringify(agentPayload)
-			});
+			let transferRecord: any = null;
 
-			if (!resJson || !resJson.success) {
-				console.error('[TRANSFERS NEW] Error en Agente Origen:', resJson);
-				return fail(400, { error: resJson?.message || 'Error al generar el Ajuste de Salida en la Sede Origen.' });
+			if (editing_id) {
+				// MODO EDICIÓN
+				const { data: existingTransfer } = await supabaseAdmin
+					.from('stock_transfers')
+					.select('*')
+					.eq('id', editing_id)
+					.single();
+
+				if (!existingTransfer || existingTransfer.status !== 'TRANSITO') {
+					return fail(400, { error: 'El traslado no existe o ya fue aceptado.' });
+				}
+
+				const resJson: any = await agentClient.request(`/ajustes/${encodeURIComponent(existingTransfer.source_ajue_num)}`, {
+					method: 'PUT',
+					body: JSON.stringify(agentPayload)
+				});
+
+				if (!resJson || !resJson.success) {
+					console.error('[TRANSFERS EDIT] Error en Agente Origen:', resJson);
+					return fail(400, { error: resJson?.message || 'Error al actualizar el Ajuste de Salida en la Sede Origen.' });
+				}
+
+				// Actualizar encabezado en Supabase
+				const { data: updatedRec, error: upErr } = await supabaseAdmin
+					.from('stock_transfers')
+					.update({
+						source_branch_id,
+						target_branch_id,
+						motivo,
+						updated_at: new Date().toISOString()
+					})
+					.eq('id', editing_id)
+					.select()
+					.single();
+
+				if (upErr || !updatedRec) {
+					return fail(500, { error: 'Error al actualizar el traslado en la base de datos.' });
+				}
+
+				transferRecord = updatedRec;
+
+				// Eliminar renglones anteriores e insertar los nuevos
+				await supabaseAdmin.from('stock_transfer_items').delete().eq('transfer_id', editing_id);
+
+			} else {
+				// MODO CREACIÓN
+				const resJson: any = await agentClient.request('/ajustes', {
+					method: 'POST',
+					body: JSON.stringify(agentPayload)
+				});
+
+				if (!resJson || !resJson.success) {
+					console.error('[TRANSFERS NEW] Error en Agente Origen:', resJson);
+					return fail(400, { error: resJson?.message || 'Error al generar el Ajuste de Salida en la Sede Origen.' });
+				}
+
+				const sourceAjueNum = resJson.ajue_num || resJson.data?.ajue_num;
+
+				const now = new Date();
+				const dateCode = now.getFullYear().toString() + String(now.getMonth() + 1).padStart(2, '0') + String(now.getDate()).padStart(2, '0');
+				const randomSuffix = Math.floor(1000 + Math.random() * 9000);
+				const transferNumber = `TR-${dateCode}-${randomSuffix}`;
+
+				const { data: insertedRec, error: insertErr } = await supabaseAdmin
+					.from('stock_transfers')
+					.insert({
+						transfer_number: transferNumber,
+						source_branch_id,
+						target_branch_id,
+						source_ajue_num: sourceAjueNum,
+						status: 'TRANSITO',
+						motivo,
+						created_by: profile.email
+					})
+					.select()
+					.single();
+
+				if (insertErr || !insertedRec) {
+					console.error('[TRANSFERS NEW] Error guardando encabezado en BD:', insertErr);
+					return fail(500, { error: 'Error interno al registrar el traslado en la base de datos.' });
+				}
+
+				transferRecord = insertedRec;
 			}
-
-			const sourceAjueNum = resJson.ajue_num || resJson.data?.ajue_num;
-
-			// 2. Generar número de traslado correlativo
-			const now = new Date();
-			const dateCode = now.getFullYear().toString() + String(now.getMonth() + 1).padStart(2, '0') + String(now.getDate()).padStart(2, '0');
-			const randomSuffix = Math.floor(1000 + Math.random() * 9000);
-			const transferNumber = `TR-${dateCode}-${randomSuffix}`;
-
-			// 3. Insertar encabezado en Supabase / PG
-			const { data: transferRecord, error: insertErr } = await supabaseAdmin
-				.from('stock_transfers')
-				.insert({
-					transfer_number: transferNumber,
-					source_branch_id,
-					target_branch_id,
-					source_ajue_num: sourceAjueNum,
-					status: 'TRANSITO',
-					motivo,
-					created_by: profile.email
-				})
-				.select()
-				.single();
 
 			if (insertErr || !transferRecord) {
 				console.error('[TRANSFERS NEW] Error guardando encabezado en BD:', insertErr);

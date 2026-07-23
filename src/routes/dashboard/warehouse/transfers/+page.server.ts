@@ -1,9 +1,14 @@
 import type { PageServerLoad } from './$types';
 import { protectLoad } from '$lib/server/permissions';
 import { supabaseAdmin } from '$lib/server/supabase';
+import { hasPermission } from '$lib/server/auth';
 
 export const load: PageServerLoad = protectLoad('inv_transfers', async ({ url, locals }) => {
 	const profile = (locals as any).profile;
+
+	const canCreate = hasPermission(profile, 'inv_transfers', 'create');
+	const canEdit = hasPermission(profile, 'inv_transfers', 'edit');
+	const canVoid = hasPermission(profile, 'inv_transfers', 'void');
 
 	// Cargar sedes activas
 	const { data: dbBranches, error: bErr } = await supabaseAdmin
@@ -53,6 +58,9 @@ export const load: PageServerLoad = protectLoad('inv_transfers', async ({ url, l
 		title: 'Traslado de Artículos entre Sedes',
 		branches,
 		selectedBranchId,
-		transfers: transfers || []
+		transfers: transfers || [],
+		canCreate,
+		canEdit,
+		canVoid
 	};
 });

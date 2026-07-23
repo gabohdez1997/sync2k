@@ -6,7 +6,7 @@ import dayjs from "dayjs";
   import { 
     ArrowRightLeft, Plus, RefreshCw, Search, Store, CheckCircle, 
     XCircle, Clock, Truck, Eye, X, AlertTriangle, Box, FileText, Check, ShieldAlert, Lock, Loader2,
-    ChevronLeft, ChevronRight
+    ChevronLeft, ChevronRight, Pencil, Ban
   } from "lucide-svelte";
   import { fade } from "svelte/transition";
   import { toast } from "svelte-sonner";
@@ -26,6 +26,12 @@ import dayjs from "dayjs";
   let showAcceptModal = $state(false);
   let transferToAccept = $state<any>(null);
   let confirmPassword = $state('');
+
+  // Estado para Anulación de Ingreso
+  let showVoidEntryModal = $state(false);
+  let transferToVoidEntry = $state<any>(null);
+  let voidEntryPassword = $state('');
+  let isVoidingEntry = $state(false);
 
   // Auto sync branch from URL
   $effect(() => {
@@ -183,6 +189,48 @@ import dayjs from "dayjs";
       toast.error(`Error de red: ${e.message}`);
     } finally {
       isAccepting = null;
+    }
+  }
+
+  function promptVoidEntry(transfer: any) {
+    transferToVoidEntry = transfer;
+    voidEntryPassword = '';
+    showVoidEntryModal = true;
+  }
+
+  async function executeVoidEntry(e?: Event) {
+    if (e) e.preventDefault();
+    if (!transferToVoidEntry) return;
+    if (!voidEntryPassword) {
+      toast.error('Debe ingresar su contraseña de confirmación.');
+      return;
+    }
+
+    isVoidingEntry = true;
+    try {
+      const res = await fetch('/api/agent/transfers/void-entry', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          transfer_id: transferToVoidEntry.id,
+          password: voidEntryPassword
+        })
+      });
+
+      const resData = await res.json();
+      if (res.ok && resData.success) {
+        toast.success(resData.message || 'Ingreso de traslado anulado con éxito.');
+        showVoidEntryModal = false;
+        detailModalOpen = false;
+        voidEntryPassword = '';
+        await invalidateAll();
+      } else {
+        toast.error(resData.message || 'Error al anular el ingreso del traslado.');
+      }
+    } catch (e: any) {
+      toast.error(`Error de red: ${e.message}`);
+    } finally {
+      isVoidingEntry = false;
     }
   }
 
@@ -366,6 +414,26 @@ import dayjs from "dayjs";
                     >
                       <Eye size={18} />
                     </button>
+
+                    {#if data.canEdit && item.status === 'TRANSITO'}
+                      <a 
+                        href="/dashboard/warehouse/transfers/new?id={item.id}"
+                        class="p-2 rounded-xl bg-surface-soft hover:bg-amber-500/10 text-text-muted hover:text-amber-500 border border-border-subtle transition-all cursor-pointer flex items-center justify-center"
+                        title="Editar Ajuste de Salida"
+                      >
+                        <Pencil size={18} />
+                      </a>
+                    {/if}
+
+                    {#if data.canVoid && item.status === 'ACEPTADO'}
+                      <button 
+                        onclick={() => promptVoidEntry(item)}
+                        class="p-2 rounded-xl bg-surface-soft hover:bg-amber-500/10 text-text-muted hover:text-amber-500 border border-border-subtle transition-all cursor-pointer flex items-center justify-center"
+                        title="Anular Ingreso de Traslado"
+                      >
+                        <Ban size={18} />
+                      </button>
+                    {/if}
 
                     {#if item.status === 'TRANSITO' && activeTab !== 'outgoing' && (selectedBranch === 'all' || item.target_branch_id === selectedBranch)}
                       <button 
@@ -725,6 +793,96 @@ import dayjs from "dayjs";
         </form>
 
       </div>
+    </div>
+  </div>
+{/if}
+
+<!-- MODAL DE CONFIRMACIÓN PARA ANULAR INGRESO DE TRASLADO -->
+{#if showVoidEntryModal && transferToVoidEntry}
+  <div 
+    class="fixed inset-0 bg-black/60 backdrop-blur-md z-50 flex items-center justify-center p-4"
+    transition:fade={{ duration: 150 }}
+  >
+    <div 
+      class="bg-surface-raised border border-border-bold rounded-3xl w-full max-w-lg overflow-hidden shadow-2xl p-6 text-center space-y-6"
+    >
+      <div class="w-16 h-16 rounded-2xl bg-amber-500/10 text-amber-500 flex items-center justify-center mx-auto border border-amber-500/20">
+        <Ban size={32} />
+      </div>
+
+      <div class="space-y-2">
+        <h3 class="text-xl font-black text-text-base">Anular Ingreso de Traslado</h3>
+        <p class="text-xs text-text-muted">
+          Esta acción anulará el ajuste de entrada en la sede destino y revertirá el estado del traslado <span class="font-mono font-bold text-amber-500">{transferToVoidEntry.transfer_number}</span> a <span class="font-bold text-amber-400">PENDIENTE</span> en la nube.
+        </p>
+      </div>
+
+      <!-- RESUMEN DEL TRASLADO -->
+      <div class="bg-surface-soft/60 rounded-2xl p-4 border border-border-subtle text-left space-y-2 font-mono text-xs">
+        <div class="flex justify-between">
+          <span class="text-text-muted">Traslado:</span>
+          <span class="font-bold text-text-base">{transferToVoidEntry.transfer_number}</span>
+        </div>
+        <div class="flex justify-between">
+          <span class="text-text-muted">Ajuste Entrada:</span>
+          <span class="font-bold text-emerald-500">{transferToVoidEntry.target_ajue_num || '---'}</span>
+        </div>
+        <div class="flex justify-between">
+          <span class="text-text-muted">Sede Destino:</span>
+          <span class="font-bold text-text-base">{transferToVoidEntry.target_branch?.name || '---'}</span>
+        </div>
+        <div class="flex justify-between">
+          <span class="text-text-muted">Total Renglones:</span>
+          <span class="font-bold text-amber-500">{transferToVoidEntry.items?.length || 0} artículos</span>
+        </div>
+      </div>
+
+      <!-- FORMULARIO CON CONTRASEÑA -->
+      <form onsubmit={executeVoidEntry} class="space-y-4 pt-1">
+        <div class="space-y-2 text-left">
+          <label 
+            class="text-[10px] font-black uppercase tracking-widest text-text-muted ml-1"
+            for="transfer-void-pass"
+          >
+            Contraseña de Confirmación
+          </label>
+          <div class="relative">
+            <Lock size={18} class="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted opacity-40" />
+            <input 
+              id="transfer-void-pass"
+              type="password"
+              bind:value={voidEntryPassword}
+              required
+              disabled={isVoidingEntry}
+              placeholder="Introduzca su contraseña"
+              class="w-full h-14 bg-surface-base border border-border-bold rounded-2xl pl-12 pr-5 focus:border-amber-500 outline-none transition-all text-text-base"
+            />
+          </div>
+        </div>
+
+        <div class="flex gap-3 pt-2">
+          <button 
+            type="button" 
+            onclick={() => (showVoidEntryModal = false)}
+            disabled={isVoidingEntry}
+            class="flex-1 h-14 rounded-2xl font-bold bg-surface-soft hover:bg-surface-strong transition-all text-text-muted hover:text-text-base border border-border-subtle cursor-pointer disabled:opacity-50"
+          >
+            Cancelar
+          </button>
+          <button 
+            type="submit"
+            disabled={isVoidingEntry || !voidEntryPassword.trim()}
+            class="flex-1 h-14 rounded-2xl font-bold bg-amber-500 hover:bg-amber-600 text-slate-950 shadow-lg shadow-amber-500/20 transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer"
+          >
+            {#if isVoidingEntry}
+              <Loader2 size={18} class="animate-spin" />
+            {:else}
+              <Ban size={18} />
+              Confirmar Anulación
+            {/if}
+          </button>
+        </div>
+      </form>
     </div>
   </div>
 {/if}

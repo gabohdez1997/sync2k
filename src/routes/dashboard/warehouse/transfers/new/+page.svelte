@@ -46,6 +46,27 @@
   let selectedItems = $state<any[]>([]);
   let isSubmitting = $state(false);
 
+  // Pre-cargar datos si estamos en modo edición
+  $effect(() => {
+    if (data.editingTransfer) {
+      sourceBranchId = data.editingTransfer.source_branch_id || sourceBranchId;
+      targetBranchId = data.editingTransfer.target_branch_id || targetBranchId;
+      motivo = data.editingTransfer.motivo || motivo;
+
+      if (data.editingTransfer.items && data.editingTransfer.items.length > 0 && selectedItems.length === 0) {
+        selectedItems = data.editingTransfer.items.map((it: any) => ({
+          co_art: it.co_art,
+          art_des: it.art_des,
+          co_alma_source: it.co_alma_source || '01',
+          co_alma_target: it.co_alma_target || '01',
+          total_art: Number(it.total_art),
+          costo_unit: Number(it.costo_unit || 0),
+          co_uni: it.co_uni || 'UND'
+        }));
+      }
+    }
+  });
+
   // === FETCH ARTICLES (REPLICADO DE COTIZACIONES) ===
   async function fetchArticles() {
     if (!sourceBranchId) return;
@@ -342,10 +363,10 @@
     <div class="flex flex-col gap-2">
       <h1 class="text-4xl font-black tracking-tight flex items-center gap-3 text-text-base">
         <ArrowRightLeft size={40} class="text-brand-500" />
-        Nuevo Traslado
+        {data.editingTransfer ? `Editar Traslado ${data.editingTransfer.transfer_number}` : 'Nuevo Traslado'}
       </h1>
       <p class="text-text-muted text-lg">
-        Generar nuevo traslado de mercancía entre sedes
+        {data.editingTransfer ? `Modificando detalle de ${data.editingTransfer.transfer_number}` : 'Generar nuevo traslado de mercancía entre sedes'}
       </p>
     </div>
 
@@ -423,7 +444,16 @@
 
   <form 
     method="POST" 
-    use:enhance={({ cancel }) => {
+    use:enhance={({ formData, cancel }) => {
+      isSubmitting = true;
+      formData.set('source_branch_id', sourceBranchId);
+      formData.set('target_branch_id', targetBranchId);
+      formData.set('motivo', motivo);
+      formData.set('items', JSON.stringify(selectedItems));
+      if (data.editingTransfer) {
+        formData.set('editing_id', data.editingTransfer.id);
+      }
+      
       for (const item of selectedItems) {
         const stock = getItemStock(item, item.co_alma_source);
         if (item.total_art > stock) {
