@@ -6,7 +6,7 @@
   import { 
     Wallet, Search, Filter, Plus, Calendar, Eye, X, Trash2,
     AlertCircle, RefreshCw, Printer, AlertTriangle, Building, CreditCard, Landmark, CheckCircle,
-    FileText, ChevronLeft, ChevronRight, Ban, Edit2, Store
+    FileText, ChevronLeft, ChevronRight, Ban, Edit2, Store, Lock, Check, Loader2
   } from 'lucide-svelte';
   import { fade } from 'svelte/transition';
   import SearchBar from "$lib/components/ui/SearchBar.svelte";
@@ -830,7 +830,7 @@
                     {#if data.canVoid && !p.anulado}
                       <button 
                         onclick={() => openVoidModal(p)}
-                        class="p-2 text-text-muted hover:text-red-500 hover:bg-red-500/10 rounded-xl transition-all cursor-pointer"
+                        class="p-2 text-text-muted hover:text-amber-500 hover:bg-amber-500/10 rounded-xl transition-all cursor-pointer"
                         title="Anular Cobro"
                       >
                         <Ban size={18} />
@@ -886,11 +886,11 @@
 
 <!-- MODAL DE DETALLE -->
 {#if detailModalOpen}
-  <div class="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-4 md:p-6" transition:fade={{ duration: 150 }}>
-    <div class="glass max-w-4xl w-full max-h-[90vh] rounded-[32px] border border-white/10 shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
+  <div class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 md:p-6" transition:fade={{ duration: 150 }}>
+    <div class="bg-surface-raised max-w-4xl w-full max-h-[90vh] rounded-[32px] border border-border-bold shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95 duration-200 text-text-base">
       
       <!-- Cabecera Modal -->
-      <div class="p-6 border-b border-white/5 flex items-center justify-between bg-white/[0.02]">
+      <div class="p-6 border-b border-border-subtle flex items-center justify-between bg-surface-soft/40">
         <div class="flex items-center gap-3">
           <div class="h-10 w-10 rounded-xl bg-brand-500/10 flex items-center justify-center text-brand-500">
             <Wallet size={20} />
@@ -902,7 +902,7 @@
         </div>
         <button 
           onclick={() => { detailModalOpen = false; detailData = null; }}
-          class="p-2 rounded-xl text-text-muted hover:bg-white/5 hover:text-text-base transition-all"
+          class="p-2 rounded-xl text-text-muted hover:bg-surface-strong hover:text-text-base transition-all cursor-pointer"
         >
           <X size={20} />
         </button>
@@ -916,7 +916,7 @@
             <p class="text-sm font-bold text-text-muted">{isEditingPayment ? 'Preparando formulario de edición...' : 'Buscando información en la sede local...'}</p>
           </div>
         {:else if detailError}
-          <div class="bg-red-500/10 border border-red-500/20 rounded-2xl p-6 flex gap-4 text-red-400">
+          <div class="bg-red-500/10 border border-red-500/20 rounded-2xl p-6 flex gap-4 text-red-500">
             <AlertCircle size={24} class="shrink-0" />
             <div>
               <h4 class="font-bold">Error al Cargar Detalle</h4>
@@ -929,21 +929,21 @@
             <div class="space-y-8">
               <!-- Información General Fija -->
               <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <div class="bg-white/5 p-5 rounded-2xl border border-white/5">
-                  <span class="text-xs text-text-muted/65 uppercase font-bold tracking-wider">Identificador</span>
+                <div class="bg-surface-soft p-5 rounded-2xl border border-border-subtle">
+                  <span class="text-xs text-text-muted uppercase font-bold tracking-wider">Identificador</span>
                   <div class="text-2xl font-black text-brand-500 mt-1">{detailData.cob_num}</div>
                 </div>
 
-                <div class="bg-white/5 p-5 rounded-2xl border border-white/5">
-                  <span class="text-xs text-text-muted/65 uppercase font-bold tracking-wider">Cliente</span>
+                <div class="bg-surface-soft p-5 rounded-2xl border border-border-subtle">
+                  <span class="text-xs text-text-muted uppercase font-bold tracking-wider">Cliente</span>
                   <div class="text-lg font-bold text-text-base mt-1 truncate">{detailData.cli_des}</div>
                   <div class="text-xs text-text-muted mt-1">{detailData.co_cli} • {detailData.rif}</div>
                 </div>
 
-                <div class="bg-white/5 p-5 rounded-2xl border border-white/5">
-                  <span class="text-xs text-text-muted/65 uppercase font-bold tracking-wider">Tasa de Cambio</span>
+                <div class="bg-surface-soft p-5 rounded-2xl border border-border-subtle">
+                  <span class="text-xs text-text-muted uppercase font-bold tracking-wider">Tasa de Cambio</span>
                   <div class="text-2xl font-black text-text-base mt-1">
-                    <span class="text-xs text-text-muted/70 font-normal mr-1">Bs. / USD</span>
+                    <span class="text-xs text-text-muted font-normal mr-1">Bs. / USD</span>
                     {Number(editTasa).toFixed(2)}
                   </div>
                 </div>
@@ -1638,41 +1638,35 @@
 
 <!-- MODAL DE ANULACIÓN -->
 {#if showVoidModal}
-  <div 
-    class="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-4" 
-    transition:fade={{ duration: 150 }}
-  >
+  <div class="fixed inset-0 z-[60] flex items-center justify-center p-4">
     <div 
-      class="glass max-w-md w-full rounded-[32px] border border-white/10 shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200"
-    >
-      <!-- Cabecera -->
-      <div class="p-6 border-b border-white/5 flex items-center justify-between bg-white/[0.02]">
-        <div class="flex items-center gap-3">
-          <div class="h-10 w-10 rounded-xl bg-red-500/10 flex items-center justify-center text-red-500">
-            <Ban size={20} />
-          </div>
-          <div>
-            <h3 class="font-black text-xl text-text-base">Confirmar Anulación</h3>
-            <p class="text-xs text-text-muted">Esta acción revertirá los saldos</p>
-          </div>
-        </div>
-        <button 
-          onclick={() => !isVoiding && (showVoidModal = false)}
-          class="p-2 rounded-xl text-text-muted hover:bg-white/5 hover:text-text-base transition-all"
-        >
-          <X size={20} />
-        </button>
-      </div>
+      class="absolute inset-0 bg-black/60 backdrop-blur-sm"
+      onclick={() => !isVoiding && (showVoidModal = false)}
+      onkeydown={(e) => e.key === "Escape" && !isVoiding && (showVoidModal = false)}
+      role="button"
+      tabindex="-1"
+    ></div>
 
-      <!-- Contenido -->
-      <div class="p-6 space-y-4">
-        <p class="text-sm text-text-muted">
-          ¿Estás seguro de que deseas anular el cobro 
-          <span class="text-text-base font-bold">{paymentToVoid?.cob_num}</span>?
-        </p>
+    <div 
+      class="bg-surface-raised w-full max-w-md rounded-[40px] border border-border-bold shadow-2xl relative z-10 overflow-hidden text-text-base"
+    >
+      <div class="p-8 text-center space-y-6">
+        <div
+          class="h-20 w-20 rounded-3xl bg-amber-500/20 text-amber-500 flex items-center justify-center mx-auto shadow-lg shadow-amber-500/10"
+        >
+          <Ban size={40} />
+        </div>
+
+        <div class="space-y-2">
+          <h2 class="text-2xl font-black tracking-tight text-text-base">Confirmar Anulación</h2>
+          <p class="text-text-muted text-sm px-2">
+            ¿Estás seguro de que deseas anular el cobro 
+            <span class="text-text-base font-bold">{paymentToVoid?.cob_num}</span>? Esta acción revertirá los saldos y documentos en Profit Plus.
+          </p>
+        </div>
 
         {#if paymentToVoid}
-          <div class="bg-white/5 p-4 rounded-2xl border border-white/5 space-y-2 text-xs text-text-muted">
+          <div class="bg-surface-soft p-4 rounded-2xl border border-border-subtle text-left space-y-1 text-xs text-text-muted">
             <p><span class="font-bold text-text-base">Cliente:</span> {paymentToVoid.cli_des}</p>
             <p><span class="font-bold text-text-base">Fecha:</span> {new Date(paymentToVoid.fecha).toLocaleDateString('es-VE')}</p>
             <p>
@@ -1685,7 +1679,7 @@
         <form 
           method="POST" 
           action="?/voidPayment" 
-          class="space-y-4"
+          class="space-y-4 pt-2"
           use:enhance={() => {
             isVoiding = true;
             return async ({ result, update }) => {
@@ -1694,7 +1688,7 @@
                 showVoidModal = false;
                 await update();
               } else if (result.type === 'failure') {
-                alert(result.data?.message || 'Error al anular el cobro');
+                toast.error(result.data?.message || 'Error al anular el cobro');
               }
             };
           }}
@@ -1702,41 +1696,46 @@
           <input type="hidden" name="cob_num" value={paymentToVoid?.cob_num} />
           <input type="hidden" name="branch_id" value={data.selectedBranchId} />
 
-          <div class="space-y-2">
-            <label for="void-pass" class="text-xs font-bold text-text-muted uppercase tracking-wider">
+          <div class="space-y-2 text-left">
+            <label for="void-pass" class="text-[10px] font-black uppercase tracking-widest text-text-muted ml-1">
               Contraseña de Confirmación
             </label>
-            <input 
-              type="password" 
-              id="void-pass" 
-              name="password"
-              required
-              bind:value={voidPassword}
-              placeholder="Introduce tu contraseña actual..."
-              class="w-full bg-surface-soft border border-white/5 px-4 py-3 rounded-xl text-sm text-text-base placeholder-text-muted/50 focus:border-brand-500/50 focus:ring-0 focus:outline-hidden transition-all"
-            />
+            <div class="relative">
+              <Lock
+                size={18}
+                class="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted opacity-40"
+              />
+              <input 
+                type="password" 
+                id="void-pass" 
+                name="password"
+                required
+                bind:value={voidPassword}
+                placeholder="Introduzca su contraseña"
+                class="w-full h-14 bg-surface-base border border-border-bold rounded-2xl pl-12 pr-5 focus:border-amber-500 outline-none transition-all text-text-base"
+              />
+            </div>
           </div>
 
-          <!-- Botones -->
-          <div class="flex gap-3 pt-2">
+          <div class="flex gap-3 pt-4">
             <button 
               type="button"
               onclick={() => (showVoidModal = false)}
               disabled={isVoiding}
-              class="flex-1 py-3.5 rounded-xl font-bold bg-white/5 hover:bg-white/10 text-text-base transition-all text-sm disabled:opacity-50"
+              class="flex-1 h-14 rounded-2xl font-bold bg-surface-soft hover:bg-surface-strong transition-all text-text-muted hover:text-text-base border border-border-subtle cursor-pointer disabled:opacity-50"
             >
               Cancelar
             </button>
             <button 
               type="submit"
               disabled={isVoiding || !voidPassword}
-              class="flex-1 py-3.5 rounded-xl font-bold bg-red-600 hover:bg-red-500 text-white transition-all text-sm disabled:opacity-50 flex items-center justify-center gap-2"
+              class="flex-1 h-14 rounded-2xl font-bold bg-amber-500 hover:bg-amber-400 text-black shadow-lg shadow-amber-500/20 transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer"
             >
               {#if isVoiding}
-                <RefreshCw size={16} class="animate-spin" />
-                Anulando...
+                <Loader2 size={18} class="animate-spin" />
               {:else}
-                Anular
+                <Check size={18} />
+                Confirmar
               {/if}
             </button>
           </div>

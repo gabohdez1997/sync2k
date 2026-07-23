@@ -352,7 +352,7 @@
                     {#if data.canVoid && !invoice.anulado}
                       <button
                         onclick={() => openVoidModal(invoice)}
-                        class="p-2 text-text-muted hover:text-red-500 hover:bg-red-500/10 rounded-xl transition-all cursor-pointer"
+                        class="p-2 text-text-muted hover:text-amber-500 hover:bg-amber-500/10 rounded-xl transition-all cursor-pointer"
                         title={isFiscalInvoice(invoice) ? 'Anular Factura' : 'Anular Nota de Entrega'}
                       >
                         <Ban size={18} />
@@ -402,7 +402,7 @@
 {#if showVoidModal}
   <div class="fixed inset-0 z-[60] flex items-center justify-center p-4">
     <div
-      class="absolute inset-0 bg-black/90 backdrop-blur-md"
+      class="absolute inset-0 bg-black/60 backdrop-blur-sm"
       onclick={() => !isVoiding && (showVoidModal = false)}
       onkeydown={(e) => e.key === "Escape" && !isVoiding && (showVoidModal = false)}
       role="button"
@@ -410,18 +410,18 @@
     ></div>
 
     <div
-      class="glass w-full max-w-md rounded-[40px] border border-white/10 shadow-2xl relative z-10 overflow-hidden"
+      class="bg-surface-raised w-full max-w-md rounded-[40px] border border-border-bold shadow-2xl relative z-10 overflow-hidden text-text-base"
       transition:slide
     >
       <div class="p-8 text-center space-y-6">
         <div
-          class="h-20 w-20 rounded-3xl bg-red-500/20 text-red-500 flex items-center justify-center mx-auto shadow-lg shadow-red-500/10"
+          class="h-20 w-20 rounded-3xl bg-amber-500/20 text-amber-500 flex items-center justify-center mx-auto shadow-lg shadow-amber-500/10"
         >
           <Ban size={40} />
         </div>
 
         <div class="space-y-2">
-          <h2 class="text-2xl font-black tracking-tight">Confirmar Anulación</h2>
+          <h2 class="text-2xl font-black tracking-tight text-text-base">Confirmar Anulación</h2>
           <p class="text-text-muted text-sm px-4">
             ¿Estás seguro de que deseas anular la factura
             <span class="text-text-base font-bold">{invoiceToVoid?.doc_num}</span>? Esto
@@ -471,7 +471,7 @@
                 bind:value={voidPassword}
                 required
                 placeholder="Introduzca su contraseña"
-                class="w-full h-14 bg-white/5 border border-white/10 rounded-2xl pl-12 pr-5 focus:border-red-500/50 outline-none transition-all text-text-base"
+                class="w-full h-14 bg-surface-base border border-border-bold rounded-2xl pl-12 pr-5 focus:border-amber-500 outline-none transition-all text-text-base"
               />
             </div>
           </div>
@@ -481,14 +481,14 @@
               type="button"
               onclick={() => (showVoidModal = false)}
               disabled={isVoiding}
-              class="flex-1 h-14 rounded-2xl font-bold bg-white/5 hover:bg-white/10 transition-all text-text-muted disabled:opacity-50 cursor-pointer"
+              class="flex-1 h-14 rounded-2xl font-bold bg-surface-soft hover:bg-surface-strong transition-all text-text-muted hover:text-text-base border border-border-subtle cursor-pointer disabled:opacity-50"
             >
               Cancelar
             </button>
             <button
               type="submit"
               disabled={isVoiding || !voidPassword}
-              class="flex-1 h-14 rounded-2xl font-bold bg-red-600 hover:bg-red-500 text-white shadow-lg shadow-red-500/20 transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer"
+              class="flex-1 h-14 rounded-2xl font-bold bg-amber-500 hover:bg-amber-400 text-black shadow-lg shadow-amber-500/20 transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer"
             >
               {#if isVoiding}
                 <Loader2 size={18} class="animate-spin" />

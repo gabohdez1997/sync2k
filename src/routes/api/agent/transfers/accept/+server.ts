@@ -4,16 +4,46 @@ import { supabaseAdmin } from '$lib/server/supabase';
 import { AgentClient } from '$lib/server/agent';
 
 export const POST: RequestHandler = async ({ request, fetch, locals }) => {
-	const user = locals.user;
+	const user = locals.user || (locals as any).session?.user;
 	const profile = locals.profile;
-	if (!user || !profile) {
-		return json({ success: false, message: 'No autorizado' }, { status: 401 });
+	const supabase = (locals as any).supabase;
+
+	if (!profile) {
+		return json({ success: false, message: 'No se encontró sesión o perfil activo.' }, { status: 401 });
 	}
 
 	try {
-		const { transfer_id } = await request.json();
+		const { transfer_id, password } = await request.json();
 		if (!transfer_id) {
 			return json({ success: false, message: 'transfer_id es requerido' }, { status: 400 });
+		}
+
+		if (!password) {
+			return json({ success: false, message: 'Debe ingresar su contraseña de confirmación.' }, { status: 400 });
+		}
+
+		// Validar contraseña del usuario activo
+		const email = user?.email || profile?.email;
+		let isPasswordValid = false;
+
+		if (email && supabase?.auth) {
+			const { error: authErr } = await supabase.auth.signInWithPassword({ email, password });
+			if (!authErr) {
+				isPasswordValid = true;
+			}
+		}
+
+		if (!isPasswordValid && profile?.password_hash) {
+			try {
+				const bcrypt = (await import('bcryptjs')).default;
+				isPasswordValid = await bcrypt.compare(password, profile.password_hash);
+			} catch (e) {
+				console.error('[ACCEPT TRANSFER] Error al verificar bcrypt:', e);
+			}
+		}
+
+		if (!isPasswordValid) {
+			return json({ success: false, message: 'Contraseña de confirmación incorrecta.' }, { status: 400 });
 		}
 
 		// 1. Cargar datos del traslado

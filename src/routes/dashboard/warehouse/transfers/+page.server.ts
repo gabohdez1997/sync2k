@@ -4,7 +4,6 @@ import { supabaseAdmin } from '$lib/server/supabase';
 
 export const load: PageServerLoad = protectLoad('inv_transfers', async ({ url, locals }) => {
 	const profile = (locals as any).profile;
-	const selectedBranchId = url.searchParams.get('branch_id') || profile?.branch_id || 'all';
 
 	// Cargar sedes activas
 	const { data: dbBranches, error: bErr } = await supabaseAdmin
@@ -16,6 +15,18 @@ export const load: PageServerLoad = protectLoad('inv_transfers', async ({ url, l
 	if (bErr) {
 		console.error('[TRASLADOS] Error al cargar sucursales:', bErr);
 	}
+
+	const branches = dbBranches || [];
+
+	// Preseleccionar una sede por defecto (preferir la sede asignada al usuario o la primera disponible)
+	let defaultBranchId = 'all';
+	if (profile?.branch_id && branches.some((b: any) => b.id === profile.branch_id)) {
+		defaultBranchId = profile.branch_id;
+	} else if (branches.length > 0) {
+		defaultBranchId = branches[0].id;
+	}
+
+	const selectedBranchId = url.searchParams.get('branch_id') || defaultBranchId;
 
 	// Cargar traslados desde Supabase / PG
 	let query = supabaseAdmin
@@ -40,7 +51,7 @@ export const load: PageServerLoad = protectLoad('inv_transfers', async ({ url, l
 
 	return {
 		title: 'Traslado de Artículos entre Sedes',
-		branches: dbBranches || [],
+		branches,
 		selectedBranchId,
 		transfers: transfers || []
 	};

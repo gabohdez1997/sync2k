@@ -166,7 +166,8 @@ export const actions: Actions = {
 				co_alma_target: it.co_alma_target || '01',
 				total_art: Number(it.total_art),
 				accepted_art: 0,
-				costo_unit: Number(it.costo_unit || 0)
+				costo_unit: Number(it.costo_unit || 0),
+				co_uni: it.co_uni || 'UND'
 			}));
 
 			const { error: itemsErr } = await supabaseAdmin

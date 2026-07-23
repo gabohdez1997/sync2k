@@ -385,7 +385,7 @@
 {#if showDeleteModal}
     <div class="fixed inset-0 z-[60] flex items-center justify-center p-4">
         <div
-            class="absolute inset-0 bg-black/90 backdrop-blur-md"
+            class="absolute inset-0 bg-black/60 backdrop-blur-sm"
             onclick={() => !isDeleting && (showDeleteModal = false)}
             onkeydown={(e) =>
                 e.key === "Escape" && !isDeleting && (showDeleteModal = false)}
@@ -394,7 +394,7 @@
         ></div>
 
         <div
-            class="glass w-full max-w-md rounded-[40px] border border-white/10 shadow-2xl relative z-10 overflow-hidden"
+            class="bg-surface-raised w-full max-w-md rounded-[40px] border border-border-bold shadow-2xl relative z-10 overflow-hidden text-text-base"
             transition:slide
         >
             <div class="p-8 text-center space-y-6">
@@ -405,7 +405,7 @@
                 </div>
 
                 <div class="space-y-2">
-                    <h2 class="text-2xl font-black tracking-tight">Confirmar Eliminación</h2>
+                    <h2 class="text-2xl font-black tracking-tight text-text-base">Confirmar Eliminación</h2>
                     <p class="text-text-muted text-sm px-4">
                         ¿Estás seguro de que deseas eliminar el pedido
                         <span class="text-text-base font-bold">{orderToDelete?.doc_num}</span>?
@@ -413,24 +413,24 @@
                     </p>
                     {#if orderToDelete}
                         {@const qStatus = getStatus(orderToDelete)}
-                        <div class="text-left p-4 rounded-2xl bg-white/5 border border-white/10 space-y-2">
-                            <p class="text-xs text-text-muted"><span class="font-bold">Cliente:</span> {orderToDelete.cli_des || orderToDelete.co_cli}</p>
-                            <p class="text-xs text-text-muted"><span class="font-bold">Fecha:</span> {dayjs(orderToDelete.fec_emis).format('DD/MM/YYYY HH:mm')}</p>
+                        <div class="text-left p-4 rounded-2xl bg-surface-soft border border-border-subtle space-y-2">
+                            <p class="text-xs text-text-muted"><span class="font-bold text-text-base">Cliente:</span> {orderToDelete.cli_des || orderToDelete.co_cli}</p>
+                            <p class="text-xs text-text-muted"><span class="font-bold text-text-base">Fecha:</span> {dayjs(orderToDelete.fec_emis).format('DD/MM/YYYY HH:mm')}</p>
                             <p class="text-xs text-text-muted">
-                                <span class="font-bold">Monto:</span>
+                                <span class="font-bold text-text-base">Monto:</span>
                                 {orderToDelete.co_mone === 'BS'
                                     ? `Bs ${Number(orderToDelete.total_neto || 0).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
                                     : `$ ${(Number(orderToDelete.total_neto || 0) / Number(orderToDelete.tasa || 1)).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
                                 }
                             </p>
                             <p class="text-xs text-text-muted flex items-center gap-2">
-                                <span class="font-bold">Estatus:</span>
+                                <span class="font-bold text-text-base">Estatus:</span>
                                 <span class="px-2 py-0.5 rounded-full border text-[10px] font-black uppercase tracking-widest {qStatus.class}">
                                     {qStatus.label}
                                 </span>
                             </p>
                             {#if !candeleteOrder(orderToDelete)}
-                                <p class="text-xs text-red-400 font-bold">
+                                <p class="text-xs text-red-500 font-bold">
                                     Solo se pueden eliminar pedidos en estado "Sin procesar".
                                 </p>
                             {/if}
@@ -479,7 +479,7 @@
                                 bind:value={deletePassword}
                                 required
                                 placeholder="Introduzca su contraseña"
-                                class="w-full h-14 bg-white/5 border border-white/10 rounded-2xl pl-12 pr-5 focus:border-red-500/50 outline-none transition-all"
+                                class="w-full h-14 bg-surface-base border border-border-bold rounded-2xl pl-12 pr-5 focus:border-red-500 outline-none transition-all text-text-base"
                             />
                         </div>
                     </div>
@@ -489,14 +489,14 @@
                             type="button"
                             onclick={() => (showDeleteModal = false)}
                             disabled={isDeleting}
-                            class="flex-1 h-14 rounded-2xl font-bold bg-white/5 hover:bg-white/10 transition-all text-text-muted disabled:opacity-50"
+                            class="flex-1 h-14 rounded-2xl font-bold bg-surface-soft hover:bg-surface-strong transition-all text-text-muted hover:text-text-base border border-border-subtle cursor-pointer disabled:opacity-50"
                         >
                             Cancelar
                         </button>
                         <button
                             type="submit"
                             disabled={isDeleting || !deletePassword || !candeleteOrder(orderToDelete)}
-                            class="flex-1 h-14 rounded-2xl font-bold bg-red-600 hover:bg-red-500 text-white shadow-lg shadow-red-500/20 transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2"
+                            class="flex-1 h-14 rounded-2xl font-bold bg-red-600 hover:bg-red-500 text-white shadow-lg shadow-red-500/20 transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer"
                         >
                             {#if isDeleting}
                                 <Loader2 size={18} class="animate-spin" />
@@ -515,7 +515,7 @@
 {#if showVoidModal}
     <div class="fixed inset-0 z-[60] flex items-center justify-center p-4">
         <div
-            class="absolute inset-0 bg-black/90 backdrop-blur-md"
+            class="absolute inset-0 bg-black/60 backdrop-blur-sm"
             onclick={() => !isVoiding && (showVoidModal = false)}
             onkeydown={(e) =>
                 e.key === "Escape" && !isVoiding && (showVoidModal = false)}
@@ -524,7 +524,7 @@
         ></div>
 
         <div
-            class="glass w-full max-w-md rounded-[40px] border border-white/10 shadow-2xl relative z-10 overflow-hidden"
+            class="bg-surface-raised w-full max-w-md rounded-[40px] border border-border-bold shadow-2xl relative z-10 overflow-hidden text-text-base"
             transition:slide
         >
             <div class="p-8 text-center space-y-6">
@@ -535,7 +535,7 @@
                 </div>
 
                 <div class="space-y-2">
-                    <h2 class="text-2xl font-black tracking-tight">Confirmar Anulación</h2>
+                    <h2 class="text-2xl font-black tracking-tight text-text-base">Confirmar Anulación</h2>
                     <p class="text-text-muted text-sm px-4">
                         ¿Estás seguro de que deseas anular el pedido
                         <span class="text-text-base font-bold">{orderToVoid?.doc_num}</span>?
@@ -543,24 +543,24 @@
                     </p>
                     {#if orderToVoid}
                         {@const qStatus = getStatus(orderToVoid)}
-                        <div class="text-left p-4 rounded-2xl bg-white/5 border border-white/10 space-y-2">
-                            <p class="text-xs text-text-muted"><span class="font-bold">Cliente:</span> {orderToVoid.cli_des || orderToVoid.co_cli}</p>
-                            <p class="text-xs text-text-muted"><span class="font-bold">Fecha:</span> {dayjs(orderToVoid.fec_emis).format('DD/MM/YYYY HH:mm')}</p>
+                        <div class="text-left p-4 rounded-2xl bg-surface-soft border border-border-subtle space-y-2">
+                            <p class="text-xs text-text-muted"><span class="font-bold text-text-base">Cliente:</span> {orderToVoid.cli_des || orderToVoid.co_cli}</p>
+                            <p class="text-xs text-text-muted"><span class="font-bold text-text-base">Fecha:</span> {dayjs(orderToVoid.fec_emis).format('DD/MM/YYYY HH:mm')}</p>
                             <p class="text-xs text-text-muted">
-                                <span class="font-bold">Monto:</span>
+                                <span class="font-bold text-text-base">Monto:</span>
                                 {orderToVoid.co_mone === 'BS'
                                     ? `Bs ${Number(orderToVoid.total_neto || 0).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
                                     : `$ ${(Number(orderToVoid.total_neto || 0) / Number(orderToVoid.tasa || 1)).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
                                 }
                             </p>
                             <p class="text-xs text-text-muted flex items-center gap-2">
-                                <span class="font-bold">Estatus:</span>
+                                <span class="font-bold text-text-base">Estatus:</span>
                                 <span class="px-2 py-0.5 rounded-full border text-[10px] font-black uppercase tracking-widest {qStatus.class}">
                                     {qStatus.label}
                                 </span>
                             </p>
                             {#if orderToVoid.anulado || orderToVoid.status !== '0'}
-                                <p class="text-xs text-red-400 font-bold">
+                                <p class="text-xs text-red-500 font-bold">
                                     Solo se pueden anular pedidos en estado "Sin procesar".
                                 </p>
                             {/if}
@@ -609,7 +609,7 @@
                                 bind:value={voidPassword}
                                 required
                                 placeholder="Introduzca su contraseña"
-                                class="w-full h-14 bg-white/5 border border-white/10 rounded-2xl pl-12 pr-5 focus:border-amber-500/50 outline-none transition-all"
+                                class="w-full h-14 bg-surface-base border border-border-bold rounded-2xl pl-12 pr-5 focus:border-amber-500 outline-none transition-all text-text-base"
                             />
                         </div>
                     </div>
@@ -619,14 +619,14 @@
                             type="button"
                             onclick={() => (showVoidModal = false)}
                             disabled={isVoiding}
-                            class="flex-1 h-14 rounded-2xl font-bold bg-white/5 hover:bg-white/10 transition-all text-text-muted disabled:opacity-50"
+                            class="flex-1 h-14 rounded-2xl font-bold bg-surface-soft hover:bg-surface-strong transition-all text-text-muted hover:text-text-base border border-border-subtle cursor-pointer disabled:opacity-50"
                         >
                             Cancelar
                         </button>
                         <button
                             type="submit"
                             disabled={isVoiding || !voidPassword || (orderToVoid?.anulado || orderToVoid?.status !== '0')}
-                            class="flex-1 h-14 rounded-2xl font-bold bg-amber-600 hover:bg-amber-500 text-white shadow-lg shadow-amber-500/20 transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2"
+                            class="flex-1 h-14 rounded-2xl font-bold bg-amber-500 hover:bg-amber-400 text-black shadow-lg shadow-amber-500/20 transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer"
                         >
                             {#if isVoiding}
                                 <Loader2 size={18} class="animate-spin" />
