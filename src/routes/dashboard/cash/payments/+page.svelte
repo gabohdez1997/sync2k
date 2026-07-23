@@ -65,13 +65,30 @@
 
   let formasPago = $state<any[]>([]);
 
-  // Reactivo: Auto-distribuir el total de instrumentos de pago a las facturas seleccionadas
+  // Reactivo: Auto-distribuir el total de instrumentos de pago y notas de crédito a las facturas seleccionadas
   $effect(() => {
-    // Total de instrumentos de pago en Bs y USD a distribuir
-    let remainingPaymentBs = totalInstrumentosPagoBs;
-    let remainingPaymentUsd = totalInstrumentosPago;
+    // 1. Calcular primero el saldo a favor aportado por Notas de Crédito seleccionadas
+    let creditFromNCsBs = 0;
+    let creditFromNCsUsd = 0;
 
-    // Procesar todos los documentos cargados
+    for (const doc of documentos) {
+      const nro = doc.nro_doc.trim();
+      if (!checkedDocs[nro]) continue;
+
+      const isNC = doc.co_tipo_doc.trim() === "N/CR";
+      if (isNC) {
+        const docTasa = doc.tasa > 0 ? doc.tasa : 1;
+        const saldoUsd = Math.round((doc.saldo / docTasa) * 100) / 100;
+        creditFromNCsBs += doc.saldo;
+        creditFromNCsUsd += saldoUsd;
+      }
+    }
+
+    // 2. Fondo disponible total para aplicar a facturas/deudas (Instrumentos + Notas de Crédito)
+    let remainingPaymentBs = Math.round((totalInstrumentosPagoBs + creditFromNCsBs) * 100) / 100;
+    let remainingPaymentUsd = Math.round((totalInstrumentosPago + creditFromNCsUsd) * 100) / 100;
+
+    // 3. Procesar todos los documentos cargados
     for (const doc of documentos) {
       const nro = doc.nro_doc.trim();
       const inp = docInputs[nro];

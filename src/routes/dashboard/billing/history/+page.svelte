@@ -189,6 +189,10 @@
               class="px-6 py-5 text-xs font-black uppercase tracking-[0.1em] text-text-muted text-right"
               >Monto</th
             >
+            <th
+              class="px-6 py-5 text-xs font-black uppercase tracking-[0.1em] text-text-muted text-right"
+              >Saldo</th
+            >
             {#if data.canSeeOthers}
               <th
                 class="px-6 py-5 text-xs font-black uppercase tracking-[0.1em] text-text-muted text-center"
@@ -212,7 +216,7 @@
         <tbody class="divide-y divide-border-subtle/30">
           {#if !data.invoices || data.invoices.length === 0}
             <tr>
-              <td colspan={data.canSeeOthers ? 8 : 7} class="px-6 py-32 text-center">
+              <td colspan={data.canSeeOthers ? 9 : 8} class="px-6 py-32 text-center">
                 <FileText size={48} class="mx-auto text-text-muted/20 mb-4" />
                 <p class="text-text-muted font-bold text-lg">No se encontraron facturas</p>
                 <button
@@ -268,6 +272,26 @@
                     {Number(invoice.total_neto).toLocaleString('de-DE', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
                     <span class="text-[10px] text-text-muted/40 ml-1">(Tasa: {Number(invoice.tasa || 1).toLocaleString('de-DE', {minimumFractionDigits: 2, maximumFractionDigits: 2})})</span>
                   </div>
+                </td>
+                <td class="px-6 py-5 text-right font-bold">
+                  {#if invoice.anulado}
+                    <span class="px-2.5 py-1 rounded-lg bg-red-500/10 text-red-400 border border-red-500/20 text-xs font-black uppercase tracking-wider">
+                      Anulada
+                    </span>
+                  {:else if Number(invoice.saldo ?? 0) <= 0.001}
+                    <span class="px-2 py-0.5 rounded-md bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[10px] font-black uppercase tracking-wider">
+                      Pagada
+                    </span>
+                  {:else}
+                    <div class="text-sm font-black text-amber-400">
+                      <span class="text-amber-500/70 text-xs font-medium mr-1">USD</span>
+                      {(Number(invoice.saldo) / Number(invoice.tasa || 1)).toLocaleString('de-DE', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+                    </div>
+                    <div class="text-xs text-amber-400/70 font-semibold mt-0.5">
+                      <span>Bs. </span>
+                      {Number(invoice.saldo).toLocaleString('de-DE', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+                    </div>
+                  {/if}
                 </td>
                 {#if data.canSeeOthers}
                   <td class="px-6 py-5 text-center">
