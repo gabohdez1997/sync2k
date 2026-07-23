@@ -97,8 +97,12 @@ export const actions: Actions = {
 				return fail(400, { error: 'Sede origen no encontrada o no configurada con agente.' });
 			}
 
+			const sourceSucuCode = (Array.isArray(sourceBranch.profit_branch_codes) ? sourceBranch.profit_branch_codes[0] : sourceBranch.profit_branch_codes) || '01';
+			const userProfitCode = (profile.profit_user || '').trim().toUpperCase() || (profile.email || 'PROFIT').split('@')[0].toUpperCase().substring(0, 6);
+
 			const agentRenglones = items.map((it: any) => ({
 				co_art: it.co_art,
+				art_des: it.art_des,
 				co_alma: it.co_alma_source || '01',
 				total_art: Number(it.total_art),
 				cost_unit: Number(it.costo_unit || 0)
@@ -109,7 +113,10 @@ export const actions: Actions = {
 				tipo: 'SAL',
 				co_tipo: '02',
 				motivo,
-				co_us_in: (profile.email || 'PROFIT').split('@')[0].substring(0, 6),
+				co_sucu_in: sourceSucuCode,
+				co_sucu_mo: sourceSucuCode,
+				co_us_in: userProfitCode,
+				co_us_mo: userProfitCode,
 				renglones: agentRenglones
 			};
 

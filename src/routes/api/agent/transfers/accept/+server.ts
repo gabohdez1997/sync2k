@@ -79,9 +79,13 @@ export const POST: RequestHandler = async ({ request, fetch, locals }) => {
 			return json({ success: false, message: 'Sucursal de destino no encontrada o no configurada.' }, { status: 404 });
 		}
 
+		const targetSucuCode = (Array.isArray(targetBranch.profit_branch_codes) ? targetBranch.profit_branch_codes[0] : targetBranch.profit_branch_codes) || '01';
+		const userProfitCode = (profile.profit_user || '').trim().toUpperCase() || (profile.email || 'PROFIT').split('@')[0].toUpperCase().substring(0, 6);
+
 		// 3. Preparar renglones para Ajuste de ENTRADA ('01') en la Sede Destino
 		const renglones = transfer.items.map((it: any) => ({
 			co_art: it.co_art,
+			art_des: it.art_des,
 			co_alma: it.co_alma_target || '01',
 			total_art: Number(it.total_art),
 			cost_unit: Number(it.costo_unit || 0)
@@ -92,7 +96,10 @@ export const POST: RequestHandler = async ({ request, fetch, locals }) => {
 			tipo: 'ENT',
 			co_tipo: '01',
 			motivo: `Ingreso Traslado Nro ${transfer.transfer_number} desde Sede Origen`,
-			co_us_in: (profile.email || 'PROFIT').split('@')[0].substring(0, 6),
+			co_sucu_in: targetSucuCode,
+			co_sucu_mo: targetSucuCode,
+			co_us_in: userProfitCode,
+			co_us_mo: userProfitCode,
 			renglones
 		};
 
@@ -113,7 +120,7 @@ export const POST: RequestHandler = async ({ request, fetch, locals }) => {
 			return json({
 				success: false,
 				message: resJson.message || 'Error al generar el Ajuste de Entrada en la Sede Destino.'
-			}, { status: 500 });
+			}, { status: 400 });
 		}
 
 		const targetAjueNum = resJson.ajue_num || resJson.data?.ajue_num;
