@@ -87,6 +87,16 @@ export const actions: Actions = {
 			}
 
 			// 1. Invocar al Agente Profit de la Sede Origen para crear saAjuste (SALIDA)
+			const { data: sourceBranch, error: branchErr } = await supabaseAdmin
+				.from('branches')
+				.select('*')
+				.eq('id', source_branch_id)
+				.single();
+
+			if (branchErr || !sourceBranch || !sourceBranch.agent_url) {
+				return fail(400, { error: 'Sede origen no encontrada o no configurada con agente.' });
+			}
+
 			const agentRenglones = items.map((it: any) => ({
 				co_art: it.co_art,
 				co_alma: it.co_alma_source || '01',
@@ -103,20 +113,23 @@ export const actions: Actions = {
 				renglones: agentRenglones
 			};
 
-			const agentRes = await agentFetch(fetch, '/api/v1/ajustes', {
+			const agentClient = new AgentClient({
+				slug: sourceBranch.id,
+				agent_url: sourceBranch.agent_url,
+				agent_api_key: sourceBranch.agent_token
+			}, profile, fetch);
+
+			const resJson: any = await agentClient.request('/ajustes', {
 				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify(agentPayload)
-			}, source_branch_id);
+			});
 
-			const resJson = await agentRes.json();
-
-			if (!agentRes.ok || !resJson.success) {
+			if (!resJson || !resJson.success) {
 				console.error('[TRANSFERS NEW] Error en Agente Origen:', resJson);
-				return fail(400, { error: resJson.message || 'Error al generar el Ajuste de Salida en la Sede Origen.' });
+				return fail(400, { error: resJson?.message || 'Error al generar el Ajuste de Salida en la Sede Origen.' });
 			}
 
-			const sourceAjueNum = resJson.ajue_num;
+			const sourceAjueNum = resJson.ajue_num || resJson.data?.ajue_num;
 
 			// 2. Generar número de traslado correlativo
 			const now = new Date();
