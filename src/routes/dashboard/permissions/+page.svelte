@@ -144,6 +144,14 @@
           onlyRead: true,
         },
         {
+          id: "reports_collections_summary",
+          label: "Resumen de Cobros",
+          actions: [
+            { id: "view", label: "Ver Reporte" },
+            { id: "others", label: "Ver Otras Sucursales" }
+          ]
+        },
+        {
           id: "reports_exchange_diff",
           label: "Diferencial Cambiario",
           hasOthers: false,
