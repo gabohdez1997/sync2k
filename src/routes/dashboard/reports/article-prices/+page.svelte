@@ -225,7 +225,7 @@
         // Start with UTF-8 BOM and sep=; directive for Excel
         let csvContent = '\uFEFFsep=;\n';
         csvContent +=
-            "Código;Descripción;Precio 1 (USD);Margen 1 (%);Precio 2 (USD);Margen 2 (%);Costo (USD);Stock Global;Estatus\n";
+            "Código;Descripción;Modelo;Precio 1 (USD);Margen 1 (%);Precio 2 (USD);Margen 2 (%);Costo (USD);Stock Global;Estatus\n";
 
         for (const item of filteredReportData) {
             // Formula trick to preserve leading zeros in Excel: ="CODE"
@@ -233,6 +233,9 @@
                 .trim()
                 .replace(/"/g, '""')}"`;
             const art_des = `"${String(item.art_des || "")
+                .trim()
+                .replace(/"/g, '""')}"`;
+            const modelo = `"${String(item.modelo || "")
                 .trim()
                 .replace(/"/g, '""')}"`;
 
@@ -257,7 +260,7 @@
                 .replace(".", ",");
             const statusLabel = item.anulado ? "Inactivo" : "Activo";
 
-            csvContent += `${co_art};${art_des};${precio1};${margen1};${precio2};${margen2};${costo};${stock_global};${statusLabel}\n`;
+            csvContent += `${co_art};${art_des};${modelo};${precio1};${margen1};${precio2};${margen2};${costo};${stock_global};${statusLabel}\n`;
         }
 
         const blob = new Blob([csvContent], {
@@ -730,6 +733,9 @@
                         <th class="px-6 py-4 font-black print:px-3 print:py-2"
                             >Descripción</th
                         >
+                        <th class="px-6 py-4 font-black print:px-3 print:py-2"
+                            >Modelo</th
+                        >
                         <th
                             class="px-6 py-4 font-black text-right w-36 print:px-3 print:py-2"
                             >Precio 1</th
@@ -776,6 +782,11 @@
                                 class="px-6 py-4 font-semibold text-text-base print:text-black print:px-3 print:py-2"
                             >
                                 {item.art_des.trim()}
+                            </td>
+                            <td
+                                class="px-6 py-4 font-medium text-text-muted text-xs print:text-black print:px-3 print:py-2"
+                            >
+                                {item.modelo ? item.modelo.trim() : ''}
                             </td>
                             <td
                                 class="px-6 py-4 text-right font-bold print:px-3 print:py-2"
