@@ -1229,7 +1229,7 @@
                                 class="w-full h-10 px-2 bg-surface-soft border border-border-subtle rounded-xl focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none transition-all font-medium text-[10px] cursor-pointer text-text-base"
                               >
                                 {#each cuentasBancarias as cb}
-                                  <option value={cb.cod_cta}>{cb.num_cta} ({cb.co_mone?.trim()})</option>
+                                  <option value={cb.cod_cta}>{cb.cod_cta?.trim()} - {cb.num_cta} ({cb.co_mone?.trim()})</option>
                                 {/each}
                               </select>
                             </div>

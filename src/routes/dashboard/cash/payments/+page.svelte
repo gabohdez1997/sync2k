@@ -1916,7 +1916,7 @@
                           >
                             {#each data.cuentasBancarias as cb}
                               <option value={cb.cod_cta}
-                                >{cb.descrip} ({cb.co_mone})</option
+                                >{cb.cod_cta.trim()} - {cb.descrip} ({cb.co_mone})</option
                               >
                             {/each}
                           </select>
