@@ -38,7 +38,12 @@ export const load: PageServerLoad = protectLoad('reports_collections_summary', a
         const fecha = url.searchParams.get('fecha') || '';
 
         const query = new URLSearchParams();
-        if (fecha) query.set('fecha', fecha);
+        if (fecha) {
+            query.set('fecha', fecha); // Nuevo agente
+            query.set('fecha_desde', fecha); // Agente viejo fallback
+            query.set('fecha_hasta', fecha); // Agente viejo fallback
+        }
+        
         query.set('sede', selectedBranch.id);
 
         console.log(`[COLLECTIONS SUMMARY REPORT SERVER] Requesting from agent branch ${selectedBranch.name}...`);
