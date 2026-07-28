@@ -2139,6 +2139,7 @@
                   amountUsd={formattedUsd}
                   amountBs={formattedBs}
                   branchName={inv.sede_nombre}
+                  cashierName={inv.cashier_name}
                   statusLabel={inv.contribu_e ? "Esp." : null}
                   statusClass={inv.contribu_e
                     ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"

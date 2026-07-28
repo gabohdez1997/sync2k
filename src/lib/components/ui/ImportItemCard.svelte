@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { User } from 'lucide-svelte';
+
   interface Props {
     docType: string;
     docNum: string;
@@ -10,6 +12,7 @@
     amountUsd: string | number;
     amountBs: string | number;
     branchName?: string | null;
+    cashierName?: string | null;
     onclick: () => void;
   }
 
@@ -24,6 +27,7 @@
     amountUsd,
     amountBs,
     branchName = null,
+    cashierName = null,
     onclick
   }: Props = $props();
 </script>
@@ -58,11 +62,18 @@
     </p>
 
     <!-- RIF / Cédula y Emisión -->
-    <p class="text-[11px] text-text-muted/70 font-semibold leading-none">
+    <p class="text-[11px] text-text-muted/70 font-semibold leading-none flex items-center flex-wrap gap-x-1.5">
       {#if clientRif}
-        {clientRif} — 
+        <span>{clientRif} &bull;</span>
       {/if}
-      Emisión: {dateEmis}
+      <span>Emisión: {dateEmis}</span>
+      {#if cashierName}
+        <span class="text-brand-500/50">&bull;</span>
+        <span class="text-[10px] text-text-base flex items-center gap-1 font-bold">
+          <User size={10} class="text-brand-500/80" />
+          {cashierName}
+        </span>
+      {/if}
     </p>
   </div>
 
