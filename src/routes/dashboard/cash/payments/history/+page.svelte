@@ -256,8 +256,9 @@
       const rawNetoBs = Number(r.mont_cob) - Number(r.monto_retencion_iva) - Number(r.monto_retencion);
       const montCobUsd = Math.round((rawNetoBs / editTasa) * 100) / 100;
 
-      const baseImpUsd = retIvaMatch ? Math.round((Number(retIvaMatch.base_imponible) / editTasa) * 100) / 100 : 0;
-      const baseImpBs = retIvaMatch ? Number(retIvaMatch.base_imponible) : 0;
+      const computedBaseImpBs = Math.round((Number(r.total_neto) - Number(r.monto_imp) - Number(r.otros1 || 0)) * 100) / 100;
+      const baseImpBs = retIvaMatch ? computedBaseImpBs : 0;
+      const baseImpUsd = retIvaMatch ? Math.round((computedBaseImpBs / editTasa) * 100) / 100 : 0;
 
       const hasIva = Number(r.monto_retencion_iva) > 0;
       const hasIslr = Number(r.monto_retencion) > 0;
@@ -285,8 +286,9 @@
         manual_override_islr: hasIslr,
         reten_islr: Math.round((Number(r.monto_retencion) / editTasa) * 100) / 100,
         reten_islr_bs: Number(r.monto_retencion),
-        co_islr: retIslrMatch ? retIslrMatch.co_islr?.trim() : "001",
-        porc_islr: retIslrMatch ? retIslrMatch.porc_retn : 2,
+        co_islr: retIslrMatch ? retIslrMatch.co_islr?.trim() : "072",
+        porc_islr: retIslrMatch ? Number(retIslrMatch.porc_retn) : 3,
+        base_imponible_islr_bs: retIslrMatch ? Number(retIslrMatch.monto_obj) : 0,
 
         maxBalanceBs: rawNetoBs + Number(r.monto_retencion_iva) + Number(r.monto_retencion),
         maxBalanceUsd: montCobUsd + Math.round((Number(r.monto_retencion_iva) / editTasa) * 100) / 100 + Math.round((Number(r.monto_retencion) / editTasa) * 100) / 100
@@ -435,7 +437,7 @@
     if (r.showIslrDetails) {
       if (!r.manual_override_islr && r.reten_islr === 0) {
         const totalNetoBs = r.total_neto > 0 ? r.total_neto : r.maxBalanceBs;
-        const baseBs = r.base_imponible_iva_bs || (totalNetoBs - (r.monto_imp || 0));
+        const baseBs = r.base_imponible_islr_bs > 0 ? r.base_imponible_islr_bs : (totalNetoBs - (r.monto_imp || 0));
         r.reten_islr_bs = Math.round(baseBs * (r.porc_islr / 100) * 100) / 100;
         r.reten_islr = Math.round((r.reten_islr_bs / editTasa) * 100) / 100;
       } else if (r.manual_override_islr) {
@@ -489,8 +491,8 @@
       const theoreticalRetIvaBs = Math.round((r.monto_imp || 0) * (porcIva / 100) * 100) / 100;
       const theoreticalRetIvaUsd = Math.round((theoreticalRetIvaBs / docTasa) * 100) / 100;
       
-      const appliedRetIva = Math.max(r.reten_iva || 0, theoreticalRetIvaUsd);
-      const appliedRetIslr = r.reten_islr || 0;
+      const appliedRetIva = r.showIvaDetails ? Math.max(r.reten_iva || 0, theoreticalRetIvaUsd) : 0;
+      const appliedRetIslr = r.showIslrDetails ? (r.reten_islr || 0) : 0;
       
       return acc + (Number(r.maxBalanceUsd) || 0) - appliedRetIva - appliedRetIslr;
     }, 0) - editTotalCobrado
@@ -501,8 +503,8 @@
       const porcIva = detailData ? (Number(detailData.porc_esp) || 0) : 0;
       const theoreticalRetIvaBs = Math.round((r.monto_imp || 0) * (porcIva / 100) * 100) / 100;
       
-      const appliedRetIvaBs = Math.max(r.reten_iva_bs || 0, theoreticalRetIvaBs);
-      const appliedRetIslrBs = r.reten_islr_bs || 0;
+      const appliedRetIvaBs = r.showIvaDetails ? Math.max(r.reten_iva_bs || 0, theoreticalRetIvaBs) : 0;
+      const appliedRetIslrBs = r.showIslrDetails ? (r.reten_islr_bs || 0) : 0;
       
       return acc + (Number(r.maxBalanceBs) || 0) - appliedRetIvaBs - appliedRetIslrBs;
     }, 0) - editTotalCobradoBs
@@ -582,7 +584,7 @@
         co_islr: r.co_islr,
         monto: r.mont_cob_bs,
         monto_reten: r.reten_islr_bs || 0,
-        monto_obj: r.mont_cob_bs,
+        monto_obj: r.base_imponible_islr_bs > 0 ? r.base_imponible_islr_bs : r.mont_cob_bs,
         sustraendo: 0,
         porc_retn: r.porc_islr
       };
@@ -998,6 +1000,7 @@
                         </div>
 
                         <!-- Retención de IVA ($) -->
+                        {#if Number(detailData?.porc_esp) > 0}
                         <div>
                           <div class="flex justify-between items-center mb-1.5">
                             <label class="block text-xs font-black text-text-muted uppercase">Reten. IVA ($)</label>
@@ -1044,8 +1047,10 @@
                             ).toLocaleString("de-DE", { minimumFractionDigits: 2 })}
                           </span>
                         </div>
+                        {/if}
 
                         <!-- Retención de ISLR ($) -->
+                        {#if r.base_imponible_islr_bs > 0}
                         <div>
                           <div class="flex justify-between items-center mb-1.5">
                             <label class="block text-xs font-black text-text-muted uppercase">Reten. ISLR ($)</label>
@@ -1082,10 +1087,11 @@
                             Bs. {(r.reten_islr_bs || 0).toLocaleString("de-DE", { minimumFractionDigits: 2 })}
                           </span>
                         </div>
+                        {/if}
                       </div>
 
                       <!-- Subpanel Comprobante IVA -->
-                      {#if r.showIvaDetails}
+                      {#if r.showIvaDetails && Number(detailData?.porc_esp) > 0}
                         <div class="bg-green-500/5 border border-green-500/20 p-4 rounded-2xl space-y-3 text-xs">
                           <span class="font-bold text-green-400">Datos Comprobante Retención IVA</span>
                           <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -1103,21 +1109,18 @@
                               <input
                                 type="number"
                                 step="0.01"
+                                readonly
                                 bind:value={r.base_imponible_iva}
-                                oninput={() => {
-                                  r.base_imponible_iva_bs = Math.round(r.base_imponible_iva * editTasa * 100) / 100;
-                                  recalculateEditDocAmounts(idx);
-                                }}
-                                class="w-full bg-surface-soft border border-border-subtle px-2 py-1.5 rounded-lg text-xs text-right"
+                                class="w-full bg-surface-soft/50 border border-border-subtle px-2 py-1.5 rounded-lg text-xs text-right opacity-70 cursor-not-allowed"
                               />
                             </div>
                             <div>
                               <span class="text-[9px] text-text-muted font-bold block mb-1">ALÍCUOTA (%)</span>
                               <input
                                 type="number"
+                                readonly
                                 bind:value={r.alicuota_iva}
-                                oninput={() => recalculateEditDocAmounts(idx)}
-                                class="w-full bg-surface-soft border border-border-subtle px-2 py-1.5 rounded-lg text-xs text-right"
+                                class="w-full bg-surface-soft/50 border border-border-subtle px-2 py-1.5 rounded-lg text-xs text-right opacity-70 cursor-not-allowed"
                               />
                             </div>
                           </div>
@@ -1125,17 +1128,38 @@
                       {/if}
 
                       <!-- Subpanel ISLR -->
-                      {#if r.showIslrDetails}
+                      {#if r.showIslrDetails && r.base_imponible_islr_bs > 0}
                         <div class="bg-amber-500/5 border border-amber-500/20 p-4 rounded-2xl space-y-3 text-xs">
                           <span class="font-bold text-amber-300">Datos Retención ISLR / Municipal</span>
-                          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
                             <div>
                               <span class="text-[9px] text-text-muted font-bold block mb-1">CONCEPTO</span>
-                              <input
-                                type="text"
-                                placeholder="Ej: 001"
+                              <select
                                 bind:value={r.co_islr}
-                                class="w-full bg-surface-soft border border-border-subtle px-2 py-1.5 rounded-lg text-xs"
+                                onchange={() => {
+                                  r.porc_islr = r.co_islr === '072' ? 3 : 2;
+                                  r.manual_override_islr = false;
+                                  r.reten_islr = 0;
+                                  recalculateEditDocAmounts(idx);
+                                }}
+                                class="w-full bg-surface-soft border border-border-subtle px-2 py-1.5 rounded-lg text-xs appearance-none"
+                              >
+                                <option value="072">072 = Servicio de Flete</option>
+                                <option value="055">055 = Servicio de Corte</option>
+                              </select>
+                            </div>
+                            <div>
+                              <span class="text-[9px] text-text-muted font-bold block mb-1">BASE IMPONIBLE (Bs.)</span>
+                              <input
+                                type="number"
+                                step="0.01"
+                                bind:value={r.base_imponible_islr_bs}
+                                oninput={() => {
+                                  r.manual_override_islr = false;
+                                  r.reten_islr = 0;
+                                  recalculateEditDocAmounts(idx);
+                                }}
+                                class="w-full bg-surface-soft border border-border-subtle px-2 py-1.5 rounded-lg text-xs text-right"
                               />
                             </div>
                             <div>
@@ -1143,9 +1167,9 @@
                               <input
                                 type="number"
                                 step="0.1"
+                                disabled
                                 bind:value={r.porc_islr}
-                                oninput={() => recalculateEditDocAmounts(idx)}
-                                class="w-full bg-surface-soft border border-border-subtle px-2 py-1.5 rounded-lg text-xs text-right"
+                                class="w-full bg-surface-soft/50 border border-border-subtle px-2 py-1.5 rounded-lg text-xs text-right opacity-70 cursor-not-allowed"
                               />
                             </div>
                           </div>
@@ -1332,6 +1356,7 @@
                   <span class="text-lg font-black text-text-base mt-1 block">$ {editTotalInstrumentos.toFixed(2)}</span>
                   <span class="text-xs text-text-muted/60 mt-0.5 block">Bs. {editTotalInstrumentosBs.toLocaleString("de-DE", { minimumFractionDigits: 2 })}</span>
                 </div>
+                {#if editTotalRetenidoIvaVista > 0 || hasPendingIvaVoucher}
                 <div>
                   <span class="text-xs text-text-muted font-bold block">Retenciones IVA</span>
                   {#if hasPendingIvaVoucher}
@@ -1342,10 +1367,13 @@
                     <span class="text-lg font-black text-green-400 mt-1 block font-mono">$ {editTotalRetenidoIvaVista.toFixed(2)}</span>
                   {/if}
                 </div>
+                {/if}
+                {#if editTotalRetenidoIslrVista > 0}
                 <div>
                   <span class="text-xs text-text-muted font-bold block">Retenciones ISLR</span>
                   <span class="text-lg font-black text-amber-300 mt-1 block font-mono">$ {editTotalRetenidoIslrVista.toFixed(2)}</span>
                 </div>
+                {/if}
                 <div>
                   <span class="text-xs text-text-muted font-bold block">Diferencia de Cuadre</span>
                   {#if editDiferenciaCuadre === 0}
