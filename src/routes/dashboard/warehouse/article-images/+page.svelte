@@ -164,6 +164,10 @@
       formData.append('co_art', artCode);
       formData.append('imageFile', webpBlob, `${artCode.trim()}.webp`);
       formData.append('branchId', selectedBranch);
+      
+      if (article.campo7 && article.campo7.trim() !== '' && !article.campo7.startsWith('http')) {
+        formData.append('oldImageFile', article.campo7.trim());
+      }
 
       const response = await fetch("?/updateImage", {
         method: "POST",

@@ -204,6 +204,7 @@ export const actions: Actions = {
 		const co_art = data.get('co_art') as string;
 		const imageFile = data.get('imageFile') as File | null;
 		const branchId = data.get('branchId') as string;
+		const oldImageFile = data.get('oldImageFile') as string | null;
 
 		if (!co_art || !branchId || !imageFile) {
 			return fail(400, { error: 'Faltan datos requeridos (código de artículo, imagen o sucursal).' });
@@ -250,6 +251,18 @@ export const actions: Actions = {
 
 			if (uploadError) {
 				return fail(500, { error: `Error subiendo imagen: ${uploadError.message}` });
+			}
+
+			// Eliminar la imagen anterior del bucket si existe
+			if (oldImageFile) {
+				const { error: removeError } = await supabaseAdmin.storage
+					.from('articulos')
+					.remove([oldImageFile]);
+				
+				if (removeError) {
+					console.error('[SUPABASE] Error eliminando imagen antigua:', removeError.message);
+					// No bloqueamos la ejecución si falla el borrado
+				}
 			}
 
 			const { data: publicUrlData } = supabaseAdmin.storage.from('articulos').getPublicUrl(fileName);
