@@ -10,6 +10,7 @@
   import { toast } from "svelte-sonner";
   import Combobox from "$lib/components/ui/Combobox.svelte";
   import BarcodeScanner from "$lib/components/ui/BarcodeScanner.svelte";
+  import ImageViewer from "$lib/components/ui/ImageViewer.svelte";
   import { PUBLIC_SUPABASE_URL } from "$env/static/public";
 
   let { data, form } = $props();
@@ -27,6 +28,8 @@
   let selectedLinea = $state('');
   let selectedCategoria = $state('');
   let loadingArticles = $state(false);
+  let viewerOpen = $state(false);
+  let viewerUrl = $state("");
   let localArticles = $state<any[]>([]);
   let localPagination = $state({ total: 0, page: 1, limit: 24, totalPages: 0 });
 
@@ -683,7 +686,13 @@
                         ? article.campo7
                         : `${PUBLIC_SUPABASE_URL}/storage/v1/object/public/articulos/${article.campo7}`}
                       alt={article.art_des || article.descripcion}
-                      class="w-full h-full object-contain p-2 drop-shadow-md group-hover:scale-105 transition-transform duration-500"
+                      class="w-full h-full object-contain p-2 drop-shadow-md group-hover:scale-105 transition-transform duration-500 cursor-pointer"
+                      onclick={() => {
+                        viewerUrl = article.campo7.startsWith("http")
+                          ? article.campo7
+                          : `${PUBLIC_SUPABASE_URL}/storage/v1/object/public/articulos/${article.campo7}`;
+                        viewerOpen = true;
+                      }}
                       onerror={(e) => (e.currentTarget.style.display = "none")}
                     />
                   {:else}
@@ -1153,6 +1162,8 @@
 
   </form>
 </div>
+
+<ImageViewer bind:isOpen={viewerOpen} imageUrl={viewerUrl} />
 
 <style>
   /* Chrome, Safari, Edge, Opera */

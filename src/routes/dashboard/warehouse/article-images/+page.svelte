@@ -18,6 +18,7 @@
   import { toast } from "svelte-sonner";
   import Combobox from "$lib/components/ui/Combobox.svelte";
   import BarcodeScanner from "$lib/components/ui/BarcodeScanner.svelte";
+  import ImageViewer from "$lib/components/ui/ImageViewer.svelte";
   import { supabase } from "$lib/supabase";
   import { PUBLIC_SUPABASE_URL } from "$env/static/public";
   import type { PageData, ActionData } from "./$types";
@@ -38,6 +39,8 @@
   let selectedLinea = $state($page.url.searchParams.get("linea") || "");
   let selectedCategoria = $state($page.url.searchParams.get("categoria") || "");
   let isSearching = $state(false);
+  let viewerOpen = $state(false);
+  let viewerUrl = $state("");
 
   const visibleArticles = $derived(
     (data.articles || []).filter(
@@ -387,7 +390,13 @@
                     ? article.campo7
                     : `${PUBLIC_SUPABASE_URL}/storage/v1/object/public/articulos/${article.campo7}`}
                   alt={article.descripcion}
-                  class="w-full h-full object-contain p-3 drop-shadow-lg transition-transform duration-700 ease-[cubic-bezier(0.25,0.46,0.45,0.94)] group-hover:scale-[1.08]"
+                  class="w-full h-full object-contain p-3 drop-shadow-lg transition-transform duration-700 ease-[cubic-bezier(0.25,0.46,0.45,0.94)] group-hover:scale-[1.08] cursor-pointer"
+                  onclick={() => {
+                    viewerUrl = article.campo7.startsWith("http")
+                      ? article.campo7
+                      : `${PUBLIC_SUPABASE_URL}/storage/v1/object/public/articulos/${article.campo7}`;
+                    viewerOpen = true;
+                  }}
                   onerror={(e) => (e.currentTarget.style.display = "none")}
                 />
               {:else}
@@ -509,3 +518,5 @@
     {/if}
   </main>
 </div>
+
+<ImageViewer bind:isOpen={viewerOpen} imageUrl={viewerUrl} />

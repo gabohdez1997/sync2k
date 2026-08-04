@@ -26,6 +26,7 @@
   } from "lucide-svelte";
   import type { PageData } from "./$types";
   import { PUBLIC_SUPABASE_URL } from "$env/static/public";
+  import ImageViewer from "$lib/components/ui/ImageViewer.svelte";
 
   let { data }: { data: PageData } = $props();
 
@@ -42,6 +43,8 @@
 
   // Estado de carga de búsqueda
   let searching = $state(false);
+  let viewerOpen = $state(false);
+  let viewerUrl = $state("");
 
   // Obtener reactivamente los resultados y la paginación
   const searchResults = $derived(data.searchResults || []);
@@ -362,7 +365,13 @@
                     ? article.campo7
                     : `${PUBLIC_SUPABASE_URL}/storage/v1/object/public/articulos/${article.campo7}`}
                   alt={article.art_des || article.descripcion}
-                  class="w-full h-full object-contain p-2 drop-shadow-md group-hover:scale-105 transition-transform duration-500"
+                  class="w-full h-full object-contain p-2 drop-shadow-md group-hover:scale-105 transition-transform duration-500 cursor-pointer"
+                  onclick={() => {
+                    viewerUrl = article.campo7.startsWith("http")
+                      ? article.campo7
+                      : `${PUBLIC_SUPABASE_URL}/storage/v1/object/public/articulos/${article.campo7}`;
+                    viewerOpen = true;
+                  }}
                   onerror={(e) => (e.currentTarget.style.display = "none")}
                 />
               {:else}
@@ -562,3 +571,5 @@
     background: transparent !important;
   }
 </style>
+
+<ImageViewer bind:isOpen={viewerOpen} imageUrl={viewerUrl} />

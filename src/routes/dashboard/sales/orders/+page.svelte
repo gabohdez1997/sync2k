@@ -50,6 +50,7 @@
   import Combobox from "$lib/components/ui/Combobox.svelte";
   import SearchBar from "$lib/components/ui/SearchBar.svelte";
   import BarcodeScanner from "$lib/components/ui/BarcodeScanner.svelte";
+  import ImageViewer from "$lib/components/ui/ImageViewer.svelte";
   import dayjs from "dayjs";
   import "dayjs/locale/es";
   import ImportItemCard from "$lib/components/ui/ImportItemCard.svelte";
@@ -64,6 +65,8 @@
   let activeTab = $state(0); // 0: Cliente, 1: Artículos, 2: Confirmación
   let searchTerm = $state($page.url.searchParams.get("search") || "");
   let isSearching = $state(false);
+  let viewerOpen = $state(false);
+  let viewerUrl = $state("");
 
   // --- CONTEXTO (Sedes/Almacenes) ---
   let selectedBranch = $state(data.selectedBranchId || "");
@@ -2078,7 +2081,13 @@
                         ? article.campo7
                         : `${PUBLIC_SUPABASE_URL}/storage/v1/object/public/articulos/${article.campo7}`}
                       alt={article.art_des || article.descripcion}
-                      class="w-full h-full object-contain p-2 drop-shadow-md group-hover:scale-105 transition-transform duration-500"
+                      class="w-full h-full object-contain p-2 drop-shadow-md group-hover:scale-105 transition-transform duration-500 cursor-pointer"
+                      onclick={() => {
+                        viewerUrl = article.campo7.startsWith("http")
+                          ? article.campo7
+                          : `${PUBLIC_SUPABASE_URL}/storage/v1/object/public/articulos/${article.campo7}`;
+                        viewerOpen = true;
+                      }}
                       onerror={(e) => (e.currentTarget.style.display = "none")}
                     />
                   {:else}
@@ -3369,3 +3378,4 @@
   </div>
 {/if}
 
+<ImageViewer bind:isOpen={viewerOpen} imageUrl={viewerUrl} />
