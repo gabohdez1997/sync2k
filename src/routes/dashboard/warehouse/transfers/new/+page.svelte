@@ -10,6 +10,7 @@
   import { toast } from "svelte-sonner";
   import Combobox from "$lib/components/ui/Combobox.svelte";
   import BarcodeScanner from "$lib/components/ui/BarcodeScanner.svelte";
+  import { PUBLIC_SUPABASE_URL } from "$env/static/public";
 
   let { data, form } = $props();
 
@@ -675,8 +676,19 @@
                   </span>
                 </div>
 
-                <div class="h-40 bg-surface-soft rounded-[20px] flex items-center justify-center text-text-muted mb-4 group-hover:bg-brand-500/5 transition-colors">
-                  <Package size={48} class="opacity-30 group-hover:scale-110 group-hover:text-brand-500 transition-all duration-500" />
+                <div class="h-40 bg-surface-soft rounded-[20px] flex items-center justify-center text-text-muted mb-4 group-hover:bg-brand-500/5 transition-colors overflow-hidden">
+                  {#if article.campo7 && article.campo7.trim() !== ""}
+                    <img
+                      src={article.campo7.startsWith("http")
+                        ? article.campo7
+                        : `${PUBLIC_SUPABASE_URL}/storage/v1/object/public/articulos/${article.campo7}`}
+                      alt={article.art_des || article.descripcion}
+                      class="w-full h-full object-contain p-2 drop-shadow-md group-hover:scale-105 transition-transform duration-500"
+                      onerror={(e) => (e.currentTarget.style.display = "none")}
+                    />
+                  {:else}
+                    <Package size={48} class="opacity-30 group-hover:scale-110 group-hover:text-brand-500 transition-all duration-500" />
+                  {/if}
                 </div>
 
                 <h3 class="font-black text-sm leading-tight group-hover:text-brand-400 transition-colors">

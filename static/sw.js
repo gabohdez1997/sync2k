@@ -29,10 +29,7 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
-  // Simple network-first strategy for dynamic content
-  event.respondWith(
-    fetch(event.request).catch(() => {
-      return caches.match(event.request);
-    })
-  );
+  // BYPASS SERVICE WORKER ENTIRELY FOR ALL REQUESTS
+  // This prevents any interference with SvelteKit's __data.json or API routes
+  return;
 });

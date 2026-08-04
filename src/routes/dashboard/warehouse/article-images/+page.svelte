@@ -19,7 +19,7 @@
   import Combobox from "$lib/components/ui/Combobox.svelte";
   import BarcodeScanner from "$lib/components/ui/BarcodeScanner.svelte";
   import { supabase } from "$lib/supabase";
-  import { PUBLIC_SUPABASE_URL } from '$env/static/public';
+  import { PUBLIC_SUPABASE_URL } from "$env/static/public";
   import type { PageData, ActionData } from "./$types";
 
   let { data, form }: { data: PageData; form: ActionData } = $props();
@@ -158,15 +158,19 @@
     try {
       // 1. Process image to WebP
       const webpBlob = await processImage(file);
-      
+
       // 2. Send to server action to upload and update agent
       const formData = new FormData();
-      formData.append('co_art', artCode);
-      formData.append('imageFile', webpBlob, `${artCode.trim()}.webp`);
-      formData.append('branchId', selectedBranch);
-      
-      if (article.campo7 && article.campo7.trim() !== '' && !article.campo7.startsWith('http')) {
-        formData.append('oldImageFile', article.campo7.trim());
+      formData.append("co_art", artCode);
+      formData.append("imageFile", webpBlob, `${artCode.trim()}.webp`);
+      formData.append("branchId", selectedBranch);
+
+      if (
+        article.campo7 &&
+        article.campo7.trim() !== "" &&
+        !article.campo7.startsWith("http")
+      ) {
+        formData.append("oldImageFile", article.campo7.trim());
       }
 
       const response = await fetch("?/updateImage", {
@@ -176,20 +180,31 @@
 
       const result = await response.json();
 
-      // La respuesta de sveltekit actions via fetch crudo viene en un formato específico,
-      if (result.type === 'success' || (result.data && !result.data.error)) {
+      if (
+        result.type === "success" ||
+        result.type === "redirect" ||
+        (result.data && !result.data.error)
+      ) {
         toast.success(`Imagen actualizada para el artículo ${artCode}`);
-        
-        // Asignación directa para actualización instantánea en la UI
-        const newUrl = result.data?.imageUrl;
-        if (newUrl && activeArticleForUpload) {
-          activeArticleForUpload.campo7 = newUrl;
-        } else if (newUrl && article) {
-          article.campo7 = newUrl;
+
+        // Extract the .webp filename from the raw SvelteKit ActionResult string
+        const resultText = JSON.stringify(result);
+        const match = resultText.match(/([a-zA-Z0-9_-]+\.webp)/);
+        const newUrl = match ? match[1] : null;
+
+        if (newUrl) {
+          if (activeArticleForUpload) {
+            activeArticleForUpload.campo7 = newUrl;
+          }
+          if (article) {
+            article.campo7 = newUrl;
+          }
         }
 
-        // Forzar recarga de los datos de servidor en el background
-        import('$app/navigation').then(n => n.invalidateAll());
+        // Forzar recarga en background (ahora con el Service Worker reparado)
+        import("$app/navigation").then((n) =>
+          n.invalidateAll().catch((e) => console.error("Invalidate error:", e)),
+        );
       } else {
         const err = result.data?.error || "Error desconocido";
         throw new Error(`Error del Agente: ${err}`);
@@ -364,12 +379,16 @@
                 </div>
               {/if}
 
-              {#if article.campo7 && article.campo7.trim() !== ''}
+
+
+              {#if article.campo7 && article.campo7.trim() !== ""}
                 <img
-                  src={article.campo7.startsWith('http') ? article.campo7 : `${PUBLIC_SUPABASE_URL}/storage/v1/object/public/articulos/${article.campo7}`}
+                  src={article.campo7.startsWith("http")
+                    ? article.campo7
+                    : `${PUBLIC_SUPABASE_URL}/storage/v1/object/public/articulos/${article.campo7}`}
                   alt={article.descripcion}
-                  class="w-full h-full object-cover"
-                  onerror={(e) => (e.currentTarget.src = "")}
+                  class="w-full h-full object-contain p-3 drop-shadow-lg transition-transform duration-700 ease-[cubic-bezier(0.25,0.46,0.45,0.94)] group-hover:scale-[1.08]"
+                  onerror={(e) => (e.currentTarget.style.display = "none")}
                 />
               {:else}
                 <div

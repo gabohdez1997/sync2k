@@ -25,6 +25,7 @@
     Package
   } from "lucide-svelte";
   import type { PageData } from "./$types";
+  import { PUBLIC_SUPABASE_URL } from "$env/static/public";
 
   let { data }: { data: PageData } = $props();
 
@@ -355,10 +356,21 @@
 
             <!-- Contenedor del Icono/Imagen del Producto -->
             <div class="h-36 bg-surface-soft/40 rounded-[20px] flex items-center justify-center text-text-muted mb-4 group-hover:bg-brand-500/5 transition-colors relative overflow-hidden shrink-0">
-              <Package
-                size={40}
-                class="opacity-30 group-hover:scale-110 group-hover:text-brand-500 transition-all duration-500"
-              />
+              {#if article.campo7 && article.campo7.trim() !== ""}
+                <img
+                  src={article.campo7.startsWith("http")
+                    ? article.campo7
+                    : `${PUBLIC_SUPABASE_URL}/storage/v1/object/public/articulos/${article.campo7}`}
+                  alt={article.art_des || article.descripcion}
+                  class="w-full h-full object-contain p-2 drop-shadow-md group-hover:scale-105 transition-transform duration-500"
+                  onerror={(e) => (e.currentTarget.style.display = "none")}
+                />
+              {:else}
+                <Package
+                  size={40}
+                  class="opacity-30 group-hover:scale-110 group-hover:text-brand-500 transition-all duration-500"
+                />
+              {/if}
             </div>
 
             <!-- Nombre y Datos -->
