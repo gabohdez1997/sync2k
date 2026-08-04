@@ -1050,7 +1050,6 @@
                         {/if}
 
                         <!-- Retención de ISLR ($) -->
-                        {#if r.base_imponible_islr_bs > 0}
                         <div>
                           <div class="flex justify-between items-center mb-1.5">
                             <label class="block text-xs font-black text-text-muted uppercase">Reten. ISLR ($)</label>
@@ -1087,7 +1086,6 @@
                             Bs. {(r.reten_islr_bs || 0).toLocaleString("de-DE", { minimumFractionDigits: 2 })}
                           </span>
                         </div>
-                        {/if}
                       </div>
 
                       <!-- Subpanel Comprobante IVA -->
@@ -1128,7 +1126,7 @@
                       {/if}
 
                       <!-- Subpanel ISLR -->
-                      {#if r.showIslrDetails && r.base_imponible_islr_bs > 0}
+                      {#if r.showIslrDetails}
                         <div class="bg-amber-500/5 border border-amber-500/20 p-4 rounded-2xl space-y-3 text-xs">
                           <span class="font-bold text-amber-300">Datos Retención ISLR / Municipal</span>
                           <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">

@@ -1378,8 +1378,6 @@
                             </span>
                           </div>
                           {/if}
-
-                          {#if doc.base_islr_default > 0}
                           <div>
                             <div
                               class="flex justify-between items-center mb-1.5"
@@ -1422,7 +1420,6 @@
                               })}
                             </span>
                           </div>
-                          {/if}
                         </div>
 
                         <!-- Detalles Retención IVA (Inputs manuales) -->
@@ -1508,7 +1505,7 @@
                         {/if}
 
                         <!-- Detalles Retención ISLR (Inputs manuales) -->
-                        {#if input.showIslrDetails && doc.base_islr_default > 0}
+                        {#if input.showIslrDetails}
                           <div
                             class="bg-amber-500/5 border border-amber-500/20 p-4 rounded-2xl space-y-3 text-xs animate-in slide-in-from-top-2 duration-150"
                           >
