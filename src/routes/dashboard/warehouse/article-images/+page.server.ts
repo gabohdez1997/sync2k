@@ -338,8 +338,8 @@ export const actions: Actions = {
 				module:       'ARTICLE_IMAGES',
 				record_id:    co_art,
 				branch_id:    branchId,
-				old_data:     oldData,
-				new_data:     { imageUrl },
+				old_data:     oldImageFile ? { imageUrl: oldImageFile } : null,
+				new_data:     { imageUrl: fileName },
 				source:       'cloud'
 			});
 
