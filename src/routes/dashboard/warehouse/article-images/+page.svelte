@@ -66,6 +66,42 @@
     selectedCategoria = $page.url.searchParams.get("categoria") || "";
   });
 
+  let globalStats = $state({
+    loading: true,
+    total: 0,
+    withImage: 0,
+    withoutImage: 0,
+    percentage: 0
+  });
+
+  import { onMount } from "svelte";
+
+  onMount(async () => {
+    try {
+      const res = await fetch('/api/dashboard/stats/images');
+      const json = await res.json();
+      if (json.success && json.data) {
+        const total = json.data.total;
+        const withImage = json.data.withImage;
+        const withoutImage = Math.max(0, total - withImage);
+        const percentage = total > 0 ? Math.round((withImage / total) * 100) : 0;
+        
+        globalStats = {
+          loading: false,
+          total,
+          withImage,
+          withoutImage,
+          percentage
+        };
+      } else {
+        globalStats.loading = false;
+      }
+    } catch (e) {
+      console.error(e);
+      globalStats.loading = false;
+    }
+  });
+
   function handleSearch(e?: Event) {
     if (e) e.preventDefault();
     isSearching = true;
@@ -221,31 +257,49 @@
 </script>
 
 <div
-  class="h-full flex flex-col pt-[72px]"
+  class="flex flex-col gap-8"
   in:fade={{ duration: 200, delay: 150 }}
 >
   <!-- ── HEADER ──────────────────────────────────────────────────────────── -->
-  <header class="flex-none px-6 py-6 pb-2 relative z-20">
-    <div class="flex items-center justify-between mb-8">
-      <div>
+  <header class="flex-none relative z-20">
+    <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+      <div class="flex flex-col gap-2">
         <h1
-          class="text-3xl font-black tracking-tight flex items-center gap-3 drop-shadow-md"
+          class="text-4xl font-black tracking-tight flex items-center gap-3 drop-shadow-md"
         >
           <div
             class="p-2.5 rounded-2xl bg-brand-500/10 text-brand-500 shadow-sm border border-brand-500/20"
           >
-            <ImageIcon size={24} />
+            <ImageIcon size={40} />
           </div>
           Imágenes de Artículos
         </h1>
-        <p class="text-text-muted mt-2">
+        <p class="text-text-muted text-lg">
           Gestione las imágenes de los productos. Se sincronizarán en todas las
           sedes.
         </p>
       </div>
 
       <div class="flex items-center gap-4">
-        <!-- Selector de sede removido según requerimiento -->
+        <!-- Progress Widget -->
+        <div class="bg-surface-soft/80 backdrop-blur-md border border-border-subtle rounded-2xl p-3 flex flex-col gap-2 min-w-[200px] shadow-sm relative overflow-hidden">
+          {#if globalStats.loading}
+            <div class="absolute inset-0 bg-surface-base/50 backdrop-blur-sm flex items-center justify-center z-10">
+              <Loader2 class="animate-spin text-brand-500" size={16} />
+            </div>
+          {/if}
+          <div class="flex justify-between items-center text-xs font-bold">
+            <span class="text-text-muted uppercase tracking-wider text-[10px]">Cobertura Global</span>
+            <span class="text-brand-400">{globalStats.percentage}%</span>
+          </div>
+          <div class="w-full bg-surface-base h-2 rounded-full overflow-hidden shadow-inner">
+            <div class="bg-brand-500 h-full rounded-full transition-all duration-1000 ease-out" style="width: {globalStats.percentage}%"></div>
+          </div>
+          <div class="flex justify-between items-center text-[10px] text-text-muted font-mono font-bold">
+            <span class="text-green-400/80">{globalStats.withImage} con img</span>
+            <span class="text-red-400/80">{globalStats.withoutImage} sin img</span>
+          </div>
+        </div>
       </div>
     </div>
 
