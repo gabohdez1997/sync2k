@@ -145,6 +145,13 @@
           onlyRead: true,
         },
         {
+          id: "rep_analisis_compras",
+          label: "Análisis de Compras",
+          hasOthers: false,
+          hasVoid: false,
+          onlyRead: true,
+        },
+        {
           id: "reports_collections_summary",
           label: "Resumen de Cobros",
           actions: [
