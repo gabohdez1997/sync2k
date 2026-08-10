@@ -16,6 +16,7 @@
         Calendar,
         X,
         CheckCircle,
+        FileText,
     } from "lucide-svelte";
     import { goto } from "$app/navigation";
     import { page } from "$app/stores";
@@ -143,11 +144,17 @@
         let sumFacturada = 0;
         let sumDevuelta = 0;
         let sumRealVendida = 0;
+        let sumDocsFacturados = 0;
+        let sumDocsDevueltos = 0;
+        let sumDocsExitosos = 0;
 
         for (const item of filteredReportData) {
             sumFacturada += Number(item.cant_facturada) || 0;
             sumDevuelta += Number(item.cant_devuelta) || 0;
             sumRealVendida += Number(item.cant_real_vendida) || 0;
+            sumDocsFacturados += Number(item.docs_facturados) || 0;
+            sumDocsDevueltos += Number(item.docs_devueltos) || 0;
+            sumDocsExitosos += Number(item.docs_exitosos) || 0;
         }
 
         return {
@@ -155,6 +162,9 @@
             sumFacturada,
             sumDevuelta,
             sumRealVendida,
+            sumDocsFacturados,
+            sumDocsDevueltos,
+            sumDocsExitosos,
         };
     });
 
@@ -175,7 +185,7 @@
         // Start with UTF-8 BOM and sep=; directive for Excel
         let csvContent = '\uFEFFsep=;\n';
         csvContent +=
-            "Código;Descripción;Modelo;Referencia;Cant. Facturada;Cant. Devuelta;Cant. Real Vendida;Estatus\n";
+            "Código;Descripción;Modelo;Referencia;Cant. Facturada;Cant. Devuelta;Cant. Real Vendida;Docs. Exitosos;Estatus\n";
 
         for (const item of filteredReportData) {
             const co_art = `="${String(item.co_art || "")
@@ -197,9 +207,10 @@
             const cant_real_vendida = (Number(item.cant_real_vendida) || 0)
                 .toFixed(2)
                 .replace(".", ",");
+            const docs_exitosos = Number(item.docs_exitosos) || 0;
             const statusLabel = item.anulado ? "Inactivo" : "Activo";
 
-            csvContent += `${co_art};${art_des};${modelo};${referencia};${cant_facturada};${cant_devuelta};${cant_real_vendida};${statusLabel}\n`;
+            csvContent += `${co_art};${art_des};${modelo};${referencia};${cant_facturada};${cant_devuelta};${cant_real_vendida};${docs_exitosos};${statusLabel}\n`;
         }
 
         const blob = new Blob([csvContent], {
@@ -294,7 +305,7 @@
 
     <!-- METRICS CARDS -->
     <div
-        class="grid grid-cols-1 md:grid-cols-4 gap-6 print:grid-cols-4 print:gap-3"
+        class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-6 print:grid-cols-5 print:gap-3"
     >
         <!-- Card 1: Artículos con Actividad -->
         <div
@@ -328,7 +339,39 @@
             </div>
         </div>
 
-        <!-- Card 2: Total Facturado -->
+        <!-- Card 2: Documentos Exitosos -->
+        <div
+            class="glass p-6 rounded-3xl border border-border-subtle shadow-xl relative overflow-hidden group print:p-3 print:rounded-xl"
+        >
+            <div
+                class="absolute -right-4 -bottom-4 w-24 h-24 bg-amber-500/5 rounded-full blur-2xl"
+            ></div>
+            <div class="flex items-start justify-between">
+                <div class="space-y-2">
+                    <span
+                        class="text-xs font-black uppercase tracking-widest text-text-muted print:text-[9px]"
+                        >Docs. Exitosos</span
+                    >
+                    <h2
+                        class="text-2xl font-black text-amber-400 tracking-tight print:text-lg"
+                    >
+                        {stats.sumDocsExitosos.toLocaleString('de-DE')}
+                    </h2>
+                    <p
+                        class="text-xs text-text-muted font-bold print:text-[8px]"
+                    >
+                        Facturas menos devoluciones
+                    </p>
+                </div>
+                <div
+                    class="h-10 w-10 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-500 print:hidden"
+                >
+                    <FileText size={20} />
+                </div>
+            </div>
+        </div>
+
+        <!-- Card 3: Total Facturado -->
         <div
             class="glass p-6 rounded-3xl border border-border-subtle shadow-xl relative overflow-hidden group print:p-3 print:rounded-xl"
         >
@@ -360,7 +403,7 @@
             </div>
         </div>
 
-        <!-- Card 3: Total Devuelto -->
+        <!-- Card 4: Total Devuelto -->
         <div
             class="glass p-6 rounded-3xl border border-border-subtle shadow-xl relative overflow-hidden group print:p-3 print:rounded-xl"
         >
@@ -392,7 +435,7 @@
             </div>
         </div>
 
-        <!-- Card 4: Cantidad Real Vendida -->
+        <!-- Card 5: Cantidad Real Vendida -->
         <div
             class="glass p-6 rounded-3xl border border-border-subtle shadow-xl relative overflow-hidden group print:p-3 print:rounded-xl"
         >
@@ -589,18 +632,19 @@
                     <tr class="border-b border-border-subtle bg-surface-soft/40">
                         <th class="py-5 px-6 font-black text-text-muted uppercase tracking-widest w-32">Código</th>
                         <th class="py-5 px-6 font-black text-text-muted uppercase tracking-widest">Descripción</th>
-                        <th class="py-5 px-6 font-black text-text-muted uppercase tracking-widest w-40">Modelo</th>
-                        <th class="py-5 px-6 font-black text-text-muted uppercase tracking-widest w-40">Referencia</th>
-                        <th class="py-5 px-6 font-black text-text-muted uppercase tracking-widest text-right w-36">Cant. Facturada</th>
-                        <th class="py-5 px-6 font-black text-text-muted uppercase tracking-widest text-right w-36">Cant. Devuelta</th>
-                        <th class="py-5 px-6 font-black text-text-muted uppercase tracking-widest text-right w-40">Cant. Real Vendida</th>
+                        <th class="py-5 px-6 font-black text-text-muted uppercase tracking-widest w-36">Modelo</th>
+                        <th class="py-5 px-6 font-black text-text-muted uppercase tracking-widest w-36">Referencia</th>
+                        <th class="py-5 px-6 font-black text-text-muted uppercase tracking-widest text-right w-32">Cant. Facturada</th>
+                        <th class="py-5 px-6 font-black text-text-muted uppercase tracking-widest text-right w-32">Cant. Devuelta</th>
+                        <th class="py-5 px-6 font-black text-text-muted uppercase tracking-widest text-right w-36">Cant. Real Vendida</th>
+                        <th class="py-5 px-6 font-black text-text-muted uppercase tracking-widest text-right w-36" title="Documentos de Ventas - Devoluciones">Docs. Exitosos</th>
                         <th class="py-5 px-6 font-black text-text-muted uppercase tracking-widest text-center w-24">Estado</th>
                     </tr>
                 </thead>
-                <tbody class="divide-y divide-border-subtle/30 font-bold">
+                <tbody class="divide-y border-border-subtle/30 font-bold">
                     {#if isSearching}
                         <tr>
-                            <td colspan="8" class="py-16 text-center text-text-muted">
+                            <td colspan="9" class="py-16 text-center text-text-muted">
                                 <RefreshCw size={24} class="animate-spin mx-auto mb-3 text-brand-500/50" />
                                 Buscando artículos en catálogo...
                             </td>
@@ -619,6 +663,9 @@
                                 <td class="py-4 px-6 text-right font-mono text-base font-black {Number(item.cant_real_vendida) > 0 ? 'text-emerald-400' : Number(item.cant_real_vendida) < 0 ? 'text-red-400' : 'text-text-muted'}">
                                     {formatQuantity(item.cant_real_vendida)}
                                 </td>
+                                <td class="py-4 px-6 text-right font-mono text-base font-black {Number(item.docs_exitosos) > 0 ? 'text-amber-400' : Number(item.docs_exitosos) < 0 ? 'text-red-400' : 'text-text-muted'}">
+                                    {Number(item.docs_exitosos || 0).toLocaleString('de-DE')}
+                                </td>
                                 <td class="py-4 px-6 text-center">
                                     {#if item.anulado}
                                         <span class="px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-wider bg-red-500/10 border border-red-500/20 text-red-500">Inactivo</span>
@@ -629,7 +676,7 @@
                             </tr>
                         {:else}
                             <tr>
-                                <td colspan="8" class="py-16 text-center text-text-muted">
+                                <td colspan="9" class="py-16 text-center text-text-muted">
                                     <div class="h-12 w-12 rounded-2xl bg-surface-soft border border-border-subtle flex items-center justify-center mx-auto mb-3 text-text-muted opacity-45">
                                         <Filter size={20} />
                                     </div>
