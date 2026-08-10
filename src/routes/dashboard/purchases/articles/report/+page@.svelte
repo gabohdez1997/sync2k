@@ -24,9 +24,9 @@
         let parts: string[] = [];
 
         if (filters.ids) {
-            parts.push('Artículos Seleccionados');
+            parts.push('Articulos Seleccionados');
         } else {
-            parts.push('Artículos');
+            parts.push('Articulos');
         }
 
         if (filters.in_stock === 'true') parts.push('Con Stock');
@@ -99,6 +99,8 @@
 </script>
 
 <svelte:head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>{reportTitle} - {branchName}</title>
 </svelte:head>
 
@@ -143,7 +145,7 @@
                         <div class="doc-info">
                             <div class="doc-badge">
                                 <span class="label">{dayjs().format("DD/MM/YYYY HH:mm")}</span>
-                                <span class="number">{articles.length} Artículos</span>
+                                <span class="number">{articles.length} Articulos</span>
                             </div>
                         </div>
                     </div>
@@ -158,8 +160,8 @@
                         <table class="items-table">
                             <thead>
                                 <tr>
-                                    <th class="col-code">Código</th>
-                                    <th class="col-desc">Descripción</th>
+                                    <th class="col-code">Codigo</th>
+                                    <th class="col-desc">Descripcion</th>
                                     {#if isAllBranches}
                                         <th class="col-sucu">Sucursal</th>
                                     {/if}
@@ -206,7 +208,7 @@
 
                     <!-- PAGE INDICATOR -->
                     <div class="page-footer">
-                        <span>Página {i + 1} de {pages.length}</span>
+                        <span>Pagina {i + 1} de {pages.length}</span>
                     </div>
                 </div>
             </div>

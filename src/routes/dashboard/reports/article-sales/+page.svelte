@@ -185,7 +185,7 @@
         // Start with UTF-8 BOM and sep=; directive for Excel
         let csvContent = '\uFEFFsep=;\n';
         csvContent +=
-            "Código;Descripción;Modelo;Referencia;Cant. Facturada;Cant. Devuelta;Cant. Real Vendida;Docs. Exitosos;Estatus\n";
+            "Codigo;Descripcion;Modelo;Referencia;Cant. Facturada;Cant. Devuelta;Cant. Real Vendida;Docs. Exitosos;Estatus\n";
 
         for (const item of filteredReportData) {
             const co_art = `="${String(item.co_art || "")

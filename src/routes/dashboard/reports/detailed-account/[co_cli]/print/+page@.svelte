@@ -114,6 +114,8 @@
 </script>
 
 <svelte:head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Cuenta Detallada - {client.cli_des}</title>
 </svelte:head>
 
@@ -173,8 +175,8 @@
 
                     <div class="doc-info">
                         <div class="dates mt-2">
-                            <p>Fecha Emisión: <strong>{dayjs().format("DD/MM/YYYY")}</strong></p>
-                            <p>Hora Emisión: <strong>{dayjs().format("hh:mm A")}</strong></p>
+                            <p>Fecha Emision: <strong>{dayjs().format("DD/MM/YYYY")}</strong></p>
+                            <p>Hora Emision: <strong>{dayjs().format("hh:mm A")}</strong></p>
                             <p class="text-[9px] text-slate-400 mt-1 uppercase">
                                 Reporte: <strong>Cuenta Detallada (Historial Consolidado)</strong>
                             </p>
@@ -188,16 +190,16 @@
                         <h3 class="section-title">Datos del Cliente</h3>
                         <p class="supplier-name">{client.cli_des}</p>
                         <p class="supplier-rif font-bold mt-1">
-                            RIF / CÓDIGO: {client.rif || client.co_cli}
+                            RIF / CODIGO: {client.rif || client.co_cli}
                         </p>
                         {#if client.direc1}
                             <p class="supplier-address font-medium text-slate-700 mt-1">
-                                DIRECCIÓN: {client.direc1}
+                                DIRECCION: {client.direc1}
                             </p>
                         {/if}
                         {#if client.telefonos}
                             <p class="supplier-phone font-bold mt-1 text-slate-700">
-                                TELÉFONO: {client.telefonos}
+                                TELEFONO: {client.telefonos}
                             </p>
                         {/if}
                     </div>
@@ -216,7 +218,7 @@
                             >
                                 {finalSaldoUsd < 0
                                     ? "CON BALANCE PENDIENTE"
-                                    : "SALDO A FAVOR / AL DÍA"}
+                                    : "SALDO A FAVOR / AL DIA"}
                             </span>
                         </div>
                         <div class="info-row">
@@ -233,7 +235,7 @@
                             <tr>
                                 <th class="col-doc">Documento</th>
                                 <th class="col-type">Tipo</th>
-                                <th class="col-date">Emisión</th>
+                                <th class="col-date">Emision</th>
                                 <th class="col-doc">Origen</th>
                                 <th class="col-date">Vencimiento</th>
                                 <th class="col-status">Estado</th>
@@ -305,18 +307,20 @@
                                 </tr>
                             {/each}
                             {#if page.showTotals}
-                                <tr class="totals-row font-bold bg-slate-50 border-t-2 border-slate-900">
-                                    <td colspan="6" class="text-right uppercase pr-4">Total General:</td>
-                                    <td class="text-right whitespace-nowrap">
+                                <tr class="total-summary-row font-black bg-slate-100 border-t-2 border-b-2 border-slate-900">
+                                    <td colspan="6" class="text-right uppercase tracking-wider py-2 pr-3">
+                                        TOTAL GENERAL CONSOLIDADO:
+                                    </td>
+                                    <td class="text-right font-bold text-slate-900 whitespace-nowrap">
                                         <div class="flex flex-col items-end">
-                                            <span class="text-slate-900">{formatCurrency(totalDebeUsd, 'USD')}</span>
-                                            <span class="text-[6.5px] text-slate-400">{formatCurrency(totalDebeBs, 'VES')}</span>
+                                            <span>{formatCurrency(totalDebeUsd, 'USD')}</span>
+                                            <span class="text-[6.5px] text-slate-500">{formatCurrency(totalDebeBs, 'VES')}</span>
                                         </div>
                                     </td>
-                                    <td class="text-right whitespace-nowrap">
+                                    <td class="text-right font-bold text-slate-900 whitespace-nowrap">
                                         <div class="flex flex-col items-end">
-                                            <span class="text-slate-900">{formatCurrency(totalHaberUsd, 'USD')}</span>
-                                            <span class="text-[6.5px] text-slate-400">{formatCurrency(totalHaberBs, 'VES')}</span>
+                                            <span>{formatCurrency(totalHaberUsd, 'USD')}</span>
+                                            <span class="text-[6.5px] text-slate-500">{formatCurrency(totalHaberBs, 'VES')}</span>
                                         </div>
                                     </td>
                                     <td class="text-right font-black whitespace-nowrap" class:text-red-600={finalSaldoUsd < 0} class:text-green-600={finalSaldoUsd >= 0}>
@@ -339,21 +343,21 @@
                         </tbody>
                     </table>
                     {#if !page.showTotals}
-                        <p class="continue-msg">CONTINÚA EN LA SIGUIENTE PÁGINA...</p>
+                        <p class="continue-msg">CONTINUA EN LA SIGUIENTE PAGINA...</p>
                     {/if}
                 </div>
 
                 {#if page.showTotals}
                     <!-- SUMMARY FIXED -->
                     <div class="disclaimer-fixed">
-                        <p>* El presente estado de cuenta consolida todos los créditos, débitos y cobros asociados al cliente.</p>
-                        <p>* Los cálculos en divisas se determinan utilizando la tasa de emisión oficial del BCV o la pactada en el documento.</p>
+                        <p>* El presente estado de cuenta consolida todos los creditos, debitos y cobros asociados al cliente.</p>
+                        <p>* Los calculos en divisas se determinan utilizando la tasa de emision oficial del BCV o la pactada en el documento.</p>
                     </div>
                 {/if}
 
                 <!-- PAGE INDICATOR -->
                 <div class="page-footer">
-                    <span>Página {i + 1} de {pages.length}</span>
+                    <span>Pagina {i + 1} de {pages.length}</span>
                 </div>
             </div>
         </div>

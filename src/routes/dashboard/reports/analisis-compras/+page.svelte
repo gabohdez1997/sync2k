@@ -230,7 +230,7 @@
         if (!items || items.length === 0) return;
 
         let csvContent = '\uFEFFsep=;\n';
-        csvContent += "Código;Descripción;Clase ABC/XYZ;SDR (Stock);ROP;SS;VPD;TR Promedio (Días);Ventas Período;Pedir Recomendado;Inversión Est. (USD);Estado de Stock\n";
+        csvContent += "Codigo;Descripcion;Clase ABC/XYZ;SDR (Stock);ROP;SS;VPD;TR Promedio (Dias);Ventas Periodo;Pedir Recomendado;Inversion Est. (USD);Estado de Stock\n";
 
         for (const item of items) {
             const co_art = `="${String(item.co_art || '').trim().replace(/"/g, '""')}"`;
@@ -397,7 +397,7 @@
 </script>
 
 <svelte:head>
-    <title>Análisis de Compras | Gestor</title>
+    <title>Analisis de Compras | Gestor</title>
 </svelte:head>
 
 <div class="p-6 md:p-8 space-y-8 animate-fade-in pb-32">

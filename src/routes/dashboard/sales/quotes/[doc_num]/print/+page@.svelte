@@ -98,7 +98,9 @@
 </script>
 
 <svelte:head>
-    <title>Cotización {quote.doc_num} - {branch.business_name || branch.name}</title>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Cotizacion {quote.doc_num} - {branch.business_name || branch.name}</title>
 </svelte:head>
 
 <!-- FLOATING ACTIONS (NO PRINT) -->
@@ -108,7 +110,7 @@
         <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
             <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect width="12" height="8" x="6" y="14" rx="1"/><path d="M6 8V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v4"/>
         </svg>
-        IMPRIMIR COTIZACIÓN
+        IMPRIMIR COTIZACION
     </button>
     <button onclick={() => window.close()}
         class="w-full md:w-auto text-center bg-gray-800/80 backdrop-blur-md text-white px-10 py-5 rounded-2xl font-black shadow-xl hover:bg-gray-700 transition-all active:scale-95 cursor-pointer">
@@ -136,14 +138,14 @@
 
                     <div class="doc-info">
                         <div class="doc-badge">
-                            <span class="label">Cotización N°</span>
+                            <span class="label">Cotizacion N°</span>
                             <span class="number text-red-600">{quote.doc_num}</span>
                         </div>
                         <div class="dates mt-2">
-                            <p>Emisión: <strong>{dayjs(displayFecEmis).format("DD/MM/YYYY")}</strong></p>
+                            <p>Emision: <strong>{dayjs(displayFecEmis).format("DD/MM/YYYY")}</strong></p>
                             <p>Vence: <strong>{dayjs(displayFecVenc).format("DD/MM/YYYY")}</strong></p>
                             <p class="text-[9px] text-slate-400 mt-1 uppercase">
-                                Moneda: <strong>{isUSD ? "DÓLARES (USD)" : "BOLÍVARES (BS.)"}</strong>
+                                Moneda: <strong>{isUSD ? "DOLARES (USD)" : "BOLIVARES (BS.)"}</strong>
                             </p>
                         </div>
                     </div>
@@ -155,8 +157,8 @@
                         <h3 class="section-title">Datos del Cliente</h3>
                         <p class="client-name">{quote.cli_des}</p>
                         <p class="client-rif">RIF: {quote.cli_rif || quote.co_cli}</p>
-                        <p class="client-address font-medium">DIRECCIÓN: {quote.cli_dir || "Dirección no registrada"}</p>
-                        {#if quote.cli_tel}<p class="client-phone font-bold mt-1 text-slate-700">TELÉFONO: {quote.cli_tel}</p>{/if}
+                        <p class="client-address font-medium">DIRECCION: {quote.cli_dir || "Direccion no registrada"}</p>
+                        {#if quote.cli_tel}<p class="client-phone font-bold mt-1 text-slate-700">TELEFONO: {quote.cli_tel}</p>{/if}
                         <p class="client-rif mt-1 font-bold text-[8px]">
                             ESTATUS FISCAL: 
                             <span class="text-blue-800 font-extrabold uppercase">
@@ -181,8 +183,8 @@
                     <table class="items-table">
                         <thead>
                             <tr>
-                                <th class="col-code">Código</th>
-                                <th class="col-desc">Descripción</th>
+                                <th class="col-code">Codigo</th>
+                                <th class="col-desc">Descripcion</th>
                                 <th class="col-qty">Cant.</th>
                                 <th class="col-uni">Uni.</th>
                                 <th class="col-price">Precio Unit. ({isUSD ? "$" : "Bs."})</th>
@@ -212,7 +214,7 @@
                         </tbody>
                     </table>
                     {#if !page.showTotals}
-                        <p class="continue-msg">CONTINÚA EN LA SIGUIENTE PÁGINA...</p>
+                        <p class="continue-msg">CONTINUA EN LA SIGUIENTE PAGINA...</p>
                     {/if}
                 </div>
 
@@ -226,8 +228,8 @@
                                     <div class="remarks-content">{quote.comentario}</div>
                                 {/if}
                                 <div class="disclaimer mt-1">
-                                    <p>* Esta cotización es referencial. Sujeto a cambios sin previo aviso según tasa del día.</p>
-                                    <p>* Tasa referencial del día: <strong>Bs. {formatCurrency(quote.tasa_actual || quote.tasa)}</strong> por 1 USD.</p>
+                                    <p>* Esta cotizacion es referencial. Sujeto a cambios sin previo aviso segun tasa del dia.</p>
+                                    <p>* Tasa referencial del dia: <strong>Bs. {formatCurrency(quote.tasa_actual || quote.tasa)}</strong> por 1 USD.</p>
                                 </div>
                             </div>
 
@@ -239,7 +241,7 @@
                                     {/if}
                                     {#if hasRetention}
                                         <div class="total-row"><span>Total Factura ($)</span><span>{formatCurrency(totalFacturaUSD)}</span></div>
-                                        <div class="total-row text-amber-600 font-bold"><span>Retención ({porcEsp}%)</span><span>- {formatCurrency(retencionUSD)}</span></div>
+                                        <div class="total-row text-amber-600 font-bold"><span>Retencion ({porcEsp}%)</span><span>- {formatCurrency(retencionUSD)}</span></div>
                                         <div class="grand-total-outline">
                                             <div class="bs-total"><span class="label">Total a Pagar</span><span class="val">$ {formatCurrency(totalAPagarUSD)}</span></div>
                                         </div>
@@ -255,7 +257,7 @@
                                     {/if}
                                     {#if hasRetention}
                                         <div class="total-row"><span>Total Factura (Bs.)</span><span>{formatCurrency(totalFacturaBS)}</span></div>
-                                        <div class="total-row text-amber-600 font-bold"><span>Retención ({porcEsp}%)</span><span>- {formatCurrency(retencionBS)}</span></div>
+                                        <div class="total-row text-amber-600 font-bold"><span>Retencion ({porcEsp}%)</span><span>- {formatCurrency(retencionBS)}</span></div>
                                         <div class="grand-total-outline">
                                             <div class="bs-total"><span class="label">Total a Pagar</span><span class="val">Bs. {formatCurrency(totalAPagarBS)}</span></div>
                                             <div class="usd-reference"><span>Referencia</span><strong>$ {formatCurrency(totalAPagarUSDRef)}</strong></div>
@@ -274,7 +276,7 @@
 
                 <!-- PAGE INDICATOR -->
                 <div class="page-footer">
-                    <span>Página {i + 1} de {pages.length}</span>
+                    <span>Pagina {i + 1} de {pages.length}</span>
                 </div>
             </div>
         </div>

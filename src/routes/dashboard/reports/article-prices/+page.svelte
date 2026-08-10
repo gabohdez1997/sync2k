@@ -225,7 +225,7 @@
         // Start with UTF-8 BOM and sep=; directive for Excel
         let csvContent = '\uFEFFsep=;\n';
         csvContent +=
-            "Código;Descripción;Modelo;Precio 1 (USD);Margen 1 (%);Precio 2 (USD);Margen 2 (%);Costo (USD);Stock Global;Estatus\n";
+            "Codigo;Descripcion;Modelo;Precio 1 (USD);Margen 1 (%);Precio 2 (USD);Margen 2 (%);Costo (USD);Stock Global;Estatus\n";
 
         for (const item of filteredReportData) {
             // Formula trick to preserve leading zeros in Excel: ="CODE"

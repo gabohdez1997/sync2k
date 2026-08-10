@@ -97,6 +97,8 @@
 </script>
 
 <svelte:head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Pedido {order.doc_num} - {branch.business_name || branch.name}</title>
 </svelte:head>
 
@@ -139,10 +141,10 @@
                             <span class="number text-red-600">{order.doc_num}</span>
                         </div>
                         <div class="dates mt-2">
-                            <p>Emisión: <strong>{dayjs(displayFecEmis).format("DD/MM/YYYY")}</strong></p>
+                            <p>Emision: <strong>{dayjs(displayFecEmis).format("DD/MM/YYYY")}</strong></p>
                             <p>Vence: <strong>{dayjs(displayFecVenc).format("DD/MM/YYYY")}</strong></p>
                             <p class="text-[9px] text-slate-400 mt-1 uppercase">
-                                Moneda: <strong>{isUSD ? "DÓLARES (USD)" : "BOLÍVARES (BS.)"}</strong>
+                                Moneda: <strong>{isUSD ? "DOLARES (USD)" : "BOLIVARES (BS.)"}</strong>
                             </p>
                         </div>
                     </div>
@@ -154,8 +156,8 @@
                         <h3 class="section-title">Datos del Cliente</h3>
                         <p class="client-name">{order.cli_des}</p>
                         <p class="client-rif">RIF: {order.cli_rif || order.co_cli}</p>
-                        <p class="client-address font-medium">DIRECCIÓN: {order.cli_dir || "Dirección no registrada"}</p>
-                        {#if order.cli_tel}<p class="client-phone font-bold mt-1 text-slate-700">TELÉFONO: {order.cli_tel}</p>{/if}
+                        <p class="client-address font-medium">DIRECCION: {order.cli_dir || "Direccion no registrada"}</p>
+                        {#if order.cli_tel}<p class="client-phone font-bold mt-1 text-slate-700">TELEFONO: {order.cli_tel}</p>{/if}
                         <p class="client-rif mt-1 font-bold text-[8px]">
                             ESTATUS FISCAL: 
                             <span class="text-blue-800 font-extrabold uppercase">
@@ -180,8 +182,8 @@
                     <table class="items-table">
                         <thead>
                             <tr>
-                                <th class="col-code">Código</th>
-                                <th class="col-desc">Descripción</th>
+                                <th class="col-code">Codigo</th>
+                                <th class="col-desc">Descripcion</th>
                                 <th class="col-qty">Cant.</th>
                                 <th class="col-uni">Uni.</th>
                                 <th class="col-price">Precio Unit. ({isUSD ? "$" : "Bs."})</th>
@@ -211,7 +213,7 @@
                         </tbody>
                     </table>
                     {#if !page.showTotals}
-                        <p class="continue-msg">CONTINÚA EN LA SIGUIENTE PÁGINA...</p>
+                        <p class="continue-msg">CONTINUA EN LA SIGUIENTE PAGINA...</p>
                     {/if}
                 </div>
 
@@ -225,8 +227,8 @@
                                     <div class="remarks-content">{order.comentario}</div>
                                 {/if}
                                 <div class="disclaimer mt-1">
-                                    <p>* Este pedido es referencial. Sujeto a cambios sin previo aviso según tasa del día.</p>
-                                    <p>* Tasa referencial del día: <strong>Bs. {formatCurrency(order.tasa_actual || order.tasa)}</strong> por 1 USD.</p>
+                                    <p>* Este pedido es referencial. Sujeto a cambios sin previo aviso segun tasa del dia.</p>
+                                    <p>* Tasa referencial del dia: <strong>Bs. {formatCurrency(order.tasa_actual || order.tasa)}</strong> por 1 USD.</p>
                                 </div>
                             </div>
 
@@ -238,7 +240,7 @@
                                     {/if}
                                     {#if hasRetention}
                                         <div class="total-row"><span>Total Factura ($)</span><span>{formatCurrency(totalFacturaUSD)}</span></div>
-                                        <div class="total-row text-amber-600 font-bold"><span>Retención ({porcEsp}%)</span><span>- {formatCurrency(retencionUSD)}</span></div>
+                                        <div class="total-row text-amber-600 font-bold"><span>Retencion ({porcEsp}%)</span><span>- {formatCurrency(retencionUSD)}</span></div>
                                         <div class="grand-total-outline">
                                             <div class="bs-total"><span class="label">Total a Pagar</span><span class="val">$ {formatCurrency(totalAPagarUSD)}</span></div>
                                         </div>
@@ -254,7 +256,7 @@
                                     {/if}
                                     {#if hasRetention}
                                         <div class="total-row"><span>Total Factura (Bs.)</span><span>{formatCurrency(totalFacturaBS)}</span></div>
-                                        <div class="total-row text-amber-600 font-bold"><span>Retención ({porcEsp}%)</span><span>- {formatCurrency(retencionBS)}</span></div>
+                                        <div class="total-row text-amber-600 font-bold"><span>Retencion ({porcEsp}%)</span><span>- {formatCurrency(retencionBS)}</span></div>
                                         <div class="grand-total-outline">
                                             <div class="bs-total"><span class="label">Total a Pagar</span><span class="val">Bs. {formatCurrency(totalAPagarBS)}</span></div>
                                             <div class="usd-reference"><span>Referencia</span><strong>$ {formatCurrency(totalAPagarUSDRef)}</strong></div>
@@ -273,7 +275,7 @@
 
                 <!-- PAGE INDICATOR -->
                 <div class="page-footer">
-                    <span>Página {i + 1} de {pages.length}</span>
+                    <span>Pagina {i + 1} de {pages.length}</span>
                 </div>
             </div>
         </div>

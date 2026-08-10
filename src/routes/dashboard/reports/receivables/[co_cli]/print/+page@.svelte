@@ -95,6 +95,8 @@
 </script>
 
 <svelte:head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Estado de Cuenta - {client.cli_des}</title>
 </svelte:head>
 
@@ -137,8 +139,8 @@
                             <span class="number text-red-600">CxC</span>
                         </div> -->
                         <div class="dates mt-2">
-                            <p>Fecha Emisión: <strong>{dayjs().format("DD/MM/YYYY")}</strong></p>
-                            <p>Hora Emisión: <strong>{dayjs().format("hh:mm A")}</strong></p>
+                            <p>Fecha Emision: <strong>{dayjs().format("DD/MM/YYYY")}</strong></p>
+                            <p>Hora Emision: <strong>{dayjs().format("hh:mm A")}</strong></p>
                             <p class="text-[9px] text-slate-400 mt-1 uppercase">
                                 Reporte: <strong>Saldos Pendientes</strong>
                             </p>
@@ -151,12 +153,12 @@
                     <div class="client-box">
                         <h3 class="section-title">Datos del Cliente</h3>
                         <p class="client-name">{client.cli_des}</p>
-                        <p class="client-rif font-bold mt-1">RIF / CÓDIGO: {client.rif || client.co_cli}</p>
+                        <p class="client-rif font-bold mt-1">RIF / CODIGO: {client.rif || client.co_cli}</p>
                         {#if client.direc1}
-                            <p class="client-address font-medium text-slate-700 mt-1">DIRECCIÓN: {client.direc1}</p>
+                            <p class="client-address font-medium text-slate-700 mt-1">DIRECCION: {client.direc1}</p>
                         {/if}
                         {#if client.telefonos}
-                            <p class="client-phone font-bold mt-1 text-slate-700">TELÉFONO: {client.telefonos}</p>
+                            <p class="client-phone font-bold mt-1 text-slate-700">TELEFONO: {client.telefonos}</p>
                         {/if}
                     </div>
                     <div class="logistic-box font-bold">
@@ -165,7 +167,7 @@
                         <div class="info-row">
                             <span class="label">Estatus:</span>
                             <span class="val" class:text-red-600={totalVencidoUsd < 0} class:text-green-600={totalVencidoUsd === 0}>
-                                {totalVencidoUsd < 0 ? `CON DEUDA VENCIDA (MÁX ${maxDiasMora} DÍAS)` : 'CARTERA AL DÍA'}
+                                {totalVencidoUsd < 0 ? `CON DEUDA VENCIDA (MAX ${maxDiasMora} DIAS)` : 'CARTERA AL DIA'}
                             </span>
                         </div>
                         <div class="info-row"><span class="label">Sede:</span><span class="val">{branch.name}</span></div>
@@ -179,12 +181,12 @@
                             <tr>
                                 <th class="col-doc">Documento</th>
                                 <th class="col-type">Tipo</th>
-                                <th class="col-date">Emisión</th>
+                                <th class="col-date">Emision</th>
                                 <th class="col-doc">Origen</th>
                                 <th class="col-date">Vencimiento</th>
                                 <th class="col-amount text-right">Monto Original (USD)</th>
                                 <th class="col-amount text-right">Saldo Pendiente (USD)</th>
-                                <th class="col-days">Días Mora</th>
+                                <th class="col-days">Dias Mora</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -211,9 +213,9 @@
                                     <td class="text-right font-black" class:text-red-600={item.vencido && !isCredit} class:text-emerald-600={isCredit}>{formatCurrency(item.saldo_usd)}</td>
                                     <td class="font-bold">
                                         {#if item.vencido}
-                                            <span class={isCredit ? "text-emerald-600" : "text-red-600"}>{item.dias_vencidos} días</span>
+                                            <span class={isCredit ? "text-emerald-600" : "text-red-600"}>{item.dias_vencidos} dias</span>
                                         {:else}
-                                            <span class={isCredit ? "text-emerald-600" : "text-green-600"}>Al día</span>
+                                            <span class={isCredit ? "text-emerald-600" : "text-green-600"}>Al dia</span>
                                         {/if}
                                     </td>
                                 </tr>
@@ -226,7 +228,7 @@
                         </tbody>
                     </table>
                     {#if !page.showTotals}
-                        <p class="continue-msg">CONTINÚA EN LA SIGUIENTE PÁGINA...</p>
+                        <p class="continue-msg">CONTINUA EN LA SIGUIENTE PAGINA...</p>
                     {/if}
                 </div>
 
@@ -237,16 +239,16 @@
                             <div class="remarks">
                                 <div class="disclaimer mt-2 font-medium">
                                     <p>* El presente estado de cuenta consolida todos los saldos por cobrar pendientes a la fecha actual.</p>
-                                    <p>* Los cálculos en divisas se determinan utilizando la tasa oficial histórica del BCV al momento de la emisión de cada documento.</p>
+                                    <p>* Los calculos en divisas se determinan utilizando la tasa oficial historica del BCV al momento de la emision de cada documento.</p>
                                 </div>
                                 <div class="signatures-row mt-6">
                                     <div class="signature-box">
                                         <div class="line"></div>
-                                        <p>Preparado por Administración</p>
+                                        <p>Preparado por Administracion</p>
                                     </div>
                                     <div class="signature-box">
                                         <div class="line"></div>
-                                        <p>Firma y Sello de Recepción</p>
+                                        <p>Firma y Sello de Recepcion</p>
                                     </div>
                                 </div>
                             </div>
@@ -277,7 +279,7 @@
 
                 <!-- PAGE INDICATOR -->
                 <div class="page-footer">
-                    <span>Página {i + 1} de {pages.length}</span>
+                    <span>Pagina {i + 1} de {pages.length}</span>
                 </div>
             </div>
         </div>

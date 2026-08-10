@@ -104,6 +104,8 @@
 </script>
 
 <svelte:head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Estado de Cuenta - {supplier.prov_des}</title>
 </svelte:head>
 
@@ -170,12 +172,12 @@
                     <div class="doc-info">
                         <div class="dates mt-2">
                             <p>
-                                Fecha Emisión: <strong
+                                Fecha Emision: <strong
                                     >{dayjs().format("DD/MM/YYYY")}</strong
                                 >
                             </p>
                             <p>
-                                Hora Emisión: <strong
+                                Hora Emision: <strong
                                     >{dayjs().format("hh:mm A")}</strong
                                 >
                             </p>
@@ -194,20 +196,20 @@
                         <h3 class="section-title">Datos del Proveedor</h3>
                         <p class="supplier-name">{supplier.prov_des}</p>
                         <p class="supplier-rif font-bold mt-1">
-                            RIF / CÓDIGO: {supplier.rif || supplier.co_prov}
+                            RIF / CODIGO: {supplier.rif || supplier.co_prov}
                         </p>
                         {#if supplier.direc1}
                             <p
                                 class="supplier-address font-medium text-slate-700 mt-1"
                             >
-                                DIRECCIÓN: {supplier.direc1}
+                                DIRECCION: {supplier.direc1}
                             </p>
                         {/if}
                         {#if supplier.telefonos}
                             <p
                                 class="supplier-phone font-bold mt-1 text-slate-700"
                             >
-                                TELÉFONO: {supplier.telefonos}
+                                TELEFONO: {supplier.telefonos}
                             </p>
                         {/if}
                     </div>
@@ -226,8 +228,8 @@
                                 class:text-green-600={totalVencidoUsd === 0}
                             >
                                 {totalVencidoUsd < 0
-                                    ? `CON MORA VENCIDA (MÁX ${maxDiasMora} DÍAS)`
-                                    : "CARTERA AL DÍA"}
+                                    ? `CON MORA VENCIDA (MAX ${maxDiasMora} DIAS)`
+                                    : "CARTERA AL DIA"}
                             </span>
                         </div>
                         <div class="info-row">
@@ -245,7 +247,7 @@
                             <tr>
                                 <th class="col-doc">Documento</th>
                                 <th class="col-type">Tipo</th>
-                                <th class="col-date">Emisión</th>
+                                <th class="col-date">Emision</th>
                                 <th class="col-doc">Origen</th>
                                 <th class="col-date">Vencimiento</th>
                                 {#if onlyProviderRates}
@@ -255,7 +257,7 @@
                                 {:else}
                                     <th class="col-amount text-right">Monto Original (USD)</th>
                                     <th class="col-amount text-right">Saldo Pendiente (USD)</th>
-                                    <th class="col-days">Días Mora</th>
+                                    <th class="col-days">Dias Mora</th>
                                 {/if}
                             </tr>
                         </thead>
@@ -341,14 +343,14 @@
                                                     class={isCredit
                                                         ? "text-emerald-600"
                                                         : "text-red-600"}
-                                                    >{item.dias_vencidos} días</span
+                                                    >{item.dias_vencidos} dias</span
                                                 >
                                             {:else}
                                                 <span
                                                     class={isCredit
                                                         ? "text-emerald-600"
                                                         : "text-green-600"}
-                                                    >Al día</span
+                                                    >Al dia</span
                                                 >
                                             {/if}
                                         </td>
@@ -366,7 +368,7 @@
                     </table>
                     {#if !page.showTotals}
                         <p class="continue-msg">
-                            CONTINÚA EN LA SIGUIENTE PÁGINA...
+                            CONTINUA EN LA SIGUIENTE PAGINA...
                         </p>
                     {/if}
                 </div>
@@ -383,20 +385,20 @@
                                         la fecha actual.
                                     </p>
                                     <p>
-                                        * Los cálculos en divisas se determinan
-                                        utilizando la tasa oficial histórica del
-                                        BCV al momento de la emisión de cada
+                                        * Los calculos en divisas se determinan
+                                        utilizando la tasa oficial historica del
+                                        BCV al momento de la emision de cada
                                         documento.
                                     </p>
                                 </div>
                                 <div class="signatures-row mt-6">
                                     <div class="signature-box">
                                         <div class="line"></div>
-                                        <p>Preparado por Administración</p>
+                                        <p>Preparado por Administracion</p>
                                     </div>
                                     <div class="signature-box">
                                         <div class="line"></div>
-                                        <p>Firma y Sello de Recepción</p>
+                                        <p>Firma y Sello de Recepcion</p>
                                     </div>
                                 </div>
                             </div>
@@ -476,7 +478,7 @@
 
                 <!-- PAGE INDICATOR -->
                 <div class="page-footer">
-                    <span>Página {i + 1} de {pages.length}</span>
+                    <span>Pagina {i + 1} de {pages.length}</span>
                 </div>
             </div>
         </div>
