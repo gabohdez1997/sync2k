@@ -765,7 +765,6 @@
         const initialStockData = historyData.map((h) => h.stock_inicial);
         const realSoldData = historyData.map((h) => h.cant_real_vendida);
         const docsData = historyData.map((h) => h.docs_exitosos);
-        const devsData = historyData.map((h) => h.cant_devuelta);
         const recepData = historyData.map((h) => h.cant_recepcionada);
         const aentData = historyData.map((h) => h.cant_ajuste_entrada);
         const asalData = historyData.map((h) => h.cant_ajuste_salida);
@@ -820,22 +819,6 @@
                         pointBorderWidth: 1.5,
                         pointRadius: 4,
                         pointHoverRadius: 6,
-                    },
-                    {
-                        type: "line" as const,
-                        label: "Devoluciones (Dev)",
-                        data: devsData,
-                        borderColor: "#fb7185",
-                        backgroundColor: "transparent",
-                        borderWidth: 1.5,
-                        borderDash: [2, 2],
-                        tension: 0.3,
-                        fill: false,
-                        pointBackgroundColor: "#fb7185",
-                        pointBorderColor: "#ffffff",
-                        pointBorderWidth: 1.5,
-                        pointRadius: 3.5,
-                        pointHoverRadius: 5.5,
                     },
                     {
                         type: "line" as const,
@@ -937,16 +920,6 @@
                                     context.parsed.y || 0,
                                 ).toLocaleString();
                                 return ` ${label} : ${val}`;
-                            },
-                            afterBody: function (context) {
-                                const idx = context[0].dataIndex;
-                                const item = historyData[idx];
-                                if (!item) return "";
-                                const lines: string[] = [];
-                                lines.push(
-                                    `• Facturas: ${item.docs_facturados} | Dev. Docs: ${item.docs_devueltos}`,
-                                );
-                                return lines.join("\n");
                             },
                         },
                     },
@@ -2450,21 +2423,6 @@
                                                     >
                                                     <span
                                                         >{m.docs_exitosos.toLocaleString()}</span
-                                                    >
-                                                </div>
-                                                <div
-                                                    class="flex items-center justify-between gap-1 {m.cant_devuelta >
-                                                    0
-                                                        ? 'text-rose-500 font-bold'
-                                                        : 'text-text-muted/60'}"
-                                                    title="Devoluciones de Clientes"
-                                                >
-                                                    <span
-                                                        class="text-text-muted font-semibold text-[9px]"
-                                                        >Dev :</span
-                                                    >
-                                                    <span
-                                                        >{m.cant_devuelta.toLocaleString()}</span
                                                     >
                                                 </div>
                                                 <div
