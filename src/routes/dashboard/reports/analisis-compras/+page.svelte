@@ -11,21 +11,26 @@
         PointElement,
         LineController,
         BarController,
+        Filler,
     } from "chart.js";
     import {
         Building,
         Calendar,
         AlertTriangle,
         TrendingUp,
-        DollarSign,
         RefreshCw,
         X,
         Box,
         BarChart,
+        BarChart2,
         Search,
         ShoppingCart,
         ShieldCheck,
         FileSpreadsheet,
+        Activity,
+        ArrowUpRight,
+        FileText,
+        Package,
     } from "lucide-svelte";
     import Combobox from "$lib/components/ui/Combobox.svelte";
     import BarcodeScanner from "$lib/components/ui/BarcodeScanner.svelte";
@@ -45,18 +50,36 @@
         LineElement,
         PointElement,
         LineController,
+        Filler,
     );
 
     let { data } = $props();
 
     let isSyncing = $state(false);
     let selectedArticle = $state<any>(null);
+    let detailModalOpen = $state(false);
     let chartCanvas = $state<HTMLCanvasElement | null>(null);
     let chartInstance: ChartJS | null = null;
     let mounted = $state(false);
 
+    // Histórico de 12 meses
+    let historyLoading = $state(false);
+    let historyData = $state<any[]>([]);
+    let historyError = $state<string | null>(null);
+    let historyChartCanvas = $state<HTMLCanvasElement | null>(null);
+    let historyChartInstance: ChartJS | null = null;
+
     onMount(() => {
         mounted = true;
+        const onKey = (e: KeyboardEvent) => {
+            if (e.key === "Escape" && detailModalOpen) {
+                closeArticleModal();
+            }
+        };
+        window.addEventListener("keydown", onKey);
+        return () => {
+            window.removeEventListener("keydown", onKey);
+        };
     });
 
     // Filtros interactivos
@@ -86,10 +109,10 @@
     ];
 
     const alertOptions = [
-        { value: "sin_stock", label: "🚫 Sin Stock (SDR = 0)" },
-        { value: "ruptura", label: "🔴 Ruptura Inminente (SDR ≤ ROP)" },
-        { value: "riesgo", label: "🟡 Cerca de Ruptura (SDR ≤ ROP+SS)" },
-        { value: "sano", label: "🟢 Stock Sano / Exceso" },
+        { value: "sin_stock", label: "🔴 Sin Stock (SDR = 0)" },
+        { value: "quebrado", label: "🟠 Stock Quebrado (SDR ≤ ROP)" },
+        { value: "ruptura", label: "🟡 Ruptura Inminente (SDR ≤ ROP+SS)" },
+        { value: "saludable", label: "🟢 Stock Saludable (SDR > ROP+SS)" },
     ];
 
     // Sincronizar cuando data cambie (navegación)
@@ -99,8 +122,8 @@
         selectedBranch = data.branchId;
     });
 
-    // Datos filtrados y KPIs
-    let items = $derived.by(() => {
+    // Artículos filtrados por atributos base (búsqueda, líneas, sub-líneas, categorías, ABC/XYZ)
+    let filteredBaseItems = $derived.by(() => {
         let list: any[] = data.analysisData || [];
         if (searchTerm && searchTerm.trim() !== "") {
             const term = searchTerm.trim().toLowerCase();
@@ -134,46 +157,179 @@
         if (selectedXYZ) {
             list = list.filter((i: any) => i.clasificacion_xyz === selectedXYZ);
         }
+        return list;
+    });
+
+    // Artículos finales para la tabla (aplica filtro de escala de calor de stock)
+    let items = $derived.by(() => {
+        let list = filteredBaseItems;
         if (selectedAlertStatus) {
             if (selectedAlertStatus === "sin_stock") {
-                list = list.filter((i: any) => (i.sdr || 0) <= 0);
-            } else if (selectedAlertStatus === "ruptura") {
-                list = list.filter((i: any) => i.sdr <= i.rop);
-            } else if (selectedAlertStatus === "riesgo") {
-                list = list.filter(
-                    (i: any) => i.sdr > i.rop && i.sdr <= i.rop + i.ss,
-                );
-            } else if (selectedAlertStatus === "sano") {
-                list = list.filter((i: any) => i.sdr > i.rop + i.ss);
+                list = list.filter((i: any) => (Number(i.sdr) || 0) <= 0);
+            } else if (selectedAlertStatus === "quebrado") {
+                list = list.filter((i: any) => {
+                    const sdr = Number(i.sdr) || 0;
+                    const rop = Number(i.rop) || 0;
+                    return sdr > 0 && sdr <= rop;
+                });
+            } else if (selectedAlertStatus === "ruptura" || selectedAlertStatus === "riesgo") {
+                list = list.filter((i: any) => {
+                    const sdr = Number(i.sdr) || 0;
+                    const rop = Number(i.rop) || 0;
+                    const ss = Number(i.ss) || 0;
+                    return sdr > rop && sdr <= rop + ss;
+                });
+            } else if (selectedAlertStatus === "saludable" || selectedAlertStatus === "sano") {
+                list = list.filter((i: any) => {
+                    const sdr = Number(i.sdr) || 0;
+                    const rop = Number(i.rop) || 0;
+                    const ss = Number(i.ss) || 0;
+                    return sdr > rop + ss;
+                });
             }
         }
         return list;
     });
 
-    // KPIs derivados dinámicamente según los artículos filtrados por el usuario
-    let kpis = $derived.by(() => {
-        let capitalInmovilizado = 0;
-        let capitalRequerido = 0;
-        let alertasSDR = 0;
+    // Mapeo dinámico y semántico de unidades fraccionables
+    const fractionalCodes = ['06', '07', '08', '10', '25'];
+    const fractionalKeywords = [
+        'MTS2', 'MTS', 'LTS', 'KG', 'ML',
+        'M2', 'M3', 'MT', 'LT', 'KGS', 'KILO', 'KILOS', 'KILOGRAMO', 'KILOGRAMOS',
+        'GR', 'GRS', 'GRAMO', 'GRAMOS', 'METRO', 'METROS', 'LITRO', 'LITROS',
+        'MILILITRO', 'MILILITROS', 'TON', 'TONELADA', 'CENTIMETRO', 'CM', 'MM', 'PULG', 'PULGADA', 'YARDA'
+    ];
+    function isFractionalUnit(co_uni?: string, des_uni?: string): boolean {
+        const code = String(co_uni || '').trim().toUpperCase();
+        const desc = String(des_uni || '').trim().toUpperCase();
 
-        items.forEach((item: any) => {
-            if (item.sdr > item.rop + item.ss) {
-                capitalInmovilizado +=
-                    (item.sdr - (item.rop + item.ss)) *
-                    (item.costo_actual || 0);
+        // 1. Configuración dinámica por Sede (allow_decimals_units)
+        const branchConfigStr = String(data.selectedBranch?.allow_decimals_units || data.selectedBranchConfig?.allow_decimals_units || '');
+        if (branchConfigStr) {
+            const allowedCustom = branchConfigStr.split(',').map((s: string) => s.trim().toUpperCase()).filter(Boolean);
+            if (allowedCustom.some((a: string) => a === code || a === desc || desc.includes(a) || code.includes(a))) {
+                return true;
             }
+        }
 
-            if (item.sdr <= item.rop) {
-                alertasSDR++;
-                const cantReponer = Math.max(0, item.rop + item.ss - item.sdr);
-                capitalRequerido += cantReponer * (item.costo_actual || 0);
+        // 2. Códigos de Profit conocidos y reglas semánticas
+        return fractionalCodes.includes(code) || fractionalKeywords.includes(code) || fractionalKeywords.includes(desc);
+    }
+
+    function formatUnitQty(val: number, itemOrCoUni?: any, des_uni?: string): string {
+        let isFrac = false;
+        if (typeof itemOrCoUni === 'object' && itemOrCoUni !== null) {
+            isFrac = isFractionalUnit(itemOrCoUni.co_uni, itemOrCoUni.des_uni);
+        } else {
+            isFrac = isFractionalUnit(itemOrCoUni, des_uni);
+        }
+        if (isFrac) {
+            return Number(val.toFixed(2)).toLocaleString('es-VE', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+        }
+        return Math.ceil(val).toLocaleString('es-VE');
+    }
+
+    function getUnitLabel(item: any): string {
+        if (!item) return 'unidades';
+        if (item.des_uni && item.des_uni.trim()) return item.des_uni.trim();
+        if (item.co_uni && item.co_uni.trim()) return item.co_uni.trim();
+        return 'unidades';
+    }
+
+    function getCantReponer(item: any): number {
+        if (!item) return 0;
+        if (typeof item.cant_sugerida === 'number') {
+            return item.cant_sugerida;
+        }
+        const sdr = Number(item.sdr) || 0;
+        const rop = Number(item.rop) || 0;
+        const ss = Number(item.ss) || 0;
+        const vpd = Number(item.vpd) || 0;
+        const isFrac = isFractionalUnit(item.co_uni, item.des_uni);
+
+        if (vpd <= 0 && (Number(item.ventas_netas) || 0) <= 0) return 0;
+
+        if (sdr <= rop || sdr <= 0) {
+            const target = Math.max(rop + ss, rop);
+            const diff = target - sdr;
+            return isFrac ? Math.max(0.01, Number(diff.toFixed(2))) : Math.max(1, Math.ceil(diff));
+        } else if (sdr < (rop + ss)) {
+            const diff = (rop + ss) - sdr;
+            return isFrac ? Number(diff.toFixed(2)) : Math.ceil(diff);
+        }
+        return 0;
+    }
+
+    // KPIs derivados dinámicamente según la Escala de Calor (Artículos Activos)
+    let kpis = $derived.by(() => {
+        let sinStockCount = 0;
+        let quebradoCount = 0;
+        let rupturaCount = 0;
+        let saludableCount = 0;
+        let totalActivos = 0;
+
+        filteredBaseItems.forEach((item: any) => {
+            totalActivos++;
+            const sdr = Number(item.sdr) || 0;
+            const rop = Number(item.rop) || 0;
+            const ss = Number(item.ss) || 0;
+
+            if (sdr <= 0) {
+                sinStockCount++;
+            } else if (sdr <= rop) {
+                quebradoCount++;
+            } else if (sdr <= rop + ss) {
+                rupturaCount++;
+            } else {
+                saludableCount++;
             }
         });
 
         return {
-            capital_inmovilizado: capitalInmovilizado,
-            capital_requerido_urgente: capitalRequerido,
-            articulos_en_alerta: alertasSDR,
+            sin_stock: sinStockCount,
+            quebrado: quebradoCount,
+            ruptura: rupturaCount,
+            saludable: saludableCount,
+            total_activos: totalActivos,
+        };
+    });
+
+    // Resumen histórico del artículo seleccionado
+    let historySummary = $derived.by(() => {
+        if (!historyData || historyData.length === 0) {
+            return { total: 0, avg: 0, max: 0, min: 0, maxMonth: "", totalDocs: 0, latestStock: 0 };
+        }
+        let total = 0;
+        let totalDocs = 0;
+        let max = -Infinity;
+        let min = Infinity;
+        let maxMonth = "";
+
+        historyData.forEach((h: any) => {
+            const v = Number(h.cant_real_vendida) || 0;
+            const d = Number(h.docs_exitosos) || 0;
+            total += v;
+            totalDocs += d;
+            if (v > max) {
+                max = v;
+                maxMonth = h.mes_nombre;
+            }
+            if (v < min) {
+                min = v;
+            }
+        });
+
+        const avg = historyData.length > 0 ? total / historyData.length : 0;
+        const latestStock = historyData[historyData.length - 1]?.stock_inicial || 0;
+
+        return {
+            total,
+            avg,
+            totalDocs,
+            max: max === -Infinity ? 0 : max,
+            min: min === Infinity ? 0 : min,
+            maxMonth,
+            latestStock,
         };
     });
 
@@ -186,37 +342,53 @@
         goto(`?${params.toString()}`);
     }
 
-    async function syncView() {
-        if (
-            !confirm(
-                "¿Deseas enviar el script de la Vista SQL al Agente local? Esto actualizará la base de datos de Profit.",
-            )
-        )
-            return;
-        isSyncing = true;
-        try {
-            const res = await fetch(
-                `/api/dashboard/agent-proxy?path=/analisis-compras/sync-view&method=POST&branch=${selectedBranch}`,
-            );
-            const json = await res.json();
-            if (json.success) {
-                alert("Vista SQL sincronizada exitosamente.");
-                invalidate("app:analisis_compras");
-            } else {
-                alert("Error: " + json.error);
-            }
-        } catch (e) {
-            alert("Error de conexión.");
-        }
-        isSyncing = false;
-    }
+    function getAlertBadge(item: any) {
+        const sdr = Number(item.sdr) || 0;
+        const rop = Number(item.rop) || 0;
+        const ss = Number(item.ss) || 0;
 
-    function getAlertColor(item: any) {
-        if (item.sdr <= item.rop)
-            return "bg-red-500/10 border-red-500/30 text-red-500";
-        if (item.sdr > item.rop + item.ss)
-            return "bg-brand-500/10 border-brand-500/30 text-brand-500";
-        return "bg-yellow-500/10 border-yellow-500/30 text-yellow-500";
+        if (sdr <= 0) {
+            return {
+                key: "sin_stock",
+                label: "Sin Stock",
+                fullLabel: "Sin Stock (SDR = 0)",
+                shortLabel: "Sin Stock",
+                class: "text-red-600 dark:text-red-400 font-bold",
+                badgeClass: "bg-transparent border border-red-500/40 text-red-600 dark:text-red-400 font-bold",
+                color: "red",
+            };
+        }
+        if (sdr <= rop) {
+            return {
+                key: "quebrado",
+                label: "Stock Quebrado",
+                fullLabel: "Stock Quebrado (SDR ≤ ROP)",
+                shortLabel: "Stock Quebrado",
+                class: "text-orange-600 dark:text-orange-400 font-bold",
+                badgeClass: "bg-transparent border border-orange-500/40 text-orange-600 dark:text-orange-400 font-bold",
+                color: "orange",
+            };
+        }
+        if (sdr <= rop + ss) {
+            return {
+                key: "ruptura",
+                label: "Ruptura Inminente",
+                fullLabel: "Ruptura Inminente (SDR ≤ ROP+SS)",
+                shortLabel: "Ruptura Inminente",
+                class: "text-amber-700 dark:text-yellow-400 font-bold",
+                badgeClass: "bg-transparent border border-amber-500/50 dark:border-yellow-500/40 text-amber-700 dark:text-yellow-400 font-bold",
+                color: "yellow",
+            };
+        }
+        return {
+            key: "saludable",
+            label: "Stock Saludable",
+            fullLabel: "Stock Saludable (SDR > ROP+SS)",
+            shortLabel: "Stock Saludable",
+            class: "text-emerald-700 dark:text-emerald-400 font-bold",
+            badgeClass: "bg-transparent border border-emerald-500/40 text-emerald-700 dark:text-emerald-400 font-bold",
+            color: "emerald",
+        };
     }
 
     function formatCurrency(val: number) {
@@ -244,21 +416,20 @@
             const tr = (Number(item.tr) || 0).toFixed(1).replace('.', ',');
             const ventas = (Number(item.ventas_netas) || 0).toString();
             
-            const cantReponer = Math.max(0, (item.rop + item.ss) - item.sdr);
+            const cantReponer = getCantReponer(item);
+            const cantReponerStr = formatUnitQty(cantReponer, item.co_uni).replace('.', ',');
             const costoInversion = (cantReponer * (item.costo_actual || 0)).toFixed(2).replace('.', ',');
             
-            let estado = "Stock Sano";
-            if (item.sdr <= 0) estado = "Sin Stock";
-            else if (item.sdr <= item.rop) estado = "Ruptura Inminente";
-            else if (item.sdr <= (item.rop + item.ss)) estado = "Cerca de Ruptura";
+            const alertInfo = getAlertBadge(item);
+            const estado = alertInfo.label;
 
-            csvContent += `${co_art};${des_art};${clase};${sdr};${rop};${ss};${vpd};${tr};${ventas};${cantReponer};${costoInversion};${estado}\n`;
+            csvContent += `${co_art};${des_art};${clase};${sdr};${rop};${ss};${vpd};${tr};${ventas};${cantReponerStr};${costoInversion};${estado}\n`;
         }
 
         const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
         const url = URL.createObjectURL(blob);
         const link = document.createElement("a");
-        const filename = `analisis_compras_${dayjs(startDate).format("YYYYMMDD")}_a_${dayjs(endDate).format("YYYYMMDD")}.csv`;
+        const filename = `analisis_compras_${startDate.replace(/-/g, '')}_a_${endDate.replace(/-/g, '')}.csv`;
 
         link.setAttribute("href", url);
         link.setAttribute("download", filename);
@@ -328,16 +499,58 @@
         },
     };
 
-    // Renderizar gráfico cuando cambie el artículo seleccionado
+    async function fetchArticleHistory(coArt: string) {
+        historyLoading = true;
+        historyError = null;
+        historyData = [];
+        try {
+            const branchParam = selectedBranch && selectedBranch !== 'default' ? `&branch_id=${selectedBranch}` : '';
+            const res = await fetch(`/api/agent/analisis-compras/article-history?co_art=${encodeURIComponent(coArt)}${branchParam}`);
+            const json = await res.json();
+            if (json.success && Array.isArray(json.history)) {
+                historyData = json.history;
+            } else {
+                historyError = json.error || json.message || "No se pudo cargar el histórico.";
+            }
+        } catch (e: any) {
+            historyError = "Error de conexión al consultar histórico.";
+        } finally {
+            historyLoading = false;
+        }
+    }
+
+    function openArticleModal(item: any) {
+        selectedArticle = item;
+        detailModalOpen = true;
+        fetchArticleHistory(item.co_art);
+    }
+
+    function closeArticleModal() {
+        detailModalOpen = false;
+        if (chartInstance) {
+            chartInstance.destroy();
+            chartInstance = null;
+        }
+        if (historyChartInstance) {
+            historyChartInstance.destroy();
+            historyChartInstance = null;
+        }
+        historyData = [];
+        historyError = null;
+    }
+
+    // 1. Renderizar gráfico superior (SDR vs ROP)
     $effect(() => {
-        if (!mounted || !chartCanvas || !selectedArticle) return;
+        if (!mounted || !detailModalOpen || !chartCanvas || !selectedArticle) return;
 
         if (chartInstance) {
             chartInstance.destroy();
             chartInstance = null;
         }
 
-        const demandaEnTR = selectedArticle.vpd * selectedArticle.tr;
+        const demandaEnTR = Math.round(
+            (Number(selectedArticle.vpd) || 0) * (Number(selectedArticle.tr) || 0),
+        );
 
         chartInstance = new ChartJS(chartCanvas, {
             type: "bar",
@@ -346,26 +559,31 @@
                 datasets: [
                     {
                         type: "bar" as const,
-                        label: "Stock Disponible Real (SDR)",
-                        backgroundColor: "rgba(59, 130, 246, 0.7)",
+                        label: "Stock Real (SDR)",
+                        backgroundColor: "rgba(59, 130, 246, 0.75)",
                         borderColor: "rgba(59, 130, 246, 1)",
-                        borderWidth: 1,
+                        borderWidth: 1.5,
+                        borderRadius: 8,
                         data: [selectedArticle.sdr],
                     },
                     {
                         type: "bar" as const,
-                        label: "Punto de Reorden (ROP)",
-                        backgroundColor: "rgba(239, 68, 68, 0.7)",
+                        label: "Pto. Reorden (ROP)",
+                        backgroundColor: "rgba(239, 68, 68, 0.75)",
                         borderColor: "rgba(239, 68, 68, 1)",
-                        borderWidth: 1,
+                        borderWidth: 1.5,
+                        borderRadius: 8,
                         data: [selectedArticle.rop],
                     },
                     {
                         type: "line" as const,
-                        label: "Demanda Proyectada en TR",
+                        label: "Demanda en TR",
                         borderColor: "rgba(245, 158, 11, 1)",
+                        backgroundColor: "rgba(245, 158, 11, 0.2)",
                         borderWidth: 3,
-                        borderDash: [5, 5],
+                        borderDash: [6, 4],
+                        pointRadius: 6,
+                        pointBackgroundColor: "rgba(245, 158, 11, 1)",
                         fill: false,
                         data: [demandaEnTR],
                     },
@@ -377,18 +595,159 @@
                 scales: {
                     y: {
                         beginAtZero: true,
-                        grid: { color: "rgba(150, 150, 150, 0.15)" },
-                        ticks: { color: "rgba(150, 150, 150, 0.9)" },
+                        grid: { color: "rgba(150, 150, 150, 0.12)" },
+                        ticks: { color: "rgba(150, 150, 150, 0.9)", font: { size: 10 } },
                     },
                     x: {
                         grid: { display: false },
-                        ticks: { color: "rgba(150, 150, 150, 0.9)" },
+                        ticks: { color: "rgba(150, 150, 150, 0.9)", font: { size: 11, weight: "bold" } },
                     },
                 },
                 plugins: {
                     legend: {
                         position: "bottom",
-                        labels: { color: "rgba(150, 150, 150, 0.9)" },
+                        labels: {
+                            boxWidth: 10,
+                            padding: 8,
+                            color: "rgba(150, 150, 150, 0.9)",
+                            font: { size: 10, weight: "bold" },
+                        },
+                    },
+                    tooltip: {
+                        backgroundColor: "rgba(15, 23, 42, 0.95)",
+                        titleFont: { weight: "bold" },
+                        padding: 10,
+                        cornerRadius: 10,
+                    },
+                },
+            },
+        });
+    });
+
+    // 2. Renderizar gráfico inferior de línea (Ventas Reales + Stock Inicial + Documentos)
+    $effect(() => {
+        if (!mounted || !detailModalOpen || !historyChartCanvas || historyData.length === 0) return;
+
+        if (historyChartInstance) {
+            historyChartInstance.destroy();
+            historyChartInstance = null;
+        }
+
+        const labels = historyData.map((h) => h.mes_nombre);
+        const realSoldData = historyData.map((h) => h.cant_real_vendida);
+        const initialStockData = historyData.map((h) => h.stock_inicial);
+        const docsData = historyData.map((h) => h.docs_exitosos);
+
+        historyChartInstance = new ChartJS(historyChartCanvas, {
+            type: "line",
+            data: {
+                labels,
+                datasets: [
+                    {
+                        type: "line" as const,
+                        label: "Cant. Real Vendida",
+                        data: realSoldData,
+                        borderColor: "#10b981",
+                        backgroundColor: "rgba(16, 185, 129, 0.12)",
+                        borderWidth: 3,
+                        tension: 0.35,
+                        fill: true,
+                        pointBackgroundColor: "#10b981",
+                        pointBorderColor: "#ffffff",
+                        pointBorderWidth: 2,
+                        pointRadius: 5,
+                        pointHoverRadius: 7,
+                    },
+                    {
+                        type: "line" as const,
+                        label: "Stock Inicial Mes",
+                        data: initialStockData,
+                        borderColor: "#3b82f6",
+                        backgroundColor: "rgba(59, 130, 246, 0.05)",
+                        borderWidth: 2.5,
+                        tension: 0.25,
+                        fill: false,
+                        pointBackgroundColor: "#3b82f6",
+                        pointBorderColor: "#ffffff",
+                        pointBorderWidth: 2,
+                        pointRadius: 4.5,
+                        pointHoverRadius: 6.5,
+                    },
+                    {
+                        type: "line" as const,
+                        label: "Documentos Exitosos",
+                        data: docsData,
+                        borderColor: "#f59e0b",
+                        backgroundColor: "transparent",
+                        borderWidth: 2,
+                        borderDash: [5, 4],
+                        tension: 0.3,
+                        fill: false,
+                        pointBackgroundColor: "#f59e0b",
+                        pointBorderColor: "#ffffff",
+                        pointBorderWidth: 2,
+                        pointRadius: 4.5,
+                        pointHoverRadius: 6.5,
+                    },
+                ],
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: {
+                    mode: "index",
+                    intersect: false,
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        grid: { color: "rgba(150, 150, 150, 0.12)" },
+                        ticks: {
+                            color: "rgba(150, 150, 150, 0.9)",
+                            font: { size: 10 },
+                            callback: function (val) {
+                                return Number(val).toLocaleString();
+                            },
+                        },
+                    },
+                    x: {
+                        grid: { display: false },
+                        ticks: {
+                            color: "rgba(150, 150, 150, 0.9)",
+                            font: { size: 10, weight: "bold" },
+                        },
+                    },
+                },
+                plugins: {
+                    legend: {
+                        position: "top",
+                        align: "end",
+                        labels: {
+                            boxWidth: 12,
+                            padding: 12,
+                            color: "rgba(150, 150, 150, 0.9)",
+                            font: { size: 11, weight: "bold" },
+                        },
+                    },
+                    tooltip: {
+                        backgroundColor: "rgba(15, 23, 42, 0.95)",
+                        titleFont: { weight: "bold", size: 12 },
+                        bodyFont: { size: 11 },
+                        padding: 12,
+                        cornerRadius: 12,
+                        callbacks: {
+                            afterBody: function (context) {
+                                const idx = context[0].dataIndex;
+                                const item = historyData[idx];
+                                if (!item) return "";
+                                const lines: string[] = [];
+                                if (item.cant_devuelta > 0) {
+                                    lines.push(`• Unidades Devueltas: -${item.cant_devuelta.toLocaleString()}`);
+                                }
+                                lines.push(`• Facturas: ${item.docs_facturados} | Dev. Docs: ${item.docs_devueltos}`);
+                                return lines.join("\n");
+                            },
+                        },
                     },
                 },
             },
@@ -454,7 +813,7 @@
                     {#if searchTerm}
                         <button
                             onclick={() => (searchTerm = "")}
-                            class="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-base"
+                            class="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-base cursor-pointer"
                         >
                             <X size={14} />
                         </button>
@@ -565,24 +924,24 @@
                 >
                     <button
                         onclick={() => setQuickDate(7)}
-                        class="px-3 py-1.5 text-xs font-bold rounded-xl hover:bg-surface-soft text-text-muted hover:text-text-base transition-colors"
+                        class="px-3 py-1.5 text-xs font-bold rounded-xl hover:bg-surface-soft text-text-muted hover:text-text-base transition-colors cursor-pointer"
                         >7d</button
                     >
                     <button
                         onclick={() => setQuickDate(30)}
-                        class="px-3 py-1.5 text-xs font-bold rounded-xl hover:bg-surface-soft text-text-muted hover:text-text-base transition-colors"
+                        class="px-3 py-1.5 text-xs font-bold rounded-xl hover:bg-surface-soft text-text-muted hover:text-text-base transition-colors cursor-pointer"
                         >30d</button
                     >
                     <button
                         onclick={() => setQuickDate(90)}
-                        class="px-3 py-1.5 text-xs font-bold rounded-xl hover:bg-surface-soft text-text-muted hover:text-text-base transition-colors"
+                        class="px-3 py-1.5 text-xs font-bold rounded-xl hover:bg-surface-soft text-text-muted hover:text-text-base transition-colors cursor-pointer"
                         >90d</button
                     >
                 </div>
 
                 <button
                     onclick={applyFilters}
-                    class="h-12 px-8 rounded-2xl bg-brand-500 text-white font-black hover:scale-105 transition-all shadow-[0_0_20px_rgba(var(--brand-500-rgb),0.3)] w-full sm:w-auto shrink-0"
+                    class="h-12 px-8 rounded-2xl bg-brand-500 text-white font-black hover:scale-105 transition-all shadow-[0_0_20px_rgba(var(--brand-500-rgb),0.3)] w-full sm:w-auto shrink-0 cursor-pointer"
                 >
                     Calcular
                 </button>
@@ -603,505 +962,1019 @@
             </div>
         </div>
     {:else}
-        <!-- KPIs EN UNA SOLA FILA DE 3 COLUMNAS -->
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <!-- ESCALA DE CALOR: 4 CARDS DE ESTADO DE STOCK (ROJO, NARANJA, AMARILLO, VERDE) -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">
+            <!-- 1. ROJO: SIN STOCK -->
             <div
-                class="bg-surface-raised border border-border-subtle rounded-3xl p-6 relative overflow-hidden group"
+                class="bg-surface-raised border transition-all rounded-3xl p-5 relative overflow-hidden group cursor-pointer {selectedAlertStatus === 'sin_stock' ? 'border-red-500 ring-2 ring-red-500/20 bg-red-500/10' : 'border-border-subtle hover:border-red-500/40'}"
+                onclick={() => selectedAlertStatus = selectedAlertStatus === 'sin_stock' ? '' : 'sin_stock'}
+                title="Filtrar por artículos sin stock"
             >
                 <div
-                    class="absolute right-0 top-0 w-32 h-32 bg-red-500/5 rounded-full blur-3xl group-hover:bg-red-500/10 transition-colors"
+                    class="absolute right-0 top-0 w-28 h-28 bg-red-500/5 rounded-full blur-2xl group-hover:bg-red-500/10 transition-colors"
                 ></div>
-                <AlertTriangle size={24} class="text-red-500 mb-4" />
+                <div class="flex items-center justify-between mb-3">
+                    <div class="p-2 rounded-xl bg-red-500/10 text-red-700 dark:text-red-400 border border-red-500/20">
+                        <AlertTriangle size={20} />
+                    </div>
+                    <span class="text-[10px] font-black uppercase px-2 py-0.5 rounded-full {selectedAlertStatus === 'sin_stock' ? 'bg-red-600 text-white' : 'bg-red-500/10 text-red-700 dark:text-red-400 border border-red-500/20'}">
+                        {selectedAlertStatus === 'sin_stock' ? 'Filtrando' : 'SDR = 0'}
+                    </span>
+                </div>
                 <p
-                    class="text-text-muted text-xs font-bold uppercase tracking-widest mb-1"
+                    class="text-text-muted text-[11px] font-bold uppercase tracking-wider mb-0.5"
                 >
-                    Quiebre de Stock
+                    Sin Stock
                 </p>
-                <p class="text-3xl font-black text-text-base">
-                    {kpis.articulos_en_alerta}
+                <p class="text-2xl sm:text-3xl font-black text-red-700 dark:text-red-400">
+                    {kpis.sin_stock.toLocaleString()}
                 </p>
-                <p class="text-[10px] text-text-muted mt-2">
-                    Artículos con SDR menor o igual al Punto de Reorden.
+                <p class="text-[10px] text-text-muted mt-1.5 line-clamp-1">
+                    Inventario físico en cero.
                 </p>
             </div>
+
+            <!-- 2. NARANJA: STOCK QUEBRADO -->
             <div
-                class="bg-surface-raised border border-border-subtle rounded-3xl p-6 relative overflow-hidden group"
+                class="bg-surface-raised border transition-all rounded-3xl p-5 relative overflow-hidden group cursor-pointer {selectedAlertStatus === 'quebrado' ? 'border-orange-500 ring-2 ring-orange-500/20 bg-orange-500/10' : 'border-border-subtle hover:border-orange-500/40'}"
+                onclick={() => selectedAlertStatus = selectedAlertStatus === 'quebrado' ? '' : 'quebrado'}
+                title="Filtrar por artículos con stock quebrado"
             >
                 <div
-                    class="absolute right-0 top-0 w-32 h-32 bg-yellow-500/5 rounded-full blur-3xl group-hover:bg-yellow-500/10 transition-colors"
+                    class="absolute right-0 top-0 w-28 h-28 bg-orange-500/5 rounded-full blur-2xl group-hover:bg-orange-500/10 transition-colors"
                 ></div>
-                <DollarSign size={24} class="text-yellow-500 mb-4" />
+                <div class="flex items-center justify-between mb-3">
+                    <div class="p-2 rounded-xl bg-orange-500/10 text-orange-700 dark:text-orange-400 border border-orange-500/20">
+                        <AlertTriangle size={20} />
+                    </div>
+                    <span class="text-[10px] font-black uppercase px-2 py-0.5 rounded-full {selectedAlertStatus === 'quebrado' ? 'bg-orange-600 text-white' : 'bg-orange-500/10 text-orange-700 dark:text-orange-400 border border-orange-500/20'}">
+                        {selectedAlertStatus === 'quebrado' ? 'Filtrando' : 'SDR ≤ ROP'}
+                    </span>
+                </div>
                 <p
-                    class="text-text-muted text-xs font-bold uppercase tracking-widest mb-1"
+                    class="text-text-muted text-[11px] font-bold uppercase tracking-wider mb-0.5"
                 >
-                    Capital Requerido (Reposición)
+                    Stock Quebrado
                 </p>
-                <p class="text-3xl font-black text-text-base">
-                    {formatCurrency(kpis.capital_requerido_urgente)}
+                <p class="text-2xl sm:text-3xl font-black text-orange-700 dark:text-orange-400">
+                    {kpis.quebrado.toLocaleString()}
                 </p>
-                <p class="text-[10px] text-text-muted mt-2">
-                    Costo estimado para reponer al nivel seguro todos los
-                    artículos en alerta.
+                <p class="text-[10px] text-text-muted mt-1.5 line-clamp-1">
+                    Stock bajo el Punto de Reorden.
                 </p>
             </div>
+
+            <!-- 3. AMARILLO: RUPTURA INMINENTE -->
             <div
-                class="bg-surface-raised border border-border-subtle rounded-3xl p-6 relative overflow-hidden group"
+                class="bg-surface-raised border transition-all rounded-3xl p-5 relative overflow-hidden group cursor-pointer {selectedAlertStatus === 'ruptura' ? 'border-amber-500 ring-2 ring-amber-500/20 bg-amber-500/10' : 'border-border-subtle hover:border-amber-500/40'}"
+                onclick={() => selectedAlertStatus = selectedAlertStatus === 'ruptura' ? '' : 'ruptura'}
+                title="Filtrar por artículos con ruptura inminente"
             >
                 <div
-                    class="absolute right-0 top-0 w-32 h-32 bg-brand-500/5 rounded-full blur-3xl group-hover:bg-brand-500/10 transition-colors"
+                    class="absolute right-0 top-0 w-28 h-28 bg-amber-500/5 rounded-full blur-2xl group-hover:bg-amber-500/10 transition-colors"
                 ></div>
-                <Box size={24} class="text-brand-500 mb-4" />
+                <div class="flex items-center justify-between mb-3">
+                    <div class="p-2 rounded-xl bg-amber-500/15 text-amber-800 dark:text-yellow-300 border border-amber-500/30">
+                        <Activity size={20} />
+                    </div>
+                    <span class="text-[10px] font-black uppercase px-2 py-0.5 rounded-full {selectedAlertStatus === 'ruptura' ? 'bg-amber-600 text-white' : 'bg-amber-500/15 text-amber-900 dark:text-yellow-300 border border-amber-500/30'}">
+                        {selectedAlertStatus === 'ruptura' ? 'Filtrando' : 'SDR ≤ ROP+SS'}
+                    </span>
+                </div>
                 <p
-                    class="text-text-muted text-xs font-bold uppercase tracking-widest mb-1"
+                    class="text-text-muted text-[11px] font-bold uppercase tracking-wider mb-0.5"
                 >
-                    Exceso (Inmovilizado)
+                    Ruptura Inminente
                 </p>
-                <p class="text-3xl font-black text-text-base">
-                    {formatCurrency(kpis.capital_inmovilizado)}
+                <p class="text-2xl sm:text-3xl font-black text-amber-800 dark:text-yellow-300">
+                    {kpis.ruptura.toLocaleString()}
                 </p>
-                <p class="text-[10px] text-text-muted mt-2">
-                    Costo del inventario que supera ampliamente el ROP + SS.
+                <p class="text-[10px] text-text-muted mt-1.5 line-clamp-1">
+                    Consumiendo colchón de seguridad.
+                </p>
+            </div>
+
+            <!-- 4. VERDE: STOCK SALUDABLE -->
+            <div
+                class="bg-surface-raised border transition-all rounded-3xl p-5 relative overflow-hidden group cursor-pointer {selectedAlertStatus === 'saludable' ? 'border-emerald-500 ring-2 ring-emerald-500/20 bg-emerald-500/10' : 'border-border-subtle hover:border-emerald-500/40'}"
+                onclick={() => selectedAlertStatus = selectedAlertStatus === 'saludable' ? '' : 'saludable'}
+                title="Filtrar por artículos con stock saludable"
+            >
+                <div
+                    class="absolute right-0 top-0 w-28 h-28 bg-emerald-500/5 rounded-full blur-2xl group-hover:bg-emerald-500/10 transition-colors"
+                ></div>
+                <div class="flex items-center justify-between mb-3">
+                    <div class="p-2 rounded-xl bg-emerald-500/15 text-emerald-800 dark:text-emerald-300 border border-emerald-500/30">
+                        <ShieldCheck size={20} />
+                    </div>
+                    <span class="text-[10px] font-black uppercase px-2 py-0.5 rounded-full {selectedAlertStatus === 'saludable' ? 'bg-emerald-600 text-white' : 'bg-emerald-500/15 text-emerald-900 dark:text-emerald-300 border border-emerald-500/30'}">
+                        {selectedAlertStatus === 'saludable' ? 'Filtrando' : 'SDR > ROP+SS'}
+                    </span>
+                </div>
+                <p
+                    class="text-text-muted text-[11px] font-bold uppercase tracking-wider mb-0.5"
+                >
+                    Stock Saludable
+                </p>
+                <p class="text-2xl sm:text-3xl font-black text-emerald-800 dark:text-emerald-300">
+                    {kpis.saludable.toLocaleString()}
+                </p>
+                <p class="text-[10px] text-text-muted mt-1.5 line-clamp-1">
+                    Inventario óptimo que cubre demanda.
                 </p>
             </div>
         </div>
 
-        <!-- TABLA PRINCIPAL Y GRÁFICO DETALLE (h-[90vh]) -->
-        <div class="grid grid-cols-1 xl:grid-cols-3 gap-6">
-            <!-- TABLA (2/3 del ancho en xl) -->
+        <!-- TABLA PRINCIPAL 100% ANCHO -->
+        <div
+            class="w-full bg-surface-raised border border-border-subtle rounded-3xl overflow-hidden shadow-xl"
+        >
             <div
-                class="xl:col-span-2 bg-surface-raised border border-border-subtle rounded-3xl overflow-hidden shadow-xl"
+                class="overflow-x-auto h-[82vh] min-h-[500px] custom-scrollbar"
             >
-                <div
-                    class="overflow-x-auto h-[90vh] min-h-[500px] custom-scrollbar"
-                >
-                    <table class="w-full text-left border-collapse relative">
-                        <thead
-                            class="sticky top-0 bg-surface-base/90 backdrop-blur-md z-20"
-                        >
-                            <tr class="border-b border-border-subtle">
-                                <th
-                                    class="px-6 py-4 text-xs font-bold uppercase tracking-widest text-text-muted"
-                                    >Artículo</th
+                <table class="w-full text-left border-collapse relative">
+                    <thead
+                        class="sticky top-0 bg-surface-base/95 backdrop-blur-md z-20 shadow-sm"
+                    >
+                        <tr class="border-b border-border-subtle">
+                            <th
+                                class="px-6 py-4 text-xs font-bold uppercase tracking-widest text-text-muted"
+                                >Artículo</th
+                            >
+                            <th
+                                class="px-4 py-4 text-xs font-bold uppercase tracking-widest text-text-muted text-center"
+                            >
+                                <div
+                                    class="relative group/tooltip inline-flex items-center gap-1 cursor-help justify-center"
                                 >
-                                <th
-                                    class="px-6 py-4 text-xs font-bold uppercase tracking-widest text-text-muted text-center"
-                                >
+                                    <span>Clase ABC/XYZ</span>
                                     <div
-                                        class="relative group/tooltip inline-flex items-center gap-1 cursor-help justify-center"
+                                        class="absolute top-full left-1/2 -translate-x-1/2 mt-2 hidden group-hover/tooltip:block bg-surface-raised border border-border-subtle p-3 rounded-2xl text-xs font-normal text-text-base shadow-2xl z-40 pointer-events-none transition-all w-64 text-left"
                                     >
-                                        <span>Clase ABC/XYZ</span>
-                                        <div
-                                            class="absolute top-full left-1/2 -translate-x-1/2 mt-2 hidden group-hover/tooltip:block bg-surface-raised border border-border-subtle p-3 rounded-2xl text-xs font-normal text-text-base shadow-2xl z-40 pointer-events-none transition-all w-64 text-left"
+                                        <p
+                                            class="font-bold text-text-base mb-1"
                                         >
-                                            <p
-                                                class="font-bold text-text-base mb-1"
-                                            >
-                                                Matriz ABC / XYZ
-                                            </p>
-                                            <p
-                                                class="text-[11px] text-text-muted leading-relaxed"
-                                            >
-                                                <b>ABC:</b> Importancia por
-                                                aporte a ventas (A: 80%, B: 15%,
-                                                C: 5%).<br />
-                                                <b>XYZ:</b> Predictibilidad de demanda
-                                                (X: Estable ≤20%, Y: Variable ≤60%,
-                                                Z: Impredecible >60%).
-                                            </p>
-                                            <div
-                                                class="absolute bottom-full left-1/2 -translate-x-1/2 border-4 border-transparent border-b-border-subtle"
-                                            ></div>
-                                        </div>
+                                            Matriz ABC / XYZ
+                                        </p>
+                                        <p
+                                            class="text-[11px] text-text-muted leading-relaxed"
+                                        >
+                                            <b>ABC:</b> Importancia por aporte
+                                            a ventas (A: 80%, B: 15%, C: 5%).<br
+                                            />
+                                            <b>XYZ:</b> Predictibilidad de demanda
+                                            (X: Estable ≤20%, Y: Variable ≤60%,
+                                            Z: Impredecible >60%).
+                                        </p>
+                                        <div
+                                            class="absolute bottom-full left-1/2 -translate-x-1/2 border-4 border-transparent border-b-border-subtle"
+                                        ></div>
                                     </div>
-                                </th>
-                                <th
-                                    class="px-6 py-4 text-xs font-bold uppercase tracking-widest text-text-muted text-right"
+                                </div>
+                            </th>
+                            <th
+                                class="px-4 py-4 text-xs font-bold uppercase tracking-widest text-text-muted text-right"
+                            >
+                                <div
+                                    class="relative group/tooltip inline-flex items-center gap-1 cursor-help justify-end"
                                 >
+                                    <span>SDR</span>
                                     <div
-                                        class="relative group/tooltip inline-flex items-center gap-1 cursor-help justify-end"
+                                        class="absolute top-full right-0 mt-2 hidden group-hover/tooltip:block bg-surface-raised border border-border-subtle p-3 rounded-2xl text-xs font-normal text-text-base shadow-2xl z-40 pointer-events-none transition-all w-64 text-left"
                                     >
-                                        <span>SDR</span>
-                                        <div
-                                            class="absolute top-full right-0 mt-2 hidden group-hover/tooltip:block bg-surface-raised border border-border-subtle p-3 rounded-2xl text-xs font-normal text-text-base shadow-2xl z-40 pointer-events-none transition-all w-64 text-left"
+                                        <p
+                                            class="font-bold text-text-base mb-1"
                                         >
-                                            <p
-                                                class="font-bold text-text-base mb-1"
-                                            >
-                                                Stock Disponible Real (SDR)
-                                            </p>
-                                            <p
-                                                class="text-[11px] text-text-muted leading-relaxed"
-                                            >
-                                                Inventario físico disponible en
-                                                Almacén.
-                                            </p>
-                                            <div
-                                                class="absolute bottom-full right-4 border-4 border-transparent border-b-border-subtle"
-                                            ></div>
-                                        </div>
+                                            Stock Disponible Real (SDR)
+                                        </p>
+                                        <p
+                                            class="text-[11px] text-text-muted leading-relaxed"
+                                        >
+                                            Inventario físico real disponible en
+                                            Almacén.
+                                        </p>
+                                        <div
+                                            class="absolute bottom-full right-4 border-4 border-transparent border-b-border-subtle"
+                                        ></div>
                                     </div>
-                                </th>
-                                <th
-                                    class="px-6 py-4 text-xs font-bold uppercase tracking-widest text-text-muted text-right"
+                                </div>
+                            </th>
+                            <th
+                                class="px-4 py-4 text-xs font-bold uppercase tracking-widest text-text-muted text-right"
+                            >
+                                <div
+                                    class="relative group/tooltip inline-flex items-center gap-1 cursor-help justify-end"
                                 >
+                                    <span>ROP</span>
                                     <div
-                                        class="relative group/tooltip inline-flex items-center gap-1 cursor-help justify-end"
+                                        class="absolute top-full right-0 mt-2 hidden group-hover/tooltip:block bg-surface-raised border border-border-subtle p-3 rounded-2xl text-xs font-normal text-text-base shadow-2xl z-40 pointer-events-none transition-all w-64 text-left"
                                     >
-                                        <span>ROP</span>
-                                        <div
-                                            class="absolute top-full right-0 mt-2 hidden group-hover/tooltip:block bg-surface-raised border border-border-subtle p-3 rounded-2xl text-xs font-normal text-text-base shadow-2xl z-40 pointer-events-none transition-all w-64 text-left"
+                                        <p
+                                            class="font-bold text-text-base mb-1"
                                         >
-                                            <p
-                                                class="font-bold text-text-base mb-1"
-                                            >
-                                                Punto de Reorden (ROP)
-                                            </p>
-                                            <p
-                                                class="text-[11px] text-text-muted leading-relaxed"
-                                            >
-                                                Fórmula: <b>(VPD × TR) + SS</b
-                                                >.<br />
-                                                Alerta cuando SDR ≤ ROP (Requiere
-                                                reponer stock inmediatamente).
-                                            </p>
-                                            <div
-                                                class="absolute bottom-full right-4 border-4 border-transparent border-b-border-subtle"
-                                            ></div>
-                                        </div>
+                                            Punto de Reorden (ROP)
+                                        </p>
+                                        <p
+                                            class="text-[11px] text-text-muted leading-relaxed"
+                                        >
+                                            Fórmula: <b>(VPD × TR) + SS</b>.<br
+                                            />
+                                            Alerta cuando SDR ≤ ROP (Requiere
+                                            reponer stock inmediatamente).
+                                        </p>
+                                        <div
+                                            class="absolute bottom-full right-4 border-4 border-transparent border-b-border-subtle"
+                                        ></div>
                                     </div>
-                                </th>
-                                <th
-                                    class="px-6 py-4 text-xs font-bold uppercase tracking-widest text-text-muted text-right"
+                                </div>
+                            </th>
+                            <th
+                                class="px-4 py-4 text-xs font-bold uppercase tracking-widest text-text-muted text-right"
+                            >
+                                <div
+                                    class="relative group/tooltip inline-flex items-center gap-1 cursor-help justify-end"
                                 >
+                                    <span>SS</span>
                                     <div
-                                        class="relative group/tooltip inline-flex items-center gap-1 cursor-help justify-end"
+                                        class="absolute top-full right-0 mt-2 hidden group-hover/tooltip:block bg-surface-raised border border-border-subtle p-3 rounded-2xl text-xs font-normal text-text-base shadow-2xl z-40 pointer-events-none transition-all w-64 text-left"
                                     >
-                                        <span>SS</span>
-                                        <div
-                                            class="absolute top-full right-0 mt-2 hidden group-hover/tooltip:block bg-surface-raised border border-border-subtle p-3 rounded-2xl text-xs font-normal text-text-base shadow-2xl z-40 pointer-events-none transition-all w-64 text-left"
+                                        <p
+                                            class="font-bold text-text-base mb-1"
                                         >
-                                            <p
-                                                class="font-bold text-text-base mb-1"
-                                            >
-                                                Stock de Seguridad (SS)
-                                            </p>
-                                            <p
-                                                class="text-[11px] text-text-muted leading-relaxed"
-                                            >
-                                                Colchón de inventario para
-                                                imprevistos basado en la
-                                                variabilidad de ventas (95%
-                                                nivel de confianza).
-                                            </p>
-                                            <div
-                                                class="absolute bottom-full right-4 border-4 border-transparent border-b-border-subtle"
-                                            ></div>
-                                        </div>
+                                            Stock de Seguridad (SS)
+                                        </p>
+                                        <p
+                                            class="text-[11px] text-text-muted leading-relaxed"
+                                        >
+                                            Colchón de inventario para
+                                            imprevistos basado en la
+                                            variabilidad de ventas (95% nivel de
+                                            confianza).
+                                        </p>
+                                        <div
+                                            class="absolute bottom-full right-4 border-4 border-transparent border-b-border-subtle"
+                                        ></div>
                                     </div>
-                                </th>
-                                <th
-                                    class="px-6 py-4 text-xs font-bold uppercase tracking-widest text-text-muted text-right"
+                                </div>
+                            </th>
+                            <th
+                                class="px-4 py-4 text-xs font-bold uppercase tracking-widest text-text-muted text-right"
+                            >
+                                <div
+                                    class="relative group/tooltip inline-flex items-center gap-1 cursor-help justify-end"
                                 >
+                                    <span>VPD</span>
                                     <div
-                                        class="relative group/tooltip inline-flex items-center gap-1 cursor-help justify-end"
+                                        class="absolute top-full right-0 mt-2 hidden group-hover/tooltip:block bg-surface-raised border border-border-subtle p-3 rounded-2xl text-xs font-normal text-text-base shadow-2xl z-40 pointer-events-none transition-all w-64 text-left"
                                     >
-                                        <span>VPD</span>
-                                        <div
-                                            class="absolute top-full right-0 mt-2 hidden group-hover/tooltip:block bg-surface-raised border border-border-subtle p-3 rounded-2xl text-xs font-normal text-text-base shadow-2xl z-40 pointer-events-none transition-all w-64 text-left"
+                                        <p
+                                            class="font-bold text-text-base mb-1"
                                         >
-                                            <p
-                                                class="font-bold text-text-base mb-1"
-                                            >
-                                                Venta Promedio Diaria (VPD)
-                                            </p>
-                                            <p
-                                                class="text-[11px] text-text-muted leading-relaxed"
-                                            >
-                                                Ventas netas divididas entre los
-                                                días hábiles del período
-                                                (excluye domingos y feriados
-                                                VE).
-                                            </p>
-                                            <div
-                                                class="absolute bottom-full right-4 border-4 border-transparent border-b-border-subtle"
-                                            ></div>
-                                        </div>
+                                            Venta Promedio Diaria (VPD)
+                                        </p>
+                                        <p
+                                            class="text-[11px] text-text-muted leading-relaxed"
+                                        >
+                                            Ventas netas divididas entre los
+                                            días hábiles del período.
+                                        </p>
+                                        <div
+                                            class="absolute bottom-full right-4 border-4 border-transparent border-b-border-subtle"
+                                        ></div>
                                     </div>
-                                </th>
-                            </tr>
-                        </thead>
-                        <tbody class="divide-y divide-border-subtle">
-                            {#each items as item}
-                                {@const classInfo = classDescriptions[
-                                    item.clase_conjunta
-                                ] || {
-                                    label: "Clasificación Combinada",
-                                    desc: "Matriz ABC/XYZ",
-                                    priority: "Estándar",
-                                }}
-                                <tr
-                                    class="hover:bg-surface-soft/60 cursor-pointer transition-colors {selectedArticle?.co_art ===
-                                    item.co_art
-                                        ? 'bg-brand-500/10'
-                                        : ''}"
-                                    onclick={() => (selectedArticle = item)}
-                                >
-                                    <td class="px-6 py-4">
-                                        <div class="flex flex-col">
-                                            <span
-                                                class="text-sm font-bold text-text-base"
-                                                >{item.des_art}</span
-                                            >
-                                            <span
-                                                class="text-[10px] text-text-muted font-mono"
-                                                >{item.co_art}</span
-                                            >
-                                        </div>
-                                    </td>
-                                    <td class="px-6 py-4 text-center">
-                                        <div
-                                            class="relative group/tooltip inline-block"
-                                        >
-                                            <span
-                                                class="inline-flex px-3 py-1 rounded-lg text-xs font-black cursor-help transition-all hover:scale-105 {item.clasificacion_abc ===
-                                                'A'
-                                                    ? 'bg-brand-500/20 text-brand-500 border border-brand-500/30'
-                                                    : 'bg-surface-base border border-border-subtle text-text-base'}"
-                                            >
-                                                {item.clase_conjunta}
-                                            </span>
-                                            <div
-                                                class="absolute top-full left-1/2 -translate-x-1/2 mt-2 hidden group-hover/tooltip:block bg-surface-raised border border-border-subtle p-3 rounded-2xl text-xs text-text-base shadow-2xl z-40 pointer-events-none transition-all w-64 text-left"
-                                            >
-                                                <div
-                                                    class="flex items-center justify-between gap-2 mb-1"
-                                                >
-                                                    <span
-                                                        class="font-black text-brand-500 text-sm"
-                                                        >Clase {item.clase_conjunta}</span
-                                                    >
-                                                    <span
-                                                        class="text-[10px] font-bold px-2 py-0.5 rounded bg-surface-soft text-text-base"
-                                                        >{classInfo.priority}</span
-                                                    >
-                                                </div>
-                                                <p
-                                                    class="font-bold text-text-base text-xs mb-1"
-                                                >
-                                                    {classInfo.label}
-                                                </p>
-                                                <p
-                                                    class="text-[11px] text-text-muted leading-normal"
-                                                >
-                                                    {classInfo.desc}
-                                                </p>
-                                                <div
-                                                    class="absolute bottom-full left-1/2 -translate-x-1/2 border-4 border-transparent border-b-border-subtle"
-                                                ></div>
-                                            </div>
-                                        </div>
-                                    </td>
-                                    <td class="px-6 py-4 text-right">
+                                </div>
+                            </th>
+                            <th
+                                class="px-4 py-4 text-xs font-bold uppercase tracking-widest text-text-muted text-right"
+                                >TR Prom.</th
+                            >
+                            <th
+                                class="px-4 py-4 text-xs font-bold uppercase tracking-widest text-text-muted text-right"
+                                >Ventas</th
+                            >
+                            <th
+                                class="px-4 py-4 text-xs font-bold uppercase tracking-widest text-text-muted text-right"
+                                >Pedir Sugerido</th
+                            >
+                            <th
+                                class="px-4 py-4 text-xs font-bold uppercase tracking-widest text-text-muted text-right"
+                                >Inversión Est.</th
+                            >
+                            <th
+                                class="px-4 py-4 text-xs font-bold uppercase tracking-widest text-text-muted text-center"
+                                >Estado</th
+                            >
+                            <th
+                                class="px-4 py-4 text-xs font-bold uppercase tracking-widest text-text-muted text-center"
+                                >Gráfica</th
+                            >
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-border-subtle">
+                        {#each items as item}
+                            {@const cantReponer = getCantReponer(item)}
+                            {@const costoInversion =
+                                cantReponer * (item.costo_actual || 0)}
+                            {@const alertInfo = getAlertBadge(item)}
+                            {@const classInfo = classDescriptions[
+                                item.clase_conjunta
+                            ] || {
+                                label: "Clasificación Combinada",
+                                desc: "Matriz ABC/XYZ",
+                                priority: "Estándar",
+                            }}
+                            <tr
+                                class="hover:bg-surface-soft/80 cursor-pointer transition-all group {selectedArticle?.co_art ===
+                                    item.co_art && detailModalOpen
+                                    ? 'bg-brand-500/10'
+                                    : ''}"
+                                onclick={() => openArticleModal(item)}
+                            >
+                                <td class="px-6 py-3.5">
+                                    <div class="flex flex-col">
                                         <span
-                                            class="inline-flex px-3 py-1 rounded-full text-xs font-black border {getAlertColor(
-                                                item,
-                                            )}"
+                                            class="text-sm font-bold text-text-base group-hover:text-brand-500 transition-colors"
+                                            >{item.des_art}</span
                                         >
-                                            {item.sdr.toLocaleString()}
+                                        <span
+                                            class="text-[10px] text-text-muted font-mono"
+                                            >{item.co_art}</span
+                                        >
+                                    </div>
+                                </td>
+                                <td class="px-4 py-3.5 text-center">
+                                    <span
+                                        class="inline-flex px-2.5 py-0.5 rounded-lg text-xs font-black {item.clasificacion_abc ===
+                                        'A'
+                                            ? 'bg-brand-500/10 text-brand-600 dark:text-brand-400 border border-brand-500/30'
+                                            : 'bg-surface-base border border-border-subtle text-text-base'}"
+                                    >
+                                        {item.clase_conjunta}
+                                    </span>
+                                </td>
+                                <td class="px-4 py-3.5 text-right font-mono text-sm font-black {alertInfo.class}">
+                                    {formatUnitQty(item.sdr, item.co_uni)}
+                                </td>
+                                <td
+                                    class="px-4 py-3.5 text-right font-mono text-sm text-text-base font-bold"
+                                >
+                                    {formatUnitQty(item.rop, item.co_uni)}
+                                </td>
+                                <td
+                                    class="px-4 py-3.5 text-right font-mono text-xs text-text-muted"
+                                >
+                                    {formatUnitQty(item.ss, item.co_uni)}
+                                </td>
+                                <td
+                                    class="px-4 py-3.5 text-right font-mono text-xs font-bold text-brand-600 dark:text-brand-400"
+                                >
+                                    {item.vpd.toFixed(2)}
+                                </td>
+                                <td
+                                    class="px-4 py-3.5 text-right font-mono text-xs text-text-muted"
+                                >
+                                    {item.tr.toFixed(1)}d
+                                </td>
+                                <td
+                                    class="px-4 py-3.5 text-right font-mono text-xs font-bold text-text-base"
+                                >
+                                    {item.ventas_netas.toLocaleString()}
+                                </td>
+                                <td class="px-4 py-3.5 text-right">
+                                    {#if cantReponer > 0}
+                                        <span
+                                            class="inline-flex items-center gap-1 font-mono font-black text-xs px-2 py-0.5 rounded-lg border bg-transparent {item.sdr <= 0 ? 'border-red-500/40 text-red-600 dark:text-red-400' : (item.sdr <= item.rop ? 'border-orange-500/40 text-orange-600 dark:text-orange-400' : 'border-amber-500/40 dark:border-yellow-500/40 text-amber-700 dark:text-yellow-400')}"
+                                        >
+                                            +{formatUnitQty(cantReponer, item.co_uni)}
                                         </span>
-                                    </td>
-                                    <td
-                                        class="px-6 py-4 text-right font-mono text-sm text-text-base"
+                                    {:else}
+                                        <span
+                                            class="text-[11px] font-bold text-emerald-700 dark:text-emerald-400"
+                                        >
+                                            Cubierto
+                                        </span>
+                                    {/if}
+                                </td>
+                                <td
+                                    class="px-4 py-3.5 text-right font-mono text-xs font-bold text-text-base"
+                                >
+                                    {cantReponer > 0
+                                        ? formatCurrency(costoInversion)
+                                        : "—"}
+                                </td>
+                                <td class="px-4 py-3.5 text-center">
+                                    <span
+                                        class="inline-flex px-2.5 py-0.5 rounded-full text-[10px] uppercase tracking-wider border {alertInfo.badgeClass}"
                                     >
-                                        {item.rop.toLocaleString()}
-                                    </td>
-                                    <td
-                                        class="px-6 py-4 text-right font-mono text-sm text-text-muted"
+                                        {alertInfo.label}
+                                    </span>
+                                </td>
+                                <td class="px-4 py-3.5 text-center">
+                                    <button
+                                        onclick={(e) => {
+                                            e.stopPropagation();
+                                            openArticleModal(item);
+                                        }}
+                                        class="p-2 rounded-xl bg-surface-soft hover:bg-brand-500 hover:text-white text-text-muted transition-all cursor-pointer shadow-sm"
+                                        title="Ver Gráfica y Detalle de Análisis"
                                     >
-                                        {item.ss.toLocaleString()}
-                                    </td>
-                                    <td
-                                        class="px-6 py-4 text-right font-mono text-sm text-brand-500 font-bold"
-                                    >
-                                        {item.vpd.toFixed(1)}
-                                    </td>
-                                </tr>
-                            {/each}
-                        </tbody>
-                    </table>
+                                        <BarChart2 size={16} />
+                                    </button>
+                                </td>
+                            </tr>
+                        {/each}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    {/if}
+</div>
+
+<!-- MODAL DE ANÁLISIS DETALLADO Y GRÁFICO (ABARCA CASI TODA LA PANTALLA) -->
+{#if detailModalOpen && selectedArticle}
+    {@const cantReponer = getCantReponer(selectedArticle)}
+    {@const costoInversion = cantReponer * (selectedArticle.costo_actual || 0)}
+    {@const demandaTR = Number((selectedArticle.vpd * selectedArticle.tr).toFixed(2))}
+    {@const alertInfo = getAlertBadge(selectedArticle)}
+    {@const isSinStock = selectedArticle.sdr <= 0}
+    {@const isQuebrado = selectedArticle.sdr > 0 && selectedArticle.sdr <= selectedArticle.rop}
+    {@const isRuptura = selectedArticle.sdr > selectedArticle.rop && selectedArticle.sdr <= (selectedArticle.rop + selectedArticle.ss)}
+    {@const isFrac = isFractionalUnit(selectedArticle.co_uni, selectedArticle.des_uni)}
+    {@const unitLabel = getUnitLabel(selectedArticle)}
+    {@const classInfo = classDescriptions[selectedArticle.clase_conjunta] || {
+        label: "Clasificación Combinada",
+        desc: "Matriz ABC/XYZ",
+        priority: "Estándar",
+    }}
+
+    <!-- BACKDROP -->
+    <div
+        class="fixed inset-0 z-[999] bg-black/80 backdrop-blur-sm flex items-center justify-center p-3 sm:p-5 md:p-8 animate-fade-in"
+        onclick={(e) => {
+            if (e.target === e.currentTarget) closeArticleModal();
+        }}
+    >
+        <!-- MODAL CONTAINER (Abarca casi toda la pantalla) -->
+        <div
+            class="bg-surface-raised border border-border-subtle rounded-[28px] sm:rounded-[36px] shadow-2xl w-full max-w-7xl max-h-[92vh] flex flex-col overflow-hidden animate-scale-in"
+            role="dialog"
+            aria-modal="true"
+        >
+            <!-- MODAL HEADER -->
+            <div
+                class="px-6 py-5 border-b border-border-subtle bg-surface-base/80 backdrop-blur-md flex items-start justify-between gap-4 shrink-0"
+            >
+                <div class="space-y-1.5 flex-1 min-w-0">
+                    <div class="flex items-center flex-wrap gap-2">
+                        <span
+                            class="px-3 py-1 rounded-xl text-xs font-black bg-surface-soft border border-border-subtle text-text-base"
+                        >
+                            Clase {selectedArticle.clase_conjunta}
+                        </span>
+                        <span
+                            class="px-3 py-1 rounded-xl text-xs font-black border {alertInfo.class}"
+                        >
+                            {alertInfo.label}
+                        </span>
+                        <span
+                            class="text-xs font-mono text-text-muted font-bold px-2.5 py-1 rounded-xl bg-surface-base border border-border-subtle"
+                        >
+                            Cód: {selectedArticle.co_art}
+                        </span>
+                        <span
+                            class="text-xs font-bold text-text-muted px-2.5 py-1 rounded-xl bg-surface-base border border-border-subtle"
+                        >
+                            Unidad: <b>{unitLabel}</b> ({isFrac ? 'Fraccionable' : 'Entera / Discreta'})
+                        </span>
+                        {#if selectedArticle.costo_actual}
+                            <span
+                                class="text-xs font-bold text-text-muted px-2.5 py-1 rounded-xl bg-surface-base border border-border-subtle"
+                            >
+                                Costo Unit.: <b
+                                    >{formatCurrency(
+                                        selectedArticle.costo_actual,
+                                    )}</b
+                                >
+                            </span>
+                        {/if}
+                    </div>
+                    <h2
+                        class="text-xl sm:text-2xl font-black text-text-base tracking-tight truncate"
+                        title={selectedArticle.des_art}
+                    >
+                        {selectedArticle.des_art}
+                    </h2>
                 </div>
+
+                <button
+                    onclick={closeArticleModal}
+                    class="p-2.5 rounded-2xl bg-surface-soft hover:bg-surface-strong text-text-muted hover:text-text-base border border-border-subtle transition-all cursor-pointer shrink-0"
+                    title="Cerrar (Esc)"
+                >
+                    <X size={20} />
+                </button>
             </div>
 
-            <!-- DETALLE DEL ARTÍCULO (1/3 del ancho en xl, h-[90vh]) -->
+            <!-- MODAL BODY -->
             <div
-                class="bg-surface-raised border border-border-subtle rounded-3xl p-6 h-[90vh] min-h-[500px] overflow-y-auto custom-scrollbar flex flex-col justify-between"
+                class="p-6 sm:p-8 overflow-y-auto custom-scrollbar flex-1 space-y-8"
             >
-                {#if selectedArticle}
-                    {@const cantReponer = Math.max(
-                        0,
-                        selectedArticle.rop +
-                            selectedArticle.ss -
-                            selectedArticle.sdr,
-                    )}
-                    {@const costoInversion =
-                        cantReponer * (selectedArticle.costo_actual || 0)}
-                    {@const demandaTR = Math.round(
-                        selectedArticle.vpd * selectedArticle.tr,
-                    )}
-
-                    <div>
-                        <div
-                            class="flex justify-between items-start mb-4 pb-4 border-b border-border-subtle"
-                        >
-                            <div>
-                                <h3
-                                    class="text-lg font-bold text-text-base mb-1 leading-tight"
-                                >
-                                    {selectedArticle.des_art}
-                                </h3>
-                                <p class="text-xs text-text-muted font-mono">
-                                    {selectedArticle.co_art}
-                                </p>
-                            </div>
+                <!-- SECCIÓN 1: Gráfico de Stock (25% en PC / 100% en tlf) vs Detalle de Compra (75% en PC / 100% en tlf) -->
+                <div class="flex flex-col lg:flex-row gap-6 items-stretch">
+                    <!-- COLUMNA GRÁFICO DE STOCK: 25% ancho en PC, 100% en tlf -->
+                    <div
+                        class="w-full lg:w-1/4 shrink-0 flex flex-col bg-surface-base border border-border-subtle rounded-3xl p-5 shadow-sm"
+                    >
+                        <div class="flex items-center justify-between mb-3">
                             <span
-                                class="px-3 py-1 rounded-lg text-xs font-black bg-surface-soft border border-border-subtle text-text-base shrink-0"
+                                class="text-xs font-black uppercase tracking-wider text-text-muted flex items-center gap-2"
                             >
-                                Clase {selectedArticle.clase_conjunta}
+                                <BarChart size={16} class="text-brand-500" />
+                                Gráfica de Stock
+                            </span>
+                            <span
+                                class="text-[10px] font-bold text-text-muted bg-surface-raised px-2 py-0.5 rounded-md border border-border-subtle"
+                            >
+                                SDR vs ROP
                             </span>
                         </div>
 
-                        <div class="w-full aspect-square relative my-2">
+                        <div
+                            class="flex-1 w-full min-h-[280px] sm:min-h-[300px] lg:min-h-[320px] relative"
+                        >
                             <canvas bind:this={chartCanvas}></canvas>
                         </div>
 
-                        <div class="mt-4 grid grid-cols-2 gap-3 text-xs">
+                        <div
+                            class="mt-3 pt-3 border-t border-border-subtle/60 grid grid-cols-3 gap-1.5 text-center"
+                        >
+                            <div class="p-2 rounded-xl bg-blue-500/10">
+                                <span
+                                    class="text-[9px] font-bold text-blue-500 block uppercase"
+                                    >SDR</span
+                                >
+                                <span class="text-xs font-black text-text-base"
+                                    >{formatUnitQty(selectedArticle.sdr, selectedArticle.co_uni)}</span
+                                >
+                            </div>
+                            <div class="p-2 rounded-xl bg-orange-500/10">
+                                <span
+                                    class="text-[9px] font-bold text-orange-500 block uppercase"
+                                    >ROP</span
+                                >
+                                <span class="text-xs font-black text-text-base"
+                                    >{formatUnitQty(selectedArticle.rop, selectedArticle.co_uni)}</span
+                                >
+                            </div>
+                            <div class="p-2 rounded-xl bg-yellow-500/10">
+                                <span
+                                    class="text-[9px] font-bold text-yellow-500 block uppercase"
+                                    >Dem. TR</span
+                                >
+                                <span class="text-xs font-black text-text-base"
+                                    >{formatUnitQty(demandaTR, selectedArticle.co_uni)}</span
+                                >
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- COLUMNA DETALLES & MÉTRICAS: 75% ancho en PC, 100% en tlf -->
+                    <div class="w-full lg:w-3/4 flex-1 flex flex-col gap-5">
+                        <!-- CUADRÍCULA DE 6 MÉTRICAS PRINCIPALES -->
+                        <div
+                            class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3"
+                        >
                             <div
-                                class="bg-surface-base p-3 rounded-2xl border border-border-subtle"
+                                class="bg-surface-base p-4 rounded-2xl border border-border-subtle"
                             >
                                 <p
-                                    class="text-[10px] text-text-muted font-bold uppercase mb-0.5"
+                                    class="text-[10px] text-text-muted font-bold uppercase mb-1"
                                 >
-                                    Ventas ({data.businessDays || 0}d hábiles)
+                                    Ventas Período
                                 </p>
-                                <p class="font-black text-text-base text-base">
-                                    {selectedArticle.ventas_netas.toLocaleString()}
-                                    <span
-                                        class="text-xs font-normal text-text-muted"
-                                        >unds</span
-                                    >
+                                <p class="text-lg font-black text-text-base">
+                                    {formatUnitQty(selectedArticle.ventas_netas, selectedArticle.co_uni)}
+                                </p>
+                                <p
+                                    class="text-[10px] text-text-muted font-medium"
+                                >
+                                    {data.businessDays || 0}d hábiles
                                 </p>
                             </div>
                             <div
-                                class="bg-surface-base p-3 rounded-2xl border border-border-subtle"
+                                class="bg-surface-base p-4 rounded-2xl border border-border-subtle"
                             >
                                 <p
-                                    class="text-[10px] text-text-muted font-bold uppercase mb-0.5"
+                                    class="text-[10px] text-text-muted font-bold uppercase mb-1"
                                 >
-                                    TR Promedio
+                                    Venta Diaria (VPD)
                                 </p>
-                                <p class="font-black text-text-base text-base">
-                                    {selectedArticle.tr.toFixed(1)} días
+                                <p class="text-lg font-black text-brand-500">
+                                    {selectedArticle.vpd.toFixed(2)}
+                                </p>
+                                <p
+                                    class="text-[10px] text-text-muted font-medium"
+                                >
+                                    {unitLabel} / día
+                                </p>
+                            </div>
+                            <div
+                                class="bg-surface-base p-4 rounded-2xl border border-border-subtle"
+                            >
+                                <p
+                                    class="text-[10px] text-text-muted font-bold uppercase mb-1"
+                                >
+                                    Tiempo Reposición (TR)
+                                </p>
+                                <p class="text-lg font-black text-text-base">
+                                    {selectedArticle.tr.toFixed(1)}
+                                </p>
+                                <p
+                                    class="text-[10px] text-text-muted font-medium"
+                                >
+                                    días prom.
+                                </p>
+                            </div>
+                            <div
+                                class="bg-surface-base p-4 rounded-2xl border border-border-subtle"
+                            >
+                                <p
+                                    class="text-[10px] text-text-muted font-bold uppercase mb-1"
+                                >
+                                    Stock Seguridad (SS)
+                                </p>
+                                <p class="text-lg font-black text-text-base">
+                                    {formatUnitQty(selectedArticle.ss, selectedArticle.co_uni)}
+                                </p>
+                                <p
+                                    class="text-[10px] text-text-muted font-medium"
+                                >
+                                    colchón 95%
+                                </p>
+                            </div>
+                            <div
+                                class="bg-surface-base p-4 rounded-2xl border border-border-subtle"
+                            >
+                                <p
+                                    class="text-[10px] text-text-muted font-bold uppercase mb-1"
+                                >
+                                    Punto Reorden (ROP)
+                                </p>
+                                <p class="text-lg font-black text-orange-500">
+                                    {formatUnitQty(selectedArticle.rop, selectedArticle.co_uni)}
+                                </p>
+                                <p
+                                    class="text-[10px] text-text-muted font-medium"
+                                >
+                                    (VPD×TR) + SS
+                                </p>
+                            </div>
+                            <div
+                                class="bg-surface-base p-4 rounded-2xl border border-border-subtle"
+                            >
+                                <p
+                                    class="text-[10px] text-text-muted font-bold uppercase mb-1"
+                                >
+                                    Stock Actual (SDR)
+                                </p>
+                                <p
+                                    class="text-lg font-black {alertInfo.class} border-0 p-0"
+                                >
+                                    {formatUnitQty(selectedArticle.sdr, selectedArticle.co_uni)}
+                                </p>
+                                <p
+                                    class="text-[10px] text-text-muted font-medium"
+                                >
+                                    disponible almacén
                                 </p>
                             </div>
                         </div>
 
-                        <!-- CUADRO DE RECOMENDACIÓN DE COMPRA -->
+                        <!-- ESTRATEGIA ABC / XYZ -->
                         <div
-                            class="mt-4 p-4 rounded-2xl border transition-all {cantReponer >
-                            0
-                                ? 'bg-brand-500/10 border-brand-500/30'
-                                : 'bg-green-500/10 border-green-500/30'}"
+                            class="bg-surface-base p-5 rounded-3xl border border-border-subtle flex flex-col sm:flex-row sm:items-center justify-between gap-4"
                         >
-                            <div class="flex items-center justify-between mb-2">
-                                <div
-                                    class="flex items-center gap-2 text-xs font-bold {cantReponer >
-                                    0
-                                        ? 'text-brand-500'
-                                        : 'text-green-500'}"
+                            <div class="space-y-1">
+                                <div class="flex items-center gap-2">
+                                    <span
+                                        class="font-black text-brand-500 text-sm"
+                                        >Clasificación {selectedArticle.clase_conjunta}
+                                        — {classInfo.label}</span
+                                    >
+                                    <span
+                                        class="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-surface-soft text-text-base border border-border-subtle"
+                                    >
+                                        {classInfo.priority}
+                                    </span>
+                                </div>
+                                <p
+                                    class="text-xs text-text-muted leading-relaxed"
                                 >
-                                    {#if cantReponer > 0}
-                                        <ShoppingCart size={16} />
-                                        <span>Sugerencia de Pedido</span>
+                                    {classInfo.desc}
+                                </p>
+                            </div>
+                        </div>
+
+                        <!-- CUADRO DE RECOMENDACIÓN DE COMPRA & INVERSIÓN SEGÚN ESCALA DE CALOR -->
+                        <div
+                            class="p-6 rounded-3xl border transition-all {isSinStock
+                                ? 'bg-red-500/10 dark:bg-red-500/15 border-red-500/30'
+                                : (isQuebrado
+                                    ? 'bg-orange-500/10 dark:bg-orange-500/15 border-orange-500/30'
+                                    : (isRuptura
+                                        ? 'bg-amber-500/15 dark:bg-yellow-500/15 border-amber-500/40 dark:border-yellow-500/30'
+                                        : 'bg-emerald-500/15 dark:bg-emerald-500/15 border-emerald-500/40 dark:border-emerald-500/30'))}"
+                        >
+                            <div
+                                class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4"
+                            >
+                                <div
+                                    class="flex items-center gap-2.5 font-bold {isSinStock
+                                        ? 'text-red-700 dark:text-red-400'
+                                        : (isQuebrado
+                                            ? 'text-orange-700 dark:text-orange-400'
+                                            : (isRuptura
+                                                ? 'text-amber-800 dark:text-yellow-300'
+                                                : 'text-emerald-800 dark:text-emerald-300'))}"
+                                >
+                                    {#if isSinStock}
+                                        <div class="p-2 rounded-xl bg-red-500/15 text-red-700 dark:text-red-400 border border-red-500/20">
+                                            <AlertTriangle size={20} />
+                                        </div>
+                                        <div>
+                                            <h4 class="text-sm font-black uppercase tracking-wider">
+                                                Alerta Crítica: Sin Stock (SDR = 0)
+                                            </h4>
+                                            <p class="text-xs text-text-muted font-normal">
+                                                Inventario en cero. Se requiere reabastecimiento urgente para no perder ventas.
+                                            </p>
+                                        </div>
+                                    {:else if isQuebrado}
+                                        <div class="p-2 rounded-xl bg-orange-500/15 text-orange-700 dark:text-orange-400 border border-orange-500/20">
+                                            <AlertTriangle size={20} />
+                                        </div>
+                                        <div>
+                                            <h4 class="text-sm font-black uppercase tracking-wider">
+                                                Alerta: Stock Quebrado (SDR ≤ ROP)
+                                            </h4>
+                                            <p class="text-xs text-text-muted font-normal">
+                                                El stock actual cayó por debajo del Punto de Reorden. Emitir orden de compra.
+                                            </p>
+                                        </div>
+                                    {:else if isRuptura}
+                                        <div class="p-2 rounded-xl bg-amber-500/20 text-amber-800 dark:text-yellow-300 border border-amber-500/30">
+                                            <Activity size={20} />
+                                        </div>
+                                        <div>
+                                            <h4 class="text-sm font-black uppercase tracking-wider">
+                                                Alerta Preventiva: Ruptura Inminente (SDR ≤ ROP+SS)
+                                            </h4>
+                                            <p class="text-xs text-text-muted font-normal">
+                                                El inventario está consumiendo el colchón de seguridad.
+                                            </p>
+                                        </div>
                                     {:else}
-                                        <ShieldCheck size={16} />
-                                        <span>Stock Cubierto</span>
+                                        <div class="p-2 rounded-xl bg-emerald-500/20 text-emerald-800 dark:text-emerald-300 border border-emerald-500/30">
+                                            <ShieldCheck size={20} />
+                                        </div>
+                                        <div>
+                                            <h4 class="text-sm font-black uppercase tracking-wider">
+                                                Inventario Óptimo y Seguro
+                                            </h4>
+                                            <p class="text-xs text-text-muted font-normal">
+                                                El stock actual cubre holgadamente la demanda esperada.
+                                            </p>
+                                        </div>
                                     {/if}
                                 </div>
                                 <span
-                                    class="text-[10px] font-black px-2 py-0.5 rounded uppercase tracking-wider {cantReponer >
-                                    0
-                                        ? 'bg-brand-500/20 text-brand-500'
-                                        : 'bg-green-500/20 text-green-500'}"
+                                    class="text-xs font-black px-3 py-1 rounded-xl uppercase tracking-wider self-start sm:self-auto {isSinStock
+                                        ? 'bg-red-500/15 text-red-800 dark:text-red-300 border border-red-500/30'
+                                        : (isQuebrado
+                                            ? 'bg-orange-500/15 text-orange-800 dark:text-orange-300 border border-orange-500/30'
+                                            : (isRuptura
+                                                ? 'bg-amber-500/20 text-amber-900 dark:text-yellow-300 border border-amber-500/40'
+                                                : 'bg-emerald-500/20 text-emerald-900 dark:text-emerald-300 border border-emerald-500/40'))}"
                                 >
-                                    {cantReponer > 0
-                                        ? "Pedir Orden"
-                                        : "Suficiente"}
+                                    {isSinStock
+                                        ? "Reabastecimiento Urgente"
+                                        : (isQuebrado
+                                            ? "Stock Quebrado"
+                                            : (isRuptura
+                                                ? "Ruptura Inminente"
+                                                : "Stock Saludable"))}
                                 </span>
                             </div>
 
-                            <div class="grid grid-cols-2 gap-3 my-2">
+                            <div
+                                class="grid grid-cols-1 sm:grid-cols-2 gap-4 my-4 p-4 rounded-2xl bg-surface-raised/80 border border-border-subtle/50"
+                            >
                                 <div>
                                     <p
-                                        class="text-[10px] text-text-muted font-bold uppercase"
+                                        class="text-xs text-text-muted font-bold uppercase mb-1"
                                     >
-                                        Pedir Recomendado
+                                        Cantidad Sugerida a Pedir
                                     </p>
                                     <p
-                                        class="text-2xl font-black {cantReponer >
+                                        class="text-3xl font-black {cantReponer >
                                         0
-                                            ? 'text-brand-500'
-                                            : 'text-green-500'}"
+                                            ? (isSinStock ? 'text-red-700 dark:text-red-400' : (isQuebrado ? 'text-orange-700 dark:text-orange-400' : 'text-amber-800 dark:text-yellow-300'))
+                                            : 'text-emerald-800 dark:text-emerald-400'}"
                                     >
-                                        {cantReponer.toLocaleString()}
+                                        {formatUnitQty(cantReponer, selectedArticle.co_uni)}
                                         <span
-                                            class="text-xs font-normal text-text-muted"
-                                            >unds</span
+                                            class="text-sm font-bold text-text-muted"
+                                            >{unitLabel}</span
                                         >
                                     </p>
                                 </div>
                                 <div>
                                     <p
-                                        class="text-[10px] text-text-muted font-bold uppercase"
+                                        class="text-xs text-text-muted font-bold uppercase mb-1"
                                     >
-                                        Inversión Est.
+                                        Inversión Estimada Total
                                     </p>
                                     <p
-                                        class="text-lg font-black text-text-base"
+                                        class="text-3xl font-black text-text-base"
                                     >
                                         {formatCurrency(costoInversion)}
                                     </p>
                                 </div>
                             </div>
 
-                            <p
-                                class="text-[11px] text-text-muted leading-relaxed pt-2 border-t border-border-subtle/50"
-                            >
+                            <p class="text-xs text-text-muted leading-relaxed">
                                 {#if cantReponer > 0}
-                                    Cubre <b>{demandaTR} unds</b> de demanda
-                                    esperada durante la entrega ({selectedArticle.tr}d)
-                                    y garantiza quedar con un colchón de
-                                    <b>{selectedArticle.ss} unds</b> ($SS$).
+                                    {#if isSinStock}
+                                        El inventario actual es <b>0 {unitLabel}</b> a pesar de registrar una venta diaria promedio de <b>{selectedArticle.vpd.toFixed(2)} {unitLabel}/día</b>. Pedir <b>{formatUnitQty(cantReponer, selectedArticle)} {unitLabel}</b> ({isFrac ? 'fraccionable por unidad ' + unitLabel : 'mínimo indivisible por unidad ' + unitLabel}) cubrirá la demanda proyectada de <b>{demandaTR} {unitLabel}</b> durante los {selectedArticle.tr.toFixed(1)} días de reposición y evitará pérdidas de ventas.
+                                    {:else}
+                                        Pedir <b>{formatUnitQty(cantReponer, selectedArticle)} {unitLabel}</b> cubrirá los <b>{demandaTR} {unitLabel}</b> de demanda proyectada durante el tiempo de reposición del proveedor ({selectedArticle.tr.toFixed(1)} días) y garantizará mantener el colchón de seguridad de <b>{formatUnitQty(selectedArticle.ss, selectedArticle)} {unitLabel}</b> (<i>SS</i>).
+                                    {/if}
                                 {:else}
-                                    El inventario actual ({selectedArticle.sdr} unds)
-                                    cubre holgadamente el ROP ({selectedArticle.rop}
-                                    unds) sin riesgo de quiebre.
+                                    El stock actual ({formatUnitQty(selectedArticle.sdr, selectedArticle)} {unitLabel}) cubre holgadamente el Punto de Reorden ({formatUnitQty(selectedArticle.rop, selectedArticle)} {unitLabel}) y el colchón de seguridad ({formatUnitQty(selectedArticle.ss, selectedArticle)} {unitLabel}). No se requiere emitir pedido en este momento.
                                 {/if}
                             </p>
                         </div>
                     </div>
-                {:else}
+                </div>
+
+                <!-- SECCIÓN 2: HISTÓRICO DE VENTAS (ÚLTIMO AÑO: VENTAS REALES, STOCK INICIAL Y DOCUMENTOS) -->
+                <div
+                    class="bg-surface-base border border-border-subtle rounded-3xl p-6 sm:p-8 space-y-6 shadow-sm"
+                >
                     <div
-                        class="flex-1 flex flex-col items-center justify-center text-center text-text-muted opacity-50 p-6"
+                        class="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-border-subtle"
                     >
-                        <BarChart size={48} class="mb-4" />
-                        <p class="font-bold">Selecciona un artículo</p>
-                        <p class="text-xs mt-2">
-                            Haz clic en una fila de la tabla para ver su
-                            sugerencia de compra y gráfico de stock.
-                        </p>
+                        <div class="space-y-1">
+                            <div class="flex items-center gap-2.5">
+                                <Activity size={20} class="text-brand-500" />
+                                <h3
+                                    class="text-lg font-black text-text-base tracking-tight"
+                                >
+                                    Histórico de Ventas, Stock Inicial y Documentos (Último Año)
+                                </h3>
+                            </div>
+                            <p class="text-xs text-text-muted">
+                                Evolución mensual de <b class="text-emerald-500">Unidades Vendidas</b> (neto de devoluciones), <b class="text-blue-500">Stock Inicial de Cada Mes</b> y <b class="text-amber-500">Documentos Exitosos</b>.
+                            </p>
+                        </div>
+
+                        <!-- MÉTRICAS RESUMEN HISTÓRICO -->
+                        <div class="flex items-center flex-wrap gap-2.5">
+                            <div
+                                class="px-3.5 py-1.5 rounded-2xl bg-surface-raised border border-border-subtle flex items-center gap-2"
+                            >
+                                <span class="text-[10px] font-bold uppercase text-text-muted">Total Ventas 12m:</span>
+                                <span class="text-sm font-black text-emerald-500">
+                                    {historySummary.total.toLocaleString()} unds
+                                </span>
+                            </div>
+                            <div
+                                class="px-3.5 py-1.5 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center gap-1.5 text-amber-600 dark:text-amber-400"
+                            >
+                                <FileText size={14} />
+                                <span class="text-[10px] font-bold uppercase">Total Docs:</span>
+                                <span class="text-xs font-black">
+                                    {historySummary.totalDocs.toLocaleString()} docs
+                                </span>
+                            </div>
+                            {#if historySummary.maxMonth}
+                                <div
+                                    class="px-3.5 py-1.5 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400"
+                                >
+                                    <ArrowUpRight size={14} />
+                                    <span class="text-[10px] font-bold uppercase">Pico Venta:</span>
+                                    <span class="text-xs font-black">
+                                        {historySummary.max.toLocaleString()} ({historySummary.maxMonth})
+                                    </span>
+                                </div>
+                            {/if}
+                        </div>
                     </div>
-                {/if}
+
+                    <!-- CONTENEDOR DEL GRÁFICO MULTI-EJE DE LÍNEAS -->
+                    {#if historyLoading}
+                        <div
+                            class="w-full h-72 flex flex-col items-center justify-center gap-3 text-text-muted opacity-70"
+                        >
+                            <RefreshCw size={28} class="animate-spin text-brand-500" />
+                            <p class="text-xs font-bold">Reconstruyendo histórico y movimientos de stock en Profit...</p>
+                        </div>
+                    {:else if historyError}
+                        <div
+                            class="p-6 rounded-2xl bg-red-500/10 border border-red-500/20 text-red-500 flex items-center justify-between gap-4"
+                        >
+                            <div class="flex items-center gap-3">
+                                <AlertTriangle size={20} />
+                                <span class="text-xs font-bold">{historyError}</span>
+                            </div>
+                            <button
+                                onclick={() => fetchArticleHistory(selectedArticle.co_art)}
+                                class="px-4 py-1.5 rounded-xl bg-surface-raised border border-border-subtle text-xs font-black hover:bg-surface-soft transition-all cursor-pointer"
+                            >
+                                Reintentar
+                            </button>
+                        </div>
+                    {:else if historyData.length > 0}
+                        <div class="w-full h-72 sm:h-80 relative">
+                            <canvas bind:this={historyChartCanvas}></canvas>
+                        </div>
+
+                        <!-- DESGLOSE EN MINI-CHIPS DE LOS 12 MESES -->
+                        <div class="pt-4 border-t border-border-subtle/60 space-y-2">
+                            <div class="flex items-center justify-between">
+                                <span class="text-xs font-black uppercase tracking-wider text-text-muted">
+                                    Detalle Mensual (Ventas / Stock Inicial / Documentos)
+                                </span>
+                            </div>
+                            <div
+                                class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-12 gap-2"
+                            >
+                                {#each historyData as m}
+                                    {@const isMax = m.mes_nombre === historySummary.maxMonth && historySummary.max > 0}
+                                    <div
+                                        class="p-2.5 rounded-2xl border text-center transition-all {isMax
+                                            ? 'bg-emerald-500/15 border-emerald-500/40 shadow-sm'
+                                            : 'bg-surface-raised border-border-subtle/70'}"
+                                    >
+                                        <span class="text-[10px] font-bold text-text-muted block truncate mb-1">
+                                            {m.mes_nombre}
+                                        </span>
+                                        <div class="space-y-0.5">
+                                            <span
+                                                class="text-xs font-black block text-emerald-600 dark:text-emerald-400"
+                                                title="Cantidad Real Vendida"
+                                            >
+                                                {m.cant_real_vendida.toLocaleString()} <span class="text-[9px] font-normal text-text-muted">unds</span>
+                                            </span>
+                                            <span
+                                                class="text-[10px] font-bold block text-blue-500"
+                                                title="Stock Inicial Reconstruido"
+                                            >
+                                                Stk: {m.stock_inicial.toLocaleString()}
+                                            </span>
+                                            <span
+                                                class="text-[10px] font-bold block text-amber-500"
+                                                title="Documentos Exitosos"
+                                            >
+                                                {m.docs_exitosos} docs
+                                            </span>
+                                        </div>
+                                        {#if m.cant_devuelta > 0}
+                                            <span class="text-[8px] font-mono font-bold text-red-500 block mt-0.5">
+                                                -{m.cant_devuelta} dev
+                                            </span>
+                                        {/if}
+                                    </div>
+                                {/each}
+                            </div>
+                        </div>
+                    {:else}
+                        <div
+                            class="p-8 rounded-2xl bg-surface-raised text-center text-text-muted text-xs font-bold"
+                        >
+                            No hay movimientos de venta registrados para este artículo en los últimos 12 meses.
+                        </div>
+                    {/if}
+                </div>
+            </div>
+
+            <!-- MODAL FOOTER -->
+            <div
+                class="px-6 py-4 border-t border-border-subtle bg-surface-base/80 backdrop-blur-md flex items-center justify-between shrink-0"
+            >
+                <span class="text-xs text-text-muted font-medium">
+                    Presiona <kbd
+                        class="px-2 py-0.5 rounded bg-surface-raised border border-border-subtle text-[11px] font-mono font-bold text-text-base"
+                        >ESC</kbd
+                    > o haz clic fuera para cerrar
+                </span>
+                <button
+                    onclick={closeArticleModal}
+                    class="px-6 py-2.5 rounded-2xl bg-surface-soft hover:bg-surface-strong text-text-base font-black text-xs border border-border-subtle transition-all cursor-pointer"
+                >
+                    Cerrar
+                </button>
             </div>
         </div>
-    {/if}
-</div>
+    </div>
+{/if}

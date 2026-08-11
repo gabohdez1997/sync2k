@@ -55,9 +55,10 @@ export const load: PageServerLoad = protectLoad('rep_analisis_compras', async ({
     );
 
     try {
+        const allowDecimals = selectedBranch.allow_decimals_units || 'MTS, MTS2, KG, LTS, ML';
         const [response, lineasRes, sublineasRes, catsRes] = await Promise.all([
             agentClient.request<any>(
-                `/analisis-compras?sede=${branchId}&startDate=${startDate}&endDate=${endDate}`,
+                `/analisis-compras?sede=${branchId}&startDate=${startDate}&endDate=${endDate}&allow_decimals_units=${encodeURIComponent(allowDecimals)}`,
                 { method: 'GET' }
             ),
             agentClient.request<any>('/catalogos/lineas').catch(() => ({ data: [] })),
@@ -74,6 +75,8 @@ export const load: PageServerLoad = protectLoad('rep_analisis_compras', async ({
                 startDate,
                 endDate,
                 branchId,
+                selectedBranch,
+                selectedBranchConfig: selectedBranch,
                 branches: allowedBranches,
                 analysisData: response.data,
                 kpis: response.kpis,
@@ -87,6 +90,8 @@ export const load: PageServerLoad = protectLoad('rep_analisis_compras', async ({
         } else {
             return {
                 startDate, endDate, branchId,
+                selectedBranch,
+                selectedBranchConfig: selectedBranch,
                 branches: allowedBranches,
                 catalogs: { lineas, sublineas, categorias },
                 error: response?.message || 'Error al obtener datos del agente.'
