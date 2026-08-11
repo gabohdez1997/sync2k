@@ -172,14 +172,20 @@
                     const rop = Number(i.rop) || 0;
                     return sdr > 0 && sdr <= rop;
                 });
-            } else if (selectedAlertStatus === "ruptura" || selectedAlertStatus === "riesgo") {
+            } else if (
+                selectedAlertStatus === "ruptura" ||
+                selectedAlertStatus === "riesgo"
+            ) {
                 list = list.filter((i: any) => {
                     const sdr = Number(i.sdr) || 0;
                     const rop = Number(i.rop) || 0;
                     const ss = Number(i.ss) || 0;
                     return sdr > rop && sdr <= rop + ss;
                 });
-            } else if (selectedAlertStatus === "saludable" || selectedAlertStatus === "sano") {
+            } else if (
+                selectedAlertStatus === "saludable" ||
+                selectedAlertStatus === "sano"
+            ) {
                 list = list.filter((i: any) => {
                     const sdr = Number(i.sdr) || 0;
                     const rop = Number(i.rop) || 0;
@@ -192,53 +198,111 @@
     });
 
     // Mapeo dinámico y semántico de unidades fraccionables
-    const fractionalCodes = ['06', '07', '08', '10', '25'];
+    const fractionalCodes = ["06", "07", "08", "10", "25"];
     const fractionalKeywords = [
-        'MTS2', 'MTS', 'LTS', 'KG', 'ML',
-        'M2', 'M3', 'MT', 'LT', 'KGS', 'KILO', 'KILOS', 'KILOGRAMO', 'KILOGRAMOS',
-        'GR', 'GRS', 'GRAMO', 'GRAMOS', 'METRO', 'METROS', 'LITRO', 'LITROS',
-        'MILILITRO', 'MILILITROS', 'TON', 'TONELADA', 'CENTIMETRO', 'CM', 'MM', 'PULG', 'PULGADA', 'YARDA'
+        "MTS2",
+        "MTS",
+        "LTS",
+        "KG",
+        "ML",
+        "M2",
+        "M3",
+        "MT",
+        "LT",
+        "KGS",
+        "KILO",
+        "KILOS",
+        "KILOGRAMO",
+        "KILOGRAMOS",
+        "GR",
+        "GRS",
+        "GRAMO",
+        "GRAMOS",
+        "METRO",
+        "METROS",
+        "LITRO",
+        "LITROS",
+        "MILILITRO",
+        "MILILITROS",
+        "TON",
+        "TONELADA",
+        "CENTIMETRO",
+        "CM",
+        "MM",
+        "PULG",
+        "PULGADA",
+        "YARDA",
     ];
     function isFractionalUnit(co_uni?: string, des_uni?: string): boolean {
-        const code = String(co_uni || '').trim().toUpperCase();
-        const desc = String(des_uni || '').trim().toUpperCase();
+        const code = String(co_uni || "")
+            .trim()
+            .toUpperCase();
+        const desc = String(des_uni || "")
+            .trim()
+            .toUpperCase();
 
         // 1. Configuración dinámica por Sede (allow_decimals_units)
-        const branchConfigStr = String(data.selectedBranch?.allow_decimals_units || data.selectedBranchConfig?.allow_decimals_units || '');
+        const branchConfigStr = String(
+            data.selectedBranch?.allow_decimals_units ||
+                data.selectedBranchConfig?.allow_decimals_units ||
+                "",
+        );
         if (branchConfigStr) {
-            const allowedCustom = branchConfigStr.split(',').map((s: string) => s.trim().toUpperCase()).filter(Boolean);
-            if (allowedCustom.some((a: string) => a === code || a === desc || desc.includes(a) || code.includes(a))) {
+            const allowedCustom = branchConfigStr
+                .split(",")
+                .map((s: string) => s.trim().toUpperCase())
+                .filter(Boolean);
+            if (
+                allowedCustom.some(
+                    (a: string) =>
+                        a === code ||
+                        a === desc ||
+                        desc.includes(a) ||
+                        code.includes(a),
+                )
+            ) {
                 return true;
             }
         }
 
         // 2. Códigos de Profit conocidos y reglas semánticas
-        return fractionalCodes.includes(code) || fractionalKeywords.includes(code) || fractionalKeywords.includes(desc);
+        return (
+            fractionalCodes.includes(code) ||
+            fractionalKeywords.includes(code) ||
+            fractionalKeywords.includes(desc)
+        );
     }
 
-    function formatUnitQty(val: number, itemOrCoUni?: any, des_uni?: string): string {
+    function formatUnitQty(
+        val: number,
+        itemOrCoUni?: any,
+        des_uni?: string,
+    ): string {
         let isFrac = false;
-        if (typeof itemOrCoUni === 'object' && itemOrCoUni !== null) {
+        if (typeof itemOrCoUni === "object" && itemOrCoUni !== null) {
             isFrac = isFractionalUnit(itemOrCoUni.co_uni, itemOrCoUni.des_uni);
         } else {
             isFrac = isFractionalUnit(itemOrCoUni, des_uni);
         }
         if (isFrac) {
-            return Number(val.toFixed(2)).toLocaleString('es-VE', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+            return Number(val.toFixed(2)).toLocaleString("es-VE", {
+                minimumFractionDigits: 0,
+                maximumFractionDigits: 2,
+            });
         }
-        return Math.ceil(val).toLocaleString('es-VE');
+        return Math.ceil(val).toLocaleString("es-VE");
     }
 
     function getUnitLabel(item: any): string {
-        if (!item) return 'unidades';
+        if (!item) return "unidades";
         if (item.des_uni && item.des_uni.trim()) return item.des_uni.trim();
         if (item.co_uni && item.co_uni.trim()) return item.co_uni.trim();
-        return 'unidades';
+        return "unidades";
     }
 
     function getCantReponer(item: any): number {
         if (!item) return 0;
-        if (typeof item.cant_sugerida === 'number') {
+        if (typeof item.cant_sugerida === "number") {
             return item.cant_sugerida;
         }
         const sdr = Number(item.sdr) || 0;
@@ -252,9 +316,11 @@
         if (sdr <= rop || sdr <= 0) {
             const target = Math.max(rop + ss, rop);
             const diff = target - sdr;
-            return isFrac ? Math.max(0.01, Number(diff.toFixed(2))) : Math.max(1, Math.ceil(diff));
-        } else if (sdr < (rop + ss)) {
-            const diff = (rop + ss) - sdr;
+            return isFrac
+                ? Math.max(0.01, Number(diff.toFixed(2)))
+                : Math.max(1, Math.ceil(diff));
+        } else if (sdr < rop + ss) {
+            const diff = rop + ss - sdr;
             return isFrac ? Number(diff.toFixed(2)) : Math.ceil(diff);
         }
         return 0;
@@ -297,10 +363,24 @@
     // Resumen histórico del artículo seleccionado
     let historySummary = $derived.by(() => {
         if (!historyData || historyData.length === 0) {
-            return { total: 0, avg: 0, max: 0, min: 0, maxMonth: "", totalDocs: 0, latestStock: 0 };
+            return {
+                total: 0,
+                avg: 0,
+                max: 0,
+                min: 0,
+                maxMonth: "",
+                totalDocs: 0,
+                totalRecep: 0,
+                totalAent: 0,
+                totalAsal: 0,
+                latestStock: 0,
+            };
         }
         let total = 0;
         let totalDocs = 0;
+        let totalRecep = 0;
+        let totalAent = 0;
+        let totalAsal = 0;
         let max = -Infinity;
         let min = Infinity;
         let maxMonth = "";
@@ -308,8 +388,14 @@
         historyData.forEach((h: any) => {
             const v = Number(h.cant_real_vendida) || 0;
             const d = Number(h.docs_exitosos) || 0;
+            const r = Number(h.cant_recepcionada) || 0;
+            const aent = Number(h.cant_ajuste_entrada) || 0;
+            const asal = Number(h.cant_ajuste_salida) || 0;
             total += v;
             totalDocs += d;
+            totalRecep += r;
+            totalAent += aent;
+            totalAsal += asal;
             if (v > max) {
                 max = v;
                 maxMonth = h.mes_nombre;
@@ -320,12 +406,16 @@
         });
 
         const avg = historyData.length > 0 ? total / historyData.length : 0;
-        const latestStock = historyData[historyData.length - 1]?.stock_inicial || 0;
+        const latestStock =
+            historyData[historyData.length - 1]?.stock_inicial || 0;
 
         return {
             total,
             avg,
             totalDocs,
+            totalRecep,
+            totalAent,
+            totalAsal,
             max: max === -Infinity ? 0 : max,
             min: min === Infinity ? 0 : min,
             maxMonth,
@@ -354,7 +444,8 @@
                 fullLabel: "Sin Stock (SDR = 0)",
                 shortLabel: "Sin Stock",
                 class: "text-red-600 dark:text-red-400 font-bold",
-                badgeClass: "bg-transparent border border-red-500/40 text-red-600 dark:text-red-400 font-bold",
+                badgeClass:
+                    "bg-transparent border border-red-500/40 text-red-600 dark:text-red-400 font-bold",
                 color: "red",
             };
         }
@@ -365,7 +456,8 @@
                 fullLabel: "Stock Quebrado (SDR ≤ ROP)",
                 shortLabel: "Stock Quebrado",
                 class: "text-orange-600 dark:text-orange-400 font-bold",
-                badgeClass: "bg-transparent border border-orange-500/40 text-orange-600 dark:text-orange-400 font-bold",
+                badgeClass:
+                    "bg-transparent border border-orange-500/40 text-orange-600 dark:text-orange-400 font-bold",
                 color: "orange",
             };
         }
@@ -376,7 +468,8 @@
                 fullLabel: "Ruptura Inminente (SDR ≤ ROP+SS)",
                 shortLabel: "Ruptura Inminente",
                 class: "text-amber-700 dark:text-yellow-400 font-bold",
-                badgeClass: "bg-transparent border border-amber-500/50 dark:border-yellow-500/40 text-amber-700 dark:text-yellow-400 font-bold",
+                badgeClass:
+                    "bg-transparent border border-amber-500/50 dark:border-yellow-500/40 text-amber-700 dark:text-yellow-400 font-bold",
                 color: "yellow",
             };
         }
@@ -386,7 +479,8 @@
             fullLabel: "Stock Saludable (SDR > ROP+SS)",
             shortLabel: "Stock Saludable",
             class: "text-emerald-700 dark:text-emerald-400 font-bold",
-            badgeClass: "bg-transparent border border-emerald-500/40 text-emerald-700 dark:text-emerald-400 font-bold",
+            badgeClass:
+                "bg-transparent border border-emerald-500/40 text-emerald-700 dark:text-emerald-400 font-bold",
             color: "emerald",
         };
     }
@@ -401,35 +495,47 @@
     function exportToExcel() {
         if (!items || items.length === 0) return;
 
-        let csvContent = '\uFEFFsep=;\n';
-        csvContent += "Codigo;Descripcion;Clase ABC/XYZ;SDR (Stock);ROP;SS;VPD;TR Promedio (Dias);Ventas Periodo;Pedir Recomendado;Inversion Est. (USD);Estado de Stock\n";
+        let csvContent = "\uFEFFsep=;\n";
+        csvContent +=
+            "Codigo;Descripcion;Clase ABC/XYZ;SDR (Stock);ROP;SS;VPD;TR Promedio (Dias);Ventas Periodo;Pedir Recomendado;Inversion Est. (USD);Estado de Stock\n";
 
         for (const item of items) {
-            const co_art = `="${String(item.co_art || '').trim().replace(/"/g, '""')}"`;
-            const des_art = `"${String(item.des_art || '').trim().replace(/"/g, '""')}"`;
-            const clase = `"${String(item.clase_conjunta || '').trim()}"`;
-            
+            const co_art = `="${String(item.co_art || "")
+                .trim()
+                .replace(/"/g, '""')}"`;
+            const des_art = `"${String(item.des_art || "")
+                .trim()
+                .replace(/"/g, '""')}"`;
+            const clase = `"${String(item.clase_conjunta || "").trim()}"`;
+
             const sdr = (Number(item.sdr) || 0).toString();
             const rop = (Number(item.rop) || 0).toString();
             const ss = (Number(item.ss) || 0).toString();
-            const vpd = (Number(item.vpd) || 0).toFixed(2).replace('.', ',');
-            const tr = (Number(item.tr) || 0).toFixed(1).replace('.', ',');
+            const vpd = (Number(item.vpd) || 0).toFixed(2).replace(".", ",");
+            const tr = (Number(item.tr) || 0).toFixed(1).replace(".", ",");
             const ventas = (Number(item.ventas_netas) || 0).toString();
-            
+
             const cantReponer = getCantReponer(item);
-            const cantReponerStr = formatUnitQty(cantReponer, item.co_uni).replace('.', ',');
-            const costoInversion = (cantReponer * (item.costo_actual || 0)).toFixed(2).replace('.', ',');
-            
+            const cantReponerStr = formatUnitQty(
+                cantReponer,
+                item.co_uni,
+            ).replace(".", ",");
+            const costoInversion = (cantReponer * (item.costo_actual || 0))
+                .toFixed(2)
+                .replace(".", ",");
+
             const alertInfo = getAlertBadge(item);
             const estado = alertInfo.label;
 
             csvContent += `${co_art};${des_art};${clase};${sdr};${rop};${ss};${vpd};${tr};${ventas};${cantReponerStr};${costoInversion};${estado}\n`;
         }
 
-        const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+        const blob = new Blob([csvContent], {
+            type: "text/csv;charset=utf-8;",
+        });
         const url = URL.createObjectURL(blob);
         const link = document.createElement("a");
-        const filename = `analisis_compras_${startDate.replace(/-/g, '')}_a_${endDate.replace(/-/g, '')}.csv`;
+        const filename = `analisis_compras_${startDate.replace(/-/g, "")}_a_${endDate.replace(/-/g, "")}.csv`;
 
         link.setAttribute("href", url);
         link.setAttribute("download", filename);
@@ -504,13 +610,21 @@
         historyError = null;
         historyData = [];
         try {
-            const branchParam = selectedBranch && selectedBranch !== 'default' ? `&branch_id=${selectedBranch}` : '';
-            const res = await fetch(`/api/agent/analisis-compras/article-history?co_art=${encodeURIComponent(coArt)}${branchParam}`);
+            const branchParam =
+                selectedBranch && selectedBranch !== "default"
+                    ? `&branch_id=${selectedBranch}`
+                    : "";
+            const res = await fetch(
+                `/api/agent/analisis-compras/article-history?co_art=${encodeURIComponent(coArt)}${branchParam}`,
+            );
             const json = await res.json();
             if (json.success && Array.isArray(json.history)) {
                 historyData = json.history;
             } else {
-                historyError = json.error || json.message || "No se pudo cargar el histórico.";
+                historyError =
+                    json.error ||
+                    json.message ||
+                    "No se pudo cargar el histórico.";
             }
         } catch (e: any) {
             historyError = "Error de conexión al consultar histórico.";
@@ -541,7 +655,8 @@
 
     // 1. Renderizar gráfico superior (SDR vs ROP)
     $effect(() => {
-        if (!mounted || !detailModalOpen || !chartCanvas || !selectedArticle) return;
+        if (!mounted || !detailModalOpen || !chartCanvas || !selectedArticle)
+            return;
 
         if (chartInstance) {
             chartInstance.destroy();
@@ -549,7 +664,8 @@
         }
 
         const demandaEnTR = Math.round(
-            (Number(selectedArticle.vpd) || 0) * (Number(selectedArticle.tr) || 0),
+            (Number(selectedArticle.vpd) || 0) *
+                (Number(selectedArticle.tr) || 0),
         );
 
         chartInstance = new ChartJS(chartCanvas, {
@@ -596,11 +712,17 @@
                     y: {
                         beginAtZero: true,
                         grid: { color: "rgba(150, 150, 150, 0.12)" },
-                        ticks: { color: "rgba(150, 150, 150, 0.9)", font: { size: 10 } },
+                        ticks: {
+                            color: "rgba(150, 150, 150, 0.9)",
+                            font: { size: 10 },
+                        },
                     },
                     x: {
                         grid: { display: false },
-                        ticks: { color: "rgba(150, 150, 150, 0.9)", font: { size: 11, weight: "bold" } },
+                        ticks: {
+                            color: "rgba(150, 150, 150, 0.9)",
+                            font: { size: 11, weight: "bold" },
+                        },
                     },
                 },
                 plugins: {
@@ -626,7 +748,13 @@
 
     // 2. Renderizar gráfico inferior de línea (Ventas Reales + Stock Inicial + Documentos)
     $effect(() => {
-        if (!mounted || !detailModalOpen || !historyChartCanvas || historyData.length === 0) return;
+        if (
+            !mounted ||
+            !detailModalOpen ||
+            !historyChartCanvas ||
+            historyData.length === 0
+        )
+            return;
 
         if (historyChartInstance) {
             historyChartInstance.destroy();
@@ -634,9 +762,13 @@
         }
 
         const labels = historyData.map((h) => h.mes_nombre);
-        const realSoldData = historyData.map((h) => h.cant_real_vendida);
         const initialStockData = historyData.map((h) => h.stock_inicial);
+        const realSoldData = historyData.map((h) => h.cant_real_vendida);
         const docsData = historyData.map((h) => h.docs_exitosos);
+        const devsData = historyData.map((h) => h.cant_devuelta);
+        const recepData = historyData.map((h) => h.cant_recepcionada);
+        const aentData = historyData.map((h) => h.cant_ajuste_entrada);
+        const asalData = historyData.map((h) => h.cant_ajuste_salida);
 
         historyChartInstance = new ChartJS(historyChartCanvas, {
             type: "line",
@@ -645,22 +777,7 @@
                 datasets: [
                     {
                         type: "line" as const,
-                        label: "Cant. Real Vendida",
-                        data: realSoldData,
-                        borderColor: "#10b981",
-                        backgroundColor: "rgba(16, 185, 129, 0.12)",
-                        borderWidth: 3,
-                        tension: 0.35,
-                        fill: true,
-                        pointBackgroundColor: "#10b981",
-                        pointBorderColor: "#ffffff",
-                        pointBorderWidth: 2,
-                        pointRadius: 5,
-                        pointHoverRadius: 7,
-                    },
-                    {
-                        type: "line" as const,
-                        label: "Stock Inicial Mes",
+                        label: "Stock Inicial (Stk)",
                         data: initialStockData,
                         borderColor: "#3b82f6",
                         backgroundColor: "rgba(59, 130, 246, 0.05)",
@@ -675,15 +792,93 @@
                     },
                     {
                         type: "line" as const,
-                        label: "Documentos Exitosos",
+                        label: "Cant. Real Vendida (Vta)",
+                        data: realSoldData,
+                        borderColor: "#10b981",
+                        backgroundColor: "rgba(16, 185, 129, 0.12)",
+                        borderWidth: 3,
+                        tension: 0.35,
+                        fill: true,
+                        pointBackgroundColor: "#10b981",
+                        pointBorderColor: "#ffffff",
+                        pointBorderWidth: 2,
+                        pointRadius: 5,
+                        pointHoverRadius: 7,
+                    },
+                    {
+                        type: "line" as const,
+                        label: "Documentos Exitosos (Docs)",
                         data: docsData,
-                        borderColor: "#f59e0b",
+                        borderColor: "#eab308",
+                        backgroundColor: "transparent",
+                        borderWidth: 1.5,
+                        borderDash: [3, 3],
+                        tension: 0.3,
+                        fill: false,
+                        pointBackgroundColor: "#eab308",
+                        pointBorderColor: "#ffffff",
+                        pointBorderWidth: 1.5,
+                        pointRadius: 4,
+                        pointHoverRadius: 6,
+                    },
+                    {
+                        type: "line" as const,
+                        label: "Devoluciones (Dev)",
+                        data: devsData,
+                        borderColor: "#fb7185",
+                        backgroundColor: "transparent",
+                        borderWidth: 1.5,
+                        borderDash: [2, 2],
+                        tension: 0.3,
+                        fill: false,
+                        pointBackgroundColor: "#fb7185",
+                        pointBorderColor: "#ffffff",
+                        pointBorderWidth: 1.5,
+                        pointRadius: 3.5,
+                        pointHoverRadius: 5.5,
+                    },
+                    {
+                        type: "line" as const,
+                        label: "Recepción Compras (Rec)",
+                        data: recepData,
+                        borderColor: "#a855f7",
+                        backgroundColor: "rgba(168, 85, 247, 0.08)",
+                        borderWidth: 2.5,
+                        tension: 0.3,
+                        fill: false,
+                        pointBackgroundColor: "#a855f7",
+                        pointBorderColor: "#ffffff",
+                        pointBorderWidth: 2,
+                        pointRadius: 4.5,
+                        pointHoverRadius: 6.5,
+                    },
+                    {
+                        type: "line" as const,
+                        label: "Ajuste Entrada (Aent)",
+                        data: aentData,
+                        borderColor: "#f97316",
                         backgroundColor: "transparent",
                         borderWidth: 2,
                         borderDash: [5, 4],
                         tension: 0.3,
                         fill: false,
-                        pointBackgroundColor: "#f59e0b",
+                        pointBackgroundColor: "#f97316",
+                        pointBorderColor: "#ffffff",
+                        pointBorderWidth: 2,
+                        pointRadius: 4.5,
+                        pointHoverRadius: 6.5,
+                    },
+                    {
+                        type: "line" as const,
+                        label: "Ajuste Salida (Asal)",
+                        data: asalData,
+                        borderColor: "#ef4444",
+                        backgroundColor: "transparent",
+                        borderWidth: 2,
+                        borderDash: [5, 4],
+                        tension: 0.3,
+                        fill: false,
+                        pointBackgroundColor: "#ef4444",
                         pointBorderColor: "#ffffff",
                         pointBorderWidth: 2,
                         pointRadius: 4.5,
@@ -736,15 +931,21 @@
                         padding: 12,
                         cornerRadius: 12,
                         callbacks: {
+                            label: function (context) {
+                                const label = context.dataset.label || "";
+                                const val = Number(
+                                    context.parsed.y || 0,
+                                ).toLocaleString();
+                                return ` ${label} : ${val}`;
+                            },
                             afterBody: function (context) {
                                 const idx = context[0].dataIndex;
                                 const item = historyData[idx];
                                 if (!item) return "";
                                 const lines: string[] = [];
-                                if (item.cant_devuelta > 0) {
-                                    lines.push(`• Unidades Devueltas: -${item.cant_devuelta.toLocaleString()}`);
-                                }
-                                lines.push(`• Facturas: ${item.docs_facturados} | Dev. Docs: ${item.docs_devueltos}`);
+                                lines.push(
+                                    `• Facturas: ${item.docs_facturados} | Dev. Docs: ${item.docs_devueltos}`,
+                                );
                                 return lines.join("\n");
                             },
                         },
@@ -963,22 +1164,38 @@
         </div>
     {:else}
         <!-- ESCALA DE CALOR: 4 CARDS DE ESTADO DE STOCK (ROJO, NARANJA, AMARILLO, VERDE) -->
-        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">
+        <div
+            class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5"
+        >
             <!-- 1. ROJO: SIN STOCK -->
             <div
-                class="bg-surface-raised border transition-all rounded-3xl p-5 relative overflow-hidden group cursor-pointer {selectedAlertStatus === 'sin_stock' ? 'border-red-500 ring-2 ring-red-500/20 bg-red-500/10' : 'border-border-subtle hover:border-red-500/40'}"
-                onclick={() => selectedAlertStatus = selectedAlertStatus === 'sin_stock' ? '' : 'sin_stock'}
+                class="bg-surface-raised border transition-all rounded-3xl p-5 relative overflow-hidden group cursor-pointer {selectedAlertStatus ===
+                'sin_stock'
+                    ? 'border-red-500 ring-2 ring-red-500/20 bg-red-500/10'
+                    : 'border-border-subtle hover:border-red-500/40'}"
+                onclick={() =>
+                    (selectedAlertStatus =
+                        selectedAlertStatus === "sin_stock" ? "" : "sin_stock")}
                 title="Filtrar por artículos sin stock"
             >
                 <div
                     class="absolute right-0 top-0 w-28 h-28 bg-red-500/5 rounded-full blur-2xl group-hover:bg-red-500/10 transition-colors"
                 ></div>
                 <div class="flex items-center justify-between mb-3">
-                    <div class="p-2 rounded-xl bg-red-500/10 text-red-700 dark:text-red-400 border border-red-500/20">
+                    <div
+                        class="p-2 rounded-xl bg-red-500/10 text-red-700 dark:text-red-400 border border-red-500/20"
+                    >
                         <AlertTriangle size={20} />
                     </div>
-                    <span class="text-[10px] font-black uppercase px-2 py-0.5 rounded-full {selectedAlertStatus === 'sin_stock' ? 'bg-red-600 text-white' : 'bg-red-500/10 text-red-700 dark:text-red-400 border border-red-500/20'}">
-                        {selectedAlertStatus === 'sin_stock' ? 'Filtrando' : 'SDR = 0'}
+                    <span
+                        class="text-[10px] font-black uppercase px-2 py-0.5 rounded-full {selectedAlertStatus ===
+                        'sin_stock'
+                            ? 'bg-red-600 text-white'
+                            : 'bg-red-500/10 text-red-700 dark:text-red-400 border border-red-500/20'}"
+                    >
+                        {selectedAlertStatus === "sin_stock"
+                            ? "Filtrando"
+                            : "SDR = 0"}
                     </span>
                 </div>
                 <p
@@ -986,7 +1203,9 @@
                 >
                     Sin Stock
                 </p>
-                <p class="text-2xl sm:text-3xl font-black text-red-700 dark:text-red-400">
+                <p
+                    class="text-2xl sm:text-3xl font-black text-red-700 dark:text-red-400"
+                >
                     {kpis.sin_stock.toLocaleString()}
                 </p>
                 <p class="text-[10px] text-text-muted mt-1.5 line-clamp-1">
@@ -996,19 +1215,33 @@
 
             <!-- 2. NARANJA: STOCK QUEBRADO -->
             <div
-                class="bg-surface-raised border transition-all rounded-3xl p-5 relative overflow-hidden group cursor-pointer {selectedAlertStatus === 'quebrado' ? 'border-orange-500 ring-2 ring-orange-500/20 bg-orange-500/10' : 'border-border-subtle hover:border-orange-500/40'}"
-                onclick={() => selectedAlertStatus = selectedAlertStatus === 'quebrado' ? '' : 'quebrado'}
+                class="bg-surface-raised border transition-all rounded-3xl p-5 relative overflow-hidden group cursor-pointer {selectedAlertStatus ===
+                'quebrado'
+                    ? 'border-orange-500 ring-2 ring-orange-500/20 bg-orange-500/10'
+                    : 'border-border-subtle hover:border-orange-500/40'}"
+                onclick={() =>
+                    (selectedAlertStatus =
+                        selectedAlertStatus === "quebrado" ? "" : "quebrado")}
                 title="Filtrar por artículos con stock quebrado"
             >
                 <div
                     class="absolute right-0 top-0 w-28 h-28 bg-orange-500/5 rounded-full blur-2xl group-hover:bg-orange-500/10 transition-colors"
                 ></div>
                 <div class="flex items-center justify-between mb-3">
-                    <div class="p-2 rounded-xl bg-orange-500/10 text-orange-700 dark:text-orange-400 border border-orange-500/20">
+                    <div
+                        class="p-2 rounded-xl bg-orange-500/10 text-orange-700 dark:text-orange-400 border border-orange-500/20"
+                    >
                         <AlertTriangle size={20} />
                     </div>
-                    <span class="text-[10px] font-black uppercase px-2 py-0.5 rounded-full {selectedAlertStatus === 'quebrado' ? 'bg-orange-600 text-white' : 'bg-orange-500/10 text-orange-700 dark:text-orange-400 border border-orange-500/20'}">
-                        {selectedAlertStatus === 'quebrado' ? 'Filtrando' : 'SDR ≤ ROP'}
+                    <span
+                        class="text-[10px] font-black uppercase px-2 py-0.5 rounded-full {selectedAlertStatus ===
+                        'quebrado'
+                            ? 'bg-orange-600 text-white'
+                            : 'bg-orange-500/10 text-orange-700 dark:text-orange-400 border border-orange-500/20'}"
+                    >
+                        {selectedAlertStatus === "quebrado"
+                            ? "Filtrando"
+                            : "SDR ≤ ROP"}
                     </span>
                 </div>
                 <p
@@ -1016,7 +1249,9 @@
                 >
                     Stock Quebrado
                 </p>
-                <p class="text-2xl sm:text-3xl font-black text-orange-700 dark:text-orange-400">
+                <p
+                    class="text-2xl sm:text-3xl font-black text-orange-700 dark:text-orange-400"
+                >
                     {kpis.quebrado.toLocaleString()}
                 </p>
                 <p class="text-[10px] text-text-muted mt-1.5 line-clamp-1">
@@ -1026,19 +1261,33 @@
 
             <!-- 3. AMARILLO: RUPTURA INMINENTE -->
             <div
-                class="bg-surface-raised border transition-all rounded-3xl p-5 relative overflow-hidden group cursor-pointer {selectedAlertStatus === 'ruptura' ? 'border-amber-500 ring-2 ring-amber-500/20 bg-amber-500/10' : 'border-border-subtle hover:border-amber-500/40'}"
-                onclick={() => selectedAlertStatus = selectedAlertStatus === 'ruptura' ? '' : 'ruptura'}
+                class="bg-surface-raised border transition-all rounded-3xl p-5 relative overflow-hidden group cursor-pointer {selectedAlertStatus ===
+                'ruptura'
+                    ? 'border-amber-500 ring-2 ring-amber-500/20 bg-amber-500/10'
+                    : 'border-border-subtle hover:border-amber-500/40'}"
+                onclick={() =>
+                    (selectedAlertStatus =
+                        selectedAlertStatus === "ruptura" ? "" : "ruptura")}
                 title="Filtrar por artículos con ruptura inminente"
             >
                 <div
                     class="absolute right-0 top-0 w-28 h-28 bg-amber-500/5 rounded-full blur-2xl group-hover:bg-amber-500/10 transition-colors"
                 ></div>
                 <div class="flex items-center justify-between mb-3">
-                    <div class="p-2 rounded-xl bg-amber-500/15 text-amber-800 dark:text-yellow-300 border border-amber-500/30">
+                    <div
+                        class="p-2 rounded-xl bg-amber-500/15 text-amber-800 dark:text-yellow-300 border border-amber-500/30"
+                    >
                         <Activity size={20} />
                     </div>
-                    <span class="text-[10px] font-black uppercase px-2 py-0.5 rounded-full {selectedAlertStatus === 'ruptura' ? 'bg-amber-600 text-white' : 'bg-amber-500/15 text-amber-900 dark:text-yellow-300 border border-amber-500/30'}">
-                        {selectedAlertStatus === 'ruptura' ? 'Filtrando' : 'SDR ≤ ROP+SS'}
+                    <span
+                        class="text-[10px] font-black uppercase px-2 py-0.5 rounded-full {selectedAlertStatus ===
+                        'ruptura'
+                            ? 'bg-amber-600 text-white'
+                            : 'bg-amber-500/15 text-amber-900 dark:text-yellow-300 border border-amber-500/30'}"
+                    >
+                        {selectedAlertStatus === "ruptura"
+                            ? "Filtrando"
+                            : "SDR ≤ ROP+SS"}
                     </span>
                 </div>
                 <p
@@ -1046,7 +1295,9 @@
                 >
                     Ruptura Inminente
                 </p>
-                <p class="text-2xl sm:text-3xl font-black text-amber-800 dark:text-yellow-300">
+                <p
+                    class="text-2xl sm:text-3xl font-black text-amber-800 dark:text-yellow-300"
+                >
                     {kpis.ruptura.toLocaleString()}
                 </p>
                 <p class="text-[10px] text-text-muted mt-1.5 line-clamp-1">
@@ -1056,19 +1307,33 @@
 
             <!-- 4. VERDE: STOCK SALUDABLE -->
             <div
-                class="bg-surface-raised border transition-all rounded-3xl p-5 relative overflow-hidden group cursor-pointer {selectedAlertStatus === 'saludable' ? 'border-emerald-500 ring-2 ring-emerald-500/20 bg-emerald-500/10' : 'border-border-subtle hover:border-emerald-500/40'}"
-                onclick={() => selectedAlertStatus = selectedAlertStatus === 'saludable' ? '' : 'saludable'}
+                class="bg-surface-raised border transition-all rounded-3xl p-5 relative overflow-hidden group cursor-pointer {selectedAlertStatus ===
+                'saludable'
+                    ? 'border-emerald-500 ring-2 ring-emerald-500/20 bg-emerald-500/10'
+                    : 'border-border-subtle hover:border-emerald-500/40'}"
+                onclick={() =>
+                    (selectedAlertStatus =
+                        selectedAlertStatus === "saludable" ? "" : "saludable")}
                 title="Filtrar por artículos con stock saludable"
             >
                 <div
                     class="absolute right-0 top-0 w-28 h-28 bg-emerald-500/5 rounded-full blur-2xl group-hover:bg-emerald-500/10 transition-colors"
                 ></div>
                 <div class="flex items-center justify-between mb-3">
-                    <div class="p-2 rounded-xl bg-emerald-500/15 text-emerald-800 dark:text-emerald-300 border border-emerald-500/30">
+                    <div
+                        class="p-2 rounded-xl bg-emerald-500/15 text-emerald-800 dark:text-emerald-300 border border-emerald-500/30"
+                    >
                         <ShieldCheck size={20} />
                     </div>
-                    <span class="text-[10px] font-black uppercase px-2 py-0.5 rounded-full {selectedAlertStatus === 'saludable' ? 'bg-emerald-600 text-white' : 'bg-emerald-500/15 text-emerald-900 dark:text-emerald-300 border border-emerald-500/30'}">
-                        {selectedAlertStatus === 'saludable' ? 'Filtrando' : 'SDR > ROP+SS'}
+                    <span
+                        class="text-[10px] font-black uppercase px-2 py-0.5 rounded-full {selectedAlertStatus ===
+                        'saludable'
+                            ? 'bg-emerald-600 text-white'
+                            : 'bg-emerald-500/15 text-emerald-900 dark:text-emerald-300 border border-emerald-500/30'}"
+                    >
+                        {selectedAlertStatus === "saludable"
+                            ? "Filtrando"
+                            : "SDR > ROP+SS"}
                     </span>
                 </div>
                 <p
@@ -1076,7 +1341,9 @@
                 >
                     Stock Saludable
                 </p>
-                <p class="text-2xl sm:text-3xl font-black text-emerald-800 dark:text-emerald-300">
+                <p
+                    class="text-2xl sm:text-3xl font-black text-emerald-800 dark:text-emerald-300"
+                >
                     {kpis.saludable.toLocaleString()}
                 </p>
                 <p class="text-[10px] text-text-muted mt-1.5 line-clamp-1">
@@ -1119,12 +1386,12 @@
                                         <p
                                             class="text-[11px] text-text-muted leading-relaxed"
                                         >
-                                            <b>ABC:</b> Importancia por aporte
-                                            a ventas (A: 80%, B: 15%, C: 5%).<br
+                                            <b>ABC:</b> Importancia por aporte a
+                                            ventas (A: 80%, B: 15%, C: 5%).<br
                                             />
                                             <b>XYZ:</b> Predictibilidad de demanda
-                                            (X: Estable ≤20%, Y: Variable ≤60%,
-                                            Z: Impredecible >60%).
+                                            (X: Estable ≤20%, Y: Variable ≤60%, Z:
+                                            Impredecible >60%).
                                         </p>
                                         <div
                                             class="absolute bottom-full left-1/2 -translate-x-1/2 border-4 border-transparent border-b-border-subtle"
@@ -1179,8 +1446,8 @@
                                         >
                                             Fórmula: <b>(VPD × TR) + SS</b>.<br
                                             />
-                                            Alerta cuando SDR ≤ ROP (Requiere
-                                            reponer stock inmediatamente).
+                                            Alerta cuando SDR ≤ ROP (Requiere reponer
+                                            stock inmediatamente).
                                         </p>
                                         <div
                                             class="absolute bottom-full right-4 border-4 border-transparent border-b-border-subtle"
@@ -1312,7 +1579,9 @@
                                         {item.clase_conjunta}
                                     </span>
                                 </td>
-                                <td class="px-4 py-3.5 text-right font-mono text-sm font-black {alertInfo.class}">
+                                <td
+                                    class="px-4 py-3.5 text-right font-mono text-sm font-black {alertInfo.class}"
+                                >
                                     {formatUnitQty(item.sdr, item.co_uni)}
                                 </td>
                                 <td
@@ -1343,9 +1612,17 @@
                                 <td class="px-4 py-3.5 text-right">
                                     {#if cantReponer > 0}
                                         <span
-                                            class="inline-flex items-center gap-1 font-mono font-black text-xs px-2 py-0.5 rounded-lg border bg-transparent {item.sdr <= 0 ? 'border-red-500/40 text-red-600 dark:text-red-400' : (item.sdr <= item.rop ? 'border-orange-500/40 text-orange-600 dark:text-orange-400' : 'border-amber-500/40 dark:border-yellow-500/40 text-amber-700 dark:text-yellow-400')}"
+                                            class="inline-flex items-center gap-1 font-mono font-black text-xs px-2 py-0.5 rounded-lg border bg-transparent {item.sdr <=
+                                            0
+                                                ? 'border-red-500/40 text-red-600 dark:text-red-400'
+                                                : item.sdr <= item.rop
+                                                  ? 'border-orange-500/40 text-orange-600 dark:text-orange-400'
+                                                  : 'border-amber-500/40 dark:border-yellow-500/40 text-amber-700 dark:text-yellow-400'}"
                                         >
-                                            +{formatUnitQty(cantReponer, item.co_uni)}
+                                            +{formatUnitQty(
+                                                cantReponer,
+                                                item.co_uni,
+                                            )}
                                         </span>
                                     {:else}
                                         <span
@@ -1394,12 +1671,20 @@
 {#if detailModalOpen && selectedArticle}
     {@const cantReponer = getCantReponer(selectedArticle)}
     {@const costoInversion = cantReponer * (selectedArticle.costo_actual || 0)}
-    {@const demandaTR = Number((selectedArticle.vpd * selectedArticle.tr).toFixed(2))}
+    {@const demandaTR = Number(
+        (selectedArticle.vpd * selectedArticle.tr).toFixed(2),
+    )}
     {@const alertInfo = getAlertBadge(selectedArticle)}
     {@const isSinStock = selectedArticle.sdr <= 0}
-    {@const isQuebrado = selectedArticle.sdr > 0 && selectedArticle.sdr <= selectedArticle.rop}
-    {@const isRuptura = selectedArticle.sdr > selectedArticle.rop && selectedArticle.sdr <= (selectedArticle.rop + selectedArticle.ss)}
-    {@const isFrac = isFractionalUnit(selectedArticle.co_uni, selectedArticle.des_uni)}
+    {@const isQuebrado =
+        selectedArticle.sdr > 0 && selectedArticle.sdr <= selectedArticle.rop}
+    {@const isRuptura =
+        selectedArticle.sdr > selectedArticle.rop &&
+        selectedArticle.sdr <= selectedArticle.rop + selectedArticle.ss}
+    {@const isFrac = isFractionalUnit(
+        selectedArticle.co_uni,
+        selectedArticle.des_uni,
+    )}
     {@const unitLabel = getUnitLabel(selectedArticle)}
     {@const classInfo = classDescriptions[selectedArticle.clase_conjunta] || {
         label: "Clasificación Combinada",
@@ -1409,14 +1694,14 @@
 
     <!-- BACKDROP -->
     <div
-        class="fixed inset-0 z-[999] bg-black/80 backdrop-blur-sm flex items-center justify-center p-3 sm:p-5 md:p-8 animate-fade-in"
+        class="fixed inset-0 z-[999] bg-black/80 backdrop-blur-sm flex items-center justify-center p-0 sm:p-4 md:p-6 animate-fade-in"
         onclick={(e) => {
             if (e.target === e.currentTarget) closeArticleModal();
         }}
     >
-        <!-- MODAL CONTAINER (Abarca casi toda la pantalla) -->
+        <!-- MODAL CONTAINER (100% en teléfonos, 90% de pantalla en PC) -->
         <div
-            class="bg-surface-raised border border-border-subtle rounded-[28px] sm:rounded-[36px] shadow-2xl w-full max-w-7xl max-h-[92vh] flex flex-col overflow-hidden animate-scale-in"
+            class="bg-surface-raised border-0 sm:border border-border-subtle rounded-none sm:rounded-[32px] md:rounded-[36px] shadow-2xl w-full md:w-[90vw] md:max-w-[90vw] h-full sm:h-auto sm:max-h-[94vh] flex flex-col overflow-hidden animate-scale-in"
             role="dialog"
             aria-modal="true"
         >
@@ -1444,7 +1729,9 @@
                         <span
                             class="text-xs font-bold text-text-muted px-2.5 py-1 rounded-xl bg-surface-base border border-border-subtle"
                         >
-                            Unidad: <b>{unitLabel}</b> ({isFrac ? 'Fraccionable' : 'Entera / Discreta'})
+                            Unidad: <b>{unitLabel}</b> ({isFrac
+                                ? "Fraccionable"
+                                : "Entera / Discreta"})
                         </span>
                         {#if selectedArticle.costo_actual}
                             <span
@@ -1514,7 +1801,10 @@
                                     >SDR</span
                                 >
                                 <span class="text-xs font-black text-text-base"
-                                    >{formatUnitQty(selectedArticle.sdr, selectedArticle.co_uni)}</span
+                                    >{formatUnitQty(
+                                        selectedArticle.sdr,
+                                        selectedArticle.co_uni,
+                                    )}</span
                                 >
                             </div>
                             <div class="p-2 rounded-xl bg-orange-500/10">
@@ -1523,7 +1813,10 @@
                                     >ROP</span
                                 >
                                 <span class="text-xs font-black text-text-base"
-                                    >{formatUnitQty(selectedArticle.rop, selectedArticle.co_uni)}</span
+                                    >{formatUnitQty(
+                                        selectedArticle.rop,
+                                        selectedArticle.co_uni,
+                                    )}</span
                                 >
                             </div>
                             <div class="p-2 rounded-xl bg-yellow-500/10">
@@ -1532,7 +1825,10 @@
                                     >Dem. TR</span
                                 >
                                 <span class="text-xs font-black text-text-base"
-                                    >{formatUnitQty(demandaTR, selectedArticle.co_uni)}</span
+                                    >{formatUnitQty(
+                                        demandaTR,
+                                        selectedArticle.co_uni,
+                                    )}</span
                                 >
                             </div>
                         </div>
@@ -1553,7 +1849,10 @@
                                     Ventas Período
                                 </p>
                                 <p class="text-lg font-black text-text-base">
-                                    {formatUnitQty(selectedArticle.ventas_netas, selectedArticle.co_uni)}
+                                    {formatUnitQty(
+                                        selectedArticle.ventas_netas,
+                                        selectedArticle.co_uni,
+                                    )}
                                 </p>
                                 <p
                                     class="text-[10px] text-text-muted font-medium"
@@ -1604,7 +1903,10 @@
                                     Stock Seguridad (SS)
                                 </p>
                                 <p class="text-lg font-black text-text-base">
-                                    {formatUnitQty(selectedArticle.ss, selectedArticle.co_uni)}
+                                    {formatUnitQty(
+                                        selectedArticle.ss,
+                                        selectedArticle.co_uni,
+                                    )}
                                 </p>
                                 <p
                                     class="text-[10px] text-text-muted font-medium"
@@ -1621,7 +1923,10 @@
                                     Punto Reorden (ROP)
                                 </p>
                                 <p class="text-lg font-black text-orange-500">
-                                    {formatUnitQty(selectedArticle.rop, selectedArticle.co_uni)}
+                                    {formatUnitQty(
+                                        selectedArticle.rop,
+                                        selectedArticle.co_uni,
+                                    )}
                                 </p>
                                 <p
                                     class="text-[10px] text-text-muted font-medium"
@@ -1640,7 +1945,10 @@
                                 <p
                                     class="text-lg font-black {alertInfo.class} border-0 p-0"
                                 >
-                                    {formatUnitQty(selectedArticle.sdr, selectedArticle.co_uni)}
+                                    {formatUnitQty(
+                                        selectedArticle.sdr,
+                                        selectedArticle.co_uni,
+                                    )}
                                 </p>
                                 <p
                                     class="text-[10px] text-text-muted font-medium"
@@ -1679,11 +1987,11 @@
                         <div
                             class="p-6 rounded-3xl border transition-all {isSinStock
                                 ? 'bg-red-500/10 dark:bg-red-500/15 border-red-500/30'
-                                : (isQuebrado
-                                    ? 'bg-orange-500/10 dark:bg-orange-500/15 border-orange-500/30'
-                                    : (isRuptura
-                                        ? 'bg-amber-500/15 dark:bg-yellow-500/15 border-amber-500/40 dark:border-yellow-500/30'
-                                        : 'bg-emerald-500/15 dark:bg-emerald-500/15 border-emerald-500/40 dark:border-emerald-500/30'))}"
+                                : isQuebrado
+                                  ? 'bg-orange-500/10 dark:bg-orange-500/15 border-orange-500/30'
+                                  : isRuptura
+                                    ? 'bg-amber-500/15 dark:bg-yellow-500/15 border-amber-500/40 dark:border-yellow-500/30'
+                                    : 'bg-emerald-500/15 dark:bg-emerald-500/15 border-emerald-500/40 dark:border-emerald-500/30'}"
                         >
                             <div
                                 class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4"
@@ -1691,58 +1999,92 @@
                                 <div
                                     class="flex items-center gap-2.5 font-bold {isSinStock
                                         ? 'text-red-700 dark:text-red-400'
-                                        : (isQuebrado
-                                            ? 'text-orange-700 dark:text-orange-400'
-                                            : (isRuptura
-                                                ? 'text-amber-800 dark:text-yellow-300'
-                                                : 'text-emerald-800 dark:text-emerald-300'))}"
+                                        : isQuebrado
+                                          ? 'text-orange-700 dark:text-orange-400'
+                                          : isRuptura
+                                            ? 'text-amber-800 dark:text-yellow-300'
+                                            : 'text-emerald-800 dark:text-emerald-300'}"
                                 >
                                     {#if isSinStock}
-                                        <div class="p-2 rounded-xl bg-red-500/15 text-red-700 dark:text-red-400 border border-red-500/20">
+                                        <div
+                                            class="p-2 rounded-xl bg-red-500/15 text-red-700 dark:text-red-400 border border-red-500/20"
+                                        >
                                             <AlertTriangle size={20} />
                                         </div>
                                         <div>
-                                            <h4 class="text-sm font-black uppercase tracking-wider">
-                                                Alerta Crítica: Sin Stock (SDR = 0)
+                                            <h4
+                                                class="text-sm font-black uppercase tracking-wider"
+                                            >
+                                                Alerta Crítica: Sin Stock (SDR =
+                                                0)
                                             </h4>
-                                            <p class="text-xs text-text-muted font-normal">
-                                                Inventario en cero. Se requiere reabastecimiento urgente para no perder ventas.
+                                            <p
+                                                class="text-xs text-text-muted font-normal"
+                                            >
+                                                Inventario en cero. Se requiere
+                                                reabastecimiento urgente para no
+                                                perder ventas.
                                             </p>
                                         </div>
                                     {:else if isQuebrado}
-                                        <div class="p-2 rounded-xl bg-orange-500/15 text-orange-700 dark:text-orange-400 border border-orange-500/20">
+                                        <div
+                                            class="p-2 rounded-xl bg-orange-500/15 text-orange-700 dark:text-orange-400 border border-orange-500/20"
+                                        >
                                             <AlertTriangle size={20} />
                                         </div>
                                         <div>
-                                            <h4 class="text-sm font-black uppercase tracking-wider">
-                                                Alerta: Stock Quebrado (SDR ≤ ROP)
+                                            <h4
+                                                class="text-sm font-black uppercase tracking-wider"
+                                            >
+                                                Alerta: Stock Quebrado (SDR ≤
+                                                ROP)
                                             </h4>
-                                            <p class="text-xs text-text-muted font-normal">
-                                                El stock actual cayó por debajo del Punto de Reorden. Emitir orden de compra.
+                                            <p
+                                                class="text-xs text-text-muted font-normal"
+                                            >
+                                                El stock actual cayó por debajo
+                                                del Punto de Reorden. Emitir
+                                                orden de compra.
                                             </p>
                                         </div>
                                     {:else if isRuptura}
-                                        <div class="p-2 rounded-xl bg-amber-500/20 text-amber-800 dark:text-yellow-300 border border-amber-500/30">
+                                        <div
+                                            class="p-2 rounded-xl bg-amber-500/20 text-amber-800 dark:text-yellow-300 border border-amber-500/30"
+                                        >
                                             <Activity size={20} />
                                         </div>
                                         <div>
-                                            <h4 class="text-sm font-black uppercase tracking-wider">
-                                                Alerta Preventiva: Ruptura Inminente (SDR ≤ ROP+SS)
+                                            <h4
+                                                class="text-sm font-black uppercase tracking-wider"
+                                            >
+                                                Alerta Preventiva: Ruptura
+                                                Inminente (SDR ≤ ROP+SS)
                                             </h4>
-                                            <p class="text-xs text-text-muted font-normal">
-                                                El inventario está consumiendo el colchón de seguridad.
+                                            <p
+                                                class="text-xs text-text-muted font-normal"
+                                            >
+                                                El inventario está consumiendo
+                                                el colchón de seguridad.
                                             </p>
                                         </div>
                                     {:else}
-                                        <div class="p-2 rounded-xl bg-emerald-500/20 text-emerald-800 dark:text-emerald-300 border border-emerald-500/30">
+                                        <div
+                                            class="p-2 rounded-xl bg-emerald-500/20 text-emerald-800 dark:text-emerald-300 border border-emerald-500/30"
+                                        >
                                             <ShieldCheck size={20} />
                                         </div>
                                         <div>
-                                            <h4 class="text-sm font-black uppercase tracking-wider">
+                                            <h4
+                                                class="text-sm font-black uppercase tracking-wider"
+                                            >
                                                 Inventario Óptimo y Seguro
                                             </h4>
-                                            <p class="text-xs text-text-muted font-normal">
-                                                El stock actual cubre holgadamente la demanda esperada.
+                                            <p
+                                                class="text-xs text-text-muted font-normal"
+                                            >
+                                                El stock actual cubre
+                                                holgadamente la demanda
+                                                esperada.
                                             </p>
                                         </div>
                                     {/if}
@@ -1750,19 +2092,19 @@
                                 <span
                                     class="text-xs font-black px-3 py-1 rounded-xl uppercase tracking-wider self-start sm:self-auto {isSinStock
                                         ? 'bg-red-500/15 text-red-800 dark:text-red-300 border border-red-500/30'
-                                        : (isQuebrado
-                                            ? 'bg-orange-500/15 text-orange-800 dark:text-orange-300 border border-orange-500/30'
-                                            : (isRuptura
-                                                ? 'bg-amber-500/20 text-amber-900 dark:text-yellow-300 border border-amber-500/40'
-                                                : 'bg-emerald-500/20 text-emerald-900 dark:text-emerald-300 border border-emerald-500/40'))}"
+                                        : isQuebrado
+                                          ? 'bg-orange-500/15 text-orange-800 dark:text-orange-300 border border-orange-500/30'
+                                          : isRuptura
+                                            ? 'bg-amber-500/20 text-amber-900 dark:text-yellow-300 border border-amber-500/40'
+                                            : 'bg-emerald-500/20 text-emerald-900 dark:text-emerald-300 border border-emerald-500/40'}"
                                 >
                                     {isSinStock
                                         ? "Reabastecimiento Urgente"
-                                        : (isQuebrado
-                                            ? "Stock Quebrado"
-                                            : (isRuptura
-                                                ? "Ruptura Inminente"
-                                                : "Stock Saludable"))}
+                                        : isQuebrado
+                                          ? "Stock Quebrado"
+                                          : isRuptura
+                                            ? "Ruptura Inminente"
+                                            : "Stock Saludable"}
                                 </span>
                             </div>
 
@@ -1778,10 +2120,17 @@
                                     <p
                                         class="text-3xl font-black {cantReponer >
                                         0
-                                            ? (isSinStock ? 'text-red-700 dark:text-red-400' : (isQuebrado ? 'text-orange-700 dark:text-orange-400' : 'text-amber-800 dark:text-yellow-300'))
+                                            ? isSinStock
+                                                ? 'text-red-700 dark:text-red-400'
+                                                : isQuebrado
+                                                  ? 'text-orange-700 dark:text-orange-400'
+                                                  : 'text-amber-800 dark:text-yellow-300'
                                             : 'text-emerald-800 dark:text-emerald-400'}"
                                     >
-                                        {formatUnitQty(cantReponer, selectedArticle.co_uni)}
+                                        {formatUnitQty(
+                                            cantReponer,
+                                            selectedArticle.co_uni,
+                                        )}
                                         <span
                                             class="text-sm font-bold text-text-muted"
                                             >{unitLabel}</span
@@ -1805,19 +2154,80 @@
                             <p class="text-xs text-text-muted leading-relaxed">
                                 {#if cantReponer > 0}
                                     {#if isSinStock}
-                                        El inventario actual es <b>0 {unitLabel}</b> a pesar de registrar una venta diaria promedio de <b>{selectedArticle.vpd.toFixed(2)} {unitLabel}/día</b>. Pedir <b>{formatUnitQty(cantReponer, selectedArticle)} {unitLabel}</b> ({isFrac ? 'fraccionable por unidad ' + unitLabel : 'mínimo indivisible por unidad ' + unitLabel}) cubrirá la demanda proyectada de <b>{demandaTR} {unitLabel}</b> durante los {selectedArticle.tr.toFixed(1)} días de reposición y evitará pérdidas de ventas.
+                                        El inventario actual es <b
+                                            >0 {unitLabel}</b
+                                        >
+                                        a pesar de registrar una venta diaria
+                                        promedio de
+                                        <b
+                                            >{selectedArticle.vpd.toFixed(2)}
+                                            {unitLabel}/día</b
+                                        >. Pedir
+                                        <b
+                                            >{formatUnitQty(
+                                                cantReponer,
+                                                selectedArticle,
+                                            )}
+                                            {unitLabel}</b
+                                        >
+                                        ({isFrac
+                                            ? "fraccionable por unidad " +
+                                              unitLabel
+                                            : "mínimo indivisible por unidad " +
+                                              unitLabel}) cubrirá la demanda
+                                        proyectada de
+                                        <b>{demandaTR} {unitLabel}</b>
+                                        durante los {selectedArticle.tr.toFixed(
+                                            1,
+                                        )} días de reposición y evitará pérdidas
+                                        de ventas.
                                     {:else}
-                                        Pedir <b>{formatUnitQty(cantReponer, selectedArticle)} {unitLabel}</b> cubrirá los <b>{demandaTR} {unitLabel}</b> de demanda proyectada durante el tiempo de reposición del proveedor ({selectedArticle.tr.toFixed(1)} días) y garantizará mantener el colchón de seguridad de <b>{formatUnitQty(selectedArticle.ss, selectedArticle)} {unitLabel}</b> (<i>SS</i>).
+                                        Pedir <b
+                                            >{formatUnitQty(
+                                                cantReponer,
+                                                selectedArticle,
+                                            )}
+                                            {unitLabel}</b
+                                        >
+                                        cubrirá los
+                                        <b>{demandaTR} {unitLabel}</b>
+                                        de demanda proyectada durante el tiempo
+                                        de reposición del proveedor ({selectedArticle.tr.toFixed(
+                                            1,
+                                        )} días) y garantizará mantener el colchón
+                                        de seguridad de
+                                        <b
+                                            >{formatUnitQty(
+                                                selectedArticle.ss,
+                                                selectedArticle,
+                                            )}
+                                            {unitLabel}</b
+                                        >
+                                        (<i>SS</i>).
                                     {/if}
                                 {:else}
-                                    El stock actual ({formatUnitQty(selectedArticle.sdr, selectedArticle)} {unitLabel}) cubre holgadamente el Punto de Reorden ({formatUnitQty(selectedArticle.rop, selectedArticle)} {unitLabel}) y el colchón de seguridad ({formatUnitQty(selectedArticle.ss, selectedArticle)} {unitLabel}). No se requiere emitir pedido en este momento.
+                                    El stock actual ({formatUnitQty(
+                                        selectedArticle.sdr,
+                                        selectedArticle,
+                                    )}
+                                    {unitLabel}) cubre holgadamente el Punto de
+                                    Reorden ({formatUnitQty(
+                                        selectedArticle.rop,
+                                        selectedArticle,
+                                    )}
+                                    {unitLabel}) y el colchón de seguridad ({formatUnitQty(
+                                        selectedArticle.ss,
+                                        selectedArticle,
+                                    )}
+                                    {unitLabel}). No se requiere emitir pedido
+                                    en este momento.
                                 {/if}
                             </p>
                         </div>
                     </div>
                 </div>
 
-                <!-- SECCIÓN 2: HISTÓRICO DE VENTAS (ÚLTIMO AÑO: VENTAS REALES, STOCK INICIAL Y DOCUMENTOS) -->
+                <!-- SECCIÓN 2: HISTÓRICO DE VENTAS, RECEPCIONES, AJUSTES, STOCK INICIAL Y DOCUMENTOS -->
                 <div
                     class="bg-surface-base border border-border-subtle rounded-3xl p-6 sm:p-8 space-y-6 shadow-sm"
                 >
@@ -1830,39 +2240,87 @@
                                 <h3
                                     class="text-lg font-black text-text-base tracking-tight"
                                 >
-                                    Histórico de Ventas, Stock Inicial y Documentos (Último Año)
+                                    Histórico de Ventas, Recepción de Compras,
+                                    Ajustes, Stock Inicial y Documentos (Último
+                                    Año)
                                 </h3>
                             </div>
                             <p class="text-xs text-text-muted">
-                                Evolución mensual de <b class="text-emerald-500">Unidades Vendidas</b> (neto de devoluciones), <b class="text-blue-500">Stock Inicial de Cada Mes</b> y <b class="text-amber-500">Documentos Exitosos</b>.
+                                Evolución mensual de <b class="text-emerald-500"
+                                    >Ventas</b
+                                >, <b class="text-purple-500">Recepciones</b>,
+                                <b class="text-orange-500">Ajustes Entrada</b>,
+                                <b class="text-red-500">Ajustes Salida</b>,
+                                <b class="text-blue-500">Stock Inicial</b>
+                                y <b class="text-amber-500">Documentos</b>.
                             </p>
                         </div>
 
                         <!-- MÉTRICAS RESUMEN HISTÓRICO -->
-                        <div class="flex items-center flex-wrap gap-2.5">
+                        <div class="flex items-center flex-wrap gap-2">
                             <div
-                                class="px-3.5 py-1.5 rounded-2xl bg-surface-raised border border-border-subtle flex items-center gap-2"
+                                class="px-3 py-1 rounded-2xl bg-surface-raised border border-border-subtle flex items-center gap-1.5"
                             >
-                                <span class="text-[10px] font-bold uppercase text-text-muted">Total Ventas 12m:</span>
-                                <span class="text-sm font-black text-emerald-500">
-                                    {historySummary.total.toLocaleString()} unds
+                                <span
+                                    class="text-[10px] font-bold uppercase text-text-muted"
+                                    >Ventas:</span
+                                >
+                                <span
+                                    class="text-xs font-black text-emerald-500"
+                                >
+                                    {historySummary.total.toLocaleString()}
                                 </span>
                             </div>
                             <div
-                                class="px-3.5 py-1.5 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center gap-1.5 text-amber-600 dark:text-amber-400"
+                                class="px-3 py-1 rounded-2xl bg-purple-500/10 border border-purple-500/20 flex items-center gap-1.5 text-purple-700 dark:text-purple-400"
                             >
-                                <FileText size={14} />
-                                <span class="text-[10px] font-bold uppercase">Total Docs:</span>
+                                <span class="text-[10px] font-bold uppercase"
+                                    >Recep:</span
+                                >
                                 <span class="text-xs font-black">
-                                    {historySummary.totalDocs.toLocaleString()} docs
+                                    {historySummary.totalRecep.toLocaleString()}
+                                </span>
+                            </div>
+                            <div
+                                class="px-3 py-1 rounded-2xl bg-orange-500/10 border border-orange-500/20 flex items-center gap-1.5 text-orange-700 dark:text-orange-400"
+                            >
+                                <span class="text-[10px] font-bold uppercase"
+                                    >A.Ent:</span
+                                >
+                                <span class="text-xs font-black">
+                                    {historySummary.totalAent.toLocaleString()}
+                                </span>
+                            </div>
+                            <div
+                                class="px-3 py-1 rounded-2xl bg-red-500/10 border border-red-500/20 flex items-center gap-1.5 text-red-700 dark:text-red-400"
+                            >
+                                <span class="text-[10px] font-bold uppercase"
+                                    >A.Sal:</span
+                                >
+                                <span class="text-xs font-black">
+                                    {historySummary.totalAsal.toLocaleString()}
+                                </span>
+                            </div>
+                            <div
+                                class="px-3 py-1 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center gap-1.5 text-amber-600 dark:text-amber-400"
+                            >
+                                <FileText size={13} />
+                                <span class="text-[10px] font-bold uppercase"
+                                    >Docs:</span
+                                >
+                                <span class="text-xs font-black">
+                                    {historySummary.totalDocs.toLocaleString()}
                                 </span>
                             </div>
                             {#if historySummary.maxMonth}
                                 <div
-                                    class="px-3.5 py-1.5 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400"
+                                    class="px-3 py-1 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 flex items-center gap-1 text-emerald-600 dark:text-emerald-400"
                                 >
-                                    <ArrowUpRight size={14} />
-                                    <span class="text-[10px] font-bold uppercase">Pico Venta:</span>
+                                    <ArrowUpRight size={13} />
+                                    <span
+                                        class="text-[10px] font-bold uppercase"
+                                        >Pico:</span
+                                    >
                                     <span class="text-xs font-black">
                                         {historySummary.max.toLocaleString()} ({historySummary.maxMonth})
                                     </span>
@@ -1876,8 +2334,14 @@
                         <div
                             class="w-full h-72 flex flex-col items-center justify-center gap-3 text-text-muted opacity-70"
                         >
-                            <RefreshCw size={28} class="animate-spin text-brand-500" />
-                            <p class="text-xs font-bold">Reconstruyendo histórico y movimientos de stock en Profit...</p>
+                            <RefreshCw
+                                size={28}
+                                class="animate-spin text-brand-500"
+                            />
+                            <p class="text-xs font-bold">
+                                Reconstruyendo histórico y movimientos de stock
+                                en Profit...
+                            </p>
                         </div>
                     {:else if historyError}
                         <div
@@ -1885,74 +2349,181 @@
                         >
                             <div class="flex items-center gap-3">
                                 <AlertTriangle size={20} />
-                                <span class="text-xs font-bold">{historyError}</span>
+                                <span class="text-xs font-bold"
+                                    >{historyError}</span
+                                >
                             </div>
                             <button
-                                onclick={() => fetchArticleHistory(selectedArticle.co_art)}
+                                onclick={() =>
+                                    fetchArticleHistory(selectedArticle.co_art)}
                                 class="px-4 py-1.5 rounded-xl bg-surface-raised border border-border-subtle text-xs font-black hover:bg-surface-soft transition-all cursor-pointer"
                             >
                                 Reintentar
                             </button>
                         </div>
                     {:else if historyData.length > 0}
-                        <div class="w-full h-72 sm:h-80 relative">
-                            <canvas bind:this={historyChartCanvas}></canvas>
+                        <!-- CONTENEDOR CON SCROLL HORIZONTAL RESPONSIVO EN MÓVIL -->
+                        <div
+                            class="w-full overflow-x-auto custom-scrollbar pb-2"
+                        >
+                            <div
+                                class="min-w-[680px] lg:min-w-full h-72 sm:h-80 relative"
+                            >
+                                <canvas bind:this={historyChartCanvas}></canvas>
+                            </div>
                         </div>
 
-                        <!-- DESGLOSE EN MINI-CHIPS DE LOS 12 MESES -->
-                        <div class="pt-4 border-t border-border-subtle/60 space-y-2">
+                        <!-- DESGLOSE EN MINI-CARDS ESTANDARIZADAS DE LOS 12 MESES -->
+                        <div
+                            class="pt-4 border-t border-border-subtle/60 space-y-2"
+                        >
                             <div class="flex items-center justify-between">
-                                <span class="text-xs font-black uppercase tracking-wider text-text-muted">
-                                    Detalle Mensual (Ventas / Stock Inicial / Documentos)
+                                <span
+                                    class="text-xs font-black uppercase tracking-wider text-text-muted"
+                                >
+                                    Detalle Mensual (Últimos 12 Meses)
+                                </span>
+                                <span
+                                    class="text-[10px] text-text-muted font-medium lg:hidden"
+                                >
+                                    ← Desliza para ver todos los meses →
                                 </span>
                             </div>
                             <div
-                                class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-12 gap-2"
+                                class="w-full overflow-x-auto custom-scrollbar pb-2"
                             >
-                                {#each historyData as m}
-                                    {@const isMax = m.mes_nombre === historySummary.maxMonth && historySummary.max > 0}
-                                    <div
-                                        class="p-2.5 rounded-2xl border text-center transition-all {isMax
-                                            ? 'bg-emerald-500/15 border-emerald-500/40 shadow-sm'
-                                            : 'bg-surface-raised border-border-subtle/70'}"
-                                    >
-                                        <span class="text-[10px] font-bold text-text-muted block truncate mb-1">
-                                            {m.mes_nombre}
-                                        </span>
-                                        <div class="space-y-0.5">
+                                <div
+                                    class="min-w-[880px] lg:min-w-full grid grid-cols-12 gap-2"
+                                >
+                                    {#each historyData as m}
+                                        {@const isMax =
+                                            m.mes_nombre ===
+                                                historySummary.maxMonth &&
+                                            historySummary.max > 0}
+                                        <div
+                                            class="p-2.5 rounded-2xl border transition-all {isMax
+                                                ? 'bg-emerald-500/15 border-emerald-500/40 shadow-sm'
+                                                : 'bg-surface-raised border-border-subtle/70'}"
+                                        >
                                             <span
-                                                class="text-xs font-black block text-emerald-600 dark:text-emerald-400"
-                                                title="Cantidad Real Vendida"
+                                                class="text-[11px] font-black text-text-base block truncate mb-1.5 pb-1 border-b border-border-subtle/50 text-center"
                                             >
-                                                {m.cant_real_vendida.toLocaleString()} <span class="text-[9px] font-normal text-text-muted">unds</span>
+                                                {m.mes_nombre}
                                             </span>
-                                            <span
-                                                class="text-[10px] font-bold block text-blue-500"
-                                                title="Stock Inicial Reconstruido"
+                                            <div
+                                                class="space-y-1 text-[10px] font-mono"
                                             >
-                                                Stk: {m.stock_inicial.toLocaleString()}
-                                            </span>
-                                            <span
-                                                class="text-[10px] font-bold block text-amber-500"
-                                                title="Documentos Exitosos"
-                                            >
-                                                {m.docs_exitosos} docs
-                                            </span>
+                                                <div
+                                                    class="flex items-center justify-between gap-1 text-blue-600 dark:text-blue-400 font-bold"
+                                                    title="Stock Inicial del Mes"
+                                                >
+                                                    <span
+                                                        class="text-text-muted font-semibold text-[9px]"
+                                                        >Stk :</span
+                                                    >
+                                                    <span
+                                                        >{m.stock_inicial.toLocaleString()}</span
+                                                    >
+                                                </div>
+                                                <div
+                                                    class="flex items-center justify-between gap-1 text-emerald-600 dark:text-emerald-400 font-bold"
+                                                    title="Ventas Reales"
+                                                >
+                                                    <span
+                                                        class="text-text-muted font-semibold text-[9px]"
+                                                        >Vta :</span
+                                                    >
+                                                    <span
+                                                        >{m.cant_real_vendida.toLocaleString()}</span
+                                                    >
+                                                </div>
+                                                <div
+                                                    class="flex items-center justify-between gap-1 {m.docs_exitosos >
+                                                    0
+                                                        ? 'text-amber-600 dark:text-amber-400 font-bold'
+                                                        : 'text-text-muted/60'}"
+                                                    title="Documentos Exitosos"
+                                                >
+                                                    <span
+                                                        class="text-text-muted font-semibold text-[9px]"
+                                                        >Docs :</span
+                                                    >
+                                                    <span
+                                                        >{m.docs_exitosos.toLocaleString()}</span
+                                                    >
+                                                </div>
+                                                <div
+                                                    class="flex items-center justify-between gap-1 {m.cant_devuelta >
+                                                    0
+                                                        ? 'text-rose-500 font-bold'
+                                                        : 'text-text-muted/60'}"
+                                                    title="Devoluciones de Clientes"
+                                                >
+                                                    <span
+                                                        class="text-text-muted font-semibold text-[9px]"
+                                                        >Dev :</span
+                                                    >
+                                                    <span
+                                                        >{m.cant_devuelta.toLocaleString()}</span
+                                                    >
+                                                </div>
+                                                <div
+                                                    class="flex items-center justify-between gap-1 {m.cant_recepcionada >
+                                                    0
+                                                        ? 'text-purple-600 dark:text-purple-400 font-bold'
+                                                        : 'text-text-muted/60'}"
+                                                    title="Recepción de Compras"
+                                                >
+                                                    <span
+                                                        class="text-text-muted font-semibold text-[9px]"
+                                                        >Rec :</span
+                                                    >
+                                                    <span
+                                                        >{m.cant_recepcionada.toLocaleString()}</span
+                                                    >
+                                                </div>
+                                                <div
+                                                    class="flex items-center justify-between gap-1 {m.cant_ajuste_entrada >
+                                                    0
+                                                        ? 'text-orange-600 dark:text-orange-400 font-bold'
+                                                        : 'text-text-muted/60'}"
+                                                    title="Ajustes de Entrada"
+                                                >
+                                                    <span
+                                                        class="text-text-muted font-semibold text-[9px]"
+                                                        >Aent :</span
+                                                    >
+                                                    <span
+                                                        >{m.cant_ajuste_entrada.toLocaleString()}</span
+                                                    >
+                                                </div>
+                                                <div
+                                                    class="flex items-center justify-between gap-1 {m.cant_ajuste_salida >
+                                                    0
+                                                        ? 'text-red-600 dark:text-red-400 font-bold'
+                                                        : 'text-text-muted/60'}"
+                                                    title="Ajustes de Salida"
+                                                >
+                                                    <span
+                                                        class="text-text-muted font-semibold text-[9px]"
+                                                        >Asal :</span
+                                                    >
+                                                    <span
+                                                        >{m.cant_ajuste_salida.toLocaleString()}</span
+                                                    >
+                                                </div>
+                                            </div>
                                         </div>
-                                        {#if m.cant_devuelta > 0}
-                                            <span class="text-[8px] font-mono font-bold text-red-500 block mt-0.5">
-                                                -{m.cant_devuelta} dev
-                                            </span>
-                                        {/if}
-                                    </div>
-                                {/each}
+                                    {/each}
+                                </div>
                             </div>
                         </div>
                     {:else}
                         <div
                             class="p-8 rounded-2xl bg-surface-raised text-center text-text-muted text-xs font-bold"
                         >
-                            No hay movimientos de venta registrados para este artículo en los últimos 12 meses.
+                            No hay movimientos de venta registrados para este
+                            artículo en los últimos 12 meses.
                         </div>
                     {/if}
                 </div>
