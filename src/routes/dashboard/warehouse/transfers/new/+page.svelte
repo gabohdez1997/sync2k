@@ -348,16 +348,45 @@
         toast.error('Debe incluir al menos un artículo en el traslado.');
         return;
       }
-      // Validar stock de todos los artículos antes de pasar al resumen final
-      for (const item of selectedItems) {
-        const stock = getItemStock(item, item.co_alma_source);
-        if (item.total_art > stock) {
-          toast.error(`La cantidad de "${item.art_des}" (${item.total_art}) excede el stock disponible en ${item.co_alma_source} (${stock})`);
-          return;
-        }
+      // Permitir pasar a la confirmación para revisar/corregir, alertando si hay stock insuficiente
+      const invalidCount = selectedItems.filter(i => {
+        const stock = getItemStock(i, i.co_alma_source);
+        return Number(i.total_art) > stock || Number(i.total_art) <= 0;
+      }).length;
+      if (invalidCount > 0) {
+        toast.warning(`Atención: Hay ${invalidCount} artículo(s) con cantidad superior al stock disponible. Por favor revísalos en el resumen.`);
       }
     }
     activeTab = step;
+  }
+
+  let invalidStockItems = $derived.by(() => {
+    return selectedItems.filter(item => {
+      const stock = getItemStock(item, item.co_alma_source);
+      return Number(item.total_art) > stock || Number(item.total_art) <= 0;
+    });
+  });
+
+  function autoFixStock() {
+    let fixed = 0;
+    for (const item of selectedItems) {
+      const stock = getItemStock(item, item.co_alma_source);
+      if (Number(item.total_art) > stock) {
+        item.total_art = stock > 0 ? stock : 0;
+        fixed++;
+      }
+    }
+    toast.success(`Se ajustaron las cantidades de ${fixed} artículo(s) al stock disponible.`);
+  }
+
+  function removeOutOfStockItems() {
+    const prevCount = selectedItems.length;
+    selectedItems = selectedItems.filter(item => {
+      const stock = getItemStock(item, item.co_alma_source);
+      return stock > 0 && Number(item.total_art) <= stock;
+    });
+    const diff = prevCount - selectedItems.length;
+    toast.success(`Se eliminaron ${diff} artículo(s) con problemas de stock.`);
   }
 
   let totalUnits = $derived.by(() => {
@@ -371,7 +400,7 @@
            selectedItems.length > 0 && 
            selectedItems.every(i => {
              const stock = getItemStock(i, i.co_alma_source);
-             return i.total_art > 0 && i.total_art <= stock;
+             return Number(i.total_art) > 0 && Number(i.total_art) <= stock;
            });
   });
 
@@ -902,6 +931,38 @@
           </p>
         </div>
 
+        {#if invalidStockItems.length > 0}
+          <div class="bg-red-500/10 border border-red-500/30 rounded-3xl p-6 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 text-red-400">
+            <div class="flex items-start gap-4">
+              <div class="h-12 w-12 rounded-2xl bg-red-500/20 text-red-400 flex items-center justify-center shrink-0">
+                <AlertCircle size={24} />
+              </div>
+              <div>
+                <h4 class="text-base font-black text-white">Stock Insuficiente Detectado ({invalidStockItems.length} artículo{invalidStockItems.length > 1 ? 's' : ''})</h4>
+                <p class="text-xs text-red-300/80 mt-0.5">
+                  Hay artículos cuya cantidad supera el stock disponible en el almacén de salida. Debes ajustar las cantidades o eliminarlos antes de procesar el traslado.
+                </p>
+              </div>
+            </div>
+            <div class="flex items-center gap-2 shrink-0 w-full md:w-auto">
+              <button
+                type="button"
+                onclick={autoFixStock}
+                class="flex-1 md:flex-none px-4 py-2.5 rounded-xl bg-red-500 hover:bg-red-600 text-white font-bold text-xs uppercase tracking-wider transition-all cursor-pointer active:scale-95 shadow-lg shadow-red-500/20"
+              >
+                Ajustar al Máximo
+              </button>
+              <button
+                type="button"
+                onclick={removeOutOfStockItems}
+                class="flex-1 md:flex-none px-4 py-2.5 rounded-xl bg-surface-soft hover:bg-red-500/20 text-red-300 hover:text-red-200 font-bold text-xs uppercase tracking-wider transition-all cursor-pointer border border-red-500/30"
+              >
+                Eliminar Sin Stock
+              </button>
+            </div>
+          </div>
+        {/if}
+
         <div class="flex flex-col gap-8">
           <!-- CARD 1: MEMBRETE (Sede Origen, Sede Destino, Motivo) -->
           <div class="glass p-8 rounded-[40px] border border-border-bold space-y-8 relative overflow-hidden bg-surface-soft/20">
@@ -985,18 +1046,20 @@
                   }
                   return list;
                 })()}
+                {@const stock = getItemStock(item, item.co_alma_source)}
+                {@const hasStockError = Number(item.total_art) > stock || Number(item.total_art) <= 0}
 
-                <div class="p-8 flex flex-col lg:flex-row items-start lg:items-center gap-8 transition-all hover:bg-surface-soft group relative border-b border-border-subtle last:border-0">
+                <div class="p-8 flex flex-col lg:flex-row items-start lg:items-center gap-8 transition-all group relative border-b border-border-subtle last:border-0 {hasStockError ? 'bg-red-500/5 hover:bg-red-500/10' : 'hover:bg-surface-soft'}">
                   
                   <!-- Identidad del Producto y Selector de Cantidad -->
                   <div class="flex items-center gap-6 shrink-0 w-full lg:w-auto">
-                    <div class="h-16 w-16 rounded-2xl bg-surface-soft flex items-center justify-center text-brand-400 relative group-hover:scale-110 transition-transform duration-500 shrink-0">
-                      <div class="absolute inset-0 bg-brand-500/10 rounded-2xl blur-lg opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                    <div class="h-16 w-16 rounded-2xl flex items-center justify-center relative group-hover:scale-110 transition-transform duration-500 shrink-0 {hasStockError ? 'bg-red-500/15 text-red-400' : 'bg-surface-soft text-brand-400'}">
+                      <div class="absolute inset-0 rounded-2xl blur-lg opacity-0 group-hover:opacity-100 transition-opacity {hasStockError ? 'bg-red-500/20' : 'bg-brand-500/10'}"></div>
                       <Package size={28} />
                     </div>
 
                     <!-- Controles de Cantidad (- qty +) -->
-                    <div class="flex items-center bg-surface-base/40 rounded-xl border border-border-subtle h-12 overflow-hidden shadow-inner shrink-0">
+                    <div class="flex items-center rounded-xl border h-12 overflow-hidden shadow-inner shrink-0 {hasStockError ? 'border-red-500/50 bg-red-500/10 ring-1 ring-red-500/30' : 'bg-surface-base/40 border-border-subtle'}">
                       <button
                         type="button"
                         onclick={() => updateItemQty(idx, item.total_art - getStep(item))}
@@ -1008,7 +1071,7 @@
                       <input
                         type="number"
                         min={getStep(item)}
-                        max={getItemStock(item, item.co_alma_source)}
+                        max={stock > 0 ? stock : undefined}
                         step={getStep(item)}
                         bind:value={item.total_art}
                         oninput={(e) => {
@@ -1027,7 +1090,7 @@
                           updateItemQty(idx, isNaN(v) ? getStep(item) : v);
                           inputEl.value = String(item.total_art);
                         }}
-                        class="w-14 text-center text-base font-black bg-transparent outline-none no-arrows text-brand-400"
+                        class="w-14 text-center text-base font-black bg-transparent outline-none no-arrows {hasStockError ? 'text-red-400' : 'text-brand-400'}"
                       />
                       <button
                         type="button"
@@ -1050,7 +1113,37 @@
                         <span class="text-brand-400 font-mono">{item.co_art}</span>
                         <span class="h-1 w-1 rounded-full bg-border-subtle"></span>
                         <span class="text-text-muted">{item.co_uni || "UND"}</span>
+                        <span class="h-1 w-1 rounded-full bg-border-subtle"></span>
+                        <span class="{stock > 0 ? 'text-emerald-400' : 'text-red-400'} font-mono">Stock en {item.co_alma_source}: {stock} ud</span>
                       </div>
+
+                      {#if hasStockError}
+                        <div class="flex flex-wrap items-center gap-2 text-xs font-bold text-red-400 bg-red-500/10 px-3 py-1.5 rounded-xl border border-red-500/20 mt-2">
+                          <AlertCircle size={14} class="shrink-0" />
+                          <span>
+                            {stock <= 0
+                              ? `Sin stock disponible en almacén ${item.co_alma_source}`
+                              : `Cantidad (${item.total_art}) excede el stock disponible (${stock} ud)`}
+                          </span>
+                          {#if stock > 0}
+                            <button
+                              type="button"
+                              onclick={() => updateItemQty(idx, stock)}
+                              class="ml-auto px-2 py-0.5 rounded-lg bg-red-500/20 hover:bg-red-500/30 text-red-300 text-[10px] font-black uppercase tracking-wider transition-colors cursor-pointer"
+                            >
+                              Ajustar a {stock} ud
+                            </button>
+                          {:else}
+                            <button
+                              type="button"
+                              onclick={() => removeItem(idx)}
+                              class="ml-auto px-2 py-0.5 rounded-lg bg-red-500/20 hover:bg-red-500/30 text-red-300 text-[10px] font-black uppercase tracking-wider transition-colors cursor-pointer"
+                            >
+                              Quitar
+                            </button>
+                          {/if}
+                        </div>
+                      {/if}
                     </div>
 
                     <!-- Selects de Almacén Origen y Destino -->
@@ -1115,6 +1208,19 @@
 
           <!-- BOTONES DE ACCIÓN (3 BOTONES EXACTO A COTIZACIONES) -->
           <div class="pt-6 space-y-4 relative z-10">
+            {#if !isFormValid}
+              <div class="text-center text-xs font-bold text-red-400 flex items-center justify-center gap-2 py-1 bg-red-500/10 border border-red-500/20 rounded-xl px-4">
+                <AlertCircle size={15} class="shrink-0" />
+                {#if invalidStockItems.length > 0}
+                  <span>No se puede procesar: Hay {invalidStockItems.length} artículo(s) con cantidad superior al stock disponible.</span>
+                {:else if selectedItems.length === 0}
+                  <span>Debes incluir al menos un artículo en el traslado.</span>
+                {:else}
+                  <span>Verifica que las sedes de origen y destino sean válidas y distintas.</span>
+                {/if}
+              </div>
+            {/if}
+
             <!-- Botón Principal: Registrar y Enviar Traslado -->
             <button
               type="submit"
