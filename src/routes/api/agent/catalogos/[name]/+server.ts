@@ -3,7 +3,7 @@ import { json } from '@sveltejs/kit';
 import { AgentClient } from '$lib/server/agent';
 import type { RequestHandler } from './$types';
 
-const ALLOWED_CATALOGS = ['cajas', 'cuentas_bancarias', 'bancos', 'tarjetas_credito'];
+const ALLOWED_CATALOGS = ['cajas', 'cuentas_bancarias', 'bancos', 'tarjetas_credito', 'ubicaciones'];
 
 export const GET: RequestHandler = async ({ params, url, locals, fetch }) => {
 	try {

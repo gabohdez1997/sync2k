@@ -19,13 +19,15 @@
     CheckSquare,
     Square,
     Printer,
+    Save,
+    Check,
   } from "lucide-svelte";
   import { toast } from "svelte-sonner";
   import Combobox from "$lib/components/ui/Combobox.svelte";
   import BarcodeScanner from "$lib/components/ui/BarcodeScanner.svelte";
-  import type { PageData, ActionData } from "./$types";
+  import type { PageData } from "./$types";
 
-  let { data, form }: { data: PageData; form: any } = $props();
+  let { data }: { data: PageData; form?: any } = $props();
 
   // Permisos CRUD del usuario para esta sección
   const canUpdate = data.crud?.update ?? false;
@@ -84,14 +86,12 @@
 
   function toggleAll() {
     if (allVisibleSelected) {
-      // deselect all visible
       const next = new Set(selectedCodes);
       visibleArticles.forEach((a: any) =>
         next.delete(a.co_art || a.codigo || a.id),
       );
       selectedCodes = next;
     } else {
-      // select all visible
       const next = new Set(selectedCodes);
       visibleArticles.forEach((a: any) =>
         next.add(a.co_art || a.codigo || a.id),
@@ -99,70 +99,210 @@
       selectedCodes = next;
     }
   }
-  let showModal = $state(false);
-  let selectedArticle = $state<any>(null);
-  let formWarehouse = $state("");
-  let formUbic1 = $state("");
-  let formUbic2 = $state("");
-  let formUbic3 = $state("");
 
-  let searchUbic1 = $state("");
-  let searchUbic2 = $state("");
-  let searchUbic3 = $state("");
-
-  const filteredUbic1 = $derived(
-    data.context?.ubicaciones?.filter((u) =>
-      `${u.co_ubicacion || u.id} ${u.descripcion || u.name}`
-        .toLowerCase()
-        .includes(searchUbic1.toLowerCase()),
-    ) || [],
-  );
-  const filteredUbic2 = $derived(
-    data.context?.ubicaciones?.filter((u) =>
-      `${u.co_ubicacion || u.id} ${u.descripcion || u.name}`
-        .toLowerCase()
-        .includes(searchUbic2.toLowerCase()),
-    ) || [],
-  );
-  const filteredUbic3 = $derived(
-    data.context?.ubicaciones?.filter((u) =>
-      `${u.co_ubicacion || u.id} ${u.descripcion || u.name}`
-        .toLowerCase()
-        .includes(searchUbic3.toLowerCase()),
-    ) || [],
-  );
+  // ── UBICACIONES CATALOG & LAZY LOADING ────────────────────────────────────
+  let ubicacionesList = $state<any[]>(data.context?.ubicaciones || []);
+  let isLoadingUbicaciones = $state(false);
 
   $effect(() => {
-    if (form?.success) {
-      toast.success("Ubicaciones actualizadas correctamente");
-      showModal = false;
-      handleSearch();
-    } else if (form?.error) {
-      toast.error(form.error as string);
+    if (data.context?.ubicaciones && data.context.ubicaciones.length > 0) {
+      ubicacionesList = data.context.ubicaciones;
     }
   });
 
-  function openLocationModal(article: any) {
-    selectedArticle = article;
+  const ubicacionesOptions = $derived(
+    (ubicacionesList || []).filter(Boolean).map((u: any) => ({
+      value: String(u?.co_ubicacion || u?.id || ''),
+      label: `${u?.co_ubicacion || u?.id || ''} - ${u?.des_ubicacion || u?.descripcion || u?.name || u?.co_ubicacion || u?.id || ''}`,
+    })),
+  );
 
-    // Si no hay sede o almacén seleccionados en los filtros principales,
-    // intentamos tomarlos de la primera ubicación o existencia del artículo.
-    const firstLoc = article.ubicaciones?.[0] || article.existencia?.[0];
-    if (firstLoc) {
-      if (!selectedBranch && firstLoc.sede_id)
-        selectedBranch = firstLoc.sede_id;
-      if (!formWarehouse && (firstLoc.co_alma || firstLoc.id)) {
-        formWarehouse = firstLoc.co_alma || firstLoc.id;
+  const warehouseOptions = $derived(
+    (data.context?.warehouses || [])
+      .filter((a: any) => !data.context?.finalWarehouseIds?.length || (data.context?.finalWarehouseIds || []).includes(a?.co_alma || a?.id))
+      .map((w: any) => ({
+        value: String(w?.co_alma || w?.id || ''),
+        label: String(w?.des_alma || w?.nombre || w?.id || ''),
+      }))
+  );
+
+  async function ensureUbicacionesLoaded() {
+    if (ubicacionesList.length > 0) return;
+    if (!selectedBranch) return;
+    isLoadingUbicaciones = true;
+    try {
+      const res = await fetch(`/api/agent/catalogos/ubicaciones?branch_id=${selectedBranch}`);
+      if (res.ok) {
+        const json = await res.json();
+        ubicacionesList = json.data || [];
       }
+    } catch (e) {
+      console.error('[LOCATIONS] Error loading ubicaciones catalog:', e);
+    } finally {
+      isLoadingUbicaciones = false;
+    }
+  }
+
+  // ── PER-CARD WAREHOUSE LOCATION SWITCHER & SAVER ───────────────────────────
+  let cardWarehouse = $state<Record<string, string>>({});
+  let cardLocations = $state<Record<string, { u1: string; u2: string; u3: string }>>({});
+  let cardOriginalLocations = $state<Record<string, { u1: string; u2: string; u3: string; warehouse: string }>>({});
+  let cardLoadingMap = $state<Record<string, boolean>>({});
+  let cardSavingMap = $state<Record<string, boolean>>({});
+
+  function getCardWarehouse(artCode: string, article: any): string {
+    if (cardWarehouse[artCode] !== undefined) return cardWarehouse[artCode];
+    const firstLoc = article.ubicaciones?.[0] || article.existencia?.[0];
+    const defaultWh = firstLoc?.co_alma || firstLoc?.id || data.context?.warehouses?.[0]?.co_alma || data.context?.warehouses?.[0]?.id || "01";
+    return defaultWh;
+  }
+
+  function getCardLocations(artCode: string, article: any) {
+    if (cardLocations[artCode]) return cardLocations[artCode];
+    return {
+      u1: article.co_ubicacion || "",
+      u2: article.co_ubicacion2 || "",
+      u3: article.co_ubicacion3 || "",
+    };
+  }
+
+  function updateCardLocation(artCode: string, article: any, field: 'u1' | 'u2' | 'u3', val: string) {
+    const current = getCardLocations(artCode, article);
+    const wh = getCardWarehouse(artCode, article);
+
+    if (!cardOriginalLocations[artCode]) {
+      cardOriginalLocations = {
+        ...cardOriginalLocations,
+        [artCode]: { ...current, warehouse: wh },
+      };
     }
 
-    formUbic1 = article.co_ubicacion || "";
-    formUbic2 = article.co_ubicacion2 || "";
-    formUbic3 = article.co_ubicacion3 || "";
-    searchUbic1 = "";
-    searchUbic2 = "";
-    searchUbic3 = "";
-    showModal = true;
+    cardLocations = {
+      ...cardLocations,
+      [artCode]: {
+        ...current,
+        [field]: val,
+      },
+    };
+  }
+
+  function hasCardChanges(artCode: string, article: any): boolean {
+    const orig = cardOriginalLocations[artCode];
+    if (!orig) return false;
+    const current = getCardLocations(artCode, article);
+    const currentWh = getCardWarehouse(artCode, article);
+    return (
+      orig.warehouse !== currentWh ||
+      orig.u1 !== current.u1 ||
+      orig.u2 !== current.u2 ||
+      orig.u3 !== current.u3
+    );
+  }
+
+  async function onCardWarehouseChange(artCode: string, newAlma: string, article: any) {
+    cardWarehouse = { ...cardWarehouse, [artCode]: newAlma };
+    if (!newAlma || !selectedBranch) return;
+
+    cardLoadingMap = { ...cardLoadingMap, [artCode]: true };
+    try {
+      const params = new URLSearchParams();
+      params.set('branch_id', selectedBranch);
+      params.set('co_art', artCode);
+      params.set('co_alma', newAlma);
+      params.set('in_stock', 'all');
+      params.set('limit', '1');
+      const res = await fetch(`/api/agent/articles?${params.toString()}`);
+      if (res.ok) {
+        const json = await res.json();
+        const items = json.data || [];
+        if (items.length > 0) {
+          const art = items[0];
+          const locObj = {
+            u1: art.co_ubicacion || "",
+            u2: art.co_ubicacion2 || "",
+            u3: art.co_ubicacion3 || "",
+          };
+          cardLocations = {
+            ...cardLocations,
+            [artCode]: locObj,
+          };
+          cardOriginalLocations = {
+            ...cardOriginalLocations,
+            [artCode]: { ...locObj, warehouse: newAlma },
+          };
+        } else {
+          const emptyObj = { u1: "", u2: "", u3: "" };
+          cardLocations = {
+            ...cardLocations,
+            [artCode]: emptyObj,
+          };
+          cardOriginalLocations = {
+            ...cardOriginalLocations,
+            [artCode]: { ...emptyObj, warehouse: newAlma },
+          };
+        }
+      }
+    } catch (e) {
+      console.error('[CARD LOCATIONS] Error:', e);
+    } finally {
+      cardLoadingMap = { ...cardLoadingMap, [artCode]: false };
+    }
+  }
+
+  async function saveCardLocations(artCode: string, article: any) {
+    if (!selectedBranch) {
+      toast.error("Selecciona una sucursal");
+      return;
+    }
+    const currentWh = getCardWarehouse(artCode, article);
+    if (!currentWh) {
+      toast.error("Selecciona un almacén");
+      return;
+    }
+    const locs = getCardLocations(artCode, article);
+
+    cardSavingMap = { ...cardSavingMap, [artCode]: true };
+    try {
+      const formData = new FormData();
+      formData.append('co_art', artCode);
+      formData.append('co_alma', currentWh);
+      formData.append('branchId', selectedBranch);
+      formData.append('co_ubicacion', locs.u1);
+      formData.append('co_ubicacion2', locs.u2);
+      formData.append('co_ubicacion3', locs.u3);
+
+      const res = await fetch('?/assignLocations', {
+        method: 'POST',
+        body: formData,
+      });
+
+      const raw = await res.text();
+      let result: any = null;
+      try {
+        result = JSON.parse(raw);
+      } catch {
+        result = { success: res.ok };
+      }
+
+      if (res.ok && result?.type !== 'failure') {
+        toast.success(`Ubicaciones guardadas para ${artCode}`);
+        article.co_ubicacion = locs.u1;
+        article.co_ubicacion2 = locs.u2;
+        article.co_ubicacion3 = locs.u3;
+        cardOriginalLocations = {
+          ...cardOriginalLocations,
+          [artCode]: { ...locs, warehouse: currentWh },
+        };
+      } else {
+        const errMsg = result?.data?.error || result?.error || "Error al guardar ubicaciones";
+        toast.error(typeof errMsg === 'string' ? errMsg : JSON.stringify(errMsg));
+      }
+    } catch (e: any) {
+      console.error('[SAVE LOCATIONS] Error:', e);
+      toast.error(`Error: ${e.message}`);
+    } finally {
+      cardSavingMap = { ...cardSavingMap, [artCode]: false };
+    }
   }
   let isSearching = $state(false);
 
@@ -172,11 +312,6 @@
     $page.url.searchParams.get("co_ubicacion") || "",
   );
 
-  let currentBranchObj = $derived(
-    data.context?.branches?.find((b) => b.id === selectedBranch),
-  );
-  let coSucuToSend = $derived(currentBranchObj?.co_sucu || "");
-  let coAlmaToSend = $derived(formWarehouse || "01");
 
   const filteredCategorias = $derived(
     !selectedLinea
@@ -418,16 +553,10 @@
     </div>
 
     <!-- 5. Ubicación -->
-    {#if data.context?.ubicaciones && data.context.ubicaciones.length > 0}
-      {@const ubicOptions = [
-        ...(data.context.ubicaciones || []).map((u: any) => ({
-          value: u.id || u.co_ubicacion,
-          label: `${u.co_ubicacion || u.id} - ${u.descripcion || u.name || u.co_ubicacion || u.id}`,
-        })),
-      ]}
+    {#if ubicacionesOptions.length > 0}
       <div class="w-full">
         <Combobox
-          options={ubicOptions}
+          options={ubicacionesOptions}
           bind:value={selectedUbicacion}
           placeholder="Ubicación..."
           allLabel="Todas las Ubicaciones"
@@ -543,111 +672,165 @@
       {#each visibleArticles as article}
         {@const artCode = article.co_art || article.codigo || article.id || ""}
         {@const isSelected = selectedCodes.has(artCode)}
-        <label
-          for="select-{artCode}"
-          class="glass p-6 rounded-3xl border transition-all hover:shadow-2xl flex flex-col gap-4 cursor-pointer select-none
+        {@const currentWh = getCardWarehouse(artCode, article)}
+        {@const locs = getCardLocations(artCode, article)}
+        {@const isModified = hasCardChanges(artCode, article)}
+        {@const isSaving = cardSavingMap[artCode] || false}
+        {@const isLoadingCard = cardLoadingMap[artCode] || false}
+
+        <div
+          class="glass p-6 rounded-3xl border transition-all hover:shadow-2xl flex flex-col gap-4 select-none
             {isSelected
             ? 'border-brand-500/60 shadow-brand-500/10 bg-brand-500/5'
             : 'border-white/5 hover:border-brand-500/30 hover:shadow-brand-500/5'}"
         >
-          <input
-            id="select-{artCode}"
-            type="checkbox"
-            class="sr-only"
-            checked={isSelected}
-            onchange={() => toggleArticle(artCode)}
-          />
           <div class="flex justify-between items-start relative group">
-            <div
-              class="h-12 w-12 rounded-2xl flex items-center justify-center transition-all
+            <button
+              type="button"
+              onclick={() => toggleArticle(artCode)}
+              class="h-12 w-12 rounded-2xl flex items-center justify-center transition-all cursor-pointer active:scale-95
                 {isSelected
-                ? 'bg-brand-500 text-white'
-                : 'bg-brand-500/10 text-brand-500'}"
+                ? 'bg-brand-500 text-white shadow-lg shadow-brand-500/30'
+                : 'bg-brand-500/10 text-brand-500 hover:bg-brand-500/20'}"
+              title={isSelected ? "Deseleccionar artículo" : "Seleccionar artículo para impresión"}
             >
               {#if isSelected}
                 <CheckSquare size={22} />
               {:else}
-                <MapPin size={24} />
+                <Square size={22} />
               {/if}
-            </div>
+            </button>
             <span
-              class="px-2 py-1 rounded-md bg-surface-base border border-border-subtle text-xs font-mono text-text-muted"
+              class="px-2.5 py-1 rounded-lg bg-surface-base border border-border-subtle text-xs font-mono text-text-muted"
             >
               {artCode || "N/A"}
             </span>
           </div>
 
-          <div class="mt-2 text-sm">
-            <h3 class="text-lg font-bold leading-tight mb-2">
+          <div class="mt-1 text-sm">
+            <h3 class="text-lg font-bold leading-tight mb-1 text-text-base">
               {article.art_des ||
                 article.descripcion ||
                 article.name ||
                 "Sin título"}
             </h3>
             {#if article.referencia || article.ref}
-              <div class="text-[11px] text-text-muted mb-4 font-mono">
+              <div class="text-[11px] text-text-muted mb-3 font-mono">
                 REF: <span class="font-bold text-text-primary">{article.referencia || article.ref}</span>
               </div>
             {:else}
               <div class="h-2 font-mono"></div>
             {/if}
 
-            <div class="flex flex-col gap-2 mt-3 mb-2">
-              <span
-                class="text-[10px] uppercase font-black tracking-widest text-brand-400"
-                >Ubicaciones Asignadas</span
-              >
-
-              <div class="grid grid-cols-1 gap-2">
-                <div
-                  class="flex items-center justify-between bg-surface-base/40 p-2 rounded-xl border border-white/5"
+            <div class="flex flex-col gap-2.5 mt-2 mb-2">
+              <!-- 1. Almacén Combobox -->
+              <div class="space-y-1">
+                <label
+                  class="text-[10px] uppercase font-black tracking-widest text-brand-400 ml-0.5"
+                  >Almacén / Depósito Profit</label
                 >
-                  <span class="text-[10px] text-text-muted uppercase font-bold"
-                    >Principal</span
-                  >
-                  <span class="font-bold text-sm text-brand-400"
-                    >{article.co_ubicacion || "Ninguna"}</span
-                  >
-                </div>
-                <div
-                  class="flex items-center justify-between bg-surface-base/40 p-2 rounded-xl border border-white/5"
-                >
-                  <span class="text-[10px] text-text-muted uppercase font-bold"
-                    >Secundaria</span
-                  >
-                  <span class="font-bold text-sm text-brand-400"
-                    >{article.co_ubicacion2 || "Ninguna"}</span
-                  >
-                </div>
-                <div
-                  class="flex items-center justify-between bg-surface-base/40 p-2 rounded-xl border border-white/5"
-                >
-                  <span class="text-[10px] text-text-muted uppercase font-bold"
-                    >Terciaria</span
-                  >
-                  <span class="font-bold text-sm text-brand-400"
-                    >{article.co_ubicacion3 || "Ninguna"}</span
-                  >
-                </div>
+                <Combobox
+                  options={warehouseOptions}
+                  value={currentWh}
+                  placeholder="-- Seleccionar Almacén --"
+                  icon={Package}
+                  buttonClass="h-11 rounded-xl text-xs bg-surface-base/60 border border-white/5"
+                  class="w-full"
+                  onchange={(val) => onCardWarehouseChange(artCode, val, article)}
+                />
               </div>
 
+              <!-- 2. Location Selectors -->
+              {#if isLoadingCard}
+                <div class="flex items-center justify-center gap-2 py-8 text-brand-400 bg-surface-base/30 rounded-2xl border border-white/5">
+                  <span class="animate-spin text-base">⟳</span>
+                  <span class="text-xs font-bold">Cargando ubicaciones...</span>
+                </div>
+              {:else}
+                <!-- Ubicación Principal -->
+                <div class="space-y-1">
+                  <label class="text-[10px] uppercase font-black tracking-widest text-text-muted ml-0.5">Ubicación Principal</label>
+                  <Combobox
+                    options={ubicacionesOptions}
+                    value={locs.u1}
+                    placeholder="-- Ninguna --"
+                    allLabel="-- Ninguna --"
+                    icon={MapPin}
+                    buttonClass="h-11 rounded-xl text-xs bg-surface-base/60 border border-white/5"
+                    class="w-full"
+                    onopen={ensureUbicacionesLoaded}
+                    loading={isLoadingUbicaciones}
+                    onchange={(val) => updateCardLocation(artCode, article, 'u1', val)}
+                  />
+                </div>
+
+                <!-- Ubicación Secundaria -->
+                <div class="space-y-1">
+                  <label class="text-[10px] uppercase font-black tracking-widest text-text-muted ml-0.5">Ubicación Secundaria</label>
+                  <Combobox
+                    options={ubicacionesOptions}
+                    value={locs.u2}
+                    placeholder="-- Ninguna --"
+                    allLabel="-- Ninguna --"
+                    icon={MapPin}
+                    buttonClass="h-11 rounded-xl text-xs bg-surface-base/60 border border-white/5"
+                    class="w-full"
+                    onopen={ensureUbicacionesLoaded}
+                    loading={isLoadingUbicaciones}
+                    onchange={(val) => updateCardLocation(artCode, article, 'u2', val)}
+                  />
+                </div>
+
+                <!-- Ubicación Terciaria -->
+                <div class="space-y-1">
+                  <label class="text-[10px] uppercase font-black tracking-widest text-text-muted ml-0.5">Ubicación Terciaria</label>
+                  <Combobox
+                    options={ubicacionesOptions}
+                    value={locs.u3}
+                    placeholder="-- Ninguna --"
+                    allLabel="-- Ninguna --"
+                    icon={MapPin}
+                    buttonClass="h-11 rounded-xl text-xs bg-surface-base/60 border border-white/5"
+                    class="w-full"
+                    onopen={ensureUbicacionesLoaded}
+                    loading={isLoadingUbicaciones}
+                    onchange={(val) => updateCardLocation(artCode, article, 'u3', val)}
+                  />
+                </div>
+              {/if}
+
+              <!-- 3. Botón Guardar Ubicaciones -->
               {#if canUpdate}
                 <button
-                  onclick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    openLocationModal(article);
-                  }}
-                  class="mt-3 w-full py-2 bg-brand-500/10 hover:bg-brand-500/20 text-brand-400 font-bold rounded-xl transition-colors border border-brand-500/20 text-sm"
+                  type="button"
+                  onclick={() => saveCardLocations(artCode, article)}
+                  disabled={isSaving || !currentWh || isLoadingCard}
+                  class="mt-1 w-full h-11 font-bold rounded-xl transition-all text-xs active:scale-95 flex items-center justify-center gap-2 shadow-md
+                    {isSaving
+                      ? 'bg-brand-500/30 text-brand-300 cursor-wait'
+                      : !currentWh
+                        ? 'bg-white/5 text-text-muted/40 cursor-not-allowed'
+                        : isModified
+                          ? 'bg-brand-600 hover:bg-brand-500 text-white shadow-brand-500/25 border border-brand-500/40'
+                          : 'bg-brand-500/10 hover:bg-brand-500/20 text-brand-400 border border-brand-500/20'}"
                 >
-                  Modificar Ubicaciones
+                  {#if isSaving}
+                    <span class="animate-spin text-sm">⟳</span>
+                    <span>Guardando...</span>
+                  {:else if isModified}
+                    <Save size={15} />
+                    <span>Guardar Cambios</span>
+                  {:else}
+                    <Save size={15} />
+                    <span>Guardar Ubicaciones</span>
+                  {/if}
                 </button>
               {/if}
             </div>
           </div>
 
           <div
-            class="mt-auto pt-4 border-t border-white/5 flex flex-col gap-2 pointer-events-none"
+            class="mt-auto pt-4 border-t border-white/5 flex flex-col gap-2"
           >
             <span
               class="text-[10px] uppercase font-black tracking-widest text-text-muted mb-1"
@@ -655,7 +838,7 @@
             >
 
             {#if article.disponibilidad && Array.isArray(article.disponibilidad)}
-              {#each article.disponibilidad.filter((alm: any) => !data.context?.finalWarehouseIds?.length || data.context.finalWarehouseIds.includes(alm.co_alma)) as alm}
+              {#each article.disponibilidad.filter((alm: any) => !data.context?.finalWarehouseIds?.length || (data.context?.finalWarehouseIds || []).includes(alm?.co_alma)) as alm}
                 <div
                   class="flex items-center justify-between py-1 bg-surface-base/50 px-2 rounded-md border border-white/5"
                 >
@@ -678,7 +861,7 @@
               </div>
             {/if}
           </div>
-        </label>
+        </div>
       {/each}
     </div>
 
@@ -717,158 +900,3 @@
   {/if}
 </div>
 
-{#if showModal && selectedArticle}
-  <div
-    class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4"
-    transition:fade
-  >
-    <div
-      class="glass border border-border-subtle rounded-3xl w-full max-w-md shadow-2xl flex flex-col overflow-hidden"
-    >
-      <div
-        class="p-6 border-b border-white/5 flex items-center justify-between bg-surface-raised"
-      >
-        <div>
-          <h2 class="text-xl font-bold flex items-center gap-2 text-brand-500">
-            <MapPin size={20} />
-            Asignar Ubicaciones
-          </h2>
-          <p class="text-xs text-text-muted font-mono mt-1">
-            {selectedArticle.co_art || selectedArticle.codigo}
-          </p>
-        </div>
-        <button
-          onclick={() => (showModal = false)}
-          class="p-2 text-text-muted hover:text-white bg-white/5 rounded-full hover:bg-red-500/20 hover:text-red-400 transition-colors"
-        >
-          <X size={20} />
-        </button>
-      </div>
-
-      <form
-        method="POST"
-        action="?/assignLocations"
-        use:enhance
-        class="p-6 flex flex-col gap-6"
-      >
-        <input
-          type="hidden"
-          name="co_art"
-          value={selectedArticle.co_art || selectedArticle.codigo}
-        />
-        <input type="hidden" name="co_alma" value={coAlmaToSend} />
-        <input type="hidden" name="branchId" value={selectedBranch} />
-
-        {#if form && typeof form === "object" && "error" in form}
-          <div
-            class="p-4 mb-4 bg-red-500/10 border border-red-500/20 rounded-2xl text-red-500 text-sm flex flex-col gap-2"
-          >
-            <div class="flex items-center gap-2 font-bold">
-              <Plus class="rotate-45" size={16} />
-              {(form as any).error}
-            </div>
-            {#if (form as any).detail}
-              <div
-                class="text-[10px] font-mono bg-black/20 p-2 rounded-lg opacity-80 break-all max-h-24 overflow-auto"
-              >
-                {(form as any).detail}
-              </div>
-            {/if}
-          </div>
-        {/if}
-
-        <!-- SELECTOR DE ALMACÉN (OBLIGATORIO) -->
-        <div class="space-y-1">
-          <label
-            class="text-[10px] uppercase font-black tracking-widest text-brand-400 ml-1"
-            >Almacén / Depósito Profit</label
-          >
-          <Combobox
-            options={(data.context?.warehouses || []).map((a: any) => ({
-              value: a.co_alma || a.id,
-              label: a.des_alma || a.nombre || a.id,
-            }))}
-            bind:value={formWarehouse}
-            placeholder="-- Seleccionar Almacén --"
-            allLabel="-- Sin seleccionar --"
-            icon={Package}
-          />
-        </div>
-
-        <div class="space-y-4">
-          <!-- UBICACION 1 -->
-          <div class="space-y-1">
-            <label
-              class="text-[10px] uppercase font-black tracking-widest text-text-muted ml-1"
-              >Ubicación Principal</label
-            >
-            <input type="hidden" name="co_ubicacion" value={formUbic1} />
-            <Combobox
-              options={(data.context?.ubicaciones || []).map((u: any) => ({
-                value: u.id || u.co_ubicacion,
-                label: `${u.co_ubicacion || u.id} - ${u.descripcion || u.name}`,
-              }))}
-              bind:value={formUbic1}
-              placeholder="-- Ninguna --"
-              allLabel="-- Ninguna --"
-              icon={MapPin}
-            />
-          </div>
-
-          <!-- UBICACION 2 -->
-          <div class="space-y-1">
-            <label
-              class="text-[10px] uppercase font-black tracking-widest text-text-muted ml-1"
-              >Ubicación Secundaria</label
-            >
-            <input type="hidden" name="co_ubicacion2" value={formUbic2} />
-            <Combobox
-              options={(data.context?.ubicaciones || []).map((u: any) => ({
-                value: u.id || u.co_ubicacion,
-                label: `${u.co_ubicacion || u.id} - ${u.descripcion || u.name}`,
-              }))}
-              bind:value={formUbic2}
-              placeholder="-- Ninguna --"
-              allLabel="-- Ninguna --"
-              icon={MapPin}
-            />
-          </div>
-
-          <!-- UBICACION 3 -->
-          <div class="space-y-1">
-            <label
-              class="text-[10px] uppercase font-black tracking-widest text-text-muted ml-1"
-              >Ubicación Terciaria</label
-            >
-            <input type="hidden" name="co_ubicacion3" value={formUbic3} />
-            <Combobox
-              options={(data.context?.ubicaciones || []).map((u: any) => ({
-                value: u.id || u.co_ubicacion,
-                label: `${u.co_ubicacion || u.id} - ${u.descripcion || u.name}`,
-              }))}
-              bind:value={formUbic3}
-              placeholder="-- Ninguna --"
-              allLabel="-- Ninguna --"
-              icon={MapPin}
-            />
-          </div>
-        </div>
-
-        <div class="pt-4 border-t border-white/5 flex gap-3 mt-2">
-          <button
-            type="button"
-            onclick={() => (showModal = false)}
-            class="flex-1 py-3 bg-white/5 hover:bg-white/10 text-white font-bold rounded-xl transition-colors"
-            >Cancelar</button
-          >
-          <button
-            type="submit"
-            disabled={!selectedBranch}
-            class="flex-1 py-3 bg-brand-600 hover:bg-brand-500 disabled:opacity-30 disabled:cursor-not-allowed text-white font-bold rounded-xl transition-colors shadow-lg shadow-brand-500/20 active:scale-95"
-            >Guardar</button
-          >
-        </div>
-      </form>
-    </div>
-  </div>
-{/if}

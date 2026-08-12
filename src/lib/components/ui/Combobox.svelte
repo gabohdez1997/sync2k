@@ -15,6 +15,9 @@
     allLabel?: string;
     icon?: any;
     onchange?: (value: string) => void;
+    onopen?: () => void | Promise<void>;
+    buttonClass?: string;
+    loading?: boolean;
     class?: string;
     id?: string;
     name?: string;
@@ -27,6 +30,9 @@
     allLabel = '',
     icon: Icon = null,
     onchange,
+    onopen,
+    buttonClass = 'h-14',
+    loading = false,
     class: extraClass = '',
     id = '',
     name = ''
@@ -38,20 +44,40 @@
   let containerEl: HTMLDivElement | null = $state(null);
   let activeIndex = $state(-1);
 
+  const safeOptions = $derived(
+    Array.isArray(options)
+      ? options.filter(Boolean).map(o => ({
+          value: String(o?.value ?? ''),
+          label: String(o?.label ?? o?.value ?? '')
+        }))
+      : []
+  );
+
   const selectedLabel = $derived(
-    options.find(o => o.value === value)?.label ?? ''
+    safeOptions.find(o => o.value === value)?.label ?? ''
   );
 
   const filtered = $derived(
     searchTerm.trim() === ''
-      ? options
-      : options.filter(o =>
-          o.label.toLowerCase().includes(searchTerm.toLowerCase())
-        )
+      ? safeOptions
+      : safeOptions.filter(o => {
+          const term = searchTerm.toLowerCase().trim();
+          const cleanTerm = term.replace(/[\s\-_]/g, '');
+          const labelNorm = o.label.toLowerCase();
+          const valueNorm = o.value.toLowerCase();
+          const cleanLabel = labelNorm.replace(/[\s\-_]/g, '');
+          const cleanValue = valueNorm.replace(/[\s\-_]/g, '');
+          return (
+            labelNorm.includes(term) ||
+            valueNorm.includes(term) ||
+            (cleanTerm.length > 1 && (cleanLabel.includes(cleanTerm) || cleanValue.includes(cleanTerm)))
+          );
+        })
   );
 
   async function open() {
     isOpen = true;
+    onopen?.();
     activeIndex = filtered.findIndex(o => o.value === value);
     await tick();
     inputEl?.focus();
@@ -118,20 +144,20 @@
   <button
     type="button"
     onclick={() => (isOpen ? close() : open())}
-    class="w-full h-14 bg-surface-base/80 rounded-2xl border transition-all font-bold text-sm cursor-pointer hover:bg-surface-soft flex items-center gap-0 pr-4 text-left
+    class="w-full bg-surface-base/80 rounded-2xl border transition-all font-bold text-sm cursor-pointer hover:bg-surface-soft flex items-center gap-0 pr-4 text-left {buttonClass}
       {isOpen ? 'border-brand-500/50 ring-1 ring-brand-500/20' : 'border-border-subtle'}
       {value ? 'text-brand-500' : 'text-text-muted'}"
   >
     {#if Icon}
-      <span class="flex-shrink-0 pl-4 pr-2.5 text-brand-400">
+      <span class="flex-shrink-0 pl-3 pr-2.5 text-brand-400">
         <Icon size={18} />
       </span>
     {:else}
-      <span class="pl-4"></span>
+      <span class="pl-3"></span>
     {/if}
 
     <span class="flex-1 truncate">
-      {selectedLabel || placeholder}
+      {selectedLabel || value || placeholder}
     </span>
 
     {#if value}
@@ -171,49 +197,56 @@
 
       <!-- Options list -->
       <ul class="max-h-60 overflow-y-auto py-1 custom-scrollbar">
-        {#if allLabel}
-          <li>
-            <button
-              type="button"
-              onclick={() => { value = ''; onchange?.(''); close(); }}
-              onmouseenter={() => (activeIndex = 0)}
-              class="w-full text-left px-4 py-2.5 text-sm transition-colors flex items-center gap-2
-                {!value
-                  ? 'bg-brand-500/20 text-brand-300 font-bold'
-                  : activeIndex === 0
-                    ? 'bg-white/5 text-text-base'
-                    : 'text-text-muted hover:bg-white/5 hover:text-text-base'}"
-            >
-              <span class="w-1.5 h-1.5 rounded-full {!value ? 'bg-brand-400' : ''} flex-shrink-0"></span>
-              <span class="truncate italic opacity-80">{allLabel}</span>
-            </button>
-          </li>
-        {/if}
-
-        {#if filtered.length === 0}
-          <li class="px-4 py-3 text-sm text-text-muted/50 italic text-center">
-            Sin resultados para "{searchTerm}"
+        {#if loading}
+          <li class="px-4 py-4 text-xs text-brand-400 flex items-center justify-center gap-2">
+            <span class="animate-spin">⟳</span>
+            <span>Cargando opciones...</span>
           </li>
         {:else}
-          {#each filtered as option, i}
-            {@const rowIndex = allLabel ? i + 1 : i}
+          {#if allLabel}
             <li>
               <button
                 type="button"
-                onclick={() => select(option)}
-                onmouseenter={() => (activeIndex = rowIndex)}
+                onclick={() => { value = ''; onchange?.(''); close(); }}
+                onmouseenter={() => (activeIndex = 0)}
                 class="w-full text-left px-4 py-2.5 text-sm transition-colors flex items-center gap-2
-                  {value === option.value
-                    ? 'bg-brand-500/20 text-brand-500 font-bold'
-                    : activeIndex === rowIndex
-                      ? 'bg-surface-soft text-text-base'
-                      : 'text-text-muted hover:bg-surface-soft hover:text-text-base'}"
+                  {!value
+                    ? 'bg-brand-500/20 text-brand-300 font-bold'
+                    : activeIndex === 0
+                      ? 'bg-white/5 text-text-base'
+                      : 'text-text-muted hover:bg-white/5 hover:text-text-base'}"
               >
-                <span class="w-1.5 h-1.5 rounded-full {value === option.value ? 'bg-brand-400' : ''} flex-shrink-0"></span>
-                <span class="truncate">{option.label}</span>
+                <span class="w-1.5 h-1.5 rounded-full {!value ? 'bg-brand-400' : ''} flex-shrink-0"></span>
+                <span class="truncate italic opacity-80">{allLabel}</span>
               </button>
             </li>
-          {/each}
+          {/if}
+
+          {#if filtered.length === 0}
+            <li class="px-4 py-3 text-sm text-text-muted/50 italic text-center">
+              Sin resultados para "{searchTerm}"
+            </li>
+          {:else}
+            {#each filtered as option, i}
+              {@const rowIndex = allLabel ? i + 1 : i}
+              <li>
+                <button
+                  type="button"
+                  onclick={() => select(option)}
+                  onmouseenter={() => (activeIndex = rowIndex)}
+                  class="w-full text-left px-4 py-2.5 text-sm transition-colors flex items-center gap-2
+                    {value === option.value
+                      ? 'bg-brand-500/20 text-brand-500 font-bold'
+                      : activeIndex === rowIndex
+                        ? 'bg-surface-soft text-text-base'
+                        : 'text-text-muted hover:bg-surface-soft hover:text-text-base'}"
+                >
+                  <span class="w-1.5 h-1.5 rounded-full {value === option.value ? 'bg-brand-400' : ''} flex-shrink-0"></span>
+                  <span class="truncate">{option.label}</span>
+                </button>
+              </li>
+            {/each}
+          {/if}
         {/if}
       </ul>
 
