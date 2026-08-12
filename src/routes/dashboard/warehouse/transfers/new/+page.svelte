@@ -118,14 +118,34 @@
     const allowed: string[] = data.allowedWarehouses || data.context?.allowedWarehouses || [];
     const isAdmin = data.isAdmin ?? data.context?.isAdmin ?? (allowed.length === 0);
 
-    if (isAdmin || allowed.length === 0) {
-      return rawList;
+    const baseList = (isAdmin || allowed.length === 0)
+      ? rawList
+      : rawList.filter((alm: any) => {
+          const almaId = String(alm.co_alma || alm.id || '').trim();
+          return allowed.some((w: string) => String(w).trim() === almaId);
+        });
+
+    // Si estamos editando un traslado, sumamos la cantidad del ajuste de salida original al stock actual
+    if (data.editingTransfer) {
+      const artCode = String(article?.co_art || article?.codigo || '').trim();
+      return baseList.map((alm: any) => {
+        const almaId = String(alm.co_alma || alm.id || '').trim();
+        const originalItem = (data.editingTransfer.items || []).find((it: any) =>
+          String(it.co_art || '').trim() === artCode &&
+          String(it.co_alma_source || '01').trim() === almaId
+        );
+        if (originalItem) {
+          const originalQty = Number(originalItem.total_art || 0);
+          return {
+            ...alm,
+            stock: Number(alm.stock || 0) + originalQty
+          };
+        }
+        return alm;
+      });
     }
 
-    return rawList.filter((alm: any) => {
-      const almaId = String(alm.co_alma || alm.id || '').trim();
-      return allowed.some((w: string) => String(w).trim() === almaId);
-    });
+    return baseList;
   }
 
   // Inicializar estados para nuevos artículos (EXACTO A COTIZACIONES)
@@ -259,6 +279,7 @@
                 const matchedAlm = dispo.find((a: any) => String(a.co_alma || a.id || '').trim() === String(it.co_alma_source).trim());
                 if (matchedAlm) {
                   it.stock_origen = Number(matchedAlm.stock);
+                  it._stockAlreadyAdjusted = true;
                 }
               }
             }
@@ -275,13 +296,23 @@
   function getItemStock(item: any, coAlma?: string): number {
     const targetAlma = String(coAlma || item.co_alma_source || '').trim();
     const art = displayArticles.find((a: any) => String(a.co_art || a.codigo || '').trim() === String(item.co_art || '').trim()) || item.article;
-    const avail = art?.disponibilidad || item.disponibilidad || [];
+    const avail = art ? getFilteredDisponibilidad(art) : (item.disponibilidad || []);
     const matched = avail.find((a: any) => String(a.co_alma || a.id || '').trim() === targetAlma);
     if (matched && matched.stock !== undefined && matched.stock !== null) {
       return Number(matched.stock);
     }
     if (item.stock_origen !== undefined && item.stock_origen !== null) {
-      return Number(item.stock_origen);
+      let base = Number(item.stock_origen);
+      if (data.editingTransfer && !item._stockAlreadyAdjusted) {
+        const originalItem = (data.editingTransfer.items || []).find((it: any) =>
+          String(it.co_art || '').trim() === String(item.co_art || '').trim() &&
+          String(it.co_alma_source || '01').trim() === targetAlma
+        );
+        if (originalItem) {
+          return base + Number(originalItem.total_art || 0);
+        }
+      }
+      return base;
     }
     if (data.editingTransfer) {
       return Number(item.total_art || 1);
