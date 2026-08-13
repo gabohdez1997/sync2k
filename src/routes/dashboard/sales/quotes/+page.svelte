@@ -174,6 +174,21 @@
   let lastLoadedDoc = $state("");
   let isInitializing = false;
 
+  // --- BUSCADOR EN RENGLONES (CARRITO) ---
+  let cartSearchTerm = $state('');
+
+  let filteredCart = $derived.by(() => {
+    const term = cartSearchTerm.trim().toLowerCase();
+    if (!term) return cart.map((item, originalIndex) => ({ item, originalIndex }));
+    return cart
+      .map((item, originalIndex) => ({ item, originalIndex }))
+      .filter(({ item }) => {
+        const code = String(item.article?.co_art || item.article?.codigo || item.co_art || '').toLowerCase();
+        const desc = String(item.article?.art_des || item.article?.descripcion || item.art_des || '').toLowerCase();
+        return code.includes(term) || desc.includes(term);
+      });
+  });
+
   $effect(() => {
     const q = data.preloadedQuote;
     if (q && q.doc_num !== lastLoadedDoc) {
@@ -2271,24 +2286,57 @@
             class="glass rounded-[32px] border border-border-subtle overflow-hidden"
           >
             <div
-              class="p-8 border-b border-border-subtle flex items-center justify-between bg-surface-soft/50"
+              class="p-6 md:p-8 border-b border-border-subtle flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 bg-surface-soft/50"
             >
-              <div class="flex items-center gap-3">
-                <Package size={20} class="text-text-muted" />
-                <h4
-                  class="text-[10px] font-black uppercase tracking-[0.2em] text-text-muted"
-                >
-                  Renglones ({cart.length})
-                </h4>
+              <!-- Buscador en Renglones (reemplaza texto Renglones) -->
+              <div class="relative flex-1 max-w-xl">
+                <Search size={16} class="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none" />
+                <input
+                  type="text"
+                  bind:value={cartSearchTerm}
+                  placeholder={`Buscar artículo en renglones (${cart.length})...`}
+                  class="w-full h-12 pl-11 pr-10 rounded-2xl bg-surface-base border border-border-subtle focus:border-brand-500/50 outline-none text-xs font-bold text-text-base transition-all placeholder:text-text-muted"
+                />
+                {#if cartSearchTerm}
+                  <button
+                    type="button"
+                    onclick={() => (cartSearchTerm = '')}
+                    class="absolute right-3.5 top-1/2 -translate-y-1/2 text-text-muted hover:text-white transition-colors cursor-pointer"
+                    title="Limpiar búsqueda"
+                  >
+                    <X size={14} />
+                  </button>
+                {/if}
               </div>
+
+              <!-- Botón Agregar Artículo -->
               <button
                 onclick={() => (activeTab = 1)}
-                class="px-4 py-2 rounded-xl bg-surface-soft hover:bg-surface-strong text-[10px] font-black uppercase text-brand-400 tracking-widest transition-all border border-border-subtle"
-                >Agregar Articulo</button
+                class="px-5 py-3 rounded-2xl bg-surface-soft hover:bg-surface-strong text-xs font-black uppercase text-brand-400 tracking-wider transition-all border border-border-subtle cursor-pointer shrink-0 flex items-center justify-center gap-2 shadow-sm"
               >
+                <Plus size={14} />
+                Agregar Artículo
+              </button>
             </div>
             <div class="divide-y border-border-subtle">
-              {#each cart as item, i}
+              {#if cart.length === 0}
+                <div class="p-12 text-center text-text-muted text-sm font-bold">
+                  No hay artículos en la cotización.
+                </div>
+              {:else if filteredCart.length === 0}
+                <div class="p-12 text-center text-text-muted text-sm font-bold space-y-3">
+                  <Search size={32} class="mx-auto text-text-muted opacity-40" />
+                  <p>No se encontraron artículos que coincidan con "<span class="text-white font-black">{cartSearchTerm}</span>"</p>
+                  <button
+                    type="button"
+                    onclick={() => (cartSearchTerm = '')}
+                    class="text-xs font-bold text-brand-400 hover:underline cursor-pointer"
+                  >
+                    Limpiar búsqueda
+                  </button>
+                </div>
+              {:else}
+                {#each filteredCart as { item, originalIndex: i } (item.article?.co_art + '_' + item.warehouse + '_' + i)}
                 <div
                   class="p-8 flex flex-col lg:flex-row items-start lg:items-center gap-8 transition-all hover:bg-surface-soft group relative border-b border-border-subtle last:border-0"
                 >
@@ -2448,7 +2496,8 @@
                     </button>
                   </div>
                 </div>
-              {/each}
+                {/each}
+              {/if}
             </div>
           </div>
 

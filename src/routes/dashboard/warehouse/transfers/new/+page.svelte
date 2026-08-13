@@ -1,10 +1,12 @@
 <!-- src/routes/dashboard/warehouse/transfers/new/+page.svelte -->
 <script lang="ts">
   import { enhance } from "$app/forms";
+  import * as XLSX from "xlsx";
   import { 
     ArrowRightLeft, Plus, Minus, Search, Trash2, Store, 
     Box, Check, AlertCircle, RefreshCw, ChevronRight, ChevronLeft, ChevronDown,
-    ShoppingBag, Package, Clock, Tag, Layers, Loader2, Truck
+    ShoppingBag, Package, Clock, Tag, Layers, Loader2, Truck,
+    FileSpreadsheet, UploadCloud, X, FileText, CheckCircle2, AlertTriangle, ArrowRight, Upload
   } from "lucide-svelte";
   import { fade, slide, scale } from "svelte/transition";
   import { toast } from "svelte-sonner";
@@ -60,6 +62,21 @@
   let selectedItems = $state<any[]>(initialItems);
   let isSubmitting = $state(false);
 
+  // --- BUSCADOR EN RENGLONES (CARRITO) ---
+  let cartSearchTerm = $state('');
+
+  let filteredSelectedItems = $derived.by(() => {
+    const term = cartSearchTerm.trim().toLowerCase();
+    if (!term) return selectedItems.map((item, originalIndex) => ({ item, originalIndex }));
+    return selectedItems
+      .map((item, originalIndex) => ({ item, originalIndex }))
+      .filter(({ item }) => {
+        const code = String(item.co_art || '').toLowerCase();
+        const desc = String(item.art_des || '').toLowerCase();
+        return code.includes(term) || desc.includes(term);
+      });
+  });
+
   // === FETCH ARTICLES (REPLICADO DE COTIZACIONES) ===
   async function fetchArticles() {
     if (!sourceBranchId) return;
@@ -100,17 +117,34 @@
     );
   });
 
-  function isDecimalAllowed(article: any) {
+  let currentBranchConfig = $derived.by(() => {
+    return data.branches?.find((b: any) => b.id === sourceBranchId) || data.branches?.[0];
+  });
+
+  function isDecimalAllowed(article: any): boolean {
     if (!article) return false;
-    const configStr = String(data.selectedBranchConfig?.allow_decimals_units || 'MTS, MTS2, KG, M, MT, M2, M3');
-    const allowed = configStr.split(',').map((s: string) => s.trim().toUpperCase());
+    const configStr = String(currentBranchConfig?.allow_decimals_units || (data as any).selectedBranchConfig?.allow_decimals_units || 'MTS, MTS2, KG');
+    const allowedTokens = configStr.split(',').map((s: string) => s.trim().toUpperCase()).filter(Boolean);
     const co_uni = String(article?.co_uni || '').trim().toUpperCase();
-    const unidad = String(article?.unidad || article?.uni_venta || '').trim().toUpperCase();
-    return allowed.some(a => a && (co_uni.includes(a) || unidad.includes(a)));
+    const unidad = String(article?.unidad || article?.uni_venta || article?.des_uni || '').trim().toUpperCase();
+    
+    return allowedTokens.some(token => token === co_uni || token === unidad || (token.length >= 2 && (co_uni === token || unidad === token)));
   }
 
-  function getStep(article: any) {
+  function getStep(article: any): number {
     return isDecimalAllowed(article) ? 0.5 : 1;
+  }
+
+  function roundQuantity(val: number, articleOrItem: any): number {
+    if (isNaN(val) || val <= 0) {
+      return isDecimalAllowed(articleOrItem) ? 0.5 : 1;
+    }
+    if (isDecimalAllowed(articleOrItem)) {
+      // Redondeo a pasos de 0.5 con mínimo de 0.5 (ej. 12.4 -> 12.5, 0.06 -> 0.5, 12.1 -> 12.0)
+      return Math.max(0.5, Math.round(val * 2) / 2);
+    }
+    // Para unidades no decimales (UND, etc.): entero con mínimo 1
+    return Math.max(1, Math.round(val));
   }
 
   function getFilteredDisponibilidad(article: any) {
@@ -118,12 +152,32 @@
     const allowed: string[] = data.allowedWarehouses || data.context?.allowedWarehouses || [];
     const isAdmin = data.isAdmin ?? data.context?.isAdmin ?? (allowed.length === 0);
 
-    const baseList = (isAdmin || allowed.length === 0)
+    let baseList = (isAdmin || allowed.length === 0)
       ? rawList
       : rawList.filter((alm: any) => {
           const almaId = String(alm.co_alma || alm.id || '').trim();
           return allowed.some((w: string) => String(w).trim() === almaId);
         });
+
+    // Si sourceWarehouses está disponible, asegurar nombres completos y que todos los almacenes de la sede estén listados
+    if (sourceWarehouses && sourceWarehouses.length > 0) {
+      const mergedList: any[] = [];
+      sourceWarehouses.forEach((sw: any) => {
+        const swCode = String(sw.co_alma || sw.id || '').trim();
+        if (!isAdmin && allowed.length > 0 && !allowed.some((w: string) => String(w).trim() === swCode)) {
+          return;
+        }
+        const existing = baseList.find((a: any) => String(a.co_alma || a.id || '').trim() === swCode);
+        mergedList.push({
+          co_alma: swCode,
+          des_alma: String(sw.des_alma || sw.des_sub || sw.nombre || existing?.des_alma || swCode).trim(),
+          stock: Number(existing?.stock || 0)
+        });
+      });
+      if (mergedList.length > 0) {
+        baseList = mergedList;
+      }
+    }
 
     // Si estamos editando un traslado, sumamos la cantidad del ajuste de salida original al stock actual
     if (data.editingTransfer) {
@@ -180,9 +234,61 @@
     fetchArticles();
   }
 
+  // Almacenes de la Sede Origen
+  let sourceWarehouses = $state<any[]>([]);
+  let loadingSourceWarehouses = $state(false);
+  let globalSourceWarehouse = $state(data.editingTransfer?.items?.[0]?.co_alma_source || '');
+
+  $effect(() => {
+    if (sourceBranchId) {
+      loadingSourceWarehouses = true;
+      fetch(`/api/agent/warehouses?branch_id=${sourceBranchId}`)
+        .then((res) => res.json())
+        .then((d) => {
+          if (d.warehouses && Array.isArray(d.warehouses)) {
+            sourceWarehouses = d.warehouses;
+            if (sourceWarehouses.length > 0) {
+              if (!globalSourceWarehouse || !sourceWarehouses.some(w => String(w.co_alma || w.id || '').trim() === String(globalSourceWarehouse).trim())) {
+                globalSourceWarehouse = sourceWarehouses[0].co_alma;
+              }
+            }
+          } else {
+            sourceWarehouses = [];
+          }
+        })
+        .catch((err) => {
+          console.error('Error fetching source branch warehouses:', err);
+          sourceWarehouses = [];
+        })
+        .finally(() => {
+          loadingSourceWarehouses = false;
+        });
+    } else {
+      sourceWarehouses = [];
+      globalSourceWarehouse = '';
+    }
+  });
+
+  function getSourceWarehouseName(coAlma: string): string {
+    const clean = String(coAlma || '').trim();
+    if (!clean) return '---';
+    const found = sourceWarehouses.find(w => String(w.co_alma || w.id || '').trim() === clean);
+    return found?.des_alma || found?.des_sub || found?.nombre || clean;
+  }
+
+  function handleGlobalSourceWarehouseChange(newSourceAlma: string) {
+    globalSourceWarehouse = newSourceAlma;
+    selectedItems.forEach((it) => {
+      it.co_alma_source = newSourceAlma;
+      it.stock_origen = getItemStock(it, newSourceAlma);
+    });
+    toast.info(`Almacén origen actualizado a "${getSourceWarehouseName(newSourceAlma)}" para todos los renglones`);
+  }
+
   // Almacenes de la Sede Destino
   let targetWarehouses = $state<any[]>([]);
   let loadingTargetWarehouses = $state(false);
+  let globalTargetWarehouse = $state(data.editingTransfer?.items?.[0]?.co_alma_target || '');
 
   $effect(() => {
     if (targetBranchId) {
@@ -193,10 +299,12 @@
           if (d.warehouses && Array.isArray(d.warehouses)) {
             targetWarehouses = d.warehouses;
             if (targetWarehouses.length > 0) {
-              const defaultTargetAlma = targetWarehouses[0].co_alma;
+              if (!globalTargetWarehouse || !targetWarehouses.some(w => String(w.co_alma || w.id || '').trim() === String(globalTargetWarehouse).trim())) {
+                globalTargetWarehouse = targetWarehouses[0].co_alma;
+              }
               selectedItems.forEach((it) => {
                 if (!it.co_alma_target || it.co_alma_target === '01') {
-                  it.co_alma_target = defaultTargetAlma;
+                  it.co_alma_target = globalTargetWarehouse;
                 }
               });
             }
@@ -213,8 +321,24 @@
         });
     } else {
       targetWarehouses = [];
+      globalTargetWarehouse = '';
     }
   });
+
+  function getTargetWarehouseName(coAlma: string): string {
+    const clean = String(coAlma || '').trim();
+    if (!clean) return '---';
+    const found = targetWarehouses.find(w => String(w.co_alma || w.id || '').trim() === clean);
+    return found?.des_alma || found?.des_sub || found?.nombre || clean;
+  }
+
+  function handleGlobalTargetWarehouseChange(newTargetAlma: string) {
+    globalTargetWarehouse = newTargetAlma;
+    selectedItems.forEach((it) => {
+      it.co_alma_target = newTargetAlma;
+    });
+    toast.info(`Almacén destino actualizado a "${getTargetWarehouseName(newTargetAlma)}" para todos los renglones`);
+  }
 
   function addItem(article: any) {
     const code = (article.co_art || article.codigo || '').trim();
@@ -229,12 +353,12 @@
     const almaCode = selectedWarehouses[code] || validDispo[0]?.co_alma || '01';
     const curAlm = validDispo.find((a: any) => String(a.co_alma).trim() === String(almaCode).trim()) || validDispo[0];
     const currentStock = Number(curAlm?.stock ?? article.stock_global ?? article.stock ?? 0);
-    const step = getStep(article);
-    const qtyToAdd = qtyPerArticle[code] || step;
+    const rawQtyToAdd = qtyPerArticle[code] || getStep(article);
+    const qtyToAdd = roundQuantity(rawQtyToAdd, article);
 
     const existingIndex = selectedItems.findIndex(i => i.co_art === code && i.co_alma_source === almaCode);
     if (existingIndex >= 0) {
-      const newQty = selectedItems[existingIndex].total_art + qtyToAdd;
+      const newQty = roundQuantity(selectedItems[existingIndex].total_art + qtyToAdd, article);
       if (currentStock > 0 && newQty > currentStock) {
         toast.error(`Stock insuficiente para "${artDesc}". Disponible en origen: ${currentStock}`);
         return;
@@ -251,9 +375,10 @@
         art_des: artDesc,
         stock_origen: currentStock,
         co_alma_source: almaCode,
-        co_alma_target: targetWarehouses[0]?.co_alma || '01',
+        co_alma_target: globalTargetWarehouse || targetWarehouses[0]?.co_alma || '01',
         total_art: qtyToAdd,
         costo_unit: Number(article.costo || 0),
+        co_uni: article.co_uni || article.unidad || 'UND',
         article,
         disponibilidad: JSON.parse(JSON.stringify(validDispo))
       });
@@ -332,31 +457,31 @@
     if (item.total_art > realStock) {
       const maxAllowed = realStock > 0 ? realStock : getStep(item);
       item.total_art = maxAllowed;
-      toast.warning(`Cantidad de "${item.art_des}" ajustada a ${maxAllowed} por disponibilidad en el almacén ${cleanAlma}`);
+      toast.warning(`Cantidad de "${item.art_des}" ajustada a ${maxAllowed} por disponibilidad en el almacén "${getSourceWarehouseName(cleanAlma)}"`);
     }
     if (realStock === 0) {
-      toast.error(`El almacén ${cleanAlma} no tiene stock disponible para "${item.art_des}"`);
+      toast.error(`El almacén "${getSourceWarehouseName(cleanAlma)}" no tiene stock disponible para "${item.art_des}"`);
     }
   }
 
   function updateItemQty(index: number, newQty: number) {
     const item = selectedItems[index];
     if (!item) return;
-    const step = getStep(item);
+    const minStep = isDecimalAllowed(item) ? 0.5 : 1;
     const realStock = getItemStock(item, item.co_alma_source);
     item.stock_origen = realStock;
 
-    if (isNaN(newQty) || newQty < step) {
-      item.total_art = step;
+    if (isNaN(newQty) || newQty < minStep) {
+      item.total_art = minStep;
       return;
     }
-    if (newQty > realStock) {
-      const maxAllowed = realStock > 0 ? realStock : step;
-      item.total_art = maxAllowed;
-      toast.error(`Stock insuficiente para "${item.art_des}". Cantidad ajustada a la disponible (${maxAllowed} ud)`);
+    if (newQty > realStock && realStock > 0) {
+      const maxAllowed = roundQuantity(realStock, item);
+      item.total_art = Math.max(minStep, maxAllowed > realStock ? realStock : maxAllowed);
+      toast.error(`Stock insuficiente para "${item.art_des}". Cantidad ajustada a la disponible (${item.total_art} ud)`);
       return;
     }
-    item.total_art = Math.round(newQty * 10) / 10;
+    item.total_art = roundQuantity(newQty, item);
   }
 
   function removeItem(index: number) {
@@ -378,6 +503,13 @@
       if (selectedItems.length === 0) {
         toast.error('Debe incluir al menos un artículo en el traslado.');
         return;
+      }
+      if (globalTargetWarehouse) {
+        selectedItems.forEach((it) => {
+          if (!it.co_alma_target || it.co_alma_target === '01') {
+            it.co_alma_target = globalTargetWarehouse;
+          }
+        });
       }
       // Permitir pasar a la confirmación para revisar/corregir, alertando si hay stock insuficiente
       const invalidCount = selectedItems.filter(i => {
@@ -442,6 +574,327 @@
   let targetBranchName = $derived.by(() => {
     return data.branches.find((b: any) => b.id === targetBranchId)?.name || '---';
   });
+
+  // ==========================================
+  // --- ESTADOS DE IMPORTACIÓN MASIVA (EXCEL / CSV) ---
+  // ==========================================
+  let showImportModal = $state(false);
+  let importStage = $state<'upload' | 'mapping'>('upload');
+  let importFileName = $state('');
+  let importWorkbook = $state<any>(null);
+  let importSheets = $state<string[]>([]);
+  let selectedSheet = $state<string>('');
+  let parsedRawRows = $state<any[]>([]);
+  let detectedColumns = $state<string[]>([]);
+  let selectedCodeCol = $state<string>('');
+  let selectedQtyCol = $state<string>('');
+  let isDragging = $state(false);
+  let isReadingFile = $state(false);
+  let isImportingToCart = $state(false);
+  let importErrorMsg = $state<string | null>(null);
+
+  function resetImportState() {
+    importStage = 'upload';
+    importFileName = '';
+    importWorkbook = null;
+    importSheets = [];
+    selectedSheet = '';
+    parsedRawRows = [];
+    detectedColumns = [];
+    selectedCodeCol = '';
+    selectedQtyCol = '';
+    isDragging = false;
+    isReadingFile = false;
+    isImportingToCart = false;
+    importErrorMsg = null;
+  }
+
+  function openImportModal() {
+    if (!sourceBranchId) {
+      toast.error('Por favor seleccione la Sede Origen antes de importar.');
+      return;
+    }
+    resetImportState();
+    showImportModal = true;
+  }
+
+  function closeImportModal() {
+    showImportModal = false;
+    resetImportState();
+  }
+
+  function normalizeHeader(str: string): string {
+    return String(str || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .trim();
+  }
+
+  function autoDetectColumns(cols: string[]) {
+    const codeCandidates = ['codigo', 'co_art', 'coart', 'cod', 'articulo', 'art_des', 'item', 'referencia', 'ref', 'sku', 'code', 'material', 'id'];
+    const qtyCandidates = ['cantidad', 'cant', 'qty', 'total_art', 'unidades', 'cant.', 'total', 'count', 'quantity', 'bultos', 'piezas', 'uds', 'und', 'cant_enviada'];
+
+    let foundCode = '';
+    for (const cand of codeCandidates) {
+      const match = cols.find(c => {
+        const norm = normalizeHeader(c);
+        return norm === cand || norm.startsWith(cand) || norm.includes(cand);
+      });
+      if (match) {
+        foundCode = match;
+        break;
+      }
+    }
+
+    let foundQty = '';
+    for (const cand of qtyCandidates) {
+      const match = cols.find(c => {
+        const norm = normalizeHeader(c);
+        return norm === cand || norm.startsWith(cand) || norm.includes(cand);
+      });
+      if (match && match !== foundCode) {
+        foundQty = match;
+        break;
+      }
+    }
+
+    selectedCodeCol = foundCode || cols[0] || '';
+    selectedQtyCol = foundQty || cols.find(c => c !== selectedCodeCol) || cols[1] || cols[0] || '';
+  }
+
+  function parseSheetData(sheetName: string) {
+    if (!importWorkbook) return;
+    const worksheet = importWorkbook.Sheets[sheetName];
+    if (!worksheet) return;
+
+    const json: any[] = XLSX.utils.sheet_to_json(worksheet, { defval: '', raw: false });
+    if (!json || json.length === 0) {
+      importErrorMsg = 'La hoja seleccionada está vacía o no contiene filas de datos.';
+      return;
+    }
+
+    parsedRawRows = json;
+    const colSet = new Set<string>();
+    json.forEach(row => {
+      Object.keys(row).forEach(k => {
+        const cleanK = String(k).trim();
+        if (cleanK && !cleanK.startsWith('__EMPTY')) {
+          colSet.add(cleanK);
+        }
+      });
+    });
+
+    const cols = Array.from(colSet);
+    if (cols.length === 0) {
+      importErrorMsg = 'No se detectaron columnas con encabezados válidos en el archivo.';
+      return;
+    }
+
+    detectedColumns = cols;
+    autoDetectColumns(cols);
+    importErrorMsg = null;
+    importStage = 'mapping';
+  }
+
+  function handleSheetChange(newSheet: string) {
+    selectedSheet = newSheet;
+    parseSheetData(newSheet);
+  }
+
+  async function handleFileUpload(file: File) {
+    if (!file) return;
+    importErrorMsg = null;
+    isReadingFile = true;
+    importFileName = file.name;
+
+    try {
+      const arrayBuffer = await file.arrayBuffer();
+      const wb = XLSX.read(arrayBuffer, { type: 'array' });
+
+      if (!wb || !wb.SheetNames || wb.SheetNames.length === 0) {
+        throw new Error('No se encontraron hojas de datos en el archivo cargado.');
+      }
+
+      importWorkbook = wb;
+      importSheets = wb.SheetNames;
+      selectedSheet = wb.SheetNames[0];
+      parseSheetData(selectedSheet);
+    } catch (err: any) {
+      console.error('Error reading Excel/CSV file:', err);
+      importErrorMsg = 'Error al leer el archivo: ' + (err?.message || 'Formato no soportado.');
+    } finally {
+      isReadingFile = false;
+    }
+  }
+
+  function handleFileDrop(e: DragEvent) {
+    e.preventDefault();
+    isDragging = false;
+    if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      handleFileUpload(e.dataTransfer.files[0]);
+    }
+  }
+
+  function handleFileInputChange(e: Event) {
+    const input = e.target as HTMLInputElement;
+    if (input && input.files && input.files.length > 0) {
+      handleFileUpload(input.files[0]);
+    }
+  }
+
+  const mappingPreview = $derived.by(() => {
+    if (!parsedRawRows || parsedRawRows.length === 0 || !selectedCodeCol) return [];
+    return parsedRawRows.slice(0, 5).map((row, idx) => {
+      const rawCode = String(row[selectedCodeCol] ?? '').trim();
+      const rawQty = selectedQtyCol ? String(row[selectedQtyCol] ?? '').trim() : '1';
+      const numQty = parseFloat(rawQty.replace(',', '.'));
+      return {
+        rowNumber: idx + 1,
+        rawCode,
+        rawQty,
+        isValidQty: !isNaN(numQty) && numQty > 0,
+        parsedQty: !isNaN(numQty) && numQty > 0 ? numQty : 1
+      };
+    });
+  });
+
+  const totalValidRowsInFile = $derived.by(() => {
+    if (!parsedRawRows || parsedRawRows.length === 0 || !selectedCodeCol) return 0;
+    return parsedRawRows.filter(row => {
+      const c = String(row[selectedCodeCol] ?? '').trim();
+      const q = selectedQtyCol ? parseFloat(String(row[selectedQtyCol] ?? '').replace(',', '.')) : 1;
+      return c.length > 0 && !isNaN(q) && q > 0;
+    }).length;
+  });
+
+  async function processAndImportItems() {
+    if (!sourceBranchId) {
+      toast.error('Debe seleccionar la Sede Origen antes de importar.');
+      return;
+    }
+    if (!selectedCodeCol) {
+      toast.error('Debe seleccionar la columna del código de artículo.');
+      return;
+    }
+
+    const itemsMap = new Map<string, number>();
+    let invalidCount = 0;
+
+    for (const row of parsedRawRows) {
+      const code = String(row[selectedCodeCol] ?? '').trim();
+      if (!code) {
+        invalidCount++;
+        continue;
+      }
+      const rawQty = selectedQtyCol ? String(row[selectedQtyCol] ?? '').trim() : '1';
+      const parsedQty = parseFloat(rawQty.replace(',', '.'));
+      if (isNaN(parsedQty) || parsedQty <= 0) {
+        invalidCount++;
+        continue;
+      }
+      const current = itemsMap.get(code) || 0;
+      itemsMap.set(code, Math.round((current + parsedQty) * 100) / 100);
+    }
+
+    if (itemsMap.size === 0) {
+      toast.error('No se encontraron artículos con código y cantidad válidos para importar.');
+      return;
+    }
+
+    isImportingToCart = true;
+    try {
+      const codesToQuery = Array.from(itemsMap.keys());
+      const res = await fetch('/api/agent/articles/bulk', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          branch_id: sourceBranchId,
+          codes: codesToQuery
+        })
+      });
+
+      const json = await res.json();
+      if (!json.success && (!json.data || json.data.length === 0)) {
+        throw new Error(json.message || 'No fue posible consultar los artículos en el agente.');
+      }
+
+      const returnedArticles: any[] = json.data || [];
+      const foundCodesSet = new Set<string>();
+      let addedCount = 0;
+      let updatedCount = 0;
+
+      const defaultTargetAlma = globalTargetWarehouse || targetWarehouses[0]?.co_alma || '01';
+
+      for (const art of returnedArticles) {
+        const artCode = String(art.co_art || art.codigo || '').trim();
+        if (!artCode) continue;
+        foundCodesSet.add(artCode);
+
+        const rawQtyToAdd = itemsMap.get(artCode) || 1;
+        const qtyToAdd = roundQuantity(rawQtyToAdd, art);
+        const validDispo = getFilteredDisponibilidad(art);
+        
+        // Priorizar almacén origen global configurado
+        let almaCode = globalSourceWarehouse || '01';
+        let matchedDispo = (validDispo || []).find((d: any) => String(d.co_alma || d.id || '').trim() === String(almaCode).trim());
+        
+        if (!matchedDispo) {
+          const preferredAlm = (validDispo || []).find((d: any) => Number(d.stock || 0) > 0) || validDispo?.[0] || sourceWarehouses?.[0];
+          almaCode = preferredAlm?.co_alma || sourceWarehouses?.[0]?.co_alma || '01';
+          matchedDispo = preferredAlm;
+        }
+        
+        const currentStock = Number(matchedDispo?.stock ?? 0);
+        const unitName = String(art.unidad || art.des_uni || (art.co_uni && art.co_uni !== '01' ? art.co_uni : 'UND')).trim();
+
+        const existingIdx = selectedItems.findIndex(i => i.co_art === artCode && i.co_alma_source === almaCode);
+        if (existingIdx >= 0) {
+          const combined = selectedItems[existingIdx].total_art + qtyToAdd;
+          selectedItems[existingIdx].total_art = roundQuantity(combined, art);
+          selectedItems[existingIdx].stock_origen = currentStock;
+          selectedItems[existingIdx].disponibilidad = JSON.parse(JSON.stringify(validDispo));
+          selectedItems[existingIdx].article = art;
+          selectedItems[existingIdx].co_uni = unitName;
+          selectedItems[existingIdx].co_alma_target = defaultTargetAlma;
+          updatedCount++;
+        } else {
+          selectedItems.push({
+            co_art: artCode,
+            art_des: String(art.art_des || art.descripcion || artCode).trim(),
+            stock_origen: currentStock,
+            co_alma_source: almaCode,
+            co_alma_target: defaultTargetAlma,
+            total_art: qtyToAdd,
+            costo_unit: Number(art.costo || 0),
+            co_uni: unitName,
+            article: art,
+            disponibilidad: JSON.parse(JSON.stringify(validDispo))
+          });
+          addedCount++;
+        }
+      }
+
+      const notFoundCodes = codesToQuery.filter(c => !foundCodesSet.has(c));
+
+      closeImportModal();
+
+      if (addedCount > 0 || updatedCount > 0) {
+        toast.success(`Importación completada: ${addedCount} artículo(s) agregado(s)${updatedCount > 0 ? `, ${updatedCount} actualizado(s)` : ''}.`);
+        goToStep(2);
+      }
+
+      if (notFoundCodes.length > 0) {
+        toast.warning(`${notFoundCodes.length} código(s) no existen en el catálogo: ${notFoundCodes.slice(0, 5).join(', ')}${notFoundCodes.length > 5 ? '...' : ''}`);
+      }
+
+    } catch (err: any) {
+      console.error('Error al procesar la importación:', err);
+      toast.error('Error al importar artículos: ' + (err?.message || 'Error desconocido'));
+    } finally {
+      isImportingToCart = false;
+    }
+  }
 </script>
 
 
@@ -460,13 +913,26 @@
       </p>
     </div>
 
-    <a
-      href="/dashboard/warehouse/transfers"
-      class="flex items-center justify-center gap-2 px-5 py-3 h-14 rounded-2xl bg-surface-soft hover:bg-surface-strong text-text-base border border-border-subtle transition-all font-bold active:scale-95 shadow-sm shrink-0 w-full md:w-auto"
-    >
-      <Clock size={18} class="text-brand-500" />
-      Ver Historial
-    </a>
+    <div class="flex flex-col sm:flex-row items-center gap-3 w-full md:w-auto">
+      {#if activeTab === 1}
+        <button
+          type="button"
+          onclick={openImportModal}
+          class="flex items-center justify-center gap-2 px-5 py-3 h-14 rounded-2xl bg-brand-500/10 hover:bg-brand-500/20 text-brand-400 border border-brand-500/30 transition-all font-bold active:scale-95 shadow-sm shrink-0 w-full sm:w-auto cursor-pointer"
+        >
+          <FileSpreadsheet size={18} />
+          Importar Artículos
+        </button>
+      {/if}
+
+      <a
+        href="/dashboard/warehouse/transfers"
+        class="flex items-center justify-center gap-2 px-5 py-3 h-14 rounded-2xl bg-surface-soft hover:bg-surface-strong text-text-base border border-border-subtle transition-all font-bold active:scale-95 shadow-sm shrink-0 w-full sm:w-auto"
+      >
+        <Clock size={18} class="text-brand-500" />
+        Ver Historial
+      </a>
+    </div>
   </div>
 
   <!-- STEP PROGRESS INDICATOR (SIN NUMEROS, EXACTO A COTIZACIONES) -->
@@ -569,18 +1035,20 @@
     <!-- PASO 1: SELECCION DE SEDES Y MOTIVO        -->
     <!-- ========================================== -->
     {#if activeTab === 0}
-      <div class="space-y-6 max-w-4xl mx-auto" transition:fade={{ duration: 150 }}>
+      <div class="space-y-6 max-w-5xl mx-auto" transition:fade={{ duration: 150 }}>
         
         <!-- SUBTITULOS FUERA DE LA CARD -->
         <div class="text-center space-y-2">
           <h2 class="text-3xl font-black text-text-base">Configuración de Sedes</h2>
-          <p class="text-text-muted text-sm max-w-md mx-auto">Selecciona la sede de origen desde donde sale la mercancía y la sede de destino.</p>
+          <p class="text-text-muted text-sm max-w-md mx-auto">Selecciona la sede y almacenes de origen y destino del traslado.</p>
         </div>
 
         <!-- CARD CON INPUTS EXCLUSIVAMENTE -->
         <div class="glass p-8 md:p-10 rounded-[32px] border border-white/5 shadow-2xl space-y-6 relative z-30">
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <!-- Sede Origen -->
+          
+          <!-- FILA 1: 4 SELECTS (25% en PC / lg:grid-cols-4, 50% en tablet / sm:grid-cols-2, 100% en móvil) -->
+          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+            <!-- 1. Sede Origen -->
             <div class="space-y-2">
               <label class="text-xs font-bold uppercase tracking-wider text-text-muted ml-1">Sede Origen (Salida)</label>
               <Combobox
@@ -592,7 +1060,40 @@
               />
             </div>
 
-            <!-- Sede Destino -->
+            <!-- 2. Almacén Origen Global -->
+            <div class="space-y-2">
+              <label class="text-xs font-bold uppercase tracking-wider text-text-muted ml-1 flex items-center justify-between">
+                <span>Almacén Origen (Salida)</span>
+                {#if loadingSourceWarehouses}
+                  <span class="text-[10px] text-brand-400 font-bold animate-pulse flex items-center gap-1">
+                    <Loader2 size={12} class="animate-spin" /> Cargando...
+                  </span>
+                {/if}
+              </label>
+              <div class="relative">
+                <select
+                  value={globalSourceWarehouse}
+                  onchange={(e) => handleGlobalSourceWarehouseChange(e.currentTarget.value)}
+                  disabled={!sourceBranchId || sourceWarehouses.length === 0}
+                  class="w-full h-14 bg-white/5 border border-white/5 rounded-2xl px-5 text-sm font-bold text-text-base focus:outline-none focus:ring-2 focus:ring-brand-500/50 appearance-none cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed pr-10"
+                >
+                  {#if sourceWarehouses.length === 0}
+                    <option value="01">
+                      {loadingSourceWarehouses ? 'Cargando almacenes...' : sourceBranchId ? 'ALMACEN PRINCIPAL (01)' : 'Seleccione Sede Origen'}
+                    </option>
+                  {:else}
+                    {#each sourceWarehouses as alm}
+                      <option value={alm.co_alma} class="bg-surface-dark text-white">
+                        {alm.des_alma || alm.des_sub || alm.nombre || alm.co_alma} ({alm.co_alma})
+                      </option>
+                    {/each}
+                  {/if}
+                </select>
+                <ChevronDown size={16} class="absolute right-4 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none" />
+              </div>
+            </div>
+
+            <!-- 3. Sede Destino -->
             <div class="space-y-2">
               <label class="text-xs font-bold uppercase tracking-wider text-text-muted ml-1">Sede Destino (Recepción)</label>
               <Combobox
@@ -603,9 +1104,42 @@
                 class="w-full h-14"
               />
             </div>
+
+            <!-- 4. Almacén Destino Global -->
+            <div class="space-y-2">
+              <label class="text-xs font-bold uppercase tracking-wider text-text-muted ml-1 flex items-center justify-between">
+                <span>Almacén Destino (Entrada)</span>
+                {#if loadingTargetWarehouses}
+                  <span class="text-[10px] text-brand-400 font-bold animate-pulse flex items-center gap-1">
+                    <Loader2 size={12} class="animate-spin" /> Cargando...
+                  </span>
+                {/if}
+              </label>
+              <div class="relative">
+                <select
+                  value={globalTargetWarehouse}
+                  onchange={(e) => handleGlobalTargetWarehouseChange(e.currentTarget.value)}
+                  disabled={!targetBranchId || targetWarehouses.length === 0}
+                  class="w-full h-14 bg-white/5 border border-white/5 rounded-2xl px-5 text-sm font-bold text-text-base focus:outline-none focus:ring-2 focus:ring-brand-500/50 appearance-none cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed pr-10"
+                >
+                  {#if targetWarehouses.length === 0}
+                    <option value="01">
+                      {loadingTargetWarehouses ? 'Cargando almacenes...' : targetBranchId ? 'ALMACEN PRINCIPAL (01)' : 'Seleccione Sede Destino'}
+                    </option>
+                  {:else}
+                    {#each targetWarehouses as alm}
+                      <option value={alm.co_alma} class="bg-surface-dark text-white">
+                        {alm.des_alma || alm.des_sub || alm.nombre || alm.co_alma} ({alm.co_alma})
+                      </option>
+                    {/each}
+                  {/if}
+                </select>
+                <ChevronDown size={16} class="absolute right-4 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none" />
+              </div>
+            </div>
           </div>
 
-          <!-- Motivo -->
+          <!-- FILA 2: MOTIVO / OBSERVACIONES (100% en PC y Móvil) -->
           <div class="space-y-2">
             <label class="text-xs font-bold uppercase tracking-wider text-text-muted ml-1">Motivo / Observaciones del Traslado</label>
             <input 
@@ -644,71 +1178,83 @@
           <p class="text-text-muted text-sm max-w-md mx-auto">Busca e incluye la mercancía que deseas trasladar desde {sourceBranchName}.</p>
         </div>
 
-        <!-- BARRA DE FILTROS (GRID EXACTO A COTIZACIONES: 4 columnas lg) -->
-        <div class="glass p-4 rounded-3xl border border-border-subtle shadow-2xl grid grid-cols-2 lg:grid-cols-4 gap-4 items-center relative z-10">
+        <!-- BARRA DE FILTROS (GRID ADAPTABLE CON BOTÓN IMPORTAR) -->
+        <div class="glass p-4 rounded-3xl border border-border-subtle shadow-2xl flex flex-col xl:flex-row gap-4 items-stretch xl:items-center justify-between relative z-10">
 
-          <!-- 0. Sede Origen Badge -->
-          <div class="col-span-2 lg:col-span-1">
-            <div class="h-14 bg-surface-base rounded-2xl px-4 flex items-center gap-3 text-text-base font-bold text-sm border border-border-subtle">
-              <Store size={18} class="text-brand-500 shrink-0" />
-              <span class="truncate">{sourceBranchName}</span>
+          <div class="grid grid-cols-2 md:grid-cols-4 gap-4 flex-1">
+            <!-- 0. Sede Origen Badge -->
+            <div class="col-span-2 md:col-span-1">
+              <div class="h-14 bg-surface-base rounded-2xl px-4 flex items-center gap-3 text-text-base font-bold text-sm border border-border-subtle">
+                <Store size={18} class="text-brand-500 shrink-0" />
+                <span class="truncate">{sourceBranchName}</span>
+              </div>
+            </div>
+
+            <!-- 1. Buscador + Scanner -->
+            <div class="flex items-center gap-2 col-span-2 md:col-span-1">
+              <form onsubmit={handleSearch} class="relative group flex-1 h-14">
+                <input
+                  type="text"
+                  placeholder="Buscar código o descripción..."
+                  bind:value={searchTerm}
+                  class="w-full h-full bg-surface-base pl-6 pr-14 rounded-2xl border border-border-subtle focus:border-brand-500/30 outline-none transition-all font-bold text-sm placeholder:font-normal placeholder:text-text-secondary/30"
+                />
+                <button
+                  type="submit"
+                  class="absolute right-1 top-1 bottom-1 w-12 flex items-center justify-center bg-surface-soft hover:bg-surface-strong text-brand-400 rounded-xl transition-all border border-border-subtle active:scale-95"
+                  title="Buscar Artículos"
+                >
+                  <Search size={18} />
+                </button>
+              </form>
+              <BarcodeScanner
+                onScan={(code) => {
+                  searchTerm = code;
+                  handleSearch();
+                }}
+              />
+            </div>
+
+            <!-- 2. Línea -->
+            <div class="col-span-1 md:col-span-1">
+              <Combobox
+                options={(data.context?.lineas || []).map((l: any) => ({
+                  value: l.co_lin,
+                  label: l.lin_des,
+                }))}
+                bind:value={selectedLinea}
+                placeholder="Líneas (Todas)"
+                allLabel="Líneas (Todas)"
+                onchange={() => handleSearch()}
+                class="w-full h-14"
+              />
+            </div>
+
+            <!-- 3. Categoría -->
+            <div class="col-span-1 md:col-span-1">
+              <Combobox
+                options={(filteredCategorias || []).map((c: any) => ({
+                  value: c.co_cat,
+                  label: c.cat_des,
+                }))}
+                bind:value={selectedCategoria}
+                placeholder="Categorías (Todas)"
+                allLabel="Categorías (Todas)"
+                onchange={() => handleSearch()}
+                class="w-full h-14"
+              />
             </div>
           </div>
 
-          <!-- 1. Buscador + Scanner -->
-          <div class="flex items-center gap-2 col-span-2 lg:col-span-1">
-            <form onsubmit={handleSearch} class="relative group flex-1 h-14">
-              <input
-                type="text"
-                placeholder="Buscar código o descripción..."
-                bind:value={searchTerm}
-                class="w-full h-full bg-surface-base pl-6 pr-14 rounded-2xl border border-border-subtle focus:border-brand-500/30 outline-none transition-all font-bold text-sm placeholder:font-normal placeholder:text-text-secondary/30"
-              />
-              <button
-                type="submit"
-                class="absolute right-1 top-1 bottom-1 w-12 flex items-center justify-center bg-surface-soft hover:bg-surface-strong text-brand-400 rounded-xl transition-all border border-border-subtle active:scale-95"
-                title="Buscar Artículos"
-              >
-                <Search size={18} />
-              </button>
-            </form>
-            <BarcodeScanner
-              onScan={(code) => {
-                searchTerm = code;
-                handleSearch();
-              }}
-            />
-          </div>
-
-          <!-- 2. Línea -->
-          <div class="col-span-1 lg:col-span-1">
-            <Combobox
-              options={(data.context?.lineas || []).map((l: any) => ({
-                value: l.co_lin,
-                label: l.lin_des,
-              }))}
-              bind:value={selectedLinea}
-              placeholder="Líneas (Todas)"
-              allLabel="Líneas (Todas)"
-              onchange={() => handleSearch()}
-              class="w-full h-14"
-            />
-          </div>
-
-          <!-- 3. Categoría -->
-          <div class="col-span-1 lg:col-span-1">
-            <Combobox
-              options={(filteredCategorias || []).map((c: any) => ({
-                value: c.co_cat,
-                label: c.cat_des,
-              }))}
-              bind:value={selectedCategoria}
-              placeholder="Categorías (Todas)"
-              allLabel="Categorías (Todas)"
-              onchange={() => handleSearch()}
-              class="w-full h-14"
-            />
-          </div>
+          <!-- Botón Importar Artículos en Barra de Filtros -->
+          <button
+            type="button"
+            onclick={openImportModal}
+            class="flex items-center justify-center gap-2 px-6 h-14 rounded-2xl bg-brand-500/10 hover:bg-brand-500/20 text-brand-400 border border-brand-500/30 transition-all font-bold active:scale-95 shadow-sm shrink-0 cursor-pointer w-full xl:w-auto"
+          >
+            <FileSpreadsheet size={18} />
+            Importar Artículos
+          </button>
         </div>
 
         <!-- Grid de Artículos -->
@@ -753,7 +1299,10 @@
                           : `${PUBLIC_SUPABASE_URL}/storage/v1/object/public/articulos/${article.campo7}`;
                         viewerOpen = true;
                       }}
-                      onerror={(e) => (e.currentTarget.style.display = "none")}
+                      onerror={(e) => {
+                        const target = e.currentTarget as HTMLElement;
+                        if (target) target.style.display = "none";
+                      }}
                     />
                   {:else}
                     <Package size={48} class="opacity-30 group-hover:scale-110 group-hover:text-brand-500 transition-all duration-500" />
@@ -813,28 +1362,32 @@
                         title="Restar"><Minus size={12} /></button>
                       <input
                         type="number"
-                        step={getStep(article)}
-                        min={getStep(article)}
+                        step={isDecimalAllowed(article) ? "0.5" : "1"}
+                        min={isDecimalAllowed(article) ? "0.5" : "1"}
                         bind:value={qtyPerArticle[code]}
                         onfocus={(e) => (e.currentTarget as HTMLInputElement).select()}
+                        onkeydown={(e) => {
+                          if (!isDecimalAllowed(article) && (e.key === '.' || e.key === ',' || e.key === 'e' || e.key === 'E')) {
+                            e.preventDefault();
+                          }
+                        }}
                         oninput={(e) => {
-                          const step = getStep(article);
+                          const inputEl = e.currentTarget as HTMLInputElement;
+                          const minStep = isDecimalAllowed(article) ? 0.5 : 1;
                           const stock = curAlm?.stock || 0;
-                          let val = parseFloat((e.currentTarget as HTMLInputElement).value);
-                          if (isNaN(val) || val < step) return;
+                          let val = parseFloat(inputEl.value);
+                          if (isNaN(val) || val < minStep) return;
                           if (stock > 0 && val > stock) {
                             toast.warning(`Cantidad ajustada al stock (${stock})`);
-                            qtyPerArticle[code] = Math.floor(stock / step) * step || step;
+                            qtyPerArticle[code] = roundQuantity(stock, article);
+                          } else {
+                            qtyPerArticle[code] = val;
                           }
                         }}
                         onblur={(e) => {
-                          const step = getStep(article);
-                          const v = parseFloat((e.currentTarget as HTMLInputElement).value);
-                          if (isNaN(v) || v < step) {
-                            qtyPerArticle[code] = step;
-                          } else {
-                            qtyPerArticle[code] = Math.round(v / step) * step;
-                          }
+                          const inputEl = e.currentTarget as HTMLInputElement;
+                          const v = parseFloat(inputEl.value);
+                          qtyPerArticle[code] = roundQuantity(v, article);
                         }}
                         class="w-full flex-1 text-center text-base font-black bg-transparent outline-none no-arrows text-brand-400 px-1"
                       />
@@ -1016,15 +1569,23 @@
             </div>
 
             <div class="space-y-6 relative z-10 w-full">
-              <!-- Sedes -->
-              <div class="grid grid-cols-1 md:grid-cols-2 gap-6 border-b border-border-subtle pb-6">
+              <!-- Sedes & Almacenes -->
+              <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 border-b border-border-subtle pb-6">
                 <div class="space-y-1">
                   <span class="text-[10px] font-black uppercase tracking-widest text-text-muted block">Sede Origen (Salida)</span>
-                  <span class="text-2xl font-black text-brand-400">{sourceBranchName}</span>
+                  <span class="text-xl font-black text-brand-400">{sourceBranchName}</span>
+                </div>
+                <div class="space-y-1">
+                  <span class="text-[10px] font-black uppercase tracking-widest text-text-muted block">Almacén Origen (Salida)</span>
+                  <span class="text-lg font-black text-text-base">{getSourceWarehouseName(globalSourceWarehouse)}</span>
                 </div>
                 <div class="space-y-1">
                   <span class="text-[10px] font-black uppercase tracking-widest text-text-muted block">Sede Destino (Recepción)</span>
-                  <span class="text-2xl font-black text-brand-400">{targetBranchName}</span>
+                  <span class="text-xl font-black text-brand-400">{targetBranchName}</span>
+                </div>
+                <div class="space-y-1">
+                  <span class="text-[10px] font-black uppercase tracking-widest text-text-muted block">Almacén Destino (Entrada)</span>
+                  <span class="text-lg font-black text-text-base">{getTargetWarehouseName(globalTargetWarehouse)}</span>
                 </div>
               </div>
 
@@ -1043,32 +1604,66 @@
             </div>
           </div>
 
-          <!-- CARD 2: DETALLE DE RENGLONES (REPLICANDO DISEÑO EXACTO DE COTIZACIONES) -->
+          <!-- CARD 2: DETALLE DE RENGLONES -->
           <div class="glass rounded-[32px] border border-border-subtle overflow-hidden">
-            <div class="p-8 border-b border-border-subtle flex items-center justify-between bg-surface-soft/50">
-              <div class="flex items-center gap-3">
-                <Package size={20} class="text-text-muted" />
-                <h4 class="text-[10px] font-black uppercase tracking-[0.2em] text-text-muted">
-                  Renglones ({selectedItems.length})
-                </h4>
+            <div class="p-6 md:p-8 border-b border-border-subtle flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 bg-surface-soft/50">
+              <!-- Buscador en Renglones (reemplaza texto Renglones) -->
+              <div class="relative flex-1 max-w-xl">
+                <Search size={16} class="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none" />
+                <input
+                  type="text"
+                  bind:value={cartSearchTerm}
+                  placeholder={`Buscar artículo en renglones (${selectedItems.length})...`}
+                  class="w-full h-12 pl-11 pr-10 rounded-2xl bg-surface-base border border-border-subtle focus:border-brand-500/50 outline-none text-xs font-bold text-text-base transition-all placeholder:text-text-muted"
+                />
+                {#if cartSearchTerm}
+                  <button
+                    type="button"
+                    onclick={() => (cartSearchTerm = '')}
+                    class="absolute right-3.5 top-1/2 -translate-y-1/2 text-text-muted hover:text-white transition-colors cursor-pointer"
+                    title="Limpiar búsqueda"
+                  >
+                    <X size={14} />
+                  </button>
+                {/if}
               </div>
+
+              <!-- Botón Agregar Artículo -->
               <button
                 type="button"
                 onclick={() => (activeTab = 1)}
-                class="px-4 py-2 rounded-xl bg-surface-soft hover:bg-surface-strong text-[10px] font-black uppercase text-brand-400 tracking-widest transition-all border border-border-subtle cursor-pointer"
+                class="px-5 py-3 rounded-2xl bg-surface-soft hover:bg-surface-strong text-xs font-black uppercase text-brand-400 tracking-wider transition-all border border-border-subtle cursor-pointer shrink-0 flex items-center justify-center gap-2 shadow-sm"
               >
-                Agregar Articulo
+                <Plus size={14} />
+                Agregar Artículo
               </button>
             </div>
 
             <div class="divide-y border-border-subtle">
-              {#each selectedItems as item, idx}
+              {#if selectedItems.length === 0}
+                <div class="p-12 text-center text-text-muted text-sm font-bold">
+                  No hay artículos en el traslado.
+                </div>
+              {:else if filteredSelectedItems.length === 0}
+                <div class="p-12 text-center text-text-muted text-sm font-bold space-y-3">
+                  <Search size={32} class="mx-auto text-text-muted opacity-40" />
+                  <p>No se encontraron artículos que coincidan con "<span class="text-white font-black">{cartSearchTerm}</span>"</p>
+                  <button
+                    type="button"
+                    onclick={() => (cartSearchTerm = '')}
+                    class="text-xs font-bold text-brand-400 hover:underline cursor-pointer"
+                  >
+                    Limpiar búsqueda
+                  </button>
+                </div>
+              {:else}
+                {#each filteredSelectedItems as { item, originalIndex: idx } (item.co_art + '_' + item.co_alma_source + '_' + idx)}
                 {@const artObj = displayArticles.find((a: any) => (a.co_art || a.codigo || '').trim() === item.co_art) || item.article}
                 {@const rawAvail = getFilteredDisponibilidad(artObj)}
                 {@const availList = (() => {
                   let list = Array.isArray(rawAvail) ? [...rawAvail] : [];
                   if (item.co_alma_source && !list.some((a: any) => (a.co_alma || a.id) === item.co_alma_source)) {
-                    const realAlma = data.context?.warehouses?.find((w: any) => (w.co_alma || w.id) === item.co_alma_source);
+                    const realAlma = (data.context as any)?.warehouses?.find((w: any) => (w.co_alma || w.id) === item.co_alma_source);
                     list.unshift({
                       co_alma: item.co_alma_source,
                       des_alma: String(realAlma?.des_alma || realAlma?.des_sub || realAlma?.nombre || item.co_alma_source).trim(),
@@ -1101,13 +1696,18 @@
                       </button>
                       <input
                         type="number"
-                        min={getStep(item)}
+                        min={isDecimalAllowed(item) ? "0.5" : "1"}
                         max={stock > 0 ? stock : undefined}
-                        step={getStep(item)}
+                        step={isDecimalAllowed(item) ? "0.5" : "1"}
                         bind:value={item.total_art}
+                        onkeydown={(e) => {
+                          if (!isDecimalAllowed(item) && (e.key === '.' || e.key === ',' || e.key === 'e' || e.key === 'E')) {
+                            e.preventDefault();
+                          }
+                        }}
                         oninput={(e) => {
                           const inputEl = e.currentTarget as HTMLInputElement;
-                          const v = parseFloat(inputEl.value);
+                          let v = parseFloat(inputEl.value);
                           if (!isNaN(v)) {
                             updateItemQty(idx, v);
                             if (inputEl.value !== String(item.total_art)) {
@@ -1117,11 +1717,12 @@
                         }}
                         onblur={(e) => {
                           const inputEl = e.currentTarget as HTMLInputElement;
-                          const v = parseFloat(inputEl.value);
-                          updateItemQty(idx, isNaN(v) ? getStep(item) : v);
+                          let v = parseFloat(inputEl.value);
+                          const rounded = roundQuantity(v, item);
+                          updateItemQty(idx, rounded);
                           inputEl.value = String(item.total_art);
                         }}
-                        class="w-14 text-center text-base font-black bg-transparent outline-none no-arrows {hasStockError ? 'text-red-400' : 'text-brand-400'}"
+                        class="w-16 text-center text-base font-black bg-transparent outline-none no-arrows {hasStockError ? 'text-red-400' : 'text-brand-400'}"
                       />
                       <button
                         type="button"
@@ -1143,9 +1744,9 @@
                       <div class="flex items-center gap-4 text-[11px] font-bold uppercase tracking-[0.15em]">
                         <span class="text-brand-400 font-mono">{item.co_art}</span>
                         <span class="h-1 w-1 rounded-full bg-border-subtle"></span>
-                        <span class="text-text-muted">{item.co_uni || "UND"}</span>
+                        <span class="text-text-muted">{item.co_uni && item.co_uni !== '01' ? item.co_uni : (item.article?.unidad || item.article?.des_uni || 'UND')}</span>
                         <span class="h-1 w-1 rounded-full bg-border-subtle"></span>
-                        <span class="{stock > 0 ? 'text-emerald-400' : 'text-red-400'} font-mono">Stock en {item.co_alma_source}: {stock} ud</span>
+                        <span class="{stock > 0 ? 'text-emerald-400' : 'text-red-400'} font-mono">Stock en {getSourceWarehouseName(item.co_alma_source)}: {stock} ud</span>
                       </div>
 
                       {#if hasStockError}
@@ -1153,8 +1754,8 @@
                           <AlertCircle size={14} class="shrink-0" />
                           <span>
                             {stock <= 0
-                              ? `Sin stock disponible en almacén ${item.co_alma_source}`
-                              : `Cantidad (${item.total_art}) excede el stock disponible (${stock} ud)`}
+                              ? `Sin stock disponible en almacén "${getSourceWarehouseName(item.co_alma_source)}"`
+                              : `Cantidad (${item.total_art}) excede el stock disponible en "${getSourceWarehouseName(item.co_alma_source)}" (${stock} ud)`}
                           </span>
                           {#if stock > 0}
                             <button
@@ -1191,7 +1792,7 @@
                         >
                           {#each availList as alm}
                             <option value={alm.co_alma} class="bg-surface-dark text-white">
-                              {alm.des_alma || alm.co_alma} ({alm.stock ?? item.stock_origen ?? 0})
+                              {alm.des_alma || getSourceWarehouseName(alm.co_alma)} ({alm.stock ?? item.stock_origen ?? 0})
                             </option>
                           {/each}
                         </select>
@@ -1222,7 +1823,7 @@
                     </div>
                   </div>
 
-                  <!-- Botón Eliminar Renglón -->
+              <!-- Botón Eliminar Renglón -->
                   <button
                     type="button"
                     onclick={() => removeItem(idx)}
@@ -1233,7 +1834,8 @@
                   </button>
 
                 </div>
-              {/each}
+                {/each}
+              {/if}
             </div>
           </div>
 
@@ -1299,6 +1901,307 @@
 
   </form>
 </div>
+
+<!-- ========================================== -->
+<!-- MODAL DE IMPORTACIÓN DE ARTÍCULOS (EXCEL / CSV) -->
+<!-- ========================================== -->
+{#if showImportModal}
+  <div
+    class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md"
+    in:fade={{ duration: 150 }}
+  >
+    <!-- svelte-ignore a11y_click_events_have_key_events -->
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <div
+      class="fixed inset-0"
+      onclick={closeImportModal}
+    ></div>
+
+    <div
+      class="w-full max-w-2xl bg-surface-base border border-border-subtle rounded-[32px] shadow-2xl overflow-hidden flex flex-col max-h-[90vh] relative z-10"
+      in:scale={{ duration: 200, start: 0.95 }}
+    >
+      <!-- Modal Header -->
+      <div class="p-6 md:p-8 border-b border-border-subtle flex justify-between items-center bg-surface-soft/50">
+        <div class="flex items-center gap-3">
+          <div class="h-12 w-12 rounded-2xl bg-brand-500/10 text-brand-400 flex items-center justify-center border border-brand-500/20">
+            <FileSpreadsheet size={24} />
+          </div>
+          <div>
+            <h2 class="text-xl md:text-2xl font-black tracking-tight text-text-base">
+              Importar Artículos
+            </h2>
+            <p class="text-text-muted text-xs md:text-sm">
+              Carga un archivo Excel (.xlsx, .xls) o CSV para añadir artículos al traslado
+            </p>
+          </div>
+        </div>
+        <button
+          type="button"
+          onclick={closeImportModal}
+          class="p-2 hover:bg-surface-strong rounded-full transition-colors cursor-pointer text-text-muted hover:text-text-base"
+        >
+          <X size={22} />
+        </button>
+      </div>
+
+      <!-- Contenido Modal -->
+      <div class="flex-1 overflow-y-auto p-6 md:p-8 space-y-6 custom-scrollbar">
+
+        {#if importErrorMsg}
+          <div class="bg-red-500/10 border border-red-500/30 rounded-2xl p-4 flex items-center gap-3 text-red-400 font-bold text-xs md:text-sm" transition:slide>
+            <AlertCircle size={20} class="shrink-0" />
+            <span>{importErrorMsg}</span>
+          </div>
+        {/if}
+
+        <!-- ETAPA 1: SUBIDA / DROPZONE -->
+        {#if importStage === 'upload'}
+          <div class="space-y-6">
+            <!-- svelte-ignore a11y_no_static_element_interactions -->
+            <div
+              class="border-2 border-dashed rounded-[28px] p-8 md:p-12 flex flex-col items-center justify-center text-center transition-all cursor-pointer group {isDragging ? 'border-brand-500 bg-brand-500/10' : 'border-border-subtle hover:border-brand-500/50 bg-surface-soft/30 hover:bg-surface-soft/60'}"
+              ondragover={(e) => { e.preventDefault(); isDragging = true; }}
+              ondragleave={() => (isDragging = false)}
+              ondrop={handleFileDrop}
+              onclick={() => document.getElementById('excelFileInput')?.click()}
+            >
+              <input
+                id="excelFileInput"
+                type="file"
+                accept=".xlsx,.xls,.csv"
+                class="hidden"
+                onchange={handleFileInputChange}
+              />
+
+              <div class="h-20 w-20 rounded-3xl bg-brand-500/10 text-brand-400 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform duration-300 border border-brand-500/20 shadow-lg shadow-brand-500/5">
+                {#if isReadingFile}
+                  <Loader2 size={36} class="animate-spin text-brand-500" />
+                {:else}
+                  <UploadCloud size={40} />
+                {/if}
+              </div>
+
+              <h3 class="text-lg font-black text-text-base mb-1">
+                Arrastra tu archivo aquí o <span class="text-brand-400 underline decoration-brand-500/40">selecciónalo</span>
+              </h3>
+              <p class="text-xs text-text-muted font-medium max-w-sm">
+                Formatos compatibles: Microsoft Excel (.xlsx, .xls) y archivos delimitados (.csv).
+              </p>
+
+              <div class="mt-6 flex flex-wrap items-center justify-center gap-2">
+                <span class="px-3 py-1 rounded-xl bg-surface-base border border-border-subtle text-[11px] font-mono font-bold text-text-muted">
+                  .XLSX
+                </span>
+                <span class="px-3 py-1 rounded-xl bg-surface-base border border-border-subtle text-[11px] font-mono font-bold text-text-muted">
+                  .XLS
+                </span>
+                <span class="px-3 py-1 rounded-xl bg-surface-base border border-border-subtle text-[11px] font-mono font-bold text-text-muted">
+                  .CSV
+                </span>
+              </div>
+            </div>
+
+            <!-- Tips & Information Box -->
+            <div class="p-4 rounded-2xl bg-surface-soft/40 border border-border-subtle flex items-start gap-3">
+              <div class="p-2 rounded-xl bg-brand-500/10 text-brand-400 shrink-0">
+                <Tag size={16} />
+              </div>
+              <div class="text-xs space-y-1">
+                <p class="font-bold text-text-base">Mapeo flexible de columnas:</p>
+                <p class="text-text-muted leading-relaxed">
+                  Tu archivo solo necesita contener una columna con los <strong>códigos de artículo</strong> y otra con las <strong>cantidades</strong>. En el siguiente paso podrás elegir exactamente qué columnas usar.
+                </p>
+              </div>
+            </div>
+          </div>
+        {/if}
+
+        <!-- ETAPA 2: MAPEO DE COLUMNAS & PREVIEW -->
+        {#if importStage === 'mapping'}
+          <div class="space-y-6" transition:fade={{ duration: 150 }}>
+            
+            <!-- Info del archivo cargado -->
+            <div class="p-4 rounded-2xl bg-surface-soft border border-border-subtle flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+              <div class="flex items-center gap-3 min-w-0">
+                <div class="h-10 w-10 rounded-xl bg-brand-500/10 text-brand-400 flex items-center justify-center shrink-0 border border-brand-500/20">
+                  <FileText size={20} />
+                </div>
+                <div class="min-w-0">
+                  <p class="text-xs font-black text-text-base truncate">{importFileName}</p>
+                  <p class="text-[10px] text-text-muted font-bold">
+                    {parsedRawRows.length} fila(s) detectada(s) · {detectedColumns.length} columna(s)
+                  </p>
+                </div>
+              </div>
+
+              <div class="flex items-center gap-2 w-full sm:w-auto justify-end">
+                {#if importSheets.length > 1}
+                  <select
+                    value={selectedSheet}
+                    onchange={(e) => handleSheetChange(e.currentTarget.value)}
+                    class="h-9 px-3 rounded-xl bg-surface-base text-xs font-bold text-text-base border border-border-subtle outline-none cursor-pointer"
+                  >
+                    {#each importSheets as sheet}
+                      <option value={sheet}>Hoja: {sheet}</option>
+                    {/each}
+                  </select>
+                {/if}
+
+                <button
+                  type="button"
+                  onclick={() => (importStage = 'upload')}
+                  class="px-3 py-1.5 rounded-xl bg-surface-base hover:bg-surface-strong text-[11px] font-bold text-text-muted hover:text-text-base border border-border-subtle transition-all cursor-pointer"
+                >
+                  Cambiar archivo
+                </button>
+              </div>
+            </div>
+
+            <!-- SELECTORES DE COLUMNAS (INTERACTIVO) -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              
+              <!-- Selector Columna Código -->
+              <div class="glass p-5 rounded-2xl border border-border-subtle space-y-2 relative">
+                <div class="flex items-center justify-between">
+                  <label class="text-[10px] font-black uppercase tracking-wider text-brand-400 block">
+                    Columna de Código *
+                  </label>
+                  <span class="text-[9px] font-bold text-text-muted uppercase">Requerido</span>
+                </div>
+                <div class="relative">
+                  <select
+                    bind:value={selectedCodeCol}
+                    class="w-full h-12 bg-surface-base rounded-xl px-4 text-xs font-black text-text-base border border-border-subtle appearance-none cursor-pointer focus:border-brand-500/50 outline-none transition-all pr-10"
+                  >
+                    {#each detectedColumns as col}
+                      <option value={col}>{col}</option>
+                    {/each}
+                  </select>
+                  <ChevronDown size={16} class="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none" />
+                </div>
+                <p class="text-[10px] text-text-muted">Identifica el código o SKU del producto en Profit.</p>
+              </div>
+
+              <!-- Selector Columna Cantidad -->
+              <div class="glass p-5 rounded-2xl border border-border-subtle space-y-2 relative">
+                <div class="flex items-center justify-between">
+                  <label class="text-[10px] font-black uppercase tracking-wider text-brand-400 block">
+                    Columna de Cantidad *
+                  </label>
+                  <span class="text-[9px] font-bold text-text-muted uppercase">Requerido</span>
+                </div>
+                <div class="relative">
+                  <select
+                    bind:value={selectedQtyCol}
+                    class="w-full h-12 bg-surface-base rounded-xl px-4 text-xs font-black text-text-base border border-border-subtle appearance-none cursor-pointer focus:border-brand-500/50 outline-none transition-all pr-10"
+                  >
+                    {#each detectedColumns as col}
+                      <option value={col}>{col}</option>
+                    {/each}
+                  </select>
+                  <ChevronDown size={16} class="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none" />
+                </div>
+                <p class="text-[10px] text-text-muted">Unidades numéricas a transferir por artículo.</p>
+              </div>
+
+            </div>
+
+            <!-- PREVISUALIZACIÓN EN VIVO DE LAS PRIMERAS 5 FILAS -->
+            <div class="space-y-3">
+              <div class="flex items-center justify-between">
+                <h4 class="text-xs font-black uppercase tracking-wider text-text-muted flex items-center gap-2">
+                  <Layers size={14} />
+                  Previsualización (Primeras 5 filas)
+                </h4>
+                <span class="text-[11px] font-bold text-brand-400">
+                  {totalValidRowsInFile} fila(s) listas para procesar
+                </span>
+              </div>
+
+              <div class="border border-border-subtle rounded-2xl overflow-hidden bg-surface-base/50">
+                <table class="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr class="bg-surface-soft/80 border-b border-border-subtle text-[10px] font-black uppercase tracking-wider text-text-muted">
+                      <th class="p-3 w-12 text-center">Fila</th>
+                      <th class="p-3">Código ({selectedCodeCol || '---'})</th>
+                      <th class="p-3 text-right">Cantidad ({selectedQtyCol || '---'})</th>
+                      <th class="p-3 text-center w-28">Estado</th>
+                    </tr>
+                  </thead>
+                  <tbody class="divide-y divide-border-subtle">
+                    {#if mappingPreview.length === 0}
+                      <tr>
+                        <td colspan="4" class="p-4 text-center text-text-muted">
+                          No hay datos disponibles para previsualizar.
+                        </td>
+                      </tr>
+                    {:else}
+                      {#each mappingPreview as row}
+                        <tr class="hover:bg-surface-soft/40 transition-colors font-mono text-[11px]">
+                          <td class="p-3 text-center text-text-muted">{row.rowNumber}</td>
+                          <td class="p-3 font-bold text-text-base font-sans">
+                            {row.rawCode || '<vacío>'}
+                          </td>
+                          <td class="p-3 text-right font-black text-brand-400">
+                            {row.rawQty || '0'}
+                          </td>
+                          <td class="p-3 text-center">
+                            {#if row.rawCode && row.isValidQty}
+                              <span class="px-2 py-0.5 rounded-md bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[10px] font-bold">
+                                Válido
+                              </span>
+                            {:else}
+                              <span class="px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-400 border border-amber-500/20 text-[10px] font-bold">
+                                Omitir
+                              </span>
+                            {/if}
+                          </td>
+                        </tr>
+                      {/each}
+                    {/if}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+          </div>
+        {/if}
+
+      </div>
+
+      <!-- Modal Footer -->
+      <div class="p-6 border-t border-border-subtle bg-surface-soft/40 flex flex-col sm:flex-row items-center justify-between gap-3">
+        <button
+          type="button"
+          onclick={closeImportModal}
+          class="w-full sm:w-auto px-6 h-12 rounded-xl text-text-muted hover:bg-surface-strong text-xs font-bold uppercase tracking-wider transition-all cursor-pointer"
+        >
+          Cancelar
+        </button>
+
+        {#if importStage === 'mapping'}
+          <button
+            type="button"
+            disabled={isImportingToCart || !selectedCodeCol || totalValidRowsInFile === 0}
+            onclick={processAndImportItems}
+            class="w-full sm:w-auto px-8 h-12 rounded-xl bg-brand-600 hover:bg-brand-500 text-white text-xs font-black uppercase tracking-widest transition-all shadow-lg shadow-brand-500/20 flex items-center justify-center gap-2 cursor-pointer active:scale-95 disabled:opacity-50 disabled:grayscale"
+          >
+            {#if isImportingToCart}
+              <Loader2 size={16} class="animate-spin" />
+              <span>Consultando Artículos...</span>
+            {:else}
+              <Check size={16} />
+              <span>Importar y Validar en Confirmación</span>
+              <ArrowRight size={14} />
+            {/if}
+          </button>
+        {/if}
+      </div>
+
+    </div>
+  </div>
+{/if}
 
 <ImageViewer bind:isOpen={viewerOpen} imageUrl={viewerUrl} />
 
