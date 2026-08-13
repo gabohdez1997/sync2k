@@ -26,6 +26,7 @@
     ChevronRight,
     Pencil,
     Ban,
+    Undo2,
     FileSpreadsheet,
   } from "lucide-svelte";
   import { fade } from "svelte/transition";
@@ -52,6 +53,12 @@
   let transferToVoidEntry = $state<any>(null);
   let voidEntryPassword = $state("");
   let isVoidingEntry = $state(false);
+
+  // Estado para Anulación de Traslado Completo
+  let showVoidTransferModal = $state(false);
+  let transferToVoid = $state<any>(null);
+  let voidTransferPassword = $state("");
+  let isVoidingTransfer = $state(false);
 
   // Auto sync branch from URL
   $effect(() => {
@@ -329,7 +336,7 @@
     voidEntryPassword = "";
     showVoidEntryModal = true;
 
-    // Cargar nombres reales de los almacenes desde el Agente Profit para la sede destino
+    // Cargar nombres reales de los almacenes desde el Agente Profit
     const branchesToFetch = Array.from(
       new Set(
         [transfer.source_branch_id, transfer.target_branch_id].filter(Boolean),
@@ -402,6 +409,97 @@
       toast.error(`Error de red: ${e.message}`);
     } finally {
       isVoidingEntry = false;
+    }
+  }
+
+  async function promptVoidTransfer(transfer: any) {
+    if (transfer.status === "ACEPTADO" || transfer.target_ajue_num) {
+      toast.error(
+        "No se puede anular el traslado porque ya fue ingresado en la sede destino. Primero debe anular el ingreso de destino.",
+      );
+      return;
+    }
+    if (transfer.status === "CANCELADO" || transfer.status === "RECHAZADO") {
+      toast.error("Este traslado ya se encuentra cancelado.");
+      return;
+    }
+    transferToVoid = transfer;
+    voidTransferPassword = "";
+    showVoidTransferModal = true;
+
+    // Cargar nombres reales de los almacenes
+    const branchesToFetch = Array.from(
+      new Set(
+        [transfer.source_branch_id, transfer.target_branch_id].filter(Boolean),
+      ),
+    );
+    await Promise.all(
+      branchesToFetch.map(async (bId) => {
+        try {
+          const res = await fetch(`/api/agent/warehouses?branch_id=${bId}`);
+          const resData = await res.json();
+          const list =
+            resData.warehouses || (Array.isArray(resData) ? resData : []);
+          if (Array.isArray(list)) {
+            list.forEach((w: any) => {
+              const code = String(
+                w.co_alma || w.id || w.warehouse_id || "",
+              ).trim();
+              const name = String(
+                w.des_alma || w.nombre || w.descripcion || "",
+              ).trim();
+              if (code && name) {
+                warehouseNames[code] = name;
+              }
+            });
+          }
+        } catch (e) {
+          console.warn(
+            `[TRANSFERS] Error cargando almacenes para sede ${bId}:`,
+            e,
+          );
+        }
+      }),
+    );
+  }
+
+  async function executeVoidTransfer(e?: Event) {
+    if (e) e.preventDefault();
+    if (!transferToVoid) return;
+    if (!voidTransferPassword) {
+      toast.error("Debe ingresar su contraseña de confirmación.");
+      return;
+    }
+
+    isVoidingTransfer = true;
+    try {
+      const res = await fetch("/api/agent/transfers/void", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          transfer_id: transferToVoid.id,
+          password: voidTransferPassword,
+        }),
+      });
+
+      const resData = await res.json();
+      if (res.ok && resData.success) {
+        toast.success(
+          resData.message || "Traslado anulado con éxito.",
+        );
+        showVoidTransferModal = false;
+        detailModalOpen = false;
+        voidTransferPassword = "";
+        await invalidateAll();
+      } else {
+        toast.error(
+          resData.message || "Error al anular el traslado.",
+        );
+      }
+    } catch (e: any) {
+      toast.error(`Error de red: ${e.message}`);
+    } finally {
+      isVoidingTransfer = false;
     }
   }
 
@@ -681,13 +779,23 @@
                       </a>
                     {/if}
 
+                    {#if data.canVoid && item.status === "TRANSITO" && (selectedBranch === "all" ? item.source_branch_id === data.userBranchId : item.source_branch_id === selectedBranch)}
+                      <button
+                        onclick={() => promptVoidTransfer(item)}
+                        class="p-2 rounded-xl bg-surface-soft hover:bg-red-500/10 text-text-muted hover:text-red-400 border border-border-subtle transition-all cursor-pointer flex items-center justify-center"
+                        title="Anular Traslado"
+                      >
+                        <Ban size={18} />
+                      </button>
+                    {/if}
+
                     {#if data.canVoid && item.status === "ACEPTADO" && (selectedBranch === "all" ? item.target_branch_id === data.userBranchId : item.target_branch_id === selectedBranch)}
                       <button
                         onclick={() => promptVoidEntry(item)}
                         class="p-2 rounded-xl bg-surface-soft hover:bg-amber-500/10 text-text-muted hover:text-amber-500 border border-border-subtle transition-all cursor-pointer flex items-center justify-center"
                         title="Anular Ingreso de Traslado"
                       >
-                        <Ban size={18} />
+                        <Undo2 size={18} />
                       </button>
                     {/if}
 
@@ -999,6 +1107,20 @@
               </a>
             {/if}
 
+            {#if data.canVoid && selectedTransfer.status === "TRANSITO" && (selectedBranch === "all" ? selectedTransfer.source_branch_id === data.userBranchId : selectedTransfer.source_branch_id === selectedBranch)}
+              <button
+                type="button"
+                onclick={() => {
+                  detailModalOpen = false;
+                  promptVoidTransfer(selectedTransfer);
+                }}
+                class="w-full sm:w-auto h-12 px-6 rounded-2xl font-bold bg-red-500/20 hover:bg-red-500/30 text-red-400 border border-red-500/30 transition-all flex items-center justify-center gap-2 text-xs cursor-pointer"
+              >
+                <Ban size={16} />
+                Anular Traslado
+              </button>
+            {/if}
+
             {#if data.canVoid && selectedTransfer.status === "ACEPTADO" && (selectedBranch === "all" ? selectedTransfer.target_branch_id === data.userBranchId : selectedTransfer.target_branch_id === selectedBranch)}
               <button
                 type="button"
@@ -1008,7 +1130,7 @@
                 }}
                 class="w-full sm:w-auto h-12 px-6 rounded-2xl font-bold bg-amber-500/20 hover:bg-amber-500/30 text-amber-400 border border-amber-500/30 transition-all flex items-center justify-center gap-2 text-xs cursor-pointer"
               >
-                <Ban size={16} />
+                <Undo2 size={16} />
                 Anular Ingreso
               </button>
             {/if}
@@ -1445,6 +1567,194 @@
             {:else}
               <Ban size={18} />
               Confirmar Anulación
+            {/if}
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+{/if}
+
+<!-- MODAL DE PREVISUALIZACIÓN Y CONFIRMACIÓN PARA ANULAR TRASLADO -->
+{#if showVoidTransferModal && transferToVoid}
+  <div
+    class="fixed inset-0 bg-black/60 backdrop-blur-md z-50 flex items-center justify-center p-4"
+    transition:fade={{ duration: 150 }}
+  >
+    <div
+      class="bg-surface-raised border border-border-bold rounded-3xl w-full max-w-xl overflow-hidden shadow-2xl p-6 md:p-8 text-center space-y-6 max-h-[90vh] overflow-y-auto custom-scrollbar"
+    >
+      <div
+        class="w-16 h-16 rounded-2xl bg-red-500/10 text-red-400 flex items-center justify-center mx-auto border border-red-500/20"
+      >
+        <Ban size={32} />
+      </div>
+
+      <div class="space-y-2">
+        <h3 class="text-2xl font-black text-text-base">
+          Anular Traslado de Inventario
+        </h3>
+        <p class="text-xs text-text-muted leading-relaxed">
+          Esta acción anulará el ajuste de salida en la sede de origen y
+          devolverá el stock a los almacenes de salida. El traslado quedará en estado <span class="font-bold text-red-400">CANCELADO</span> permanentemente.
+        </p>
+      </div>
+
+      <!-- RESUMEN DEL TRASLADO -->
+      <div
+        class="bg-surface-soft/60 rounded-2xl p-5 border border-border-subtle text-left space-y-2.5 font-mono text-xs"
+      >
+        <div class="flex justify-between items-center">
+          <span class="text-text-muted">Traslado:</span>
+          <span class="font-black text-brand-500 text-sm"
+            >{transferToVoid.transfer_number}</span
+          >
+        </div>
+        <div class="flex justify-between">
+          <span class="text-text-muted">Sede Origen (Salida):</span>
+          <span class="font-bold text-text-base"
+            >{transferToVoid.source_branch?.name || "---"}</span
+          >
+        </div>
+        <div class="flex justify-between">
+          <span class="text-text-muted">Ajuste Salida Profit:</span>
+          <span class="font-bold text-amber-500"
+            >{transferToVoid.source_ajue_num || "---"}</span
+          >
+        </div>
+        <div class="flex justify-between">
+          <span class="text-text-muted">Sede Destino (Recepción):</span>
+          <span class="font-bold text-text-base"
+            >{transferToVoid.target_branch?.name || "---"}</span
+          >
+        </div>
+        {#if transferToVoid.motivo}
+          <div class="flex justify-between pt-1 border-t border-border-subtle/50">
+            <span class="text-text-muted">Motivo:</span>
+            <span class="font-sans text-text-base font-medium max-w-[280px] text-right truncate"
+              >{transferToVoid.motivo}</span
+            >
+          </div>
+        {/if}
+      </div>
+
+      <!-- PREVISUALIZACIÓN DE ARTÍCULOS A REVERTIR -->
+      <div class="space-y-2 text-left">
+        <div class="flex items-center justify-between">
+          <span
+            class="text-[10px] font-black uppercase tracking-widest text-text-muted"
+          >
+            Artículos a Reintegrar en Origen ({(transferToVoid.items || []).length})
+          </span>
+        </div>
+        <div
+          class="border border-border-subtle rounded-2xl overflow-hidden max-h-52 overflow-y-auto custom-scrollbar bg-surface-base/50"
+        >
+          <table class="w-full text-left text-xs">
+            <thead>
+              <tr
+                class="bg-surface-soft border-b border-border-subtle text-text-muted font-bold text-[10px] uppercase tracking-wider"
+              >
+                <th class="p-3">Código</th>
+                <th class="p-3">Descripción</th>
+                <th class="p-3 text-center">Almacén Salida</th>
+                <th class="p-3 text-right">Cantidad / Unidad</th>
+              </tr>
+            </thead>
+            <tbody
+              class="divide-y divide-border-subtle/50 font-semibold text-[11px]"
+            >
+              {#each transferToVoid.items || [] as item}
+                {@const srcName = warehouseNames[item.co_alma_source]
+                  ? `${warehouseNames[item.co_alma_source]} (${item.co_alma_source})`
+                  : `Almacén ${item.co_alma_source || '01'}`}
+                <tr class="hover:bg-surface-soft/50">
+                  <td
+                    class="p-3 font-mono text-brand-500 font-bold whitespace-nowrap"
+                    >{item.co_art}</td
+                  >
+                  <td class="p-3 text-text-base leading-relaxed break-words"
+                    >{item.art_des}</td
+                  >
+                  <td
+                    class="p-3 text-center font-mono text-amber-500 font-bold text-[11px]"
+                    >{srcName}</td
+                  >
+                  <td
+                    class="p-3 text-right font-mono font-black text-emerald-400 text-xs whitespace-nowrap"
+                  >
+                    +{Number(item.total_art).toFixed(2)}
+                    <span
+                      class="text-[10px] text-emerald-500 font-bold ml-1 uppercase"
+                      >{item.co_uni || "UND"}</span
+                    >
+                  </td>
+                </tr>
+              {/each}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ALERTA INFORMATIVA -->
+      <div
+        class="bg-red-500/10 border border-red-500/20 rounded-2xl p-4 text-xs text-red-300 text-left flex items-start gap-3"
+      >
+        <AlertTriangle size={18} class="text-red-400 shrink-0 mt-0.5" />
+        <span class="leading-relaxed">
+          Esta acción anulará el ajuste <strong>{transferToVoid.source_ajue_num || 'de salida'}</strong> en Profit Plus y repondrá las cantidades en la sede origen. Esta acción no se puede deshacer.
+        </span>
+      </div>
+
+      <!-- FORMULARIO CON CONTRASEÑA -->
+      <form onsubmit={executeVoidTransfer} class="space-y-4 pt-1">
+        <div class="space-y-2 text-left">
+          <label
+            class="text-[10px] font-black uppercase tracking-widest text-text-muted ml-1"
+            for="transfer-void-full-pass"
+          >
+            Contraseña de Confirmación
+          </label>
+          <div class="relative">
+            <Lock
+              size={18}
+              class="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted opacity-40"
+            />
+            <input
+              id="transfer-void-full-pass"
+              type="password"
+              bind:value={voidTransferPassword}
+              disabled={isVoidingTransfer}
+              placeholder="Introduzca su contraseña"
+              class="w-full h-14 bg-surface-base border border-border-bold rounded-2xl pl-12 pr-5 focus:border-red-500 outline-none transition-all text-text-base"
+              required
+            />
+          </div>
+        </div>
+
+        <div class="flex gap-3 pt-2">
+          <button
+            type="button"
+            onclick={() => {
+              showVoidTransferModal = false;
+              voidTransferPassword = "";
+            }}
+            disabled={isVoidingTransfer}
+            class="flex-1 h-14 rounded-2xl font-bold bg-surface-soft hover:bg-surface-strong transition-all text-text-muted hover:text-text-base border border-border-subtle cursor-pointer disabled:opacity-50"
+          >
+            Cancelar
+          </button>
+          <button
+            type="submit"
+            disabled={isVoidingTransfer || !voidTransferPassword.trim()}
+            class="flex-1 h-14 rounded-2xl font-bold bg-red-600 hover:bg-red-500 text-white shadow-lg shadow-red-600/20 transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer"
+          >
+            {#if isVoidingTransfer}
+              <Loader2 size={18} class="animate-spin" />
+              <span>Anulando...</span>
+            {:else}
+              <Ban size={18} />
+              <span>Confirmar Anulación</span>
             {/if}
           </button>
         </div>

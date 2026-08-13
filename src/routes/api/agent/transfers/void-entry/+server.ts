@@ -98,11 +98,16 @@ export const POST: RequestHandler = async ({ request, fetch, locals }) => {
 		});
 
 		if (!agentRes || !agentRes.success) {
-			console.error('[VOID ENTRY TRANSFER] Error anulando ajuste en Agente Destino:', agentRes);
-			return json({
-				success: false,
-				message: agentRes?.message || 'Error al anular el Ajuste de Entrada en la Sede Destino.'
-			}, { status: 400 });
+			const errMsg = String(agentRes?.message || '').toLowerCase();
+			if (errMsg.includes('ya se encuentra anulado') || errMsg.includes('ya esta anulado') || errMsg.includes('ya está anulado') || agentRes?.already_voided) {
+				console.warn(`[VOID ENTRY TRANSFER] El ajuste ${transfer.target_ajue_num} ya estaba anulado en Profit Plus. Se procede a restablecer el traslado a PENDIENTE en la nube.`);
+			} else {
+				console.error('[VOID ENTRY TRANSFER] Error anulando ajuste en Agente Destino:', agentRes);
+				return json({
+					success: false,
+					message: agentRes?.message || 'Error al anular el Ajuste de Entrada en la Sede Destino.'
+				}, { status: 400 });
+			}
 		}
 
 		// 4. Actualizar el traslado en Supabase para colocarlo como PENDIENTE (TRANSITO)
