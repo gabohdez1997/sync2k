@@ -41,7 +41,8 @@
     Printer,
     Award,
     Image,
-    TrendingUp
+    TrendingUp,
+    BarChart2
   } from 'lucide-svelte';
   import { slide, fade } from 'svelte/transition';
 
@@ -136,7 +137,8 @@
         { id: 'reports_cashier_month', label: 'Cajero del Mes', href: '/dashboard/reports/cashier-month', icon: Award },
         { id: 'reports_article_prices', label: 'Artículos con Precios', href: '/dashboard/reports/article-prices', icon: Tag },
         { id: 'reports_article_sales', label: 'Cantidad Real Vendida', href: '/dashboard/reports/article-sales', icon: ShoppingBag },
-        { id: 'rep_analisis_compras', label: 'Análisis de Compras', href: '/dashboard/reports/analisis-compras', icon: TrendingUp },
+        { id: 'rep_analisis_compras', label: 'Análisis de Compras', href: '/dashboard/reports/purchases-analysis', icon: TrendingUp },
+        { id: 'reports_vendor_performance', label: 'Rendimiento de Vendedores', href: '/dashboard/reports/vendor-performance', icon: BarChart2 },
         { id: 'reports_exchange_diff', label: 'Diferencial Cambiario', href: '/dashboard/reports/exchange-diff', icon: ArrowRightLeft }
       ]
     },

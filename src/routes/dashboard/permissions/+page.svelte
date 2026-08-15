@@ -152,6 +152,13 @@
           onlyRead: true,
         },
         {
+          id: "reports_vendor_performance",
+          label: "Rendimiento de Vendedores",
+          hasOthers: false,
+          hasVoid: false,
+          onlyRead: true,
+        },
+        {
           id: "reports_collections_summary",
           label: "Resumen de Cobros",
           actions: [
