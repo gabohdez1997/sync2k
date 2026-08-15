@@ -24,6 +24,7 @@
         Users,
         Percent,
         Truck,
+        Scissors,
     } from "lucide-svelte";
     import Combobox from "$lib/components/ui/Combobox.svelte";
     import { goto } from "$app/navigation";
@@ -64,6 +65,9 @@
 
     let chartFletesCanvas = $state<HTMLCanvasElement | null>(null);
     let chartFletesInstance: ChartJS | null = null;
+
+    let chartCortesCanvas = $state<HTMLCanvasElement | null>(null);
+    let chartCortesInstance: ChartJS | null = null;
 
     const VENDOR_COLORS = [
         "#3b82f6", // Blue
@@ -169,12 +173,13 @@
         if (chartDevInstance) chartDevInstance.destroy();
         if (chartPctDevInstance) chartPctDevInstance.destroy();
         if (chartFletesInstance) chartFletesInstance.destroy();
+        if (chartCortesInstance) chartCortesInstance.destroy();
     });
 
     function createVendorChart(
         canvas: HTMLCanvasElement,
         labels: string[],
-        metric: "docs_exitosos" | "cotizaciones" | "pedidos" | "devoluciones" | "fletes",
+        metric: "docs_exitosos" | "cotizaciones" | "pedidos" | "devoluciones" | "fletes" | "cortes",
         metricLabel: string,
     ) {
         const vList = data.vendedores || [];
@@ -278,7 +283,7 @@
     }
 
     function getPeriodBreakdown(
-        metric: "docs_exitosos" | "cotizaciones" | "pedidos" | "devoluciones" | "fletes",
+        metric: "docs_exitosos" | "cotizaciones" | "pedidos" | "devoluciones" | "fletes" | "cortes",
     ) {
         const vList = data.vendedores || [];
         const vTimeline = data.vendedoresTimeline || [];
@@ -585,6 +590,7 @@
     const breakdownDev = $derived(getPeriodBreakdown("devoluciones"));
     const breakdownPctDev = $derived(getDevRateBreakdown());
     const breakdownFletes = $derived(getPeriodBreakdown("fletes"));
+    const breakdownCortes = $derived(getPeriodBreakdown("cortes"));
 
     // Chart reactivo principal y comparativos
     $effect(() => {
@@ -785,6 +791,15 @@
                     compLabels,
                     "fletes",
                     "Fletes",
+                );
+            }
+            if (chartCortesCanvas) {
+                if (chartCortesInstance) chartCortesInstance.destroy();
+                chartCortesInstance = createVendorChart(
+                    chartCortesCanvas,
+                    compLabels,
+                    "cortes",
+                    "Cortes",
                 );
             }
         }
@@ -2084,6 +2099,140 @@
                                                         class="text-[10px] text-text-muted/50 italic text-center py-2"
                                                     >
                                                         0 servicios de flete
+                                                    </p>
+                                                {:else}
+                                                    {#each p.vendors as ven}
+                                                        <div
+                                                            class="flex items-center justify-between gap-1.5 text-[10px]"
+                                                        >
+                                                            <div
+                                                                class="flex items-center gap-1.5 min-w-0"
+                                                            >
+                                                                <span
+                                                                    class="w-2 h-2 rounded-full shrink-0 shadow-sm"
+                                                                    style="background-color: {ven.color}"
+                                                                ></span>
+                                                                <span
+                                                                    class="font-bold text-text-base truncate"
+                                                                    title="{ven.ven_des} ({ven.co_ven})"
+                                                                >
+                                                                    {ven.ven_des}
+                                                                </span>
+                                                            </div>
+                                                            <span
+                                                                class="font-mono font-black text-text-base shrink-0"
+                                                            >
+                                                                {formatNumber(
+                                                                    ven.qty,
+                                                                )}
+                                                            </span>
+                                                        </div>
+                                                    {/each}
+                                                {/if}
+                                            </div>
+                                        </div>
+                                    {/each}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 7. Servicios de Cortes por Vendedor (100% Ancho) -->
+                    <div
+                        class="bg-surface-raised border border-border-subtle hover:border-rose-500/40 transition-all rounded-3xl p-6 sm:p-7 shadow-xl space-y-6"
+                    >
+                        <div
+                            class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border-subtle/60 pb-4"
+                        >
+                            <div class="flex items-center gap-3">
+                                <div
+                                    class="p-2.5 rounded-2xl bg-rose-500/10 text-rose-500 border border-rose-500/20"
+                                >
+                                    <Scissors size={22} />
+                                </div>
+                                <div>
+                                    <h3
+                                        class="text-base sm:text-lg font-black text-text-base flex items-center gap-2"
+                                    >
+                                        Servicios de Cortes por Vendedor
+                                    </h3>
+                                    <p class="text-xs text-text-muted">
+                                        Servicios de corte (códigos 902001 y 902002 sumados) facturados con éxito (sin devoluciones) por cada vendedor en el período.
+                                    </p>
+                                </div>
+                            </div>
+                            <div class="flex items-center gap-2 self-start sm:self-auto">
+                                <span
+                                    class="text-[11px] font-mono font-bold text-rose-500 bg-rose-500/10 px-3 py-1 rounded-full border border-rose-500/20"
+                                >
+                                    Total: {formatNumber(breakdownCortes.grandTotal)}
+                                </span>
+                                <span
+                                    class="text-[10px] font-black uppercase px-2.5 py-1 rounded-full bg-surface-soft text-text-muted border border-border-subtle"
+                                >
+                                    Cortes Exitosos
+                                </span>
+                            </div>
+                        </div>
+
+                        <div class="relative w-full" style="height: 380px;">
+                            <canvas bind:this={chartCortesCanvas}></canvas>
+                        </div>
+
+                        <!-- CARDS DE LEYENDA AGRUPADAS POR TEMPORALIDAD CON VENDEDORES -->
+                        <div class="pt-5 border-t border-border-subtle/60 space-y-3">
+                            <div class="flex items-center justify-between">
+                                <span
+                                    class="text-xs font-black uppercase tracking-wider text-text-muted flex items-center gap-2"
+                                >
+                                    Detalle {tipoAgrupacion === 'diario'
+                                        ? 'Diario'
+                                        : tipoAgrupacion === 'semanal'
+                                          ? 'Semanal'
+                                          : 'Mensual'} por Vendedor (Servicios de Cortes)
+                                </span>
+                                <span
+                                    class="text-[10px] text-text-muted font-medium lg:hidden"
+                                >
+                                    ← Desliza para ver todos los períodos →
+                                </span>
+                            </div>
+
+                            <div class="w-full overflow-x-auto custom-scrollbar pb-2">
+                                <div class="flex gap-2.5 min-w-full">
+                                    {#each breakdownCortes.periods as p}
+                                        {@const isMax =
+                                            p.total === breakdownCortes.maxPeriodTotal &&
+                                            breakdownCortes.maxPeriodTotal > 0}
+                                        <div
+                                            class="flex-1 min-w-[170px] sm:min-w-[200px] p-3 rounded-2xl border transition-all flex flex-col justify-between {isMax
+                                                ? 'bg-rose-500/10 border-rose-500/50 ring-1 ring-rose-500/20'
+                                                : 'bg-surface-base/80 border-border-subtle/70 hover:border-border-subtle'}"
+                                        >
+                                            <div
+                                                class="flex items-center justify-between gap-1 mb-2 pb-1.5 border-b border-border-subtle/50"
+                                            >
+                                                <span
+                                                    class="text-[11px] font-black text-text-base block truncate uppercase tracking-wider"
+                                                >
+                                                    {p.periodo}
+                                                </span>
+                                                <span
+                                                    class="text-[11px] font-mono font-black text-rose-500 shrink-0"
+                                                >
+                                                    {formatNumber(p.total)}
+                                                </span>
+                                            </div>
+
+                                            <!-- Listado de vendedores en el período -->
+                                            <div
+                                                class="space-y-1.5 text-xs flex-1"
+                                            >
+                                                {#if p.vendors.length === 0}
+                                                    <p
+                                                        class="text-[10px] text-text-muted/50 italic text-center py-2"
+                                                    >
+                                                        0 servicios de cortes
                                                     </p>
                                                 {:else}
                                                     {#each p.vendors as ven}
