@@ -23,6 +23,7 @@
         ShoppingCart,
         Users,
         Percent,
+        Truck,
     } from "lucide-svelte";
     import Combobox from "$lib/components/ui/Combobox.svelte";
     import { goto } from "$app/navigation";
@@ -60,6 +61,9 @@
 
     let chartPctDevCanvas = $state<HTMLCanvasElement | null>(null);
     let chartPctDevInstance: ChartJS | null = null;
+
+    let chartFletesCanvas = $state<HTMLCanvasElement | null>(null);
+    let chartFletesInstance: ChartJS | null = null;
 
     const VENDOR_COLORS = [
         "#3b82f6", // Blue
@@ -164,12 +168,13 @@
         if (chartPedInstance) chartPedInstance.destroy();
         if (chartDevInstance) chartDevInstance.destroy();
         if (chartPctDevInstance) chartPctDevInstance.destroy();
+        if (chartFletesInstance) chartFletesInstance.destroy();
     });
 
     function createVendorChart(
         canvas: HTMLCanvasElement,
         labels: string[],
-        metric: "docs_exitosos" | "cotizaciones" | "pedidos" | "devoluciones",
+        metric: "docs_exitosos" | "cotizaciones" | "pedidos" | "devoluciones" | "fletes",
         metricLabel: string,
     ) {
         const vList = data.vendedores || [];
@@ -273,7 +278,7 @@
     }
 
     function getPeriodBreakdown(
-        metric: "docs_exitosos" | "cotizaciones" | "pedidos" | "devoluciones",
+        metric: "docs_exitosos" | "cotizaciones" | "pedidos" | "devoluciones" | "fletes",
     ) {
         const vList = data.vendedores || [];
         const vTimeline = data.vendedoresTimeline || [];
@@ -579,6 +584,7 @@
     const breakdownPed = $derived(getPeriodBreakdown("pedidos"));
     const breakdownDev = $derived(getPeriodBreakdown("devoluciones"));
     const breakdownPctDev = $derived(getDevRateBreakdown());
+    const breakdownFletes = $derived(getPeriodBreakdown("fletes"));
 
     // Chart reactivo principal y comparativos
     $effect(() => {
@@ -770,6 +776,15 @@
                 chartPctDevInstance = createVendorPctChart(
                     chartPctDevCanvas,
                     compLabels,
+                );
+            }
+            if (chartFletesCanvas) {
+                if (chartFletesInstance) chartFletesInstance.destroy();
+                chartFletesInstance = createVendorChart(
+                    chartFletesCanvas,
+                    compLabels,
+                    "fletes",
+                    "Fletes",
                 );
             }
         }
@@ -1935,6 +1950,140 @@
                                                         class="text-[10px] text-text-muted/50 italic text-center py-2"
                                                     >
                                                         0 cotizaciones
+                                                    </p>
+                                                {:else}
+                                                    {#each p.vendors as ven}
+                                                        <div
+                                                            class="flex items-center justify-between gap-1.5 text-[10px]"
+                                                        >
+                                                            <div
+                                                                class="flex items-center gap-1.5 min-w-0"
+                                                            >
+                                                                <span
+                                                                    class="w-2 h-2 rounded-full shrink-0 shadow-sm"
+                                                                    style="background-color: {ven.color}"
+                                                                ></span>
+                                                                <span
+                                                                    class="font-bold text-text-base truncate"
+                                                                    title="{ven.ven_des} ({ven.co_ven})"
+                                                                >
+                                                                    {ven.ven_des}
+                                                                </span>
+                                                            </div>
+                                                            <span
+                                                                class="font-mono font-black text-text-base shrink-0"
+                                                            >
+                                                                {formatNumber(
+                                                                    ven.qty,
+                                                                )}
+                                                            </span>
+                                                        </div>
+                                                    {/each}
+                                                {/if}
+                                            </div>
+                                        </div>
+                                    {/each}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 6. Servicios de Flete por Vendedor (100% Ancho) -->
+                    <div
+                        class="bg-surface-raised border border-border-subtle hover:border-cyan-500/40 transition-all rounded-3xl p-6 sm:p-7 shadow-xl space-y-6"
+                    >
+                        <div
+                            class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border-subtle/60 pb-4"
+                        >
+                            <div class="flex items-center gap-3">
+                                <div
+                                    class="p-2.5 rounded-2xl bg-cyan-500/10 text-cyan-500 border border-cyan-500/20"
+                                >
+                                    <Truck size={22} />
+                                </div>
+                                <div>
+                                    <h3
+                                        class="text-base sm:text-lg font-black text-text-base flex items-center gap-2"
+                                    >
+                                        Servicios de Flete por Vendedor
+                                    </h3>
+                                    <p class="text-xs text-text-muted">
+                                        Servicios de flete (código 901001...) facturados con éxito (sin devoluciones) por cada vendedor en el período.
+                                    </p>
+                                </div>
+                            </div>
+                            <div class="flex items-center gap-2 self-start sm:self-auto">
+                                <span
+                                    class="text-[11px] font-mono font-bold text-cyan-500 bg-cyan-500/10 px-3 py-1 rounded-full border border-cyan-500/20"
+                                >
+                                    Total: {formatNumber(breakdownFletes.grandTotal)}
+                                </span>
+                                <span
+                                    class="text-[10px] font-black uppercase px-2.5 py-1 rounded-full bg-surface-soft text-text-muted border border-border-subtle"
+                                >
+                                    Fletes Exitosos
+                                </span>
+                            </div>
+                        </div>
+
+                        <div class="relative w-full" style="height: 380px;">
+                            <canvas bind:this={chartFletesCanvas}></canvas>
+                        </div>
+
+                        <!-- CARDS DE LEYENDA AGRUPADAS POR TEMPORALIDAD CON VENDEDORES -->
+                        <div class="pt-5 border-t border-border-subtle/60 space-y-3">
+                            <div class="flex items-center justify-between">
+                                <span
+                                    class="text-xs font-black uppercase tracking-wider text-text-muted flex items-center gap-2"
+                                >
+                                    Detalle {tipoAgrupacion === 'diario'
+                                        ? 'Diario'
+                                        : tipoAgrupacion === 'semanal'
+                                          ? 'Semanal'
+                                          : 'Mensual'} por Vendedor (Servicios de Flete)
+                                </span>
+                                <span
+                                    class="text-[10px] text-text-muted font-medium lg:hidden"
+                                >
+                                    ← Desliza para ver todos los períodos →
+                                </span>
+                            </div>
+
+                            <div class="w-full overflow-x-auto custom-scrollbar pb-2">
+                                <div class="flex gap-2.5 min-w-full">
+                                    {#each breakdownFletes.periods as p}
+                                        {@const isMax =
+                                            p.total === breakdownFletes.maxPeriodTotal &&
+                                            breakdownFletes.maxPeriodTotal > 0}
+                                        <div
+                                            class="flex-1 min-w-[170px] sm:min-w-[200px] p-3 rounded-2xl border transition-all flex flex-col justify-between {isMax
+                                                ? 'bg-cyan-500/10 border-cyan-500/50 ring-1 ring-cyan-500/20'
+                                                : 'bg-surface-base/80 border-border-subtle/70 hover:border-border-subtle'}"
+                                        >
+                                            <div
+                                                class="flex items-center justify-between gap-1 mb-2 pb-1.5 border-b border-border-subtle/50"
+                                            >
+                                                <span
+                                                    class="text-[11px] font-black text-text-base block truncate uppercase tracking-wider"
+                                                >
+                                                    {p.periodo}
+                                                </span>
+                                                <span
+                                                    class="text-[11px] font-mono font-black text-cyan-500 shrink-0"
+                                                >
+                                                    {formatNumber(p.total)}
+                                                </span>
+                                            </div>
+
+                                            <!-- Listado de vendedores en el período -->
+                                            <div
+                                                class="space-y-1.5 text-xs flex-1"
+                                            >
+                                                {#if p.vendors.length === 0}
+                                                    <p
+                                                        class="text-[10px] text-text-muted/50 italic text-center py-2"
+                                                    >
+                                                        0 servicios de flete
                                                     </p>
                                                 {:else}
                                                     {#each p.vendors as ven}
