@@ -22,6 +22,7 @@
         ClipboardList,
         ShoppingCart,
         Users,
+        Percent,
     } from "lucide-svelte";
     import Combobox from "$lib/components/ui/Combobox.svelte";
     import { goto } from "$app/navigation";
@@ -56,6 +57,9 @@
 
     let chartDevCanvas = $state<HTMLCanvasElement | null>(null);
     let chartDevInstance: ChartJS | null = null;
+
+    let chartPctDevCanvas = $state<HTMLCanvasElement | null>(null);
+    let chartPctDevInstance: ChartJS | null = null;
 
     const VENDOR_COLORS = [
         "#3b82f6", // Blue
@@ -159,6 +163,7 @@
         if (chartCotInstance) chartCotInstance.destroy();
         if (chartPedInstance) chartPedInstance.destroy();
         if (chartDevInstance) chartDevInstance.destroy();
+        if (chartPctDevInstance) chartPctDevInstance.destroy();
     });
 
     function createVendorChart(
@@ -348,10 +353,232 @@
         };
     }
 
+    function createVendorPctChart(
+        canvas: HTMLCanvasElement,
+        labels: string[],
+    ) {
+        const vList = data.vendedores || [];
+        const vTimeline = data.vendedoresTimeline || [];
+
+        const venMap = new Map<string, Map<string, { rate: number; dev: number; netDocs: number }>>();
+        for (const row of vTimeline) {
+            const cVen = row.co_ven;
+            if (!venMap.has(cVen)) {
+                venMap.set(cVen, new Map());
+            }
+            const dev = Number(row.devoluciones) || 0;
+            const netDocs = Number(row.docs_exitosos) || 0;
+            let rate = 0;
+            if (netDocs > 0) {
+                rate = Number(((dev / netDocs) * 100).toFixed(2));
+            } else if (dev > 0) {
+                rate = 100;
+            }
+            venMap.get(cVen)!.set(row.periodo, { rate, dev, netDocs });
+        }
+
+        const datasets = vList.map((ven: any, idx: number) => {
+            const color = VENDOR_COLORS[idx % VENDOR_COLORS.length];
+            const vDataMap = venMap.get(ven.co_ven);
+            const dataPoints = labels.map((p) =>
+                vDataMap && vDataMap.has(p) ? vDataMap.get(p)!.rate : 0,
+            );
+
+            return {
+                label: (ven.ven_des || ven.co_ven || "").trim().toUpperCase(),
+                data: dataPoints,
+                borderColor: color,
+                backgroundColor: color,
+                borderWidth: 2.2,
+                pointRadius: tipoAgrupacion === "diario" ? 3 : 4,
+                pointHoverRadius: tipoAgrupacion === "diario" ? 5 : 6,
+                pointBackgroundColor: color,
+                pointBorderColor: "#fff",
+                pointBorderWidth: 1.5,
+                tension: 0.35,
+                fill: false,
+            };
+        });
+
+        return new ChartJS(canvas, {
+            type: "line",
+            data: { labels, datasets },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: {
+                    mode: "index",
+                    intersect: false,
+                },
+                plugins: {
+                    legend: {
+                        position: "top",
+                        labels: {
+                            usePointStyle: true,
+                            pointStyle: "circle",
+                            padding: 12,
+                            font: { size: 10, weight: "bold" },
+                            boxWidth: 8,
+                        },
+                    },
+                    tooltip: {
+                        backgroundColor: "rgba(15, 15, 20, 0.95)",
+                        titleFont: { size: 12, weight: "bold" },
+                        bodyFont: { size: 11 },
+                        padding: 10,
+                        cornerRadius: 10,
+                        displayColors: true,
+                        itemSort: function (a, b) {
+                            return (b.parsed.y || 0) - (a.parsed.y || 0);
+                        },
+                        filter: function (tooltipItem) {
+                            return (tooltipItem.parsed.y || 0) > 0;
+                        },
+                        callbacks: {
+                            label: function (context) {
+                                const label = context.dataset.label || "";
+                                const val = (context.parsed.y || 0).toLocaleString("es-VE", {
+                                    minimumFractionDigits: 1,
+                                    maximumFractionDigits: 2,
+                                });
+                                return ` ${label}: ${val}%`;
+                            },
+                        },
+                    },
+                },
+                scales: {
+                    x: {
+                        grid: { display: false },
+                        ticks: { font: { size: 10, weight: "bold" } },
+                    },
+                    y: {
+                        beginAtZero: true,
+                        grid: { color: "rgba(128, 128, 128, 0.08)" },
+                        ticks: {
+                            font: { size: 10 },
+                            callback: function (value) {
+                                return `${Number(value).toLocaleString()}%`;
+                            },
+                        },
+                    },
+                },
+            },
+        });
+    }
+
+    function getDevRateBreakdown() {
+        const vList = data.vendedores || [];
+        const vTimeline = data.vendedoresTimeline || [];
+        const compLabels =
+            data.periodosComparativa && data.periodosComparativa.length > 0
+                ? data.periodosComparativa
+                : timeline.map((m: any) => m.periodo);
+
+        const vendorColorMap = new Map<string, string>();
+        const vendorNameMap = new Map<string, string>();
+        vList.forEach((v: any, idx: number) => {
+            vendorColorMap.set(
+                v.co_ven,
+                VENDOR_COLORS[idx % VENDOR_COLORS.length],
+            );
+            vendorNameMap.set(
+                v.co_ven,
+                (v.ven_des || v.co_ven || "").trim().toUpperCase(),
+            );
+        });
+
+        const periodMap = new Map<string, Map<string, { dev: number; netDocs: number; rate: number }>>();
+        for (const p of compLabels) {
+            periodMap.set(p, new Map());
+        }
+
+        for (const row of vTimeline) {
+            if (!periodMap.has(row.periodo)) {
+                periodMap.set(row.periodo, new Map());
+            }
+            const dev = Number(row.devoluciones) || 0;
+            const netDocs = Number(row.docs_exitosos) || 0;
+            let rate = 0;
+            if (netDocs > 0) {
+                rate = Number(((dev / netDocs) * 100).toFixed(2));
+            } else if (dev > 0) {
+                rate = 100;
+            }
+
+            if (dev > 0 || netDocs > 0) {
+                periodMap.get(row.periodo)!.set(row.co_ven, { dev, netDocs, rate });
+            }
+        }
+
+        let grandTotalDev = 0;
+        let grandTotalNet = 0;
+
+        const periodsList = compLabels.map((p) => {
+            const vMap = periodMap.get(p) || new Map();
+            const vendorsInPeriod: Array<{
+                co_ven: string;
+                ven_des: string;
+                rate: number;
+                dev: number;
+                netDocs: number;
+                color: string;
+            }> = [];
+            let periodDev = 0;
+            let periodNet = 0;
+
+            for (const [co_ven, val] of vMap.entries()) {
+                periodDev += val.dev;
+                periodNet += val.netDocs;
+                vendorsInPeriod.push({
+                    co_ven,
+                    ven_des: vendorNameMap.get(co_ven) || co_ven,
+                    rate: val.rate,
+                    dev: val.dev,
+                    netDocs: val.netDocs,
+                    color: vendorColorMap.get(co_ven) || "#3b82f6",
+                });
+            }
+
+            vendorsInPeriod.sort((a, b) => b.rate - a.rate || b.dev - a.dev);
+            grandTotalDev += periodDev;
+            grandTotalNet += periodNet;
+
+            const periodRate = periodNet > 0 
+                ? Number(((periodDev / periodNet) * 100).toFixed(2))
+                : (periodDev > 0 ? 100 : 0);
+
+            return {
+                periodo: p,
+                rate: periodRate,
+                dev: periodDev,
+                netDocs: periodNet,
+                vendors: vendorsInPeriod,
+            };
+        });
+
+        const maxPeriodRate =
+            periodsList.length > 0
+                ? Math.max(...periodsList.map((p) => p.rate))
+                : 0;
+
+        const grandAvgRate = grandTotalNet > 0 
+            ? Number(((grandTotalDev / grandTotalNet) * 100).toFixed(2))
+            : (grandTotalDev > 0 ? 100 : 0);
+
+        return {
+            periods: periodsList,
+            maxPeriodRate,
+            grandAvgRate,
+            grandTotalDev,
+            grandTotalNet,
+        };
+    }
+
     const breakdownDocs = $derived(getPeriodBreakdown("docs_exitosos"));
     const breakdownCot = $derived(getPeriodBreakdown("cotizaciones"));
     const breakdownPed = $derived(getPeriodBreakdown("pedidos"));
     const breakdownDev = $derived(getPeriodBreakdown("devoluciones"));
+    const breakdownPctDev = $derived(getDevRateBreakdown());
 
     // Chart reactivo principal y comparativos
     $effect(() => {
@@ -536,6 +763,13 @@
                     compLabels,
                     "devoluciones",
                     "Devoluciones",
+                );
+            }
+            if (chartPctDevCanvas) {
+                if (chartPctDevInstance) chartPctDevInstance.destroy();
+                chartPctDevInstance = createVendorPctChart(
+                    chartPctDevCanvas,
+                    compLabels,
                 );
             }
         }
@@ -1203,47 +1437,47 @@
                         </div>
                     </div>
 
-                    <!-- 2. Cotizaciones (100% Ancho) -->
+                    <!-- 2. Devoluciones (100% Ancho) -->
                     <div
-                        class="bg-surface-raised border border-border-subtle hover:border-blue-500/40 transition-all rounded-3xl p-6 sm:p-7 shadow-xl space-y-6"
+                        class="bg-surface-raised border border-border-subtle hover:border-red-500/40 transition-all rounded-3xl p-6 sm:p-7 shadow-xl space-y-6"
                     >
                         <div
                             class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border-subtle/60 pb-4"
                         >
                             <div class="flex items-center gap-3">
                                 <div
-                                    class="p-2.5 rounded-2xl bg-blue-500/10 text-blue-500 border border-blue-500/20"
+                                    class="p-2.5 rounded-2xl bg-red-500/10 text-red-500 border border-red-500/20"
                                 >
-                                    <ClipboardList size={22} />
+                                    <FileX size={22} />
                                 </div>
                                 <div>
                                     <h3
                                         class="text-base sm:text-lg font-black text-text-base flex items-center gap-2"
                                     >
-                                        Cotizaciones por Vendedor
+                                        Devoluciones por Vendedor
                                     </h3>
                                     <p class="text-xs text-text-muted">
-                                        Cotizaciones emitidas por cada vendedor en
-                                        el período.
+                                        Devoluciones de clientes registradas por
+                                        cada vendedor en el período.
                                     </p>
                                 </div>
                             </div>
                             <div class="flex items-center gap-2 self-start sm:self-auto">
                                 <span
-                                    class="text-[11px] font-mono font-bold text-blue-500 bg-blue-500/10 px-3 py-1 rounded-full border border-blue-500/20"
+                                    class="text-[11px] font-mono font-bold text-red-500 bg-red-500/10 px-3 py-1 rounded-full border border-red-500/20"
                                 >
-                                    Total: {formatNumber(breakdownCot.grandTotal)}
+                                    Total: {formatNumber(breakdownDev.grandTotal)}
                                 </span>
                                 <span
                                     class="text-[10px] font-black uppercase px-2.5 py-1 rounded-full bg-surface-soft text-text-muted border border-border-subtle"
                                 >
-                                    Cotizaciones
+                                    Devoluciones
                                 </span>
                             </div>
                         </div>
 
                         <div class="relative w-full" style="height: 380px;">
-                            <canvas bind:this={chartCotCanvas}></canvas>
+                            <canvas bind:this={chartDevCanvas}></canvas>
                         </div>
 
                         <!-- CARDS DE LEYENDA AGRUPADAS POR TEMPORALIDAD CON VENDEDORES -->
@@ -1256,7 +1490,7 @@
                                         ? 'Diario'
                                         : tipoAgrupacion === 'semanal'
                                           ? 'Semanal'
-                                          : 'Mensual'} por Vendedor (Cotizaciones)
+                                          : 'Mensual'} por Vendedor (Devoluciones)
                                 </span>
                                 <span
                                     class="text-[10px] text-text-muted font-medium lg:hidden"
@@ -1267,13 +1501,13 @@
 
                             <div class="w-full overflow-x-auto custom-scrollbar pb-2">
                                 <div class="flex gap-2.5 min-w-full">
-                                    {#each breakdownCot.periods as p}
+                                    {#each breakdownDev.periods as p}
                                         {@const isMax =
-                                            p.total === breakdownCot.maxPeriodTotal &&
-                                            breakdownCot.maxPeriodTotal > 0}
+                                            p.total === breakdownDev.maxPeriodTotal &&
+                                            breakdownDev.maxPeriodTotal > 0}
                                         <div
                                             class="flex-1 min-w-[170px] sm:min-w-[200px] p-3 rounded-2xl border transition-all flex flex-col justify-between {isMax
-                                                ? 'bg-blue-500/10 border-blue-500/50 ring-1 ring-blue-500/20'
+                                                ? 'bg-red-500/10 border-red-500/50 ring-1 ring-red-500/20'
                                                 : 'bg-surface-base/80 border-border-subtle/70 hover:border-border-subtle'}"
                                         >
                                             <div
@@ -1285,7 +1519,7 @@
                                                     {p.periodo}
                                                 </span>
                                                 <span
-                                                    class="text-[11px] font-mono font-black text-blue-500 shrink-0"
+                                                    class="text-[11px] font-mono font-black text-red-500 shrink-0"
                                                 >
                                                     {formatNumber(p.total)}
                                                 </span>
@@ -1299,7 +1533,7 @@
                                                     <p
                                                         class="text-[10px] text-text-muted/50 italic text-center py-2"
                                                     >
-                                                        0 cotizaciones
+                                                        0 devoluciones
                                                     </p>
                                                 {:else}
                                                     {#each p.vendors as ven}
@@ -1338,7 +1572,138 @@
                         </div>
                     </div>
 
-                    <!-- 3. Pedidos (100% Ancho) -->
+                    <!-- 3. % Devoluciones sobre Facturas Netas (100% Ancho) -->
+                    <div
+                        class="bg-surface-raised border border-border-subtle hover:border-amber-500/40 transition-all rounded-3xl p-6 sm:p-7 shadow-xl space-y-6"
+                    >
+                        <div
+                            class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border-subtle/60 pb-4"
+                        >
+                            <div class="flex items-center gap-3">
+                                <div
+                                    class="p-2.5 rounded-2xl bg-amber-500/10 text-amber-500 border border-amber-500/20"
+                                >
+                                    <Percent size={22} />
+                                </div>
+                                <div>
+                                    <h3
+                                        class="text-base sm:text-lg font-black text-text-base flex items-center gap-2"
+                                    >
+                                        % Devoluciones sobre Facturas Netas por Vendedor
+                                    </h3>
+                                    <p class="text-xs text-text-muted">
+                                        Porcentaje que representan las devoluciones respecto a las facturas netas ((Devoluciones / Facturas Netas) × 100).
+                                    </p>
+                                </div>
+                            </div>
+                            <div class="flex items-center gap-2 self-start sm:self-auto">
+                                <span
+                                    class="text-[11px] font-mono font-bold text-amber-500 bg-amber-500/10 px-3 py-1 rounded-full border border-amber-500/20"
+                                >
+                                    Tasa Global: {breakdownPctDev.grandAvgRate.toLocaleString('es-VE', { minimumFractionDigits: 1, maximumFractionDigits: 2 })}%
+                                </span>
+                                <span
+                                    class="text-[10px] font-black uppercase px-2.5 py-1 rounded-full bg-surface-soft text-text-muted border border-border-subtle"
+                                >
+                                    (Dev / Netas) × 100
+                                </span>
+                            </div>
+                        </div>
+
+                        <div class="relative w-full" style="height: 380px;">
+                            <canvas bind:this={chartPctDevCanvas}></canvas>
+                        </div>
+
+                        <!-- CARDS DE LEYENDA AGRUPADAS POR TEMPORALIDAD CON VENDEDORES -->
+                        <div class="pt-5 border-t border-border-subtle/60 space-y-3">
+                            <div class="flex items-center justify-between">
+                                <span
+                                    class="text-xs font-black uppercase tracking-wider text-text-muted flex items-center gap-2"
+                                >
+                                    Detalle {tipoAgrupacion === 'diario'
+                                        ? 'Diario'
+                                        : tipoAgrupacion === 'semanal'
+                                          ? 'Semanal'
+                                          : 'Mensual'} por Vendedor (% Devoluciones)
+                                </span>
+                                <span
+                                    class="text-[10px] text-text-muted font-medium lg:hidden"
+                                >
+                                    ← Desliza para ver todos los períodos →
+                                </span>
+                            </div>
+
+                            <div class="w-full overflow-x-auto custom-scrollbar pb-2">
+                                <div class="flex gap-2.5 min-w-full">
+                                    {#each breakdownPctDev.periods as p}
+                                        {@const isMax =
+                                            p.rate === breakdownPctDev.maxPeriodRate &&
+                                            breakdownPctDev.maxPeriodRate > 0}
+                                        <div
+                                            class="flex-1 min-w-[170px] sm:min-w-[200px] p-3 rounded-2xl border transition-all flex flex-col justify-between {isMax
+                                                ? 'bg-amber-500/10 border-amber-500/50 ring-1 ring-amber-500/20'
+                                                : 'bg-surface-base/80 border-border-subtle/70 hover:border-border-subtle'}"
+                                        >
+                                            <div
+                                                class="flex items-center justify-between gap-1 mb-2 pb-1.5 border-b border-border-subtle/50"
+                                            >
+                                                <span
+                                                    class="text-[11px] font-black text-text-base block truncate uppercase tracking-wider"
+                                                >
+                                                    {p.periodo}
+                                                </span>
+                                                <span
+                                                    class="text-[11px] font-mono font-black text-amber-500 shrink-0"
+                                                >
+                                                    {p.rate.toLocaleString('es-VE', { minimumFractionDigits: 1, maximumFractionDigits: 2 })}%
+                                                </span>
+                                            </div>
+
+                                            <!-- Listado de vendedores en el período -->
+                                            <div class="space-y-1.5 text-xs flex-1">
+                                                {#if p.vendors.length === 0}
+                                                    <p
+                                                        class="text-[10px] text-text-muted/50 italic text-center py-2"
+                                                    >
+                                                        0% devoluciones
+                                                    </p>
+                                                {:else}
+                                                    {#each p.vendors as ven}
+                                                        <div
+                                                            class="flex items-center justify-between gap-1.5 text-[10px]"
+                                                            title="Dev: {ven.dev} / Netas: {ven.netDocs}"
+                                                        >
+                                                            <div
+                                                                class="flex items-center gap-1.5 min-w-0"
+                                                            >
+                                                                <span
+                                                                    class="w-2 h-2 rounded-full shrink-0 shadow-sm"
+                                                                    style="background-color: {ven.color}"
+                                                                ></span>
+                                                                <span
+                                                                    class="font-bold text-text-base truncate"
+                                                                    title="{ven.ven_des} ({ven.co_ven}) - Dev: {ven.dev} / Netas: {ven.netDocs}"
+                                                                >
+                                                                    {ven.ven_des}
+                                                                </span>
+                                                            </div>
+                                                            <span
+                                                                class="font-mono font-black text-text-base shrink-0"
+                                                            >
+                                                                {ven.rate.toLocaleString('es-VE', { minimumFractionDigits: 1, maximumFractionDigits: 2 })}%
+                                                            </span>
+                                                        </div>
+                                                    {/each}
+                                                {/if}
+                                            </div>
+                                        </div>
+                                    {/each}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 4. Pedidos (100% Ancho) -->
                     <div
                         class="bg-surface-raised border border-border-subtle hover:border-purple-500/40 transition-all rounded-3xl p-6 sm:p-7 shadow-xl space-y-6"
                     >
@@ -1473,47 +1838,47 @@
                         </div>
                     </div>
 
-                    <!-- 4. Devoluciones (100% Ancho) -->
+                    <!-- 5. Cotizaciones (100% Ancho) -->
                     <div
-                        class="bg-surface-raised border border-border-subtle hover:border-red-500/40 transition-all rounded-3xl p-6 sm:p-7 shadow-xl space-y-6"
+                        class="bg-surface-raised border border-border-subtle hover:border-blue-500/40 transition-all rounded-3xl p-6 sm:p-7 shadow-xl space-y-6"
                     >
                         <div
                             class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border-subtle/60 pb-4"
                         >
                             <div class="flex items-center gap-3">
                                 <div
-                                    class="p-2.5 rounded-2xl bg-red-500/10 text-red-500 border border-red-500/20"
+                                    class="p-2.5 rounded-2xl bg-blue-500/10 text-blue-500 border border-blue-500/20"
                                 >
-                                    <FileX size={22} />
+                                    <ClipboardList size={22} />
                                 </div>
                                 <div>
                                     <h3
                                         class="text-base sm:text-lg font-black text-text-base flex items-center gap-2"
                                     >
-                                        Devoluciones por Vendedor
+                                        Cotizaciones por Vendedor
                                     </h3>
                                     <p class="text-xs text-text-muted">
-                                        Devoluciones de clientes registradas por
-                                        cada vendedor en el período.
+                                        Cotizaciones emitidas por cada vendedor en
+                                        el período.
                                     </p>
                                 </div>
                             </div>
                             <div class="flex items-center gap-2 self-start sm:self-auto">
                                 <span
-                                    class="text-[11px] font-mono font-bold text-red-500 bg-red-500/10 px-3 py-1 rounded-full border border-red-500/20"
+                                    class="text-[11px] font-mono font-bold text-blue-500 bg-blue-500/10 px-3 py-1 rounded-full border border-blue-500/20"
                                 >
-                                    Total: {formatNumber(breakdownDev.grandTotal)}
+                                    Total: {formatNumber(breakdownCot.grandTotal)}
                                 </span>
                                 <span
                                     class="text-[10px] font-black uppercase px-2.5 py-1 rounded-full bg-surface-soft text-text-muted border border-border-subtle"
                                 >
-                                    Devoluciones
+                                    Cotizaciones
                                 </span>
                             </div>
                         </div>
 
                         <div class="relative w-full" style="height: 380px;">
-                            <canvas bind:this={chartDevCanvas}></canvas>
+                            <canvas bind:this={chartCotCanvas}></canvas>
                         </div>
 
                         <!-- CARDS DE LEYENDA AGRUPADAS POR TEMPORALIDAD CON VENDEDORES -->
@@ -1526,7 +1891,7 @@
                                         ? 'Diario'
                                         : tipoAgrupacion === 'semanal'
                                           ? 'Semanal'
-                                          : 'Mensual'} por Vendedor (Devoluciones)
+                                          : 'Mensual'} por Vendedor (Cotizaciones)
                                 </span>
                                 <span
                                     class="text-[10px] text-text-muted font-medium lg:hidden"
@@ -1537,13 +1902,13 @@
 
                             <div class="w-full overflow-x-auto custom-scrollbar pb-2">
                                 <div class="flex gap-2.5 min-w-full">
-                                    {#each breakdownDev.periods as p}
+                                    {#each breakdownCot.periods as p}
                                         {@const isMax =
-                                            p.total === breakdownDev.maxPeriodTotal &&
-                                            breakdownDev.maxPeriodTotal > 0}
+                                            p.total === breakdownCot.maxPeriodTotal &&
+                                            breakdownCot.maxPeriodTotal > 0}
                                         <div
                                             class="flex-1 min-w-[170px] sm:min-w-[200px] p-3 rounded-2xl border transition-all flex flex-col justify-between {isMax
-                                                ? 'bg-red-500/10 border-red-500/50 ring-1 ring-red-500/20'
+                                                ? 'bg-blue-500/10 border-blue-500/50 ring-1 ring-blue-500/20'
                                                 : 'bg-surface-base/80 border-border-subtle/70 hover:border-border-subtle'}"
                                         >
                                             <div
@@ -1555,7 +1920,7 @@
                                                     {p.periodo}
                                                 </span>
                                                 <span
-                                                    class="text-[11px] font-mono font-black text-red-500 shrink-0"
+                                                    class="text-[11px] font-mono font-black text-blue-500 shrink-0"
                                                 >
                                                     {formatNumber(p.total)}
                                                 </span>
@@ -1569,7 +1934,7 @@
                                                     <p
                                                         class="text-[10px] text-text-muted/50 italic text-center py-2"
                                                     >
-                                                        0 devoluciones
+                                                        0 cotizaciones
                                                     </p>
                                                 {:else}
                                                     {#each p.vendors as ven}
