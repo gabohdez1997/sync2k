@@ -1,10 +1,10 @@
-// src/routes/dashboard/reports/vendor-performance/+page.server.ts
+// src/routes/dashboard/reports/sales-analysis/+page.server.ts
 import { protectLoad } from '$lib/server/permissions';
 import { AgentClient } from '$lib/server/agent';
 import type { PageServerLoad } from './$types';
 
-export const load: PageServerLoad = protectLoad('reports_vendor_performance', async ({ locals, url, depends, fetch }) => {
-    depends('app:vendor_performance');
+export const load: PageServerLoad = protectLoad('reports_sales_analysis', async ({ locals, url, depends, fetch }) => {
+    depends('app:sales_analysis');
 
     const profile = (locals as any).profile;
     if (!profile) throw new Error('Perfil no cargado.');
@@ -12,7 +12,6 @@ export const load: PageServerLoad = protectLoad('reports_vendor_performance', as
     let startDate = url.searchParams.get('startDate');
     let endDate = url.searchParams.get('endDate');
     let branchId = url.searchParams.get('branch_id') || '';
-    let coVen = url.searchParams.get('co_ven') || '';
 
     // Por defecto: últimos 30 días
     if (!startDate || !endDate) {
@@ -26,7 +25,7 @@ export const load: PageServerLoad = protectLoad('reports_vendor_performance', as
     const allowedBranches = profile.allowed_branches || [];
     if (allowedBranches.length === 0) {
         return {
-            startDate, endDate, branchId, coVen,
+            startDate, endDate, branchId,
             branches: [],
             error: 'No tienes sucursales asignadas.'
         };
@@ -39,7 +38,7 @@ export const load: PageServerLoad = protectLoad('reports_vendor_performance', as
 
     if (!selectedBranch || !selectedBranch.agent_url) {
         return {
-            startDate, endDate, branchId, coVen,
+            startDate, endDate, branchId,
             branches: allowedBranches,
             error: 'La sucursal seleccionada no tiene agente configurado.'
         };
@@ -58,11 +57,19 @@ export const load: PageServerLoad = protectLoad('reports_vendor_performance', as
     );
 
     try {
-        const venParam = coVen ? `&co_ven=${encodeURIComponent(coVen)}` : '';
-        const response = await agentClient.request<any>(
-            `/rendimiento-vendedores?sede=${branchId}&startDate=${startDate}&endDate=${endDate}${venParam}`,
-            { method: 'GET' }
-        );
+        const [response, lineasRes, sublineasRes, catsRes] = await Promise.all([
+            agentClient.request<any>(
+                `/analisis-ventas?sede=${branchId}&startDate=${startDate}&endDate=${endDate}`,
+                { method: 'GET' }
+            ),
+            agentClient.request<any>('/catalogos/lineas').catch(() => ({ data: [] })),
+            agentClient.request<any>('/catalogos/sublineas').catch(() => ({ data: [] })),
+            agentClient.request<any>('/catalogos/categorias').catch(() => ({ data: [] }))
+        ]);
+
+        const lineas = (lineasRes as any).data || (lineasRes as any).items || (Array.isArray(lineasRes) ? lineasRes : []);
+        const sublineas = (sublineasRes as any).data || (sublineasRes as any).items || (Array.isArray(sublineasRes) ? sublineasRes : []);
+        const categorias = (catsRes as any).data || (catsRes as any).items || (Array.isArray(catsRes) ? catsRes : []);
 
         if (response && response.success) {
             return {
@@ -70,36 +77,33 @@ export const load: PageServerLoad = protectLoad('reports_vendor_performance', as
                 endDate,
                 branchId,
                 selectedBranch,
-                selectedCoVen: coVen,
+                selectedBranchConfig: selectedBranch,
                 branches: allowedBranches,
-                tipoAgrupacion: response.tipoAgrupacion || 'mensual',
-                totales: response.totales || { facturas: 0, devoluciones: 0, docs_exitosos: 0, cotizaciones: 0, pedidos: 0 },
-                timeline: response.timeline || response.mensual || [],
-                mensual: response.timeline || response.mensual || [],
-                periodosComparativa: response.periodosComparativa || [],
-                vendedoresTimeline: response.vendedoresTimeline || [],
-                vendedores: response.vendedores || [],
-                rankingVendedores: response.rankingVendedores || [],
-                rankingArtPedidos: response.rankingArtPedidos || [],
-                rankingArtCotizados: response.rankingArtCotizados || [],
-                totalArticulosActivos: response.totalArticulosActivos || 0,
-                totalArticulosDistintosGlobal: response.totalArticulosDistintosGlobal || 0,
-                totalArtPedidosGlobal: response.totalArtPedidosGlobal || 0,
-                totalArtCotizadosGlobal: response.totalArtCotizadosGlobal || 0
+                analysisData: response.data || [],
+                kpis: response.kpis,
+                businessDays: response.businessDays,
+                catalogs: {
+                    lineas,
+                    sublineas,
+                    categorias
+                }
             };
         } else {
             return {
-                startDate, endDate, branchId, selectedCoVen: coVen,
+                startDate, endDate, branchId,
                 selectedBranch,
+                selectedBranchConfig: selectedBranch,
                 branches: allowedBranches,
-                error: response?.message || 'Error al obtener rendimiento de vendedores del agente.'
+                catalogs: { lineas, sublineas, categorias },
+                error: response?.message || 'Error al obtener análisis de ventas del agente.'
             };
         }
     } catch (e: any) {
-        console.error('[Vendor Performance Load]', e);
+        console.error('[Sales Analysis Load]', e);
         return {
-            startDate, endDate, branchId, selectedCoVen: coVen,
+            startDate, endDate, branchId,
             branches: allowedBranches,
+            catalogs: { lineas: [], sublineas: [], categorias: [] },
             error: 'Error comunicándose con el Agente Profit: ' + e.message
         };
     }

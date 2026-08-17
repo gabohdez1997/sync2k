@@ -157,6 +157,13 @@
           onlyRead: true,
         },
         {
+          id: "reports_sales_analysis",
+          label: "Análisis de Ventas",
+          hasOthers: false,
+          hasVoid: false,
+          onlyRead: true,
+        },
+        {
           id: "reports_vendor_performance",
           label: "Rendimiento de Vendedores",
           hasOthers: false,

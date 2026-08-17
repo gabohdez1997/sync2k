@@ -139,6 +139,7 @@
         { id: 'reports_article_sales', label: 'Cantidad Real Vendida', href: '/dashboard/reports/article-sales', icon: ShoppingBag },
         { id: 'rep_analisis_compras', label: 'Análisis de Compras', href: '/dashboard/reports/purchases-analysis', icon: TrendingUp },
         { id: 'reports_vendor_performance', label: 'Rendimiento de Vendedores', href: '/dashboard/reports/vendor-performance', icon: BarChart2 },
+        { id: 'reports_sales_analysis', label: 'Análisis de Ventas', href: '/dashboard/reports/sales-analysis', icon: ShoppingBag },
         { id: 'reports_exchange_diff', label: 'Diferencial Cambiario', href: '/dashboard/reports/exchange-diff', icon: ArrowRightLeft }
       ]
     },

@@ -25,6 +25,12 @@
         Percent,
         Truck,
         Scissors,
+        EyeOff,
+        PackageSearch,
+        PackagePlus,
+        FileSpreadsheet,
+        Award,
+        Search,
     } from "lucide-svelte";
     import Combobox from "$lib/components/ui/Combobox.svelte";
     import { goto } from "$app/navigation";
@@ -48,26 +54,8 @@
     let chartCanvas = $state<HTMLCanvasElement | null>(null);
     let chartInstance: ChartJS | null = null;
 
-    let chartDocsCanvas = $state<HTMLCanvasElement | null>(null);
-    let chartDocsInstance: ChartJS | null = null;
-
-    let chartCotCanvas = $state<HTMLCanvasElement | null>(null);
-    let chartCotInstance: ChartJS | null = null;
-
-    let chartPedCanvas = $state<HTMLCanvasElement | null>(null);
-    let chartPedInstance: ChartJS | null = null;
-
-    let chartDevCanvas = $state<HTMLCanvasElement | null>(null);
-    let chartDevInstance: ChartJS | null = null;
-
-    let chartPctDevCanvas = $state<HTMLCanvasElement | null>(null);
-    let chartPctDevInstance: ChartJS | null = null;
-
-    let chartFletesCanvas = $state<HTMLCanvasElement | null>(null);
-    let chartFletesInstance: ChartJS | null = null;
-
-    let chartCortesCanvas = $state<HTMLCanvasElement | null>(null);
-    let chartCortesInstance: ChartJS | null = null;
+    let compChartCanvas = $state<HTMLCanvasElement | null>(null);
+    let compChartInstance: ChartJS | null = null;
 
     const VENDOR_COLORS = [
         "#3b82f6", // Blue
@@ -87,11 +75,184 @@
         "#64748b", // Slate
     ];
 
+    // Estados de visibilidad de vendedores por cada gráfica
+    let visibleVendorsDocs = $state<Set<string>>(new Set());
+    let visibleVendorsDev = $state<Set<string>>(new Set());
+    let visibleVendorsPctDev = $state<Set<string>>(new Set());
+    let visibleVendorsPed = $state<Set<string>>(new Set());
+    let visibleVendorsCot = $state<Set<string>>(new Set());
+    let visibleVendorsFletes = $state<Set<string>>(new Set());
+    let visibleVendorsCortes = $state<Set<string>>(new Set());
+    let visibleVendorsArt = $state<Set<string>>(new Set());
+    let visibleVendorsArtPed = $state<Set<string>>(new Set());
+    let visibleVendorsArtCot = $state<Set<string>>(new Set());
+    let lastData: any = null;
+
+    $effect(() => {
+        if (data !== lastData) {
+            lastData = data;
+            const vList = data.vendedores || [];
+            const activeVendors = vList.filter((v: any) => !v.inactivo);
+            const activeKeys = (activeVendors.length > 0 ? activeVendors : vList).map((v: any) => v.co_ven);
+            visibleVendorsDocs = new Set(activeKeys);
+            visibleVendorsDev = new Set(activeKeys);
+            visibleVendorsPctDev = new Set(activeKeys);
+            visibleVendorsPed = new Set(activeKeys);
+            visibleVendorsCot = new Set(activeKeys);
+            visibleVendorsFletes = new Set(activeKeys);
+            visibleVendorsCortes = new Set(activeKeys);
+            visibleVendorsArt = new Set(activeKeys);
+            visibleVendorsArtPed = new Set(activeKeys);
+            visibleVendorsArtCot = new Set(activeKeys);
+        }
+    });
+
+    const vendorColorMap = $derived.by(() => {
+        const map = new Map<string, string>();
+        const list = data.vendedores || [];
+        list.forEach((v: any, idx: number) => {
+            map.set(v.co_ven, VENDOR_COLORS[idx % VENDOR_COLORS.length]);
+        });
+        return map;
+    });
+
+    function toggleVendorDocs(coVen: string) {
+        const next = new Set(visibleVendorsDocs);
+        if (next.has(coVen)) next.delete(coVen); else next.add(coVen);
+        visibleVendorsDocs = next;
+    }
+    function selectAllDocs() {
+        visibleVendorsDocs = new Set((data.vendedores || []).map((v: any) => v.co_ven));
+    }
+    function deselectAllDocs() {
+        visibleVendorsDocs = new Set();
+    }
+
+    function toggleVendorDev(coVen: string) {
+        const next = new Set(visibleVendorsDev);
+        if (next.has(coVen)) next.delete(coVen); else next.add(coVen);
+        visibleVendorsDev = next;
+    }
+    function selectAllDev() {
+        visibleVendorsDev = new Set((data.vendedores || []).map((v: any) => v.co_ven));
+    }
+    function deselectAllDev() {
+        visibleVendorsDev = new Set();
+    }
+
+    function toggleVendorPctDev(coVen: string) {
+        const next = new Set(visibleVendorsPctDev);
+        if (next.has(coVen)) next.delete(coVen); else next.add(coVen);
+        visibleVendorsPctDev = next;
+    }
+    function selectAllPctDev() {
+        visibleVendorsPctDev = new Set((data.vendedores || []).map((v: any) => v.co_ven));
+    }
+    function deselectAllPctDev() {
+        visibleVendorsPctDev = new Set();
+    }
+
+    function toggleVendorPed(coVen: string) {
+        const next = new Set(visibleVendorsPed);
+        if (next.has(coVen)) next.delete(coVen); else next.add(coVen);
+        visibleVendorsPed = next;
+    }
+    function selectAllPed() {
+        visibleVendorsPed = new Set((data.vendedores || []).map((v: any) => v.co_ven));
+    }
+    function deselectAllPed() {
+        visibleVendorsPed = new Set();
+    }
+
+    function toggleVendorCot(coVen: string) {
+        const next = new Set(visibleVendorsCot);
+        if (next.has(coVen)) next.delete(coVen); else next.add(coVen);
+        visibleVendorsCot = next;
+    }
+    function selectAllCot() {
+        visibleVendorsCot = new Set((data.vendedores || []).map((v: any) => v.co_ven));
+    }
+    function deselectAllCot() {
+        visibleVendorsCot = new Set();
+    }
+
+    function toggleVendorFletes(coVen: string) {
+        const next = new Set(visibleVendorsFletes);
+        if (next.has(coVen)) next.delete(coVen); else next.add(coVen);
+        visibleVendorsFletes = next;
+    }
+    function selectAllFletes() {
+        visibleVendorsFletes = new Set((data.vendedores || []).map((v: any) => v.co_ven));
+    }
+    function deselectAllFletes() {
+        visibleVendorsFletes = new Set();
+    }
+
+    function toggleVendorCortes(coVen: string) {
+        const next = new Set(visibleVendorsCortes);
+        if (next.has(coVen)) next.delete(coVen); else next.add(coVen);
+        visibleVendorsCortes = next;
+    }
+    function selectAllCortes() {
+        visibleVendorsCortes = new Set((data.vendedores || []).map((v: any) => v.co_ven));
+    }
+    function deselectAllCortes() {
+        visibleVendorsCortes = new Set();
+    }
+
+    function toggleVendorArt(coVen: string) {
+        const next = new Set(visibleVendorsArt);
+        if (next.has(coVen)) next.delete(coVen); else next.add(coVen);
+        visibleVendorsArt = next;
+    }
+    function selectAllArt() {
+        visibleVendorsArt = new Set((data.vendedores || []).map((v: any) => v.co_ven));
+    }
+    function deselectAllArt() {
+        visibleVendorsArt = new Set();
+    }
+
+    function toggleVendorArtPed(coVen: string) {
+        const next = new Set(visibleVendorsArtPed);
+        if (next.has(coVen)) next.delete(coVen); else next.add(coVen);
+        visibleVendorsArtPed = next;
+    }
+    function selectAllArtPed() {
+        visibleVendorsArtPed = new Set((data.vendedores || []).map((v: any) => v.co_ven));
+    }
+    function deselectAllArtPed() {
+        visibleVendorsArtPed = new Set();
+    }
+
+    function toggleVendorArtCot(coVen: string) {
+        const next = new Set(visibleVendorsArtCot);
+        if (next.has(coVen)) next.delete(coVen); else next.add(coVen);
+        visibleVendorsArtCot = next;
+    }
+    function selectAllArtCot() {
+        visibleVendorsArtCot = new Set((data.vendedores || []).map((v: any) => v.co_ven));
+    }
+    function deselectAllArtCot() {
+        visibleVendorsArtCot = new Set();
+    }
+
     // Filtros interactivos
     let startDate = $state(data.startDate);
     let endDate = $state(data.endDate);
     let selectedBranch = $state(data.branchId);
     let selectedVendedor = $state(data.selectedCoVen || "");
+    
+    // Buscadores individuales por cada tabla de ranking
+    let vendorFilterSearchDocs = $state("");
+    let vendorFilterSearchDev = $state("");
+    let vendorFilterSearchPctDev = $state("");
+    let vendorFilterSearchPed = $state("");
+    let vendorFilterSearchCot = $state("");
+    let vendorFilterSearchFletes = $state("");
+    let vendorFilterSearchCortes = $state("");
+    let vendorFilterSearch = $state("");
+    let vendorFilterSearchPedArt = $state("");
+    let vendorFilterSearchCotArt = $state("");
 
     // Sincronizar filtros cuando data cambie
     $effect(() => {
@@ -105,11 +266,11 @@
     const vendedoresOptions = $derived(
         (data.vendedores || []).map((v: any) => ({
             value: v.co_ven,
-            label: `${(v.ven_des || v.co_ven || "").trim().toUpperCase()} (${v.total_docs} docs)`,
+            label: `${(v.ven_des || v.co_ven || "").trim().toUpperCase()} (${v.total_docs} docs)${v.inactivo ? " [INACTIVO]" : ""}`,
         })),
     );
 
-    // Totales
+    // Totales y Ranking
     const totales = $derived(
         data.totales || {
             facturas: 0,
@@ -117,8 +278,89 @@
             docs_exitosos: 0,
             cotizaciones: 0,
             pedidos: 0,
+            fletes: 0,
+            cortes: 0,
+            art_distintos: 0,
+            art_pedidos: 0,
+            art_cotizados: 0
         },
     );
+
+    const rankingList = $derived(data.rankingVendedores || []);
+    const rankingArtPedidos = $derived(data.rankingArtPedidos || []);
+    const rankingArtCotizados = $derived(data.rankingArtCotizados || []);
+    const totalArticulosActivos = $derived(data.totalArticulosActivos || 0);
+    const totalArticulosDistintosGlobal = $derived(data.totalArticulosDistintosGlobal || 0);
+    const totalArtPedidosGlobal = $derived(data.totalArtPedidosGlobal || 0);
+    const totalArtCotizadosGlobal = $derived(data.totalArtCotizadosGlobal || 0);
+
+    // Resumen acumulado de todo el rango por cada vendedor
+    const vendorRankingSummary = $derived.by(() => {
+        const map = new Map<string, {
+            co_ven: string;
+            ven_des: string;
+            inactivo: boolean;
+            docs_exitosos: number;
+            facturas: number;
+            devoluciones: number;
+            pedidos: number;
+            cotizaciones: number;
+            fletes: number;
+            cortes: number;
+            pct_dev: number;
+        }>();
+
+        const vList = data.vendedores || [];
+        vList.forEach((v: any) => {
+            map.set(v.co_ven, {
+                co_ven: v.co_ven,
+                ven_des: (v.ven_des || v.co_ven).trim().toUpperCase(),
+                inactivo: !!v.inactivo,
+                docs_exitosos: 0,
+                facturas: 0,
+                devoluciones: 0,
+                pedidos: 0,
+                cotizaciones: 0,
+                fletes: 0,
+                cortes: 0,
+                pct_dev: 0
+            });
+        });
+
+        const vTimeline = data.vendedoresTimeline || [];
+        for (const row of vTimeline) {
+            const item = map.get(row.co_ven);
+            if (item) {
+                item.docs_exitosos += (Number(row.docs_exitosos) || 0);
+                item.facturas += (Number(row.facturas) || 0);
+                item.devoluciones += (Number(row.devoluciones) || 0);
+                item.pedidos += (Number(row.pedidos) || 0);
+                item.cotizaciones += (Number(row.cotizaciones) || 0);
+                item.fletes += (Number(row.fletes) || 0);
+                item.cortes += (Number(row.cortes) || 0);
+            }
+        }
+
+        for (const item of map.values()) {
+            if (item.docs_exitosos > 0) {
+                item.pct_dev = Number(((item.devoluciones / item.docs_exitosos) * 100).toFixed(2));
+            } else if (item.devoluciones > 0) {
+                item.pct_dev = 100;
+            } else {
+                item.pct_dev = 0;
+            }
+        }
+
+        return Array.from(map.values());
+    });
+
+    const rankingDocs = $derived([...vendorRankingSummary].sort((a, b) => b.docs_exitosos - a.docs_exitosos));
+    const rankingDev = $derived([...vendorRankingSummary].sort((a, b) => b.devoluciones - a.devoluciones));
+    const rankingPctDev = $derived([...vendorRankingSummary].sort((a, b) => b.pct_dev - a.pct_dev || b.devoluciones - a.devoluciones));
+    const rankingPed = $derived([...vendorRankingSummary].sort((a, b) => b.pedidos - a.pedidos));
+    const rankingCot = $derived([...vendorRankingSummary].sort((a, b) => b.cotizaciones - a.cotizaciones));
+    const rankingFletes = $derived([...vendorRankingSummary].sort((a, b) => b.fletes - a.fletes));
+    const rankingCortes = $derived([...vendorRankingSummary].sort((a, b) => b.cortes - a.cortes));
 
     const timeline = $derived(data.timeline || data.mensual || []);
     const tipoAgrupacion = $derived(data.tipoAgrupacion || "mensual");
@@ -167,22 +409,17 @@
 
     onDestroy(() => {
         if (chartInstance) chartInstance.destroy();
-        if (chartDocsInstance) chartDocsInstance.destroy();
-        if (chartCotInstance) chartCotInstance.destroy();
-        if (chartPedInstance) chartPedInstance.destroy();
-        if (chartDevInstance) chartDevInstance.destroy();
-        if (chartPctDevInstance) chartPctDevInstance.destroy();
-        if (chartFletesInstance) chartFletesInstance.destroy();
-        if (chartCortesInstance) chartCortesInstance.destroy();
+        if (compChartInstance) compChartInstance.destroy();
     });
 
     function createVendorChart(
         canvas: HTMLCanvasElement,
         labels: string[],
-        metric: "docs_exitosos" | "cotizaciones" | "pedidos" | "devoluciones" | "fletes" | "cortes",
+        metric: "docs_exitosos" | "cotizaciones" | "pedidos" | "devoluciones" | "fletes" | "cortes" | "art_distintos" | "art_pedidos" | "art_cotizados",
         metricLabel: string,
+        visibleSet: Set<string>,
     ) {
-        const vList = data.vendedores || [];
+        const vList = (data.vendedores || []).filter((v: any) => visibleSet.has(v.co_ven));
         const vTimeline = data.vendedoresTimeline || [];
 
         const venMap = new Map<string, Map<string, number>>();
@@ -194,8 +431,9 @@
             venMap.get(cVen)!.set(row.periodo, Number(row[metric]) || 0);
         }
 
-        const datasets = vList.map((ven: any, idx: number) => {
-            const color = VENDOR_COLORS[idx % VENDOR_COLORS.length];
+        const datasets = vList.map((ven: any) => {
+            const idx = (data.vendedores || []).findIndex((v: any) => v.co_ven === ven.co_ven);
+            const color = VENDOR_COLORS[idx >= 0 ? idx % VENDOR_COLORS.length : 0];
             const vDataMap = venMap.get(ven.co_ven);
             const dataPoints = labels.map((p) =>
                 vDataMap ? vDataMap.get(p) || 0 : 0,
@@ -205,7 +443,7 @@
                 label: (ven.ven_des || ven.co_ven || "").trim().toUpperCase(),
                 data: dataPoints,
                 borderColor: color,
-                backgroundColor: color,
+                backgroundColor: color + "20",
                 borderWidth: 2.2,
                 pointRadius: tipoAgrupacion === "diario" ? 3 : 4,
                 pointHoverRadius: tipoAgrupacion === "diario" ? 5 : 6,
@@ -229,14 +467,7 @@
                 },
                 plugins: {
                     legend: {
-                        position: "top",
-                        labels: {
-                            usePointStyle: true,
-                            pointStyle: "circle",
-                            padding: 12,
-                            font: { size: 10, weight: "bold" },
-                            boxWidth: 8,
-                        },
+                        display: false,
                     },
                     tooltip: {
                         backgroundColor: "rgba(15, 15, 20, 0.95)",
@@ -257,7 +488,8 @@
                                 const val = (
                                     context.parsed.y || 0
                                 ).toLocaleString("es-VE");
-                                return ` ${label}: ${val} ${metricLabel.toLowerCase()}`;
+                                const unit = metric === "art_distintos" ? " artículos" : ` ${metricLabel.toLowerCase()}`;
+                                return ` ${label}: ${val}${unit}`;
                             },
                         },
                     },
@@ -366,8 +598,9 @@
     function createVendorPctChart(
         canvas: HTMLCanvasElement,
         labels: string[],
+        visibleSet: Set<string>,
     ) {
-        const vList = data.vendedores || [];
+        const vList = (data.vendedores || []).filter((v: any) => visibleSet.has(v.co_ven));
         const vTimeline = data.vendedoresTimeline || [];
 
         const venMap = new Map<string, Map<string, { rate: number; dev: number; netDocs: number }>>();
@@ -387,8 +620,9 @@
             venMap.get(cVen)!.set(row.periodo, { rate, dev, netDocs });
         }
 
-        const datasets = vList.map((ven: any, idx: number) => {
-            const color = VENDOR_COLORS[idx % VENDOR_COLORS.length];
+        const datasets = vList.map((ven: any) => {
+            const idx = (data.vendedores || []).findIndex((v: any) => v.co_ven === ven.co_ven);
+            const color = VENDOR_COLORS[idx >= 0 ? idx % VENDOR_COLORS.length : 0];
             const vDataMap = venMap.get(ven.co_ven);
             const dataPoints = labels.map((p) =>
                 vDataMap && vDataMap.has(p) ? vDataMap.get(p)!.rate : 0,
@@ -398,7 +632,7 @@
                 label: (ven.ven_des || ven.co_ven || "").trim().toUpperCase(),
                 data: dataPoints,
                 borderColor: color,
-                backgroundColor: color,
+                backgroundColor: color + "20",
                 borderWidth: 2.2,
                 pointRadius: tipoAgrupacion === "diario" ? 3 : 4,
                 pointHoverRadius: tipoAgrupacion === "diario" ? 5 : 6,
@@ -422,14 +656,7 @@
                 },
                 plugins: {
                     legend: {
-                        position: "top",
-                        labels: {
-                            usePointStyle: true,
-                            pointStyle: "circle",
-                            padding: 12,
-                            font: { size: 10, weight: "bold" },
-                            boxWidth: 8,
-                        },
+                        display: false,
                     },
                     tooltip: {
                         backgroundColor: "rgba(15, 15, 20, 0.95)",
@@ -467,7 +694,7 @@
                         ticks: {
                             font: { size: 10 },
                             callback: function (value) {
-                                return `${Number(value).toLocaleString()}%`;
+                                return Number(value).toLocaleString() + "%";
                             },
                         },
                     },
@@ -591,217 +818,334 @@
     const breakdownPctDev = $derived(getDevRateBreakdown());
     const breakdownFletes = $derived(getPeriodBreakdown("fletes"));
     const breakdownCortes = $derived(getPeriodBreakdown("cortes"));
+    const breakdownArt = $derived(getPeriodBreakdown("art_distintos"));
+    const breakdownArtPed = $derived(getPeriodBreakdown("art_pedidos"));
+    const breakdownArtCot = $derived(getPeriodBreakdown("art_cotizados"));
+
+    let activeCompTab = $state<"docs_exitosos" | "devoluciones" | "pct_dev" | "pedidos" | "cotizaciones" | "fletes" | "cortes" | "art_distintos" | "art_pedidos" | "art_cotizados">("docs_exitosos");
+
+    const compTabs = $derived([
+        {
+            id: "docs_exitosos" as const,
+            label: "Docs. Exitosos",
+            icon: FileCheck,
+            activeBg: "bg-emerald-500/10 dark:bg-emerald-500/15",
+            activeBorder: "border-emerald-500/50 text-emerald-600 dark:text-emerald-400 shadow-sm",
+            activeText: "text-emerald-600 dark:text-emerald-400",
+            iconColor: "text-emerald-500"
+        },
+        {
+            id: "devoluciones" as const,
+            label: "Devoluciones",
+            icon: FileX,
+            activeBg: "bg-red-500/10 dark:bg-red-500/15",
+            activeBorder: "border-red-500/50 text-red-600 dark:text-red-400 shadow-sm",
+            activeText: "text-red-600 dark:text-red-400",
+            iconColor: "text-red-500"
+        },
+        {
+            id: "pct_dev" as const,
+            label: "% Devoluciones",
+            icon: Percent,
+            activeBg: "bg-amber-500/10 dark:bg-amber-500/15",
+            activeBorder: "border-amber-500/50 text-amber-600 dark:text-amber-400 shadow-sm",
+            activeText: "text-amber-600 dark:text-amber-400",
+            iconColor: "text-amber-500"
+        },
+        {
+            id: "pedidos" as const,
+            label: "Pedidos",
+            icon: ShoppingCart,
+            activeBg: "bg-purple-500/10 dark:bg-purple-500/15",
+            activeBorder: "border-purple-500/50 text-purple-600 dark:text-purple-400 shadow-sm",
+            activeText: "text-purple-600 dark:text-purple-400",
+            iconColor: "text-purple-500"
+        },
+        {
+            id: "cotizaciones" as const,
+            label: "Cotizaciones",
+            icon: ClipboardList,
+            activeBg: "bg-blue-500/10 dark:bg-blue-500/15",
+            activeBorder: "border-blue-500/50 text-blue-600 dark:text-blue-400 shadow-sm",
+            activeText: "text-blue-600 dark:text-blue-400",
+            iconColor: "text-blue-500"
+        },
+        {
+            id: "fletes" as const,
+            label: "Fletes",
+            icon: Truck,
+            activeBg: "bg-cyan-500/10 dark:bg-cyan-500/15",
+            activeBorder: "border-cyan-500/50 text-cyan-600 dark:text-cyan-400 shadow-sm",
+            activeText: "text-cyan-600 dark:text-cyan-400",
+            iconColor: "text-cyan-500"
+        },
+        {
+            id: "cortes" as const,
+            label: "Cortes",
+            icon: Scissors,
+            activeBg: "bg-rose-500/10 dark:bg-rose-500/15",
+            activeBorder: "border-rose-500/50 text-rose-600 dark:text-rose-400 shadow-sm",
+            activeText: "text-rose-600 dark:text-rose-400",
+            iconColor: "text-rose-500"
+        },
+        {
+            id: "art_distintos" as const,
+            label: "Artículos Únicos Vendidos",
+            icon: PackageSearch,
+            activeBg: "bg-teal-500/10 dark:bg-teal-500/15",
+            activeBorder: "border-teal-500/50 text-teal-600 dark:text-teal-400 shadow-sm",
+            activeText: "text-teal-600 dark:text-teal-400",
+            iconColor: "text-teal-500"
+        },
+        {
+            id: "art_pedidos" as const,
+            label: "Artículos Únicos Pedidos",
+            icon: PackagePlus,
+            activeBg: "bg-purple-500/10 dark:bg-purple-500/15",
+            activeBorder: "border-purple-500/50 text-purple-600 dark:text-purple-400 shadow-sm",
+            activeText: "text-purple-600 dark:text-purple-400",
+            iconColor: "text-purple-500"
+        },
+        {
+            id: "art_cotizados" as const,
+            label: "Artículos Únicos Cotizados",
+            icon: FileSpreadsheet,
+            activeBg: "bg-indigo-500/10 dark:bg-indigo-500/15",
+            activeBorder: "border-indigo-500/50 text-indigo-600 dark:text-indigo-400 shadow-sm",
+            activeText: "text-indigo-600 dark:text-indigo-400",
+            iconColor: "text-indigo-500"
+        }
+    ]);
 
     // Chart reactivo principal y comparativos
+    // 1. Gráfica principal (histórica / vendedor único)
     $effect(() => {
-        if (!mounted) return;
-
-        // 1. Gráfica principal
-        if (chartCanvas && timeline.length) {
-            if (chartInstance) {
-                chartInstance.destroy();
-                chartInstance = null;
-            }
-
-            const labels = timeline.map((m: any) => m.periodo);
-
-            chartInstance = new ChartJS(chartCanvas, {
-                type: "line",
-                data: {
-                    labels,
-                    datasets: [
-                        {
-                            label: "Docs. Exitosos",
-                            data: timeline.map((m: any) => m.docs_exitosos),
-                            borderColor: "#22c55e",
-                            backgroundColor: "rgba(34, 197, 94, 0.08)",
-                            borderWidth: 3,
-                            pointRadius: tipoAgrupacion === "diario" ? 3.5 : 5,
-                            pointHoverRadius:
-                                tipoAgrupacion === "diario" ? 6 : 8,
-                            pointBackgroundColor: "#22c55e",
-                            pointBorderColor: "#fff",
-                            pointBorderWidth: 2,
-                            tension: 0.35,
-                            fill: true,
-                        },
-                        {
-                            label: "Cotizaciones",
-                            data: timeline.map((m: any) => m.cotizaciones),
-                            borderColor: "#3b82f6",
-                            backgroundColor: "rgba(59, 130, 246, 0.06)",
-                            borderWidth: 2.5,
-                            pointRadius: tipoAgrupacion === "diario" ? 2.5 : 4,
-                            pointHoverRadius:
-                                tipoAgrupacion === "diario" ? 5 : 7,
-                            pointBackgroundColor: "#3b82f6",
-                            pointBorderColor: "#fff",
-                            pointBorderWidth: 2,
-                            tension: 0.35,
-                            fill: true,
-                        },
-                        {
-                            label: "Pedidos",
-                            data: timeline.map((m: any) => m.pedidos),
-                            borderColor: "#a855f7",
-                            backgroundColor: "rgba(168, 85, 247, 0.06)",
-                            borderWidth: 2.5,
-                            pointRadius: tipoAgrupacion === "diario" ? 2.5 : 4,
-                            pointHoverRadius:
-                                tipoAgrupacion === "diario" ? 5 : 7,
-                            pointBackgroundColor: "#a855f7",
-                            pointBorderColor: "#fff",
-                            pointBorderWidth: 2,
-                            tension: 0.35,
-                            fill: true,
-                        },
-                        {
-                            label: "Devoluciones",
-                            data: timeline.map((m: any) => m.devoluciones),
-                            borderColor: "#ef4444",
-                            backgroundColor: "rgba(239, 68, 68, 0.06)",
-                            borderWidth: 2,
-                            pointRadius: tipoAgrupacion === "diario" ? 2.5 : 4,
-                            pointHoverRadius:
-                                tipoAgrupacion === "diario" ? 5 : 7,
-                            pointBackgroundColor: "#ef4444",
-                            pointBorderColor: "#fff",
-                            pointBorderWidth: 2,
-                            tension: 0.35,
-                            fill: true,
-                            borderDash: [6, 3],
-                        },
-                    ],
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    interaction: {
-                        mode: "index",
-                        intersect: false,
-                    },
-                    plugins: {
-                        legend: {
-                            position: "top",
-                            labels: {
-                                usePointStyle: true,
-                                pointStyle: "circle",
-                                padding: 20,
-                                font: { size: 12, weight: "bold" },
-                            },
-                        },
-                        tooltip: {
-                            backgroundColor: "rgba(15, 15, 20, 0.95)",
-                            titleFont: { size: 13, weight: "bold" },
-                            bodyFont: { size: 12 },
-                            padding: 14,
-                            cornerRadius: 12,
-                            displayColors: true,
-                            callbacks: {
-                                label: function (context) {
-                                    const label = context.dataset.label || "";
-                                    const val = (
-                                        context.parsed.y || 0
-                                    ).toLocaleString();
-                                    return ` ${label}: ${val}`;
-                                },
-                            },
-                        },
-                    },
-                    scales: {
-                        x: {
-                            grid: {
-                                display: false,
-                            },
-                            ticks: {
-                                font: { size: 11, weight: "bold" },
-                            },
-                        },
-                        y: {
-                            beginAtZero: true,
-                            grid: {
-                                color: "rgba(128, 128, 128, 0.08)",
-                            },
-                            ticks: {
-                                font: { size: 11 },
-                                callback: function (value) {
-                                    return Number(value).toLocaleString();
-                                },
-                            },
-                        },
-                    },
-                },
-            });
+        if (!mounted || !chartCanvas || !timeline.length) return;
+        if (chartInstance) {
+            chartInstance.destroy();
+            chartInstance = null;
         }
 
-        // 2. Gráficas comparativas por vendedor
+        const labels = timeline.map((m: any) => m.periodo);
+
+        chartInstance = new ChartJS(chartCanvas, {
+            type: "line",
+            data: {
+                labels,
+                datasets: [
+                    {
+                        label: "Docs. Exitosos",
+                        data: timeline.map((m: any) => m.docs_exitosos),
+                        borderColor: "#22c55e",
+                        backgroundColor: "rgba(34, 197, 94, 0.08)",
+                        borderWidth: 3,
+                        pointRadius: tipoAgrupacion === "diario" ? 3.5 : 5,
+                        pointHoverRadius: tipoAgrupacion === "diario" ? 6 : 8,
+                        pointBackgroundColor: "#22c55e",
+                        pointBorderColor: "#fff",
+                        pointBorderWidth: 2,
+                        tension: 0.35,
+                        fill: true,
+                    },
+                    {
+                        label: "Cotizaciones",
+                        data: timeline.map((m: any) => m.cotizaciones),
+                        borderColor: "#3b82f6",
+                        backgroundColor: "rgba(59, 130, 246, 0.06)",
+                        borderWidth: 2.5,
+                        pointRadius: tipoAgrupacion === "diario" ? 2.5 : 4,
+                        pointHoverRadius: tipoAgrupacion === "diario" ? 5 : 7,
+                        pointBackgroundColor: "#3b82f6",
+                        pointBorderColor: "#fff",
+                        pointBorderWidth: 2,
+                        tension: 0.35,
+                        fill: true,
+                    },
+                    {
+                        label: "Pedidos",
+                        data: timeline.map((m: any) => m.pedidos),
+                        borderColor: "#a855f7",
+                        backgroundColor: "rgba(168, 85, 247, 0.06)",
+                        borderWidth: 2.5,
+                        pointRadius: tipoAgrupacion === "diario" ? 2.5 : 4,
+                        pointHoverRadius: tipoAgrupacion === "diario" ? 5 : 7,
+                        pointBackgroundColor: "#a855f7",
+                        pointBorderColor: "#fff",
+                        pointBorderWidth: 2,
+                        tension: 0.35,
+                        fill: true,
+                    },
+                    {
+                        label: "Devoluciones",
+                        data: timeline.map((m: any) => m.devoluciones),
+                        borderColor: "#ef4444",
+                        backgroundColor: "rgba(239, 68, 68, 0.06)",
+                        borderWidth: 2,
+                        pointRadius: tipoAgrupacion === "diario" ? 2.5 : 4,
+                        pointHoverRadius: tipoAgrupacion === "diario" ? 5 : 7,
+                        pointBackgroundColor: "#ef4444",
+                        pointBorderColor: "#fff",
+                        pointBorderWidth: 2,
+                        tension: 0.35,
+                        fill: true,
+                        borderDash: [6, 3],
+                    },
+                ],
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: {
+                    mode: "index",
+                    intersect: false,
+                },
+                plugins: {
+                    legend: {
+                        position: "top",
+                        labels: {
+                            usePointStyle: true,
+                            pointStyle: "circle",
+                            padding: 20,
+                            font: { size: 12, weight: "bold" },
+                        },
+                    },
+                    tooltip: {
+                        backgroundColor: "rgba(15, 15, 20, 0.95)",
+                        titleFont: { size: 13, weight: "bold" },
+                        bodyFont: { size: 12 },
+                        padding: 14,
+                        cornerRadius: 12,
+                        displayColors: true,
+                        callbacks: {
+                            label: function (context) {
+                                const label = context.dataset.label || "";
+                                const val = (
+                                    context.parsed.y || 0
+                                ).toLocaleString();
+                                return ` ${label}: ${val}`;
+                            },
+                        },
+                    },
+                },
+                scales: {
+                    x: {
+                        grid: {
+                            display: false,
+                        },
+                        ticks: {
+                            font: { size: 11, weight: "bold" },
+                        },
+                    },
+                    y: {
+                        beginAtZero: true,
+                        grid: {
+                            color: "rgba(128, 128, 128, 0.08)",
+                        },
+                        ticks: {
+                            font: { size: 11 },
+                            callback: function (value) {
+                                return Number(value).toLocaleString();
+                            },
+                        },
+                    },
+                },
+            },
+        });
+    });
+
+    // 2. Gráfica comparativa por vendedor (métrica activa)
+    $effect(() => {
+        if (!mounted || !compChartCanvas) return;
+        if (compChartInstance) {
+            compChartInstance.destroy();
+            compChartInstance = null;
+        }
+
         const compLabels =
             data.periodosComparativa && data.periodosComparativa.length > 0
                 ? data.periodosComparativa
                 : timeline.map((m: any) => m.periodo);
 
-        if (compLabels.length > 0 && (data.vendedores || []).length > 0) {
-            if (chartDocsCanvas) {
-                if (chartDocsInstance) chartDocsInstance.destroy();
-                chartDocsInstance = createVendorChart(
-                    chartDocsCanvas,
-                    compLabels,
-                    "docs_exitosos",
-                    "Docs. Exitosos",
-                );
-            }
-            if (chartCotCanvas) {
-                if (chartCotInstance) chartCotInstance.destroy();
-                chartCotInstance = createVendorChart(
-                    chartCotCanvas,
-                    compLabels,
-                    "cotizaciones",
-                    "Cotizaciones",
-                );
-            }
-            if (chartPedCanvas) {
-                if (chartPedInstance) chartPedInstance.destroy();
-                chartPedInstance = createVendorChart(
-                    chartPedCanvas,
-                    compLabels,
-                    "pedidos",
-                    "Pedidos",
-                );
-            }
-            if (chartDevCanvas) {
-                if (chartDevInstance) chartDevInstance.destroy();
-                chartDevInstance = createVendorChart(
-                    chartDevCanvas,
-                    compLabels,
-                    "devoluciones",
-                    "Devoluciones",
-                );
-            }
-            if (chartPctDevCanvas) {
-                if (chartPctDevInstance) chartPctDevInstance.destroy();
-                chartPctDevInstance = createVendorPctChart(
-                    chartPctDevCanvas,
-                    compLabels,
-                );
-            }
-            if (chartFletesCanvas) {
-                if (chartFletesInstance) chartFletesInstance.destroy();
-                chartFletesInstance = createVendorChart(
-                    chartFletesCanvas,
-                    compLabels,
-                    "fletes",
-                    "Fletes",
-                );
-            }
-            if (chartCortesCanvas) {
-                if (chartCortesInstance) chartCortesInstance.destroy();
-                chartCortesInstance = createVendorChart(
-                    chartCortesCanvas,
-                    compLabels,
-                    "cortes",
-                    "Cortes",
-                );
-            }
+        if (!compLabels.length || !(data.vendedores || []).length) return;
+
+        if (activeCompTab === "docs_exitosos") {
+            compChartInstance = createVendorChart(
+                compChartCanvas,
+                compLabels,
+                "docs_exitosos",
+                "Docs. Exitosos",
+                visibleVendorsDocs,
+            );
+        } else if (activeCompTab === "devoluciones") {
+            compChartInstance = createVendorChart(
+                compChartCanvas,
+                compLabels,
+                "devoluciones",
+                "Devoluciones",
+                visibleVendorsDev,
+            );
+        } else if (activeCompTab === "pct_dev") {
+            compChartInstance = createVendorPctChart(
+                compChartCanvas,
+                compLabels,
+                visibleVendorsPctDev,
+            );
+        } else if (activeCompTab === "pedidos") {
+            compChartInstance = createVendorChart(
+                compChartCanvas,
+                compLabels,
+                "pedidos",
+                "Pedidos",
+                visibleVendorsPed,
+            );
+        } else if (activeCompTab === "cotizaciones") {
+            compChartInstance = createVendorChart(
+                compChartCanvas,
+                compLabels,
+                "cotizaciones",
+                "Cotizaciones",
+                visibleVendorsCot,
+            );
+        } else if (activeCompTab === "fletes") {
+            compChartInstance = createVendorChart(
+                compChartCanvas,
+                compLabels,
+                "fletes",
+                "Fletes",
+                visibleVendorsFletes,
+            );
+        } else if (activeCompTab === "cortes") {
+            compChartInstance = createVendorChart(
+                compChartCanvas,
+                compLabels,
+                "cortes",
+                "Cortes",
+                visibleVendorsCortes,
+            );
+        } else if (activeCompTab === "art_distintos") {
+            compChartInstance = createVendorChart(
+                compChartCanvas,
+                compLabels,
+                "art_distintos",
+                "Artículos Únicos Vendidos",
+                visibleVendorsArt,
+            );
+        } else if (activeCompTab === "art_pedidos") {
+            compChartInstance = createVendorChart(
+                compChartCanvas,
+                compLabels,
+                "art_pedidos",
+                "Artículos Únicos Pedidos",
+                visibleVendorsArtPed,
+            );
+        } else if (activeCompTab === "art_cotizados") {
+            compChartInstance = createVendorChart(
+                compChartCanvas,
+                compLabels,
+                "art_cotizados",
+                "Artículos Únicos Cotizados",
+                visibleVendorsArtCot,
+            );
         }
     });
 </script>
@@ -1331,11 +1675,32 @@
                     </p>
                 </div>
             {:else}
-                <div class="space-y-8">
-                    <!-- 1. Documentos Exitosos (100% Ancho) -->
-                    <div
-                        class="bg-surface-raised border border-border-subtle hover:border-emerald-500/40 transition-all rounded-3xl p-6 sm:p-7 shadow-xl space-y-6"
-                    >
+                <div class="space-y-6">
+                    <!-- NAVEGACIÓN DE TABS / MÉTRICAS -->
+                    <div class="flex items-center gap-2 overflow-x-auto custom-scrollbar pb-2 pt-1">
+                        {#each compTabs as tab}
+                            <button
+                                type="button"
+                                onclick={() => (activeCompTab = tab.id)}
+                                class="flex items-center gap-2.5 px-4 py-2.5 rounded-2xl font-bold text-xs transition-all shrink-0 cursor-pointer border {activeCompTab === tab.id
+                                    ? `${tab.activeBg} ${tab.activeBorder} ${tab.activeText}`
+                                    : 'bg-surface-raised border-border-subtle text-text-muted hover:text-text-base hover:bg-surface-soft'}"
+                            >
+                                <svelte:component
+                                    this={tab.icon}
+                                    size={16}
+                                    class={activeCompTab === tab.id ? tab.iconColor : 'text-text-muted'}
+                                />
+                                <span>{tab.label}</span>
+                            </button>
+                        {/each}
+                    </div>
+
+                    {#if activeCompTab === 'docs_exitosos'}
+                        <!-- 1. Documentos Exitosos (100% Ancho) -->
+                        <div
+                            class="bg-surface-raised border border-border-subtle hover:border-emerald-500/40 transition-all rounded-3xl p-6 sm:p-7 shadow-xl space-y-6"
+                        >
                         <div
                             class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border-subtle/60 pb-4"
                         >
@@ -1357,22 +1722,73 @@
                                     </p>
                                 </div>
                             </div>
-                            <div class="flex items-center gap-2 self-start sm:self-auto">
+                            <div class="flex items-center gap-2 self-start sm:self-auto flex-wrap">
                                 <span
                                     class="text-[11px] font-mono font-bold text-emerald-500 bg-emerald-500/10 px-3 py-1 rounded-full border border-emerald-500/20"
                                 >
                                     Total: {formatNumber(breakdownDocs.grandTotal)}
                                 </span>
-                                <span
-                                    class="text-[10px] font-black uppercase px-2.5 py-1 rounded-full bg-surface-soft text-text-muted border border-border-subtle"
+                                <button
+                                    type="button"
+                                    onclick={selectAllDocs}
+                                    class="px-3 py-1 rounded-xl text-xs font-bold bg-surface-raised border border-border-subtle text-text-muted hover:text-text-base hover:bg-surface-soft transition-colors cursor-pointer"
                                 >
-                                    Fact - Dev
+                                    Todos ({(data.vendedores || []).length})
+                                </button>
+                                <button
+                                    type="button"
+                                    onclick={deselectAllDocs}
+                                    class="px-3 py-1 rounded-xl text-xs font-bold bg-surface-raised border border-border-subtle text-text-muted hover:text-text-base hover:bg-surface-soft transition-colors cursor-pointer"
+                                >
+                                    Ninguno
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Barra de Pills / Vendedores -->
+                        <div class="space-y-2">
+                            <div class="flex items-center justify-between gap-2">
+                                <span class="text-xs font-black uppercase tracking-wider text-text-muted">
+                                    Filtrar Vendedores en Gráfica
                                 </span>
+                                <span class="text-xs text-text-muted">
+                                    {visibleVendorsDocs.size} de {(data.vendedores || []).length} visibles
+                                </span>
+                            </div>
+                            <div class="flex flex-wrap gap-2 max-h-36 overflow-y-auto custom-scrollbar p-1">
+                                {#each (data.vendedores || []) as v}
+                                    {@const isVisible = visibleVendorsDocs.has(v.co_ven)}
+                                    {@const color = vendorColorMap.get(v.co_ven) || '#3b82f6'}
+                                    <button
+                                        type="button"
+                                        onclick={() => toggleVendorDocs(v.co_ven)}
+                                        class="px-3 py-1.5 rounded-xl text-xs font-bold border transition-all flex items-center gap-2 cursor-pointer {isVisible
+                                            ? 'bg-surface-raised border-border-subtle text-text-base shadow-sm'
+                                            : 'bg-surface-base/50 border-border-subtle/40 text-text-muted/50 opacity-60'}"
+                                    >
+                                        <span
+                                            class="w-2.5 h-2.5 rounded-full shrink-0"
+                                            style="background-color: {isVisible ? color : '#94a3b8'}"
+                                        ></span>
+                                        <span class="truncate max-w-[150px]">{(v.ven_des || v.co_ven).trim().toUpperCase()}</span>
+                                        {#if v.inactivo}
+                                            <span class="text-[9px] font-bold text-rose-500 bg-rose-500/10 px-1 py-0.5 rounded">Inactivo</span>
+                                        {/if}
+                                    </button>
+                                {/each}
                             </div>
                         </div>
 
                         <div class="relative w-full" style="height: 380px;">
-                            <canvas bind:this={chartDocsCanvas}></canvas>
+                            {#if visibleVendorsDocs.size > 0}
+                                <canvas bind:this={compChartCanvas}></canvas>
+                            {:else}
+                                <div class="h-full flex flex-col items-center justify-center text-center p-8 bg-surface-raised/50 rounded-2xl border border-dashed border-border-subtle">
+                                    <EyeOff size={36} class="text-text-muted mb-2" />
+                                    <p class="text-sm font-bold text-text-base">Ningún vendedor seleccionado</p>
+                                    <p class="text-xs text-text-muted mt-1">Haz clic en los botones superiores para activar vendedores en la gráfica.</p>
+                                </div>
+                            {/if}
                         </div>
 
                         <!-- CARDS DE LEYENDA AGRUPADAS POR TEMPORALIDAD CON VENDEDORES -->
@@ -1464,13 +1880,107 @@
                                     {/each}
                                 </div>
                             </div>
+
+                            <!-- TABLA / RANKING DE DOCUMENTOS EXITOSOS POR ASESOR -->
+                            <div class="mt-8 pt-6 border-t border-border-subtle/80 space-y-6">
+                                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-border-subtle/60">
+                                    <div class="flex items-center gap-3">
+                                        <div
+                                            class="p-2.5 rounded-2xl bg-emerald-500/10 text-emerald-500 border border-emerald-500/20"
+                                        >
+                                            <Award size={22} />
+                                        </div>
+                                        <div>
+                                            <h3 class="text-base sm:text-lg font-black text-text-base flex items-center gap-2">
+                                                Ranking de Documentos Exitosos por Asesor
+                                            </h3>
+                                            <p class="text-xs text-text-muted">
+                                                Total de facturas emitidas menos devoluciones por asesor en el rango de fechas seleccionado.
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <div class="relative w-full sm:w-64">
+                                        <Search size={16} class="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" />
+                                        <input
+                                            type="text"
+                                            bind:value={vendorFilterSearchDocs}
+                                            placeholder="Buscar vendedor..."
+                                            class="w-full bg-surface-base border border-border-subtle rounded-xl pl-9 pr-3 py-2 text-xs text-text-base focus:outline-none focus:border-brand-500"
+                                        />
+                                    </div>
+                                </div>
+
+                                <div class="overflow-x-auto custom-scrollbar">
+                                    <table class="w-full text-left text-xs">
+                                        <thead>
+                                            <tr class="border-b border-border-subtle text-text-muted font-black uppercase text-[10px]">
+                                                <th class="py-3 px-4">#</th>
+                                                <th class="py-3 px-4">Código</th>
+                                                <th class="py-3 px-4">Asesor Comercial</th>
+                                                <th class="py-3 px-4 text-right">Docs. Exitosos (Rango)</th>
+                                                <th class="py-3 px-4 text-right">% del Total</th>
+                                                <th class="py-3 px-4 text-center">Estado en Gráfica</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody class="divide-y divide-border-subtle/40 font-medium">
+                                            {#each rankingDocs.filter((t) => !vendorFilterSearchDocs || t.ven_des.toLowerCase().includes(vendorFilterSearchDocs.toLowerCase()) || t.co_ven.toLowerCase().includes(vendorFilterSearchDocs.toLowerCase())) as item, idx}
+                                                {@const pct = totales.docs_exitosos > 0 ? ((item.docs_exitosos / totales.docs_exitosos) * 100).toFixed(2) : '0.00'}
+                                                {@const color = vendorColorMap.get(item.co_ven) || '#3b82f6'}
+                                                {@const isVis = visibleVendorsDocs.has(item.co_ven)}
+                                                <tr class="hover:bg-surface-soft/60 transition-colors">
+                                                    <td class="py-3 px-4 font-mono font-bold text-text-muted">
+                                                        {idx + 1}
+                                                    </td>
+                                                    <td class="py-3 px-4 font-mono text-text-muted">
+                                                        {item.co_ven}
+                                                    </td>
+                                                    <td class="py-3 px-4 font-bold text-text-base flex items-center gap-2">
+                                                        <span
+                                                            class="w-2.5 h-2.5 rounded-full shrink-0"
+                                                            style="background-color: {color}"
+                                                        ></span>
+                                                        {item.ven_des}
+                                                        {#if item.inactivo}
+                                                            <span class="text-[9px] font-bold text-rose-500 bg-rose-500/10 px-1.5 py-0.5 rounded">Inactivo</span>
+                                                        {/if}
+                                                    </td>
+                                                    <td class="py-3 px-4 text-right font-black font-mono text-text-base">
+                                                        {item.docs_exitosos.toLocaleString("es-VE")}
+                                                    </td>
+                                                    <td class="py-3 px-4 text-right font-mono text-emerald-600 dark:text-emerald-400 font-bold">
+                                                        {pct}%
+                                                    </td>
+                                                    <td class="py-3 px-4 text-center">
+                                                        <button
+                                                            type="button"
+                                                            onclick={() => toggleVendorDocs(item.co_ven)}
+                                                            class="px-2.5 py-1 rounded-lg text-[10px] font-bold border transition-all cursor-pointer {isVis
+                                                                ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/30'
+                                                                : 'bg-surface-raised text-text-muted border-border-subtle'}"
+                                                        >
+                                                            {isVis ? 'Visible' : 'Oculto'}
+                                                        </button>
+                                                    </td>
+                                                </tr>
+                                            {/each}
+                                            {#if rankingDocs.length === 0}
+                                                <tr>
+                                                    <td colspan="6" class="py-8 text-center text-text-muted font-bold">
+                                                        No se encontraron datos para mostrar.
+                                                    </td>
+                                                </tr>
+                                            {/if}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
                         </div>
                     </div>
-
-                    <!-- 2. Devoluciones (100% Ancho) -->
-                    <div
-                        class="bg-surface-raised border border-border-subtle hover:border-red-500/40 transition-all rounded-3xl p-6 sm:p-7 shadow-xl space-y-6"
-                    >
+                    {:else if activeCompTab === 'devoluciones'}
+                        <!-- 2. Devoluciones (100% Ancho) -->
+                        <div
+                            class="bg-surface-raised border border-border-subtle hover:border-red-500/40 transition-all rounded-3xl p-6 sm:p-7 shadow-xl space-y-6"
+                        >
                         <div
                             class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border-subtle/60 pb-4"
                         >
@@ -1492,22 +2002,73 @@
                                     </p>
                                 </div>
                             </div>
-                            <div class="flex items-center gap-2 self-start sm:self-auto">
+                            <div class="flex items-center gap-2 self-start sm:self-auto flex-wrap">
                                 <span
                                     class="text-[11px] font-mono font-bold text-red-500 bg-red-500/10 px-3 py-1 rounded-full border border-red-500/20"
                                 >
                                     Total: {formatNumber(breakdownDev.grandTotal)}
                                 </span>
-                                <span
-                                    class="text-[10px] font-black uppercase px-2.5 py-1 rounded-full bg-surface-soft text-text-muted border border-border-subtle"
+                                <button
+                                    type="button"
+                                    onclick={selectAllDev}
+                                    class="px-3 py-1 rounded-xl text-xs font-bold bg-surface-raised border border-border-subtle text-text-muted hover:text-text-base hover:bg-surface-soft transition-colors cursor-pointer"
                                 >
-                                    Devoluciones
+                                    Todos ({(data.vendedores || []).length})
+                                </button>
+                                <button
+                                    type="button"
+                                    onclick={deselectAllDev}
+                                    class="px-3 py-1 rounded-xl text-xs font-bold bg-surface-raised border border-border-subtle text-text-muted hover:text-text-base hover:bg-surface-soft transition-colors cursor-pointer"
+                                >
+                                    Ninguno
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Barra de Pills / Vendedores -->
+                        <div class="space-y-2">
+                            <div class="flex items-center justify-between gap-2">
+                                <span class="text-xs font-black uppercase tracking-wider text-text-muted">
+                                    Filtrar Vendedores en Gráfica
                                 </span>
+                                <span class="text-xs text-text-muted">
+                                    {visibleVendorsDev.size} de {(data.vendedores || []).length} visibles
+                                </span>
+                            </div>
+                            <div class="flex flex-wrap gap-2 max-h-36 overflow-y-auto custom-scrollbar p-1">
+                                {#each (data.vendedores || []) as v}
+                                    {@const isVisible = visibleVendorsDev.has(v.co_ven)}
+                                    {@const color = vendorColorMap.get(v.co_ven) || '#3b82f6'}
+                                    <button
+                                        type="button"
+                                        onclick={() => toggleVendorDev(v.co_ven)}
+                                        class="px-3 py-1.5 rounded-xl text-xs font-bold border transition-all flex items-center gap-2 cursor-pointer {isVisible
+                                            ? 'bg-surface-raised border-border-subtle text-text-base shadow-sm'
+                                            : 'bg-surface-base/50 border-border-subtle/40 text-text-muted/50 opacity-60'}"
+                                    >
+                                        <span
+                                            class="w-2.5 h-2.5 rounded-full shrink-0"
+                                            style="background-color: {isVisible ? color : '#94a3b8'}"
+                                        ></span>
+                                        <span class="truncate max-w-[150px]">{(v.ven_des || v.co_ven).trim().toUpperCase()}</span>
+                                        {#if v.inactivo}
+                                            <span class="text-[9px] font-bold text-rose-500 bg-rose-500/10 px-1 py-0.5 rounded">Inactivo</span>
+                                        {/if}
+                                    </button>
+                                {/each}
                             </div>
                         </div>
 
                         <div class="relative w-full" style="height: 380px;">
-                            <canvas bind:this={chartDevCanvas}></canvas>
+                            {#if visibleVendorsDev.size > 0}
+                                <canvas bind:this={compChartCanvas}></canvas>
+                            {:else}
+                                <div class="h-full flex flex-col items-center justify-center text-center p-8 bg-surface-raised/50 rounded-2xl border border-dashed border-border-subtle">
+                                    <EyeOff size={36} class="text-text-muted mb-2" />
+                                    <p class="text-sm font-bold text-text-base">Ningún vendedor seleccionado</p>
+                                    <p class="text-xs text-text-muted mt-1">Haz clic en los botones superiores para activar vendedores en la gráfica.</p>
+                                </div>
+                            {/if}
                         </div>
 
                         <!-- CARDS DE LEYENDA AGRUPADAS POR TEMPORALIDAD CON VENDEDORES -->
@@ -1599,13 +2160,107 @@
                                     {/each}
                                 </div>
                             </div>
+
+                            <!-- TABLA / RANKING DE DEVOLUCIONES POR ASESOR -->
+                            <div class="mt-8 pt-6 border-t border-border-subtle/80 space-y-6">
+                                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-border-subtle/60">
+                                    <div class="flex items-center gap-3">
+                                        <div
+                                            class="p-2.5 rounded-2xl bg-red-500/10 text-red-500 border border-red-500/20"
+                                        >
+                                            <Award size={22} />
+                                        </div>
+                                        <div>
+                                            <h3 class="text-base sm:text-lg font-black text-text-base flex items-center gap-2">
+                                                Ranking de Devoluciones por Asesor
+                                            </h3>
+                                            <p class="text-xs text-text-muted">
+                                                Total de documentos de devolución de clientes registrados por asesor en el rango de fechas.
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <div class="relative w-full sm:w-64">
+                                        <Search size={16} class="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" />
+                                        <input
+                                            type="text"
+                                            bind:value={vendorFilterSearchDev}
+                                            placeholder="Buscar vendedor..."
+                                            class="w-full bg-surface-base border border-border-subtle rounded-xl pl-9 pr-3 py-2 text-xs text-text-base focus:outline-none focus:border-brand-500"
+                                        />
+                                    </div>
+                                </div>
+
+                                <div class="overflow-x-auto custom-scrollbar">
+                                    <table class="w-full text-left text-xs">
+                                        <thead>
+                                            <tr class="border-b border-border-subtle text-text-muted font-black uppercase text-[10px]">
+                                                <th class="py-3 px-4">#</th>
+                                                <th class="py-3 px-4">Código</th>
+                                                <th class="py-3 px-4">Asesor Comercial</th>
+                                                <th class="py-3 px-4 text-right">Devoluciones (Rango)</th>
+                                                <th class="py-3 px-4 text-right">% del Total</th>
+                                                <th class="py-3 px-4 text-center">Estado en Gráfica</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody class="divide-y divide-border-subtle/40 font-medium">
+                                            {#each rankingDev.filter((t) => !vendorFilterSearchDev || t.ven_des.toLowerCase().includes(vendorFilterSearchDev.toLowerCase()) || t.co_ven.toLowerCase().includes(vendorFilterSearchDev.toLowerCase())) as item, idx}
+                                                {@const pct = totales.devoluciones > 0 ? ((item.devoluciones / totales.devoluciones) * 100).toFixed(2) : '0.00'}
+                                                {@const color = vendorColorMap.get(item.co_ven) || '#3b82f6'}
+                                                {@const isVis = visibleVendorsDev.has(item.co_ven)}
+                                                <tr class="hover:bg-surface-soft/60 transition-colors">
+                                                    <td class="py-3 px-4 font-mono font-bold text-text-muted">
+                                                        {idx + 1}
+                                                    </td>
+                                                    <td class="py-3 px-4 font-mono text-text-muted">
+                                                        {item.co_ven}
+                                                    </td>
+                                                    <td class="py-3 px-4 font-bold text-text-base flex items-center gap-2">
+                                                        <span
+                                                            class="w-2.5 h-2.5 rounded-full shrink-0"
+                                                            style="background-color: {color}"
+                                                        ></span>
+                                                        {item.ven_des}
+                                                        {#if item.inactivo}
+                                                            <span class="text-[9px] font-bold text-rose-500 bg-rose-500/10 px-1.5 py-0.5 rounded">Inactivo</span>
+                                                        {/if}
+                                                    </td>
+                                                    <td class="py-3 px-4 text-right font-black font-mono text-text-base">
+                                                        {item.devoluciones.toLocaleString("es-VE")}
+                                                    </td>
+                                                    <td class="py-3 px-4 text-right font-mono text-red-600 dark:text-red-400 font-bold">
+                                                        {pct}%
+                                                    </td>
+                                                    <td class="py-3 px-4 text-center">
+                                                        <button
+                                                            type="button"
+                                                            onclick={() => toggleVendorDev(item.co_ven)}
+                                                            class="px-2.5 py-1 rounded-lg text-[10px] font-bold border transition-all cursor-pointer {isVis
+                                                                ? 'bg-red-500/10 text-red-500 border-red-500/30'
+                                                                : 'bg-surface-raised text-text-muted border-border-subtle'}"
+                                                        >
+                                                            {isVis ? 'Visible' : 'Oculto'}
+                                                        </button>
+                                                    </td>
+                                                </tr>
+                                            {/each}
+                                            {#if rankingDev.length === 0}
+                                                <tr>
+                                                    <td colspan="6" class="py-8 text-center text-text-muted font-bold">
+                                                        No se encontraron datos para mostrar.
+                                                    </td>
+                                                </tr>
+                                            {/if}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
                         </div>
                     </div>
-
-                    <!-- 3. % Devoluciones sobre Facturas Netas (100% Ancho) -->
-                    <div
-                        class="bg-surface-raised border border-border-subtle hover:border-amber-500/40 transition-all rounded-3xl p-6 sm:p-7 shadow-xl space-y-6"
-                    >
+                    {:else if activeCompTab === 'pct_dev'}
+                        <!-- 3. % Devoluciones sobre Facturas Netas (100% Ancho) -->
+                        <div
+                            class="bg-surface-raised border border-border-subtle hover:border-amber-500/40 transition-all rounded-3xl p-6 sm:p-7 shadow-xl space-y-6"
+                        >
                         <div
                             class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border-subtle/60 pb-4"
                         >
@@ -1626,22 +2281,73 @@
                                     </p>
                                 </div>
                             </div>
-                            <div class="flex items-center gap-2 self-start sm:self-auto">
+                            <div class="flex items-center gap-2 self-start sm:self-auto flex-wrap">
                                 <span
                                     class="text-[11px] font-mono font-bold text-amber-500 bg-amber-500/10 px-3 py-1 rounded-full border border-amber-500/20"
                                 >
                                     Tasa Global: {breakdownPctDev.grandAvgRate.toLocaleString('es-VE', { minimumFractionDigits: 1, maximumFractionDigits: 2 })}%
                                 </span>
-                                <span
-                                    class="text-[10px] font-black uppercase px-2.5 py-1 rounded-full bg-surface-soft text-text-muted border border-border-subtle"
+                                <button
+                                    type="button"
+                                    onclick={selectAllPctDev}
+                                    class="px-3 py-1 rounded-xl text-xs font-bold bg-surface-raised border border-border-subtle text-text-muted hover:text-text-base hover:bg-surface-soft transition-colors cursor-pointer"
                                 >
-                                    (Dev / Netas) × 100
+                                    Todos ({(data.vendedores || []).length})
+                                </button>
+                                <button
+                                    type="button"
+                                    onclick={deselectAllPctDev}
+                                    class="px-3 py-1 rounded-xl text-xs font-bold bg-surface-raised border border-border-subtle text-text-muted hover:text-text-base hover:bg-surface-soft transition-colors cursor-pointer"
+                                >
+                                    Ninguno
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Barra de Pills / Vendedores -->
+                        <div class="space-y-2">
+                            <div class="flex items-center justify-between gap-2">
+                                <span class="text-xs font-black uppercase tracking-wider text-text-muted">
+                                    Filtrar Vendedores en Gráfica
                                 </span>
+                                <span class="text-xs text-text-muted">
+                                    {visibleVendorsPctDev.size} de {(data.vendedores || []).length} visibles
+                                </span>
+                            </div>
+                            <div class="flex flex-wrap gap-2 max-h-36 overflow-y-auto custom-scrollbar p-1">
+                                {#each (data.vendedores || []) as v}
+                                    {@const isVisible = visibleVendorsPctDev.has(v.co_ven)}
+                                    {@const color = vendorColorMap.get(v.co_ven) || '#3b82f6'}
+                                    <button
+                                        type="button"
+                                        onclick={() => toggleVendorPctDev(v.co_ven)}
+                                        class="px-3 py-1.5 rounded-xl text-xs font-bold border transition-all flex items-center gap-2 cursor-pointer {isVisible
+                                            ? 'bg-surface-raised border-border-subtle text-text-base shadow-sm'
+                                            : 'bg-surface-base/50 border-border-subtle/40 text-text-muted/50 opacity-60'}"
+                                    >
+                                        <span
+                                            class="w-2.5 h-2.5 rounded-full shrink-0"
+                                            style="background-color: {isVisible ? color : '#94a3b8'}"
+                                        ></span>
+                                        <span class="truncate max-w-[150px]">{(v.ven_des || v.co_ven).trim().toUpperCase()}</span>
+                                        {#if v.inactivo}
+                                            <span class="text-[9px] font-bold text-rose-500 bg-rose-500/10 px-1 py-0.5 rounded">Inactivo</span>
+                                        {/if}
+                                    </button>
+                                {/each}
                             </div>
                         </div>
 
                         <div class="relative w-full" style="height: 380px;">
-                            <canvas bind:this={chartPctDevCanvas}></canvas>
+                            {#if visibleVendorsPctDev.size > 0}
+                                <canvas bind:this={compChartCanvas}></canvas>
+                            {:else}
+                                <div class="h-full flex flex-col items-center justify-center text-center p-8 bg-surface-raised/50 rounded-2xl border border-dashed border-border-subtle">
+                                    <EyeOff size={36} class="text-text-muted mb-2" />
+                                    <p class="text-sm font-bold text-text-base">Ningún vendedor seleccionado</p>
+                                    <p class="text-xs text-text-muted mt-1">Haz clic en los botones superiores para activar vendedores en la gráfica.</p>
+                                </div>
+                            {/if}
                         </div>
 
                         <!-- CARDS DE LEYENDA AGRUPADAS POR TEMPORALIDAD CON VENDEDORES -->
@@ -1730,13 +2436,110 @@
                                     {/each}
                                 </div>
                             </div>
+
+                            <!-- TABLA / RANKING DE TASA DE DEVOLUCIÓN POR ASESOR -->
+                            <div class="mt-8 pt-6 border-t border-border-subtle/80 space-y-6">
+                                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-border-subtle/60">
+                                    <div class="flex items-center gap-3">
+                                        <div
+                                            class="p-2.5 rounded-2xl bg-amber-500/10 text-amber-500 border border-amber-500/20"
+                                        >
+                                            <Award size={22} />
+                                        </div>
+                                        <div>
+                                            <h3 class="text-base sm:text-lg font-black text-text-base flex items-center gap-2">
+                                                Ranking de Tasa de Devolución por Asesor
+                                            </h3>
+                                            <p class="text-xs text-text-muted">
+                                                Porcentaje que representan las devoluciones sobre facturas netas ((Devoluciones / Docs. Exitosos) × 100) en el rango.
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <div class="relative w-full sm:w-64">
+                                        <Search size={16} class="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" />
+                                        <input
+                                            type="text"
+                                            bind:value={vendorFilterSearchPctDev}
+                                            placeholder="Buscar vendedor..."
+                                            class="w-full bg-surface-base border border-border-subtle rounded-xl pl-9 pr-3 py-2 text-xs text-text-base focus:outline-none focus:border-brand-500"
+                                        />
+                                    </div>
+                                </div>
+
+                                <div class="overflow-x-auto custom-scrollbar">
+                                    <table class="w-full text-left text-xs">
+                                        <thead>
+                                            <tr class="border-b border-border-subtle text-text-muted font-black uppercase text-[10px]">
+                                                <th class="py-3 px-4">#</th>
+                                                <th class="py-3 px-4">Código</th>
+                                                <th class="py-3 px-4">Asesor Comercial</th>
+                                                <th class="py-3 px-4 text-right">Devoluciones</th>
+                                                <th class="py-3 px-4 text-right">Docs. Exitosos</th>
+                                                <th class="py-3 px-4 text-right">% Devolución</th>
+                                                <th class="py-3 px-4 text-center">Estado en Gráfica</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody class="divide-y divide-border-subtle/40 font-medium">
+                                            {#each rankingPctDev.filter((t) => !vendorFilterSearchPctDev || t.ven_des.toLowerCase().includes(vendorFilterSearchPctDev.toLowerCase()) || t.co_ven.toLowerCase().includes(vendorFilterSearchPctDev.toLowerCase())) as item, idx}
+                                                {@const color = vendorColorMap.get(item.co_ven) || '#3b82f6'}
+                                                {@const isVis = visibleVendorsPctDev.has(item.co_ven)}
+                                                <tr class="hover:bg-surface-soft/60 transition-colors">
+                                                    <td class="py-3 px-4 font-mono font-bold text-text-muted">
+                                                        {idx + 1}
+                                                    </td>
+                                                    <td class="py-3 px-4 font-mono text-text-muted">
+                                                        {item.co_ven}
+                                                    </td>
+                                                    <td class="py-3 px-4 font-bold text-text-base flex items-center gap-2">
+                                                        <span
+                                                            class="w-2.5 h-2.5 rounded-full shrink-0"
+                                                            style="background-color: {color}"
+                                                        ></span>
+                                                        {item.ven_des}
+                                                        {#if item.inactivo}
+                                                            <span class="text-[9px] font-bold text-rose-500 bg-rose-500/10 px-1.5 py-0.5 rounded">Inactivo</span>
+                                                        {/if}
+                                                    </td>
+                                                    <td class="py-3 px-4 text-right font-mono text-text-base">
+                                                        {item.devoluciones.toLocaleString("es-VE")}
+                                                    </td>
+                                                    <td class="py-3 px-4 text-right font-mono text-text-base">
+                                                        {item.docs_exitosos.toLocaleString("es-VE")}
+                                                    </td>
+                                                    <td class="py-3 px-4 text-right font-black font-mono {item.pct_dev === 0 ? 'text-emerald-500' : item.pct_dev < 5 ? 'text-emerald-600 dark:text-emerald-400' : item.pct_dev < 10 ? 'text-amber-500' : 'text-rose-500'}">
+                                                        {item.pct_dev.toLocaleString('es-VE', { minimumFractionDigits: 1, maximumFractionDigits: 2 })}%
+                                                    </td>
+                                                    <td class="py-3 px-4 text-center">
+                                                        <button
+                                                            type="button"
+                                                            onclick={() => toggleVendorPctDev(item.co_ven)}
+                                                            class="px-2.5 py-1 rounded-lg text-[10px] font-bold border transition-all cursor-pointer {isVis
+                                                                ? 'bg-amber-500/10 text-amber-500 border-amber-500/30'
+                                                                : 'bg-surface-raised text-text-muted border-border-subtle'}"
+                                                        >
+                                                            {isVis ? 'Visible' : 'Oculto'}
+                                                        </button>
+                                                    </td>
+                                                </tr>
+                                            {/each}
+                                            {#if rankingPctDev.length === 0}
+                                                <tr>
+                                                    <td colspan="7" class="py-8 text-center text-text-muted font-bold">
+                                                        No se encontraron datos para mostrar.
+                                                    </td>
+                                                </tr>
+                                            {/if}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
                         </div>
                     </div>
-
-                    <!-- 4. Pedidos (100% Ancho) -->
-                    <div
-                        class="bg-surface-raised border border-border-subtle hover:border-purple-500/40 transition-all rounded-3xl p-6 sm:p-7 shadow-xl space-y-6"
-                    >
+                    {:else if activeCompTab === 'pedidos'}
+                        <!-- 4. Pedidos (100% Ancho) -->
+                        <div
+                            class="bg-surface-raised border border-border-subtle hover:border-purple-500/40 transition-all rounded-3xl p-6 sm:p-7 shadow-xl space-y-6"
+                        >
                         <div
                             class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border-subtle/60 pb-4"
                         >
@@ -1758,22 +2561,73 @@
                                     </p>
                                 </div>
                             </div>
-                            <div class="flex items-center gap-2 self-start sm:self-auto">
+                            <div class="flex items-center gap-2 self-start sm:self-auto flex-wrap">
                                 <span
                                     class="text-[11px] font-mono font-bold text-purple-500 bg-purple-500/10 px-3 py-1 rounded-full border border-purple-500/20"
                                 >
                                     Total: {formatNumber(breakdownPed.grandTotal)}
                                 </span>
-                                <span
-                                    class="text-[10px] font-black uppercase px-2.5 py-1 rounded-full bg-surface-soft text-text-muted border border-border-subtle"
+                                <button
+                                    type="button"
+                                    onclick={selectAllPed}
+                                    class="px-3 py-1 rounded-xl text-xs font-bold bg-surface-raised border border-border-subtle text-text-muted hover:text-text-base hover:bg-surface-soft transition-colors cursor-pointer"
                                 >
-                                    Pedidos
+                                    Todos ({(data.vendedores || []).length})
+                                </button>
+                                <button
+                                    type="button"
+                                    onclick={deselectAllPed}
+                                    class="px-3 py-1 rounded-xl text-xs font-bold bg-surface-raised border border-border-subtle text-text-muted hover:text-text-base hover:bg-surface-soft transition-colors cursor-pointer"
+                                >
+                                    Ninguno
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Barra de Pills / Vendedores -->
+                        <div class="space-y-2">
+                            <div class="flex items-center justify-between gap-2">
+                                <span class="text-xs font-black uppercase tracking-wider text-text-muted">
+                                    Filtrar Vendedores en Gráfica
                                 </span>
+                                <span class="text-xs text-text-muted">
+                                    {visibleVendorsPed.size} de {(data.vendedores || []).length} visibles
+                                </span>
+                            </div>
+                            <div class="flex flex-wrap gap-2 max-h-36 overflow-y-auto custom-scrollbar p-1">
+                                {#each (data.vendedores || []) as v}
+                                    {@const isVisible = visibleVendorsPed.has(v.co_ven)}
+                                    {@const color = vendorColorMap.get(v.co_ven) || '#3b82f6'}
+                                    <button
+                                        type="button"
+                                        onclick={() => toggleVendorPed(v.co_ven)}
+                                        class="px-3 py-1.5 rounded-xl text-xs font-bold border transition-all flex items-center gap-2 cursor-pointer {isVisible
+                                            ? 'bg-surface-raised border-border-subtle text-text-base shadow-sm'
+                                            : 'bg-surface-base/50 border-border-subtle/40 text-text-muted/50 opacity-60'}"
+                                    >
+                                        <span
+                                            class="w-2.5 h-2.5 rounded-full shrink-0"
+                                            style="background-color: {isVisible ? color : '#94a3b8'}"
+                                        ></span>
+                                        <span class="truncate max-w-[150px]">{(v.ven_des || v.co_ven).trim().toUpperCase()}</span>
+                                        {#if v.inactivo}
+                                            <span class="text-[9px] font-bold text-rose-500 bg-rose-500/10 px-1 py-0.5 rounded">Inactivo</span>
+                                        {/if}
+                                    </button>
+                                {/each}
                             </div>
                         </div>
 
                         <div class="relative w-full" style="height: 380px;">
-                            <canvas bind:this={chartPedCanvas}></canvas>
+                            {#if visibleVendorsPed.size > 0}
+                                <canvas bind:this={compChartCanvas}></canvas>
+                            {:else}
+                                <div class="h-full flex flex-col items-center justify-center text-center p-8 bg-surface-raised/50 rounded-2xl border border-dashed border-border-subtle">
+                                    <EyeOff size={36} class="text-text-muted mb-2" />
+                                    <p class="text-sm font-bold text-text-base">Ningún vendedor seleccionado</p>
+                                    <p class="text-xs text-text-muted mt-1">Haz clic en los botones superiores para activar vendedores en la gráfica.</p>
+                                </div>
+                            {/if}
                         </div>
 
                         <!-- CARDS DE LEYENDA AGRUPADAS POR TEMPORALIDAD CON VENDEDORES -->
@@ -1865,13 +2719,107 @@
                                     {/each}
                                 </div>
                             </div>
+
+                            <!-- TABLA / RANKING DE PEDIDOS POR ASESOR -->
+                            <div class="mt-8 pt-6 border-t border-border-subtle/80 space-y-6">
+                                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-border-subtle/60">
+                                    <div class="flex items-center gap-3">
+                                        <div
+                                            class="p-2.5 rounded-2xl bg-purple-500/10 text-purple-500 border border-purple-500/20"
+                                        >
+                                            <Award size={22} />
+                                        </div>
+                                        <div>
+                                            <h3 class="text-base sm:text-lg font-black text-text-base flex items-center gap-2">
+                                                Ranking de Pedidos por Asesor
+                                            </h3>
+                                            <p class="text-xs text-text-muted">
+                                                Total de pedidos de venta emitidos por cada asesor comercial en el rango de fechas.
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <div class="relative w-full sm:w-64">
+                                        <Search size={16} class="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" />
+                                        <input
+                                            type="text"
+                                            bind:value={vendorFilterSearchPed}
+                                            placeholder="Buscar vendedor..."
+                                            class="w-full bg-surface-base border border-border-subtle rounded-xl pl-9 pr-3 py-2 text-xs text-text-base focus:outline-none focus:border-brand-500"
+                                        />
+                                    </div>
+                                </div>
+
+                                <div class="overflow-x-auto custom-scrollbar">
+                                    <table class="w-full text-left text-xs">
+                                        <thead>
+                                            <tr class="border-b border-border-subtle text-text-muted font-black uppercase text-[10px]">
+                                                <th class="py-3 px-4">#</th>
+                                                <th class="py-3 px-4">Código</th>
+                                                <th class="py-3 px-4">Asesor Comercial</th>
+                                                <th class="py-3 px-4 text-right">Pedidos (Rango)</th>
+                                                <th class="py-3 px-4 text-right">% del Total</th>
+                                                <th class="py-3 px-4 text-center">Estado en Gráfica</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody class="divide-y divide-border-subtle/40 font-medium">
+                                            {#each rankingPed.filter((t) => !vendorFilterSearchPed || t.ven_des.toLowerCase().includes(vendorFilterSearchPed.toLowerCase()) || t.co_ven.toLowerCase().includes(vendorFilterSearchPed.toLowerCase())) as item, idx}
+                                                {@const pct = totales.pedidos > 0 ? ((item.pedidos / totales.pedidos) * 100).toFixed(2) : '0.00'}
+                                                {@const color = vendorColorMap.get(item.co_ven) || '#3b82f6'}
+                                                {@const isVis = visibleVendorsPed.has(item.co_ven)}
+                                                <tr class="hover:bg-surface-soft/60 transition-colors">
+                                                    <td class="py-3 px-4 font-mono font-bold text-text-muted">
+                                                        {idx + 1}
+                                                    </td>
+                                                    <td class="py-3 px-4 font-mono text-text-muted">
+                                                        {item.co_ven}
+                                                    </td>
+                                                    <td class="py-3 px-4 font-bold text-text-base flex items-center gap-2">
+                                                        <span
+                                                            class="w-2.5 h-2.5 rounded-full shrink-0"
+                                                            style="background-color: {color}"
+                                                        ></span>
+                                                        {item.ven_des}
+                                                        {#if item.inactivo}
+                                                            <span class="text-[9px] font-bold text-rose-500 bg-rose-500/10 px-1.5 py-0.5 rounded">Inactivo</span>
+                                                        {/if}
+                                                    </td>
+                                                    <td class="py-3 px-4 text-right font-black font-mono text-text-base">
+                                                        {item.pedidos.toLocaleString("es-VE")}
+                                                    </td>
+                                                    <td class="py-3 px-4 text-right font-mono text-purple-600 dark:text-purple-400 font-bold">
+                                                        {pct}%
+                                                    </td>
+                                                    <td class="py-3 px-4 text-center">
+                                                        <button
+                                                            type="button"
+                                                            onclick={() => toggleVendorPed(item.co_ven)}
+                                                            class="px-2.5 py-1 rounded-lg text-[10px] font-bold border transition-all cursor-pointer {isVis
+                                                                ? 'bg-purple-500/10 text-purple-500 border-purple-500/30'
+                                                                : 'bg-surface-raised text-text-muted border-border-subtle'}"
+                                                        >
+                                                            {isVis ? 'Visible' : 'Oculto'}
+                                                        </button>
+                                                    </td>
+                                                </tr>
+                                            {/each}
+                                            {#if rankingPed.length === 0}
+                                                <tr>
+                                                    <td colspan="6" class="py-8 text-center text-text-muted font-bold">
+                                                        No se encontraron datos para mostrar.
+                                                    </td>
+                                                </tr>
+                                            {/if}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
                         </div>
                     </div>
-
-                    <!-- 5. Cotizaciones (100% Ancho) -->
-                    <div
-                        class="bg-surface-raised border border-border-subtle hover:border-blue-500/40 transition-all rounded-3xl p-6 sm:p-7 shadow-xl space-y-6"
-                    >
+                    {:else if activeCompTab === 'cotizaciones'}
+                        <!-- 5. Cotizaciones (100% Ancho) -->
+                        <div
+                            class="bg-surface-raised border border-border-subtle hover:border-blue-500/40 transition-all rounded-3xl p-6 sm:p-7 shadow-xl space-y-6"
+                        >
                         <div
                             class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border-subtle/60 pb-4"
                         >
@@ -1893,22 +2841,73 @@
                                     </p>
                                 </div>
                             </div>
-                            <div class="flex items-center gap-2 self-start sm:self-auto">
+                            <div class="flex items-center gap-2 self-start sm:self-auto flex-wrap">
                                 <span
                                     class="text-[11px] font-mono font-bold text-blue-500 bg-blue-500/10 px-3 py-1 rounded-full border border-blue-500/20"
                                 >
                                     Total: {formatNumber(breakdownCot.grandTotal)}
                                 </span>
-                                <span
-                                    class="text-[10px] font-black uppercase px-2.5 py-1 rounded-full bg-surface-soft text-text-muted border border-border-subtle"
+                                <button
+                                    type="button"
+                                    onclick={selectAllCot}
+                                    class="px-3 py-1 rounded-xl text-xs font-bold bg-surface-raised border border-border-subtle text-text-muted hover:text-text-base hover:bg-surface-soft transition-colors cursor-pointer"
                                 >
-                                    Cotizaciones
+                                    Todos ({(data.vendedores || []).length})
+                                </button>
+                                <button
+                                    type="button"
+                                    onclick={deselectAllCot}
+                                    class="px-3 py-1 rounded-xl text-xs font-bold bg-surface-raised border border-border-subtle text-text-muted hover:text-text-base hover:bg-surface-soft transition-colors cursor-pointer"
+                                >
+                                    Ninguno
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Barra de Pills / Vendedores -->
+                        <div class="space-y-2">
+                            <div class="flex items-center justify-between gap-2">
+                                <span class="text-xs font-black uppercase tracking-wider text-text-muted">
+                                    Filtrar Vendedores en Gráfica
                                 </span>
+                                <span class="text-xs text-text-muted">
+                                    {visibleVendorsCot.size} de {(data.vendedores || []).length} visibles
+                                </span>
+                            </div>
+                            <div class="flex flex-wrap gap-2 max-h-36 overflow-y-auto custom-scrollbar p-1">
+                                {#each (data.vendedores || []) as v}
+                                    {@const isVisible = visibleVendorsCot.has(v.co_ven)}
+                                    {@const color = vendorColorMap.get(v.co_ven) || '#3b82f6'}
+                                    <button
+                                        type="button"
+                                        onclick={() => toggleVendorCot(v.co_ven)}
+                                        class="px-3 py-1.5 rounded-xl text-xs font-bold border transition-all flex items-center gap-2 cursor-pointer {isVisible
+                                            ? 'bg-surface-raised border-border-subtle text-text-base shadow-sm'
+                                            : 'bg-surface-base/50 border-border-subtle/40 text-text-muted/50 opacity-60'}"
+                                    >
+                                        <span
+                                            class="w-2.5 h-2.5 rounded-full shrink-0"
+                                            style="background-color: {isVisible ? color : '#94a3b8'}"
+                                        ></span>
+                                        <span class="truncate max-w-[150px]">{(v.ven_des || v.co_ven).trim().toUpperCase()}</span>
+                                        {#if v.inactivo}
+                                            <span class="text-[9px] font-bold text-rose-500 bg-rose-500/10 px-1 py-0.5 rounded">Inactivo</span>
+                                        {/if}
+                                    </button>
+                                {/each}
                             </div>
                         </div>
 
                         <div class="relative w-full" style="height: 380px;">
-                            <canvas bind:this={chartCotCanvas}></canvas>
+                            {#if visibleVendorsCot.size > 0}
+                                <canvas bind:this={compChartCanvas}></canvas>
+                            {:else}
+                                <div class="h-full flex flex-col items-center justify-center text-center p-8 bg-surface-raised/50 rounded-2xl border border-dashed border-border-subtle">
+                                    <EyeOff size={36} class="text-text-muted mb-2" />
+                                    <p class="text-sm font-bold text-text-base">Ningún vendedor seleccionado</p>
+                                    <p class="text-xs text-text-muted mt-1">Haz clic en los botones superiores para activar vendedores en la gráfica.</p>
+                                </div>
+                            {/if}
                         </div>
 
                         <!-- CARDS DE LEYENDA AGRUPADAS POR TEMPORALIDAD CON VENDEDORES -->
@@ -2000,13 +2999,107 @@
                                     {/each}
                                 </div>
                             </div>
+
+                            <!-- TABLA / RANKING DE COTIZACIONES POR ASESOR -->
+                            <div class="mt-8 pt-6 border-t border-border-subtle/80 space-y-6">
+                                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-border-subtle/60">
+                                    <div class="flex items-center gap-3">
+                                        <div
+                                            class="p-2.5 rounded-2xl bg-blue-500/10 text-blue-500 border border-blue-500/20"
+                                        >
+                                            <Award size={22} />
+                                        </div>
+                                        <div>
+                                            <h3 class="text-base sm:text-lg font-black text-text-base flex items-center gap-2">
+                                                Ranking de Cotizaciones por Asesor
+                                            </h3>
+                                            <p class="text-xs text-text-muted">
+                                                Total de cotizaciones emitidas por cada asesor comercial en el rango de fechas.
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <div class="relative w-full sm:w-64">
+                                        <Search size={16} class="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" />
+                                        <input
+                                            type="text"
+                                            bind:value={vendorFilterSearchCot}
+                                            placeholder="Buscar vendedor..."
+                                            class="w-full bg-surface-base border border-border-subtle rounded-xl pl-9 pr-3 py-2 text-xs text-text-base focus:outline-none focus:border-brand-500"
+                                        />
+                                    </div>
+                                </div>
+
+                                <div class="overflow-x-auto custom-scrollbar">
+                                    <table class="w-full text-left text-xs">
+                                        <thead>
+                                            <tr class="border-b border-border-subtle text-text-muted font-black uppercase text-[10px]">
+                                                <th class="py-3 px-4">#</th>
+                                                <th class="py-3 px-4">Código</th>
+                                                <th class="py-3 px-4">Asesor Comercial</th>
+                                                <th class="py-3 px-4 text-right">Cotizaciones (Rango)</th>
+                                                <th class="py-3 px-4 text-right">% del Total</th>
+                                                <th class="py-3 px-4 text-center">Estado en Gráfica</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody class="divide-y divide-border-subtle/40 font-medium">
+                                            {#each rankingCot.filter((t) => !vendorFilterSearchCot || t.ven_des.toLowerCase().includes(vendorFilterSearchCot.toLowerCase()) || t.co_ven.toLowerCase().includes(vendorFilterSearchCot.toLowerCase())) as item, idx}
+                                                {@const pct = totales.cotizaciones > 0 ? ((item.cotizaciones / totales.cotizaciones) * 100).toFixed(2) : '0.00'}
+                                                {@const color = vendorColorMap.get(item.co_ven) || '#3b82f6'}
+                                                {@const isVis = visibleVendorsCot.has(item.co_ven)}
+                                                <tr class="hover:bg-surface-soft/60 transition-colors">
+                                                    <td class="py-3 px-4 font-mono font-bold text-text-muted">
+                                                        {idx + 1}
+                                                    </td>
+                                                    <td class="py-3 px-4 font-mono text-text-muted">
+                                                        {item.co_ven}
+                                                    </td>
+                                                    <td class="py-3 px-4 font-bold text-text-base flex items-center gap-2">
+                                                        <span
+                                                            class="w-2.5 h-2.5 rounded-full shrink-0"
+                                                            style="background-color: {color}"
+                                                        ></span>
+                                                        {item.ven_des}
+                                                        {#if item.inactivo}
+                                                            <span class="text-[9px] font-bold text-rose-500 bg-rose-500/10 px-1.5 py-0.5 rounded">Inactivo</span>
+                                                        {/if}
+                                                    </td>
+                                                    <td class="py-3 px-4 text-right font-black font-mono text-text-base">
+                                                        {item.cotizaciones.toLocaleString("es-VE")}
+                                                    </td>
+                                                    <td class="py-3 px-4 text-right font-mono text-blue-600 dark:text-blue-400 font-bold">
+                                                        {pct}%
+                                                    </td>
+                                                    <td class="py-3 px-4 text-center">
+                                                        <button
+                                                            type="button"
+                                                            onclick={() => toggleVendorCot(item.co_ven)}
+                                                            class="px-2.5 py-1 rounded-lg text-[10px] font-bold border transition-all cursor-pointer {isVis
+                                                                ? 'bg-blue-500/10 text-blue-500 border-blue-500/30'
+                                                                : 'bg-surface-raised text-text-muted border-border-subtle'}"
+                                                        >
+                                                            {isVis ? 'Visible' : 'Oculto'}
+                                                        </button>
+                                                    </td>
+                                                </tr>
+                                            {/each}
+                                            {#if rankingCot.length === 0}
+                                                <tr>
+                                                    <td colspan="6" class="py-8 text-center text-text-muted font-bold">
+                                                        No se encontraron datos para mostrar.
+                                                    </td>
+                                                </tr>
+                                            {/if}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
                         </div>
                     </div>
-
-                    <!-- 6. Servicios de Flete por Vendedor (100% Ancho) -->
-                    <div
-                        class="bg-surface-raised border border-border-subtle hover:border-cyan-500/40 transition-all rounded-3xl p-6 sm:p-7 shadow-xl space-y-6"
-                    >
+                    {:else if activeCompTab === 'fletes'}
+                        <!-- 6. Servicios de Flete por Vendedor (100% Ancho) -->
+                        <div
+                            class="bg-surface-raised border border-border-subtle hover:border-cyan-500/40 transition-all rounded-3xl p-6 sm:p-7 shadow-xl space-y-6"
+                        >
                         <div
                             class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border-subtle/60 pb-4"
                         >
@@ -2027,22 +3120,73 @@
                                     </p>
                                 </div>
                             </div>
-                            <div class="flex items-center gap-2 self-start sm:self-auto">
+                            <div class="flex items-center gap-2 self-start sm:self-auto flex-wrap">
                                 <span
                                     class="text-[11px] font-mono font-bold text-cyan-500 bg-cyan-500/10 px-3 py-1 rounded-full border border-cyan-500/20"
                                 >
                                     Total: {formatNumber(breakdownFletes.grandTotal)}
                                 </span>
-                                <span
-                                    class="text-[10px] font-black uppercase px-2.5 py-1 rounded-full bg-surface-soft text-text-muted border border-border-subtle"
+                                <button
+                                    type="button"
+                                    onclick={selectAllFletes}
+                                    class="px-3 py-1 rounded-xl text-xs font-bold bg-surface-raised border border-border-subtle text-text-muted hover:text-text-base hover:bg-surface-soft transition-colors cursor-pointer"
                                 >
-                                    Fletes Exitosos
+                                    Todos ({(data.vendedores || []).length})
+                                </button>
+                                <button
+                                    type="button"
+                                    onclick={deselectAllFletes}
+                                    class="px-3 py-1 rounded-xl text-xs font-bold bg-surface-raised border border-border-subtle text-text-muted hover:text-text-base hover:bg-surface-soft transition-colors cursor-pointer"
+                                >
+                                    Ninguno
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Barra de Pills / Vendedores -->
+                        <div class="space-y-2">
+                            <div class="flex items-center justify-between gap-2">
+                                <span class="text-xs font-black uppercase tracking-wider text-text-muted">
+                                    Filtrar Vendedores en Gráfica
                                 </span>
+                                <span class="text-xs text-text-muted">
+                                    {visibleVendorsFletes.size} de {(data.vendedores || []).length} visibles
+                                </span>
+                            </div>
+                            <div class="flex flex-wrap gap-2 max-h-36 overflow-y-auto custom-scrollbar p-1">
+                                {#each (data.vendedores || []) as v}
+                                    {@const isVisible = visibleVendorsFletes.has(v.co_ven)}
+                                    {@const color = vendorColorMap.get(v.co_ven) || '#3b82f6'}
+                                    <button
+                                        type="button"
+                                        onclick={() => toggleVendorFletes(v.co_ven)}
+                                        class="px-3 py-1.5 rounded-xl text-xs font-bold border transition-all flex items-center gap-2 cursor-pointer {isVisible
+                                            ? 'bg-surface-raised border-border-subtle text-text-base shadow-sm'
+                                            : 'bg-surface-base/50 border-border-subtle/40 text-text-muted/50 opacity-60'}"
+                                    >
+                                        <span
+                                            class="w-2.5 h-2.5 rounded-full shrink-0"
+                                            style="background-color: {isVisible ? color : '#94a3b8'}"
+                                        ></span>
+                                        <span class="truncate max-w-[150px]">{(v.ven_des || v.co_ven).trim().toUpperCase()}</span>
+                                        {#if v.inactivo}
+                                            <span class="text-[9px] font-bold text-rose-500 bg-rose-500/10 px-1 py-0.5 rounded">Inactivo</span>
+                                        {/if}
+                                    </button>
+                                {/each}
                             </div>
                         </div>
 
                         <div class="relative w-full" style="height: 380px;">
-                            <canvas bind:this={chartFletesCanvas}></canvas>
+                            {#if visibleVendorsFletes.size > 0}
+                                <canvas bind:this={compChartCanvas}></canvas>
+                            {:else}
+                                <div class="h-full flex flex-col items-center justify-center text-center p-8 bg-surface-raised/50 rounded-2xl border border-dashed border-border-subtle">
+                                    <EyeOff size={36} class="text-text-muted mb-2" />
+                                    <p class="text-sm font-bold text-text-base">Ningún vendedor seleccionado</p>
+                                    <p class="text-xs text-text-muted mt-1">Haz clic en los botones superiores para activar vendedores en la gráfica.</p>
+                                </div>
+                            {/if}
                         </div>
 
                         <!-- CARDS DE LEYENDA AGRUPADAS POR TEMPORALIDAD CON VENDEDORES -->
@@ -2134,13 +3278,107 @@
                                     {/each}
                                 </div>
                             </div>
+
+                            <!-- TABLA / RANKING DE SERVICIOS DE FLETE POR ASESOR -->
+                            <div class="mt-8 pt-6 border-t border-border-subtle/80 space-y-6">
+                                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-border-subtle/60">
+                                    <div class="flex items-center gap-3">
+                                        <div
+                                            class="p-2.5 rounded-2xl bg-cyan-500/10 text-cyan-500 border border-cyan-500/20"
+                                        >
+                                            <Award size={22} />
+                                        </div>
+                                        <div>
+                                            <h3 class="text-base sm:text-lg font-black text-text-base flex items-center gap-2">
+                                                Ranking de Servicios de Flete por Asesor
+                                            </h3>
+                                            <p class="text-xs text-text-muted">
+                                                Total de servicios de flete facturados en documentos exitosos por asesor en el rango de fechas.
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <div class="relative w-full sm:w-64">
+                                        <Search size={16} class="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" />
+                                        <input
+                                            type="text"
+                                            bind:value={vendorFilterSearchFletes}
+                                            placeholder="Buscar vendedor..."
+                                            class="w-full bg-surface-base border border-border-subtle rounded-xl pl-9 pr-3 py-2 text-xs text-text-base focus:outline-none focus:border-brand-500"
+                                        />
+                                    </div>
+                                </div>
+
+                                <div class="overflow-x-auto custom-scrollbar">
+                                    <table class="w-full text-left text-xs">
+                                        <thead>
+                                            <tr class="border-b border-border-subtle text-text-muted font-black uppercase text-[10px]">
+                                                <th class="py-3 px-4">#</th>
+                                                <th class="py-3 px-4">Código</th>
+                                                <th class="py-3 px-4">Asesor Comercial</th>
+                                                <th class="py-3 px-4 text-right">Servicios de Flete (Rango)</th>
+                                                <th class="py-3 px-4 text-right">% del Total</th>
+                                                <th class="py-3 px-4 text-center">Estado en Gráfica</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody class="divide-y divide-border-subtle/40 font-medium">
+                                            {#each rankingFletes.filter((t) => !vendorFilterSearchFletes || t.ven_des.toLowerCase().includes(vendorFilterSearchFletes.toLowerCase()) || t.co_ven.toLowerCase().includes(vendorFilterSearchFletes.toLowerCase())) as item, idx}
+                                                {@const pct = totales.fletes > 0 ? ((item.fletes / totales.fletes) * 100).toFixed(2) : '0.00'}
+                                                {@const color = vendorColorMap.get(item.co_ven) || '#3b82f6'}
+                                                {@const isVis = visibleVendorsFletes.has(item.co_ven)}
+                                                <tr class="hover:bg-surface-soft/60 transition-colors">
+                                                    <td class="py-3 px-4 font-mono font-bold text-text-muted">
+                                                        {idx + 1}
+                                                    </td>
+                                                    <td class="py-3 px-4 font-mono text-text-muted">
+                                                        {item.co_ven}
+                                                    </td>
+                                                    <td class="py-3 px-4 font-bold text-text-base flex items-center gap-2">
+                                                        <span
+                                                            class="w-2.5 h-2.5 rounded-full shrink-0"
+                                                            style="background-color: {color}"
+                                                        ></span>
+                                                        {item.ven_des}
+                                                        {#if item.inactivo}
+                                                            <span class="text-[9px] font-bold text-rose-500 bg-rose-500/10 px-1.5 py-0.5 rounded">Inactivo</span>
+                                                        {/if}
+                                                    </td>
+                                                    <td class="py-3 px-4 text-right font-black font-mono text-text-base">
+                                                        {item.fletes.toLocaleString("es-VE")}
+                                                    </td>
+                                                    <td class="py-3 px-4 text-right font-mono text-cyan-600 dark:text-cyan-400 font-bold">
+                                                        {pct}%
+                                                    </td>
+                                                    <td class="py-3 px-4 text-center">
+                                                        <button
+                                                            type="button"
+                                                            onclick={() => toggleVendorFletes(item.co_ven)}
+                                                            class="px-2.5 py-1 rounded-lg text-[10px] font-bold border transition-all cursor-pointer {isVis
+                                                                ? 'bg-cyan-500/10 text-cyan-500 border-cyan-500/30'
+                                                                : 'bg-surface-raised text-text-muted border-border-subtle'}"
+                                                        >
+                                                            {isVis ? 'Visible' : 'Oculto'}
+                                                        </button>
+                                                    </td>
+                                                </tr>
+                                            {/each}
+                                            {#if rankingFletes.length === 0}
+                                                <tr>
+                                                    <td colspan="6" class="py-8 text-center text-text-muted font-bold">
+                                                        No se encontraron datos para mostrar.
+                                                    </td>
+                                                </tr>
+                                            {/if}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
                         </div>
                     </div>
-
-                    <!-- 7. Servicios de Cortes por Vendedor (100% Ancho) -->
-                    <div
-                        class="bg-surface-raised border border-border-subtle hover:border-rose-500/40 transition-all rounded-3xl p-6 sm:p-7 shadow-xl space-y-6"
-                    >
+                    {:else if activeCompTab === 'cortes'}
+                        <!-- 7. Servicios de Cortes por Vendedor (100% Ancho) -->
+                        <div
+                            class="bg-surface-raised border border-border-subtle hover:border-rose-500/40 transition-all rounded-3xl p-6 sm:p-7 shadow-xl space-y-6"
+                        >
                         <div
                             class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border-subtle/60 pb-4"
                         >
@@ -2161,22 +3399,73 @@
                                     </p>
                                 </div>
                             </div>
-                            <div class="flex items-center gap-2 self-start sm:self-auto">
+                            <div class="flex items-center gap-2 self-start sm:self-auto flex-wrap">
                                 <span
                                     class="text-[11px] font-mono font-bold text-rose-500 bg-rose-500/10 px-3 py-1 rounded-full border border-rose-500/20"
                                 >
                                     Total: {formatNumber(breakdownCortes.grandTotal)}
                                 </span>
-                                <span
-                                    class="text-[10px] font-black uppercase px-2.5 py-1 rounded-full bg-surface-soft text-text-muted border border-border-subtle"
+                                <button
+                                    type="button"
+                                    onclick={selectAllCortes}
+                                    class="px-3 py-1 rounded-xl text-xs font-bold bg-surface-raised border border-border-subtle text-text-muted hover:text-text-base hover:bg-surface-soft transition-colors cursor-pointer"
                                 >
-                                    Cortes Exitosos
+                                    Todos ({(data.vendedores || []).length})
+                                </button>
+                                <button
+                                    type="button"
+                                    onclick={deselectAllCortes}
+                                    class="px-3 py-1 rounded-xl text-xs font-bold bg-surface-raised border border-border-subtle text-text-muted hover:text-text-base hover:bg-surface-soft transition-colors cursor-pointer"
+                                >
+                                    Ninguno
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Barra de Pills / Vendedores -->
+                        <div class="space-y-2">
+                            <div class="flex items-center justify-between gap-2">
+                                <span class="text-xs font-black uppercase tracking-wider text-text-muted">
+                                    Filtrar Vendedores en Gráfica
                                 </span>
+                                <span class="text-xs text-text-muted">
+                                    {visibleVendorsCortes.size} de {(data.vendedores || []).length} visibles
+                                </span>
+                            </div>
+                            <div class="flex flex-wrap gap-2 max-h-36 overflow-y-auto custom-scrollbar p-1">
+                                {#each (data.vendedores || []) as v}
+                                    {@const isVisible = visibleVendorsCortes.has(v.co_ven)}
+                                    {@const color = vendorColorMap.get(v.co_ven) || '#3b82f6'}
+                                    <button
+                                        type="button"
+                                        onclick={() => toggleVendorCortes(v.co_ven)}
+                                        class="px-3 py-1.5 rounded-xl text-xs font-bold border transition-all flex items-center gap-2 cursor-pointer {isVisible
+                                            ? 'bg-surface-raised border-border-subtle text-text-base shadow-sm'
+                                            : 'bg-surface-base/50 border-border-subtle/40 text-text-muted/50 opacity-60'}"
+                                    >
+                                        <span
+                                            class="w-2.5 h-2.5 rounded-full shrink-0"
+                                            style="background-color: {isVisible ? color : '#94a3b8'}"
+                                        ></span>
+                                        <span class="truncate max-w-[150px]">{(v.ven_des || v.co_ven).trim().toUpperCase()}</span>
+                                        {#if v.inactivo}
+                                            <span class="text-[9px] font-bold text-rose-500 bg-rose-500/10 px-1 py-0.5 rounded">Inactivo</span>
+                                        {/if}
+                                    </button>
+                                {/each}
                             </div>
                         </div>
 
                         <div class="relative w-full" style="height: 380px;">
-                            <canvas bind:this={chartCortesCanvas}></canvas>
+                            {#if visibleVendorsCortes.size > 0}
+                                <canvas bind:this={compChartCanvas}></canvas>
+                            {:else}
+                                <div class="h-full flex flex-col items-center justify-center text-center p-8 bg-surface-raised/50 rounded-2xl border border-dashed border-border-subtle">
+                                    <EyeOff size={36} class="text-text-muted mb-2" />
+                                    <p class="text-sm font-bold text-text-base">Ningún vendedor seleccionado</p>
+                                    <p class="text-xs text-text-muted mt-1">Haz clic en los botones superiores para activar vendedores en la gráfica.</p>
+                                </div>
+                            {/if}
                         </div>
 
                         <!-- CARDS DE LEYENDA AGRUPADAS POR TEMPORALIDAD CON VENDEDORES -->
@@ -2268,8 +3557,964 @@
                                     {/each}
                                 </div>
                             </div>
+
+                            <!-- TABLA / RANKING DE SERVICIOS DE CORTE POR ASESOR -->
+                            <div class="mt-8 pt-6 border-t border-border-subtle/80 space-y-6">
+                                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-border-subtle/60">
+                                    <div class="flex items-center gap-3">
+                                        <div
+                                            class="p-2.5 rounded-2xl bg-rose-500/10 text-rose-500 border border-rose-500/20"
+                                        >
+                                            <Award size={22} />
+                                        </div>
+                                        <div>
+                                            <h3 class="text-base sm:text-lg font-black text-text-base flex items-center gap-2">
+                                                Ranking de Servicios de Corte por Asesor
+                                            </h3>
+                                            <p class="text-xs text-text-muted">
+                                                Total de servicios de corte facturados en documentos exitosos por asesor en el rango de fechas.
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <div class="relative w-full sm:w-64">
+                                        <Search size={16} class="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" />
+                                        <input
+                                            type="text"
+                                            bind:value={vendorFilterSearchCortes}
+                                            placeholder="Buscar vendedor..."
+                                            class="w-full bg-surface-base border border-border-subtle rounded-xl pl-9 pr-3 py-2 text-xs text-text-base focus:outline-none focus:border-brand-500"
+                                        />
+                                    </div>
+                                </div>
+
+                                <div class="overflow-x-auto custom-scrollbar">
+                                    <table class="w-full text-left text-xs">
+                                        <thead>
+                                            <tr class="border-b border-border-subtle text-text-muted font-black uppercase text-[10px]">
+                                                <th class="py-3 px-4">#</th>
+                                                <th class="py-3 px-4">Código</th>
+                                                <th class="py-3 px-4">Asesor Comercial</th>
+                                                <th class="py-3 px-4 text-right">Servicios de Corte (Rango)</th>
+                                                <th class="py-3 px-4 text-right">% del Total</th>
+                                                <th class="py-3 px-4 text-center">Estado en Gráfica</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody class="divide-y divide-border-subtle/40 font-medium">
+                                            {#each rankingCortes.filter((t) => !vendorFilterSearchCortes || t.ven_des.toLowerCase().includes(vendorFilterSearchCortes.toLowerCase()) || t.co_ven.toLowerCase().includes(vendorFilterSearchCortes.toLowerCase())) as item, idx}
+                                                {@const pct = totales.cortes > 0 ? ((item.cortes / totales.cortes) * 100).toFixed(2) : '0.00'}
+                                                {@const color = vendorColorMap.get(item.co_ven) || '#3b82f6'}
+                                                {@const isVis = visibleVendorsCortes.has(item.co_ven)}
+                                                <tr class="hover:bg-surface-soft/60 transition-colors">
+                                                    <td class="py-3 px-4 font-mono font-bold text-text-muted">
+                                                        {idx + 1}
+                                                    </td>
+                                                    <td class="py-3 px-4 font-mono text-text-muted">
+                                                        {item.co_ven}
+                                                    </td>
+                                                    <td class="py-3 px-4 font-bold text-text-base flex items-center gap-2">
+                                                        <span
+                                                            class="w-2.5 h-2.5 rounded-full shrink-0"
+                                                            style="background-color: {color}"
+                                                        ></span>
+                                                        {item.ven_des}
+                                                        {#if item.inactivo}
+                                                            <span class="text-[9px] font-bold text-rose-500 bg-rose-500/10 px-1.5 py-0.5 rounded">Inactivo</span>
+                                                        {/if}
+                                                    </td>
+                                                    <td class="py-3 px-4 text-right font-black font-mono text-text-base">
+                                                        {item.cortes.toLocaleString("es-VE")}
+                                                    </td>
+                                                    <td class="py-3 px-4 text-right font-mono text-rose-600 dark:text-rose-400 font-bold">
+                                                        {pct}%
+                                                    </td>
+                                                    <td class="py-3 px-4 text-center">
+                                                        <button
+                                                            type="button"
+                                                            onclick={() => toggleVendorCortes(item.co_ven)}
+                                                            class="px-2.5 py-1 rounded-lg text-[10px] font-bold border transition-all cursor-pointer {isVis
+                                                                ? 'bg-rose-500/10 text-rose-500 border-rose-500/30'
+                                                                : 'bg-surface-raised text-text-muted border-border-subtle'}"
+                                                        >
+                                                            {isVis ? 'Visible' : 'Oculto'}
+                                                        </button>
+                                                    </td>
+                                                </tr>
+                                            {/each}
+                                            {#if rankingCortes.length === 0}
+                                                <tr>
+                                                    <td colspan="6" class="py-8 text-center text-text-muted font-bold">
+                                                        No se encontraron datos para mostrar.
+                                                    </td>
+                                                </tr>
+                                            {/if}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
                         </div>
                     </div>
+                    {:else if activeCompTab === 'art_distintos'}
+                        <!-- 8. Artículos Únicos Vendidos (100% Ancho) -->
+                        <div
+                            class="bg-surface-raised border border-border-subtle hover:border-teal-500/40 transition-all rounded-3xl p-6 sm:p-7 shadow-xl space-y-6"
+                        >
+                            <div
+                                class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border-subtle/60 pb-4"
+                            >
+                                <div class="flex items-center gap-3">
+                                    <div
+                                        class="p-2.5 rounded-2xl bg-teal-500/10 text-teal-500 border border-teal-500/20"
+                                    >
+                                        <PackageSearch size={22} />
+                                    </div>
+                                    <div>
+                                        <h3
+                                            class="text-base sm:text-lg font-black text-text-base flex items-center gap-2"
+                                        >
+                                            Artículos Distintos por Vendedor (Documentos Exitosos)
+                                        </h3>
+                                        <p class="text-xs text-text-muted">
+                                            Evolución temporal de cantidad de artículos distintos vendidos en documentos exitosos por cada vendedor en el período.
+                                        </p>
+                                    </div>
+                                </div>
+                                <div class="flex items-center gap-2 self-start sm:self-auto flex-wrap">
+                                    <span
+                                        class="text-[11px] font-mono font-bold text-teal-500 bg-teal-500/10 px-3 py-1 rounded-full border border-teal-500/20"
+                                    >
+                                        Total: {totalArticulosDistintosGlobal.toLocaleString("es-VE")}
+                                    </span>
+                                    <button
+                                        type="button"
+                                        onclick={selectAllArt}
+                                        class="px-3 py-1 rounded-xl text-xs font-bold bg-surface-raised border border-border-subtle text-text-muted hover:text-text-base hover:bg-surface-soft transition-colors cursor-pointer"
+                                    >
+                                        Todos ({(data.vendedores || []).length})
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onclick={deselectAllArt}
+                                        class="px-3 py-1 rounded-xl text-xs font-bold bg-surface-raised border border-border-subtle text-text-muted hover:text-text-base hover:bg-surface-soft transition-colors cursor-pointer"
+                                    >
+                                        Ninguno
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- Barra de Pills / Vendedores -->
+                            <div class="space-y-2">
+                                <div class="flex items-center justify-between gap-2">
+                                    <span class="text-xs font-black uppercase tracking-wider text-text-muted">
+                                        Filtrar Vendedores en Gráfica
+                                    </span>
+                                    <span class="text-xs text-text-muted">
+                                        {visibleVendorsArt.size} de {(data.vendedores || []).length} visibles
+                                    </span>
+                                </div>
+                                <div class="flex flex-wrap gap-2 max-h-36 overflow-y-auto custom-scrollbar p-1">
+                                    {#each (data.vendedores || []) as v}
+                                        {@const isVisible = visibleVendorsArt.has(v.co_ven)}
+                                        {@const color = vendorColorMap.get(v.co_ven) || '#3b82f6'}
+                                        {@const rankItem = rankingList.find((t: any) => t.co_ven === v.co_ven)}
+                                        <button
+                                            type="button"
+                                            onclick={() => toggleVendorArt(v.co_ven)}
+                                            class="px-3 py-1.5 rounded-xl text-xs font-bold border transition-all flex items-center gap-2 cursor-pointer {isVisible
+                                                ? 'bg-surface-raised border-border-subtle text-text-base shadow-sm'
+                                                : 'bg-surface-base/50 border-border-subtle/40 text-text-muted/50 opacity-60'}"
+                                        >
+                                            <span
+                                                class="w-2.5 h-2.5 rounded-full shrink-0"
+                                                style="background-color: {isVisible ? color : '#94a3b8'}"
+                                            ></span>
+                                            <span class="truncate max-w-[150px]">{(v.ven_des || v.co_ven).trim().toUpperCase()}</span>
+                                            {#if v.inactivo}
+                                                <span class="text-[9px] font-bold text-rose-500 bg-rose-500/10 px-1 py-0.5 rounded">Inactivo</span>
+                                            {/if}
+                                            {#if rankItem}
+                                                <span class="text-[10px] font-mono opacity-70">
+                                                    ({rankItem.cant_articulos_unicos})
+                                                </span>
+                                            {/if}
+                                        </button>
+                                    {/each}
+                                </div>
+                            </div>
+
+                            <div class="relative w-full" style="height: 380px;">
+                                {#if visibleVendorsArt.size > 0}
+                                    <canvas bind:this={compChartCanvas}></canvas>
+                                {:else}
+                                    <div class="h-full flex flex-col items-center justify-center text-center p-8 bg-surface-raised/50 rounded-2xl border border-dashed border-border-subtle">
+                                        <EyeOff size={36} class="text-text-muted mb-2" />
+                                        <p class="text-sm font-bold text-text-base">Ningún vendedor seleccionado</p>
+                                        <p class="text-xs text-text-muted mt-1">Haz clic en los botones superiores para activar vendedores en la gráfica.</p>
+                                    </div>
+                                {/if}
+                            </div>
+
+                            <!-- CARDS DE LEYENDA AGRUPADAS POR TEMPORALIDAD CON VENDEDORES -->
+                            <div class="pt-5 border-t border-border-subtle/60 space-y-3">
+                                <div class="flex items-center justify-between">
+                                    <span
+                                        class="text-xs font-black uppercase tracking-wider text-text-muted flex items-center gap-2"
+                                    >
+                                        Detalle {tipoAgrupacion === 'diario'
+                                            ? 'Diario'
+                                            : tipoAgrupacion === 'semanal'
+                                              ? 'Semanal'
+                                              : 'Mensual'} por Vendedor (Artículos Distintos)
+                                    </span>
+                                    <span
+                                        class="text-[10px] text-text-muted font-medium lg:hidden"
+                                    >
+                                        ← Desliza para ver todos los períodos →
+                                    </span>
+                                </div>
+
+                                <div class="w-full overflow-x-auto custom-scrollbar pb-2">
+                                    <div class="flex gap-2.5 min-w-full">
+                                        {#each breakdownArt.periods as p}
+                                            {@const isMax =
+                                                p.total === breakdownArt.maxPeriodTotal &&
+                                                breakdownArt.maxPeriodTotal > 0}
+                                            <div
+                                                class="flex-1 min-w-[170px] sm:min-w-[200px] p-3 rounded-2xl border transition-all flex flex-col justify-between {isMax
+                                                    ? 'bg-teal-500/10 border-teal-500/50 ring-1 ring-teal-500/20'
+                                                    : 'bg-surface-base/80 border-border-subtle/70 hover:border-border-subtle'}"
+                                            >
+                                                <div>
+                                                    <div
+                                                        class="flex items-center justify-between gap-1 mb-2 pb-1.5 border-b border-border-subtle/50"
+                                                    >
+                                                        <span
+                                                            class="text-[11px] font-black text-text-base block truncate uppercase tracking-wider"
+                                                        >
+                                                            {p.periodo}
+                                                        </span>
+                                                        <span
+                                                            class="text-[11px] font-mono font-black text-teal-500 shrink-0"
+                                                        >
+                                                            {formatNumber(p.total)}
+                                                        </span>
+                                                    </div>
+
+                                                    <!-- Listado de vendedores en el período -->
+                                                    <div
+                                                        class="space-y-1.5 text-xs flex-1"
+                                                    >
+                                                        {#if p.vendors.length === 0}
+                                                            <p
+                                                                class="text-[10px] text-text-muted/50 italic text-center py-2"
+                                                            >
+                                                                0 artículos
+                                                            </p>
+                                                        {:else}
+                                                            {#each p.vendors as ven}
+                                                                <div
+                                                                    class="flex items-center justify-between gap-1.5 text-[10px]"
+                                                                >
+                                                                    <div
+                                                                        class="flex items-center gap-1.5 min-w-0"
+                                                                    >
+                                                                        <span
+                                                                            class="w-2 h-2 rounded-full shrink-0 shadow-sm"
+                                                                            style="background-color: {ven.color}"
+                                                                        ></span>
+                                                                        <span
+                                                                            class="font-bold text-text-base truncate"
+                                                                            title="{ven.ven_des} ({ven.co_ven})"
+                                                                        >
+                                                                            {ven.ven_des}
+                                                                        </span>
+                                                                    </div>
+                                                                    <span
+                                                                        class="font-mono font-black text-text-base shrink-0"
+                                                                    >
+                                                                        {formatNumber(
+                                                                            ven.qty,
+                                                                        )}
+                                                                    </span>
+                                                                </div>
+                                                            {/each}
+                                                        {/if}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        {/each}
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- TABLA / RANKING DE VARIEDAD POR ASESOR -->
+                            <div class="mt-8 pt-6 border-t border-border-subtle/80 space-y-6">
+                                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-border-subtle/60">
+                                    <div class="flex items-center gap-3">
+                                        <div
+                                            class="p-2.5 rounded-2xl bg-amber-500/10 text-amber-500 border border-amber-500/20"
+                                        >
+                                            <Award size={22} />
+                                        </div>
+                                        <div>
+                                            <h3 class="text-base sm:text-lg font-black text-text-base flex items-center gap-2">
+                                                Ranking de Variedad por Asesor
+                                            </h3>
+                                            <p class="text-xs text-text-muted">
+                                                Cada artículo se contabiliza 1 sola vez por asesor en todo el rango de fechas seleccionado.
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <div class="relative w-full sm:w-64">
+                                        <Search size={16} class="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" />
+                                        <input
+                                            type="text"
+                                            bind:value={vendorFilterSearch}
+                                            placeholder="Buscar vendedor..."
+                                            class="w-full bg-surface-base border border-border-subtle rounded-xl pl-9 pr-3 py-2 text-xs text-text-base focus:outline-none focus:border-brand-500"
+                                        />
+                                    </div>
+                                </div>
+
+                                <div class="overflow-x-auto custom-scrollbar">
+                                    <table class="w-full text-left text-xs">
+                                        <thead>
+                                            <tr class="border-b border-border-subtle text-text-muted font-black uppercase text-[10px]">
+                                                <th class="py-3 px-4">#</th>
+                                                <th class="py-3 px-4">Código</th>
+                                                <th class="py-3 px-4">Asesor Comercial</th>
+                                                <th class="py-3 px-4 text-right">Artículos Distintos (Rango)</th>
+                                                <th class="py-3 px-4 text-right">% Catálogo Activo</th>
+                                                <th class="py-3 px-4 text-center">Estado en Gráfica</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody class="divide-y divide-border-subtle/40 font-medium">
+                                            {#each rankingList.filter((t: any) => !vendorFilterSearch || (t.ven_des || '').toLowerCase().includes(vendorFilterSearch.toLowerCase()) || t.co_ven.toLowerCase().includes(vendorFilterSearch.toLowerCase())) as item, idx}
+                                                {@const pctCatalogo = totalArticulosActivos > 0 ? ((item.cant_articulos_unicos / totalArticulosActivos) * 100).toFixed(2) : '0.00'}
+                                                {@const color = vendorColorMap.get(item.co_ven) || '#3b82f6'}
+                                                {@const isVis = visibleVendorsArt.has(item.co_ven)}
+                                                <tr class="hover:bg-surface-soft/60 transition-colors">
+                                                    <td class="py-3 px-4 font-mono font-bold text-text-muted">
+                                                        {idx + 1}
+                                                    </td>
+                                                    <td class="py-3 px-4 font-mono text-text-muted">
+                                                        {item.co_ven}
+                                                    </td>
+                                                    <td class="py-3 px-4 font-bold text-text-base flex items-center gap-2">
+                                                        <span
+                                                            class="w-2.5 h-2.5 rounded-full shrink-0"
+                                                            style="background-color: {color}"
+                                                        ></span>
+                                                        {(item.ven_des || item.co_ven).trim().toUpperCase()}
+                                                        {#if item.inactivo}
+                                                            <span class="text-[9px] font-bold text-rose-500 bg-rose-500/10 px-1.5 py-0.5 rounded">Inactivo</span>
+                                                        {/if}
+                                                    </td>
+                                                    <td class="py-3 px-4 text-right font-black font-mono text-text-base">
+                                                        {item.cant_articulos_unicos.toLocaleString("es-VE")}
+                                                    </td>
+                                                    <td class="py-3 px-4 text-right font-mono text-emerald-600 dark:text-emerald-400 font-bold">
+                                                        {pctCatalogo}%
+                                                    </td>
+                                                    <td class="py-3 px-4 text-center">
+                                                        <button
+                                                            type="button"
+                                                            onclick={() => toggleVendorArt(item.co_ven)}
+                                                            class="px-2.5 py-1 rounded-lg text-[10px] font-bold border transition-all cursor-pointer {isVis
+                                                                ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/30'
+                                                                : 'bg-surface-raised text-text-muted border-border-subtle'}"
+                                                        >
+                                                            {isVis ? 'Visible' : 'Oculto'}
+                                                        </button>
+                                                    </td>
+                                                </tr>
+                                            {/each}
+                                            {#if rankingList.length === 0}
+                                                <tr>
+                                                    <td colspan="6" class="py-8 text-center text-text-muted font-bold">
+                                                        No se encontraron datos para mostrar.
+                                                    </td>
+                                                </tr>
+                                            {/if}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    {:else if activeCompTab === 'art_pedidos'}
+                        <!-- 9. Artículos Únicos Pedidos (100% Ancho) -->
+                        <div
+                            class="bg-surface-raised border border-border-subtle hover:border-purple-500/40 transition-all rounded-3xl p-6 sm:p-7 shadow-xl space-y-6"
+                        >
+                            <div
+                                class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border-subtle/60 pb-4"
+                            >
+                                <div class="flex items-center gap-3">
+                                    <div
+                                        class="p-2.5 rounded-2xl bg-purple-500/10 text-purple-500 border border-purple-500/20"
+                                    >
+                                        <PackagePlus size={22} />
+                                    </div>
+                                    <div>
+                                        <h3
+                                            class="text-base sm:text-lg font-black text-text-base flex items-center gap-2"
+                                        >
+                                            Artículos Distintos por Vendedor (Pedidos de Venta)
+                                        </h3>
+                                        <p class="text-xs text-text-muted">
+                                            Evolución temporal de cantidad de artículos distintos pedidos por cada vendedor en el período.
+                                        </p>
+                                    </div>
+                                </div>
+                                <div class="flex items-center gap-2 self-start sm:self-auto flex-wrap">
+                                    <span
+                                        class="text-[11px] font-mono font-bold text-purple-500 bg-purple-500/10 px-3 py-1 rounded-full border border-purple-500/20"
+                                    >
+                                        Total: {totalArtPedidosGlobal.toLocaleString("es-VE")}
+                                    </span>
+                                    <button
+                                        type="button"
+                                        onclick={selectAllArtPed}
+                                        class="px-3 py-1 rounded-xl text-xs font-bold bg-surface-raised border border-border-subtle text-text-muted hover:text-text-base hover:bg-surface-soft transition-colors cursor-pointer"
+                                    >
+                                        Todos ({(data.vendedores || []).length})
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onclick={deselectAllArtPed}
+                                        class="px-3 py-1 rounded-xl text-xs font-bold bg-surface-raised border border-border-subtle text-text-muted hover:text-text-base hover:bg-surface-soft transition-colors cursor-pointer"
+                                    >
+                                        Ninguno
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- Barra de Pills / Vendedores -->
+                            <div class="space-y-2">
+                                <div class="flex items-center justify-between gap-2">
+                                    <span class="text-xs font-black uppercase tracking-wider text-text-muted">
+                                        Filtrar Vendedores en Gráfica
+                                    </span>
+                                    <span class="text-xs text-text-muted">
+                                        {visibleVendorsArtPed.size} de {(data.vendedores || []).length} visibles
+                                    </span>
+                                </div>
+                                <div class="flex flex-wrap gap-2 max-h-36 overflow-y-auto custom-scrollbar p-1">
+                                    {#each (data.vendedores || []) as v}
+                                        {@const isVisible = visibleVendorsArtPed.has(v.co_ven)}
+                                        {@const color = vendorColorMap.get(v.co_ven) || '#3b82f6'}
+                                        {@const rankItem = rankingArtPedidos.find((t: any) => t.co_ven === v.co_ven)}
+                                        <button
+                                            type="button"
+                                            onclick={() => toggleVendorArtPed(v.co_ven)}
+                                            class="px-3 py-1.5 rounded-xl text-xs font-bold border transition-all flex items-center gap-2 cursor-pointer {isVisible
+                                                ? 'bg-surface-raised border-border-subtle text-text-base shadow-sm'
+                                                : 'bg-surface-base/50 border-border-subtle/40 text-text-muted/50 opacity-60'}"
+                                        >
+                                            <span
+                                                class="w-2.5 h-2.5 rounded-full shrink-0"
+                                                style="background-color: {isVisible ? color : '#94a3b8'}"
+                                            ></span>
+                                            <span class="truncate max-w-[150px]">{(v.ven_des || v.co_ven).trim().toUpperCase()}</span>
+                                            {#if v.inactivo}
+                                                <span class="text-[9px] font-bold text-rose-500 bg-rose-500/10 px-1 py-0.5 rounded">Inactivo</span>
+                                            {/if}
+                                            {#if rankItem}
+                                                <span class="text-[10px] font-mono opacity-70">
+                                                    ({rankItem.cant_articulos_unicos})
+                                                </span>
+                                            {/if}
+                                        </button>
+                                    {/each}
+                                </div>
+                            </div>
+
+                            <div class="relative w-full" style="height: 380px;">
+                                {#if visibleVendorsArtPed.size > 0}
+                                    <canvas bind:this={compChartCanvas}></canvas>
+                                {:else}
+                                    <div class="h-full flex flex-col items-center justify-center text-center p-8 bg-surface-raised/50 rounded-2xl border border-dashed border-border-subtle">
+                                        <EyeOff size={36} class="text-text-muted mb-2" />
+                                        <p class="text-sm font-bold text-text-base">Ningún vendedor seleccionado</p>
+                                        <p class="text-xs text-text-muted mt-1">Haz clic en los botones superiores para activar vendedores en la gráfica.</p>
+                                    </div>
+                                {/if}
+                            </div>
+
+                            <!-- CARDS DE LEYENDA AGRUPADAS POR TEMPORALIDAD CON VENDEDORES -->
+                            <div class="pt-5 border-t border-border-subtle/60 space-y-3">
+                                <div class="flex items-center justify-between">
+                                    <span
+                                        class="text-xs font-black uppercase tracking-wider text-text-muted flex items-center gap-2"
+                                    >
+                                        Detalle {tipoAgrupacion === 'diario'
+                                            ? 'Diario'
+                                            : tipoAgrupacion === 'semanal'
+                                              ? 'Semanal'
+                                              : 'Mensual'} por Vendedor (Artículos Pedidos)
+                                    </span>
+                                    <span
+                                        class="text-[10px] text-text-muted font-medium lg:hidden"
+                                    >
+                                        ← Desliza para ver todos los períodos →
+                                    </span>
+                                </div>
+
+                                <div class="w-full overflow-x-auto custom-scrollbar pb-2">
+                                    <div class="flex gap-2.5 min-w-full">
+                                        {#each breakdownArtPed.periods as p}
+                                            {@const isMax =
+                                                p.total === breakdownArtPed.maxPeriodTotal &&
+                                                breakdownArtPed.maxPeriodTotal > 0}
+                                            <div
+                                                class="flex-1 min-w-[170px] sm:min-w-[200px] p-3 rounded-2xl border transition-all flex flex-col justify-between {isMax
+                                                    ? 'bg-purple-500/10 border-purple-500/50 ring-1 ring-purple-500/20'
+                                                    : 'bg-surface-base/80 border-border-subtle/70 hover:border-border-subtle'}"
+                                            >
+                                                <div>
+                                                    <div
+                                                        class="flex items-center justify-between gap-1 mb-2 pb-1.5 border-b border-border-subtle/50"
+                                                    >
+                                                        <span
+                                                            class="text-[11px] font-black text-text-base block truncate uppercase tracking-wider"
+                                                        >
+                                                            {p.periodo}
+                                                        </span>
+                                                        <span
+                                                            class="text-[11px] font-mono font-black text-purple-500 shrink-0"
+                                                        >
+                                                            {formatNumber(p.total)}
+                                                        </span>
+                                                    </div>
+
+                                                    <!-- Listado de vendedores en el período -->
+                                                    <div
+                                                        class="space-y-1.5 text-xs flex-1"
+                                                    >
+                                                        {#if p.vendors.length === 0}
+                                                            <p
+                                                                class="text-[10px] text-text-muted/50 italic text-center py-2"
+                                                            >
+                                                                0 artículos
+                                                            </p>
+                                                        {:else}
+                                                            {#each p.vendors as ven}
+                                                                <div
+                                                                    class="flex items-center justify-between gap-1.5 text-[10px]"
+                                                                >
+                                                                    <div
+                                                                        class="flex items-center gap-1.5 min-w-0"
+                                                                    >
+                                                                        <span
+                                                                            class="w-2 h-2 rounded-full shrink-0 shadow-sm"
+                                                                            style="background-color: {ven.color}"
+                                                                        ></span>
+                                                                        <span
+                                                                            class="font-bold text-text-base truncate"
+                                                                            title="{ven.ven_des} ({ven.co_ven})"
+                                                                        >
+                                                                            {ven.ven_des}
+                                                                        </span>
+                                                                    </div>
+                                                                    <span
+                                                                        class="font-mono font-black text-text-base shrink-0"
+                                                                    >
+                                                                        {formatNumber(
+                                                                            ven.qty,
+                                                                        )}
+                                                                    </span>
+                                                                </div>
+                                                            {/each}
+                                                        {/if}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        {/each}
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- TABLA / RANKING DE VARIEDAD POR ASESOR (PEDIDOS) -->
+                            <div class="mt-8 pt-6 border-t border-border-subtle/80 space-y-6">
+                                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-border-subtle/60">
+                                    <div class="flex items-center gap-3">
+                                        <div
+                                            class="p-2.5 rounded-2xl bg-purple-500/10 text-purple-500 border border-purple-500/20"
+                                        >
+                                            <Award size={22} />
+                                        </div>
+                                        <div>
+                                            <h3 class="text-base sm:text-lg font-black text-text-base flex items-center gap-2">
+                                                Ranking de Variedad por Asesor (Pedidos)
+                                            </h3>
+                                            <p class="text-xs text-text-muted">
+                                                Cada artículo se contabiliza 1 sola vez por asesor en todos sus pedidos de venta del rango seleccionado.
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <div class="relative w-full sm:w-64">
+                                        <Search size={16} class="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" />
+                                        <input
+                                            type="text"
+                                            bind:value={vendorFilterSearchPedArt}
+                                            placeholder="Buscar vendedor..."
+                                            class="w-full bg-surface-base border border-border-subtle rounded-xl pl-9 pr-3 py-2 text-xs text-text-base focus:outline-none focus:border-brand-500"
+                                        />
+                                    </div>
+                                </div>
+
+                                <div class="overflow-x-auto custom-scrollbar">
+                                    <table class="w-full text-left text-xs">
+                                        <thead>
+                                            <tr class="border-b border-border-subtle text-text-muted font-black uppercase text-[10px]">
+                                                <th class="py-3 px-4">#</th>
+                                                <th class="py-3 px-4">Código</th>
+                                                <th class="py-3 px-4">Asesor Comercial</th>
+                                                <th class="py-3 px-4 text-right">Artículos Distintos (Rango)</th>
+                                                <th class="py-3 px-4 text-right">% Catálogo Activo</th>
+                                                <th class="py-3 px-4 text-center">Estado en Gráfica</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody class="divide-y divide-border-subtle/40 font-medium">
+                                            {#each rankingArtPedidos.filter((t: any) => !vendorFilterSearchPedArt || (t.ven_des || '').toLowerCase().includes(vendorFilterSearchPedArt.toLowerCase()) || t.co_ven.toLowerCase().includes(vendorFilterSearchPedArt.toLowerCase())) as item, idx}
+                                                {@const pctCatalogo = totalArticulosActivos > 0 ? ((item.cant_articulos_unicos / totalArticulosActivos) * 100).toFixed(2) : '0.00'}
+                                                {@const color = vendorColorMap.get(item.co_ven) || '#3b82f6'}
+                                                {@const isVis = visibleVendorsArtPed.has(item.co_ven)}
+                                                <tr class="hover:bg-surface-soft/60 transition-colors">
+                                                    <td class="py-3 px-4 font-mono font-bold text-text-muted">
+                                                        {idx + 1}
+                                                    </td>
+                                                    <td class="py-3 px-4 font-mono text-text-muted">
+                                                        {item.co_ven}
+                                                    </td>
+                                                    <td class="py-3 px-4 font-bold text-text-base flex items-center gap-2">
+                                                        <span
+                                                            class="w-2.5 h-2.5 rounded-full shrink-0"
+                                                            style="background-color: {color}"
+                                                        ></span>
+                                                        {(item.ven_des || item.co_ven).trim().toUpperCase()}
+                                                        {#if item.inactivo}
+                                                            <span class="text-[9px] font-bold text-rose-500 bg-rose-500/10 px-1.5 py-0.5 rounded">Inactivo</span>
+                                                        {/if}
+                                                    </td>
+                                                    <td class="py-3 px-4 text-right font-black font-mono text-text-base">
+                                                        {item.cant_articulos_unicos.toLocaleString("es-VE")}
+                                                    </td>
+                                                    <td class="py-3 px-4 text-right font-mono text-purple-600 dark:text-purple-400 font-bold">
+                                                        {pctCatalogo}%
+                                                    </td>
+                                                    <td class="py-3 px-4 text-center">
+                                                        <button
+                                                            type="button"
+                                                            onclick={() => toggleVendorArtPed(item.co_ven)}
+                                                            class="px-2.5 py-1 rounded-lg text-[10px] font-bold border transition-all cursor-pointer {isVis
+                                                                ? 'bg-purple-500/10 text-purple-500 border-purple-500/30'
+                                                                : 'bg-surface-raised text-text-muted border-border-subtle'}"
+                                                        >
+                                                            {isVis ? 'Visible' : 'Oculto'}
+                                                        </button>
+                                                    </td>
+                                                </tr>
+                                            {/each}
+                                            {#if rankingArtPedidos.length === 0}
+                                                <tr>
+                                                    <td colspan="6" class="py-8 text-center text-text-muted font-bold">
+                                                        No se encontraron datos para mostrar.
+                                                    </td>
+                                                </tr>
+                                            {/if}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    {:else if activeCompTab === 'art_cotizados'}
+                        <!-- 10. Artículos Únicos Cotizados (100% Ancho) -->
+                        <div
+                            class="bg-surface-raised border border-border-subtle hover:border-indigo-500/40 transition-all rounded-3xl p-6 sm:p-7 shadow-xl space-y-6"
+                        >
+                            <div
+                                class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border-subtle/60 pb-4"
+                            >
+                                <div class="flex items-center gap-3">
+                                    <div
+                                        class="p-2.5 rounded-2xl bg-indigo-500/10 text-indigo-500 border border-indigo-500/20"
+                                    >
+                                        <FileSpreadsheet size={22} />
+                                    </div>
+                                    <div>
+                                        <h3
+                                            class="text-base sm:text-lg font-black text-text-base flex items-center gap-2"
+                                        >
+                                            Artículos Distintos por Vendedor (Cotizaciones)
+                                        </h3>
+                                        <p class="text-xs text-text-muted">
+                                            Evolución temporal de cantidad de artículos distintos cotizados por cada vendedor en el período.
+                                        </p>
+                                    </div>
+                                </div>
+                                <div class="flex items-center gap-2 self-start sm:self-auto flex-wrap">
+                                    <span
+                                        class="text-[11px] font-mono font-bold text-indigo-500 bg-indigo-500/10 px-3 py-1 rounded-full border border-indigo-500/20"
+                                    >
+                                        Total: {totalArtCotizadosGlobal.toLocaleString("es-VE")}
+                                    </span>
+                                    <button
+                                        type="button"
+                                        onclick={selectAllArtCot}
+                                        class="px-3 py-1 rounded-xl text-xs font-bold bg-surface-raised border border-border-subtle text-text-muted hover:text-text-base hover:bg-surface-soft transition-colors cursor-pointer"
+                                    >
+                                        Todos ({(data.vendedores || []).length})
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onclick={deselectAllArtCot}
+                                        class="px-3 py-1 rounded-xl text-xs font-bold bg-surface-raised border border-border-subtle text-text-muted hover:text-text-base hover:bg-surface-soft transition-colors cursor-pointer"
+                                    >
+                                        Ninguno
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- Barra de Pills / Vendedores -->
+                            <div class="space-y-2">
+                                <div class="flex items-center justify-between gap-2">
+                                    <span class="text-xs font-black uppercase tracking-wider text-text-muted">
+                                        Filtrar Vendedores en Gráfica
+                                    </span>
+                                    <span class="text-xs text-text-muted">
+                                        {visibleVendorsArtCot.size} de {(data.vendedores || []).length} visibles
+                                    </span>
+                                </div>
+                                <div class="flex flex-wrap gap-2 max-h-36 overflow-y-auto custom-scrollbar p-1">
+                                    {#each (data.vendedores || []) as v}
+                                        {@const isVisible = visibleVendorsArtCot.has(v.co_ven)}
+                                        {@const color = vendorColorMap.get(v.co_ven) || '#3b82f6'}
+                                        {@const rankItem = rankingArtCotizados.find((t: any) => t.co_ven === v.co_ven)}
+                                        <button
+                                            type="button"
+                                            onclick={() => toggleVendorArtCot(v.co_ven)}
+                                            class="px-3 py-1.5 rounded-xl text-xs font-bold border transition-all flex items-center gap-2 cursor-pointer {isVisible
+                                                ? 'bg-surface-raised border-border-subtle text-text-base shadow-sm'
+                                                : 'bg-surface-base/50 border-border-subtle/40 text-text-muted/50 opacity-60'}"
+                                        >
+                                            <span
+                                                class="w-2.5 h-2.5 rounded-full shrink-0"
+                                                style="background-color: {isVisible ? color : '#94a3b8'}"
+                                            ></span>
+                                            <span class="truncate max-w-[150px]">{(v.ven_des || v.co_ven).trim().toUpperCase()}</span>
+                                            {#if v.inactivo}
+                                                <span class="text-[9px] font-bold text-rose-500 bg-rose-500/10 px-1 py-0.5 rounded">Inactivo</span>
+                                            {/if}
+                                            {#if rankItem}
+                                                <span class="text-[10px] font-mono opacity-70">
+                                                    ({rankItem.cant_articulos_unicos})
+                                                </span>
+                                            {/if}
+                                        </button>
+                                    {/each}
+                                </div>
+                            </div>
+
+                            <div class="relative w-full" style="height: 380px;">
+                                {#if visibleVendorsArtCot.size > 0}
+                                    <canvas bind:this={compChartCanvas}></canvas>
+                                {:else}
+                                    <div class="h-full flex flex-col items-center justify-center text-center p-8 bg-surface-raised/50 rounded-2xl border border-dashed border-border-subtle">
+                                        <EyeOff size={36} class="text-text-muted mb-2" />
+                                        <p class="text-sm font-bold text-text-base">Ningún vendedor seleccionado</p>
+                                        <p class="text-xs text-text-muted mt-1">Haz clic en los botones superiores para activar vendedores en la gráfica.</p>
+                                    </div>
+                                {/if}
+                            </div>
+
+                            <!-- CARDS DE LEYENDA AGRUPADAS POR TEMPORALIDAD CON VENDEDORES -->
+                            <div class="pt-5 border-t border-border-subtle/60 space-y-3">
+                                <div class="flex items-center justify-between">
+                                    <span
+                                        class="text-xs font-black uppercase tracking-wider text-text-muted flex items-center gap-2"
+                                    >
+                                        Detalle {tipoAgrupacion === 'diario'
+                                            ? 'Diario'
+                                            : tipoAgrupacion === 'semanal'
+                                              ? 'Semanal'
+                                              : 'Mensual'} por Vendedor (Artículos Cotizados)
+                                    </span>
+                                    <span
+                                        class="text-[10px] text-text-muted font-medium lg:hidden"
+                                    >
+                                        ← Desliza para ver todos los períodos →
+                                    </span>
+                                </div>
+
+                                <div class="w-full overflow-x-auto custom-scrollbar pb-2">
+                                    <div class="flex gap-2.5 min-w-full">
+                                        {#each breakdownArtCot.periods as p}
+                                            {@const isMax =
+                                                p.total === breakdownArtCot.maxPeriodTotal &&
+                                                breakdownArtCot.maxPeriodTotal > 0}
+                                            <div
+                                                class="flex-1 min-w-[170px] sm:min-w-[200px] p-3 rounded-2xl border transition-all flex flex-col justify-between {isMax
+                                                    ? 'bg-indigo-500/10 border-indigo-500/50 ring-1 ring-indigo-500/20'
+                                                    : 'bg-surface-base/80 border-border-subtle/70 hover:border-border-subtle'}"
+                                            >
+                                                <div>
+                                                    <div
+                                                        class="flex items-center justify-between gap-1 mb-2 pb-1.5 border-b border-border-subtle/50"
+                                                    >
+                                                        <span
+                                                            class="text-[11px] font-black text-text-base block truncate uppercase tracking-wider"
+                                                        >
+                                                            {p.periodo}
+                                                        </span>
+                                                        <span
+                                                            class="text-[11px] font-mono font-black text-indigo-500 shrink-0"
+                                                        >
+                                                            {formatNumber(p.total)}
+                                                        </span>
+                                                    </div>
+
+                                                    <!-- Listado de vendedores en el período -->
+                                                    <div
+                                                        class="space-y-1.5 text-xs flex-1"
+                                                    >
+                                                        {#if p.vendors.length === 0}
+                                                            <p
+                                                                class="text-[10px] text-text-muted/50 italic text-center py-2"
+                                                            >
+                                                                0 artículos
+                                                            </p>
+                                                        {:else}
+                                                            {#each p.vendors as ven}
+                                                                <div
+                                                                    class="flex items-center justify-between gap-1.5 text-[10px]"
+                                                                >
+                                                                    <div
+                                                                        class="flex items-center gap-1.5 min-w-0"
+                                                                    >
+                                                                        <span
+                                                                            class="w-2 h-2 rounded-full shrink-0 shadow-sm"
+                                                                            style="background-color: {ven.color}"
+                                                                        ></span>
+                                                                        <span
+                                                                            class="font-bold text-text-base truncate"
+                                                                            title="{ven.ven_des} ({ven.co_ven})"
+                                                                        >
+                                                                            {ven.ven_des}
+                                                                        </span>
+                                                                    </div>
+                                                                    <span
+                                                                        class="font-mono font-black text-text-base shrink-0"
+                                                                    >
+                                                                        {formatNumber(
+                                                                            ven.qty,
+                                                                        )}
+                                                                    </span>
+                                                                </div>
+                                                            {/each}
+                                                        {/if}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        {/each}
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- TABLA / RANKING DE VARIEDAD POR ASESOR (COTIZACIONES) -->
+                            <div class="mt-8 pt-6 border-t border-border-subtle/80 space-y-6">
+                                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-border-subtle/60">
+                                    <div class="flex items-center gap-3">
+                                        <div
+                                            class="p-2.5 rounded-2xl bg-indigo-500/10 text-indigo-500 border border-indigo-500/20"
+                                        >
+                                            <Award size={22} />
+                                        </div>
+                                        <div>
+                                            <h3 class="text-base sm:text-lg font-black text-text-base flex items-center gap-2">
+                                                Ranking de Variedad por Asesor (Cotizaciones)
+                                            </h3>
+                                            <p class="text-xs text-text-muted">
+                                                Cada artículo se contabiliza 1 sola vez por asesor en todas sus cotizaciones del rango seleccionado.
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <div class="relative w-full sm:w-64">
+                                        <Search size={16} class="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" />
+                                        <input
+                                            type="text"
+                                            bind:value={vendorFilterSearchCotArt}
+                                            placeholder="Buscar vendedor..."
+                                            class="w-full bg-surface-base border border-border-subtle rounded-xl pl-9 pr-3 py-2 text-xs text-text-base focus:outline-none focus:border-brand-500"
+                                        />
+                                    </div>
+                                </div>
+
+                                <div class="overflow-x-auto custom-scrollbar">
+                                    <table class="w-full text-left text-xs">
+                                        <thead>
+                                            <tr class="border-b border-border-subtle text-text-muted font-black uppercase text-[10px]">
+                                                <th class="py-3 px-4">#</th>
+                                                <th class="py-3 px-4">Código</th>
+                                                <th class="py-3 px-4">Asesor Comercial</th>
+                                                <th class="py-3 px-4 text-right">Artículos Distintos (Rango)</th>
+                                                <th class="py-3 px-4 text-right">% Catálogo Activo</th>
+                                                <th class="py-3 px-4 text-center">Estado en Gráfica</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody class="divide-y divide-border-subtle/40 font-medium">
+                                            {#each rankingArtCotizados.filter((t: any) => !vendorFilterSearchCotArt || (t.ven_des || '').toLowerCase().includes(vendorFilterSearchCotArt.toLowerCase()) || t.co_ven.toLowerCase().includes(vendorFilterSearchCotArt.toLowerCase())) as item, idx}
+                                                {@const pctCatalogo = totalArticulosActivos > 0 ? ((item.cant_articulos_unicos / totalArticulosActivos) * 100).toFixed(2) : '0.00'}
+                                                {@const color = vendorColorMap.get(item.co_ven) || '#3b82f6'}
+                                                {@const isVis = visibleVendorsArtCot.has(item.co_ven)}
+                                                <tr class="hover:bg-surface-soft/60 transition-colors">
+                                                    <td class="py-3 px-4 font-mono font-bold text-text-muted">
+                                                        {idx + 1}
+                                                    </td>
+                                                    <td class="py-3 px-4 font-mono text-text-muted">
+                                                        {item.co_ven}
+                                                    </td>
+                                                    <td class="py-3 px-4 font-bold text-text-base flex items-center gap-2">
+                                                        <span
+                                                            class="w-2.5 h-2.5 rounded-full shrink-0"
+                                                            style="background-color: {color}"
+                                                        ></span>
+                                                        {(item.ven_des || item.co_ven).trim().toUpperCase()}
+                                                        {#if item.inactivo}
+                                                            <span class="text-[9px] font-bold text-rose-500 bg-rose-500/10 px-1.5 py-0.5 rounded">Inactivo</span>
+                                                        {/if}
+                                                    </td>
+                                                    <td class="py-3 px-4 text-right font-black font-mono text-text-base">
+                                                        {item.cant_articulos_unicos.toLocaleString("es-VE")}
+                                                    </td>
+                                                    <td class="py-3 px-4 text-right font-mono text-indigo-600 dark:text-indigo-400 font-bold">
+                                                        {pctCatalogo}%
+                                                    </td>
+                                                    <td class="py-3 px-4 text-center">
+                                                        <button
+                                                            type="button"
+                                                            onclick={() => toggleVendorArtCot(item.co_ven)}
+                                                            class="px-2.5 py-1 rounded-lg text-[10px] font-bold border transition-all cursor-pointer {isVis
+                                                                ? 'bg-indigo-500/10 text-indigo-500 border-indigo-500/30'
+                                                                : 'bg-surface-raised text-text-muted border-border-subtle'}"
+                                                        >
+                                                            {isVis ? 'Visible' : 'Oculto'}
+                                                        </button>
+                                                    </td>
+                                                </tr>
+                                            {/each}
+                                            {#if rankingArtCotizados.length === 0}
+                                                <tr>
+                                                    <td colspan="6" class="py-8 text-center text-text-muted font-bold">
+                                                        No se encontraron datos para mostrar.
+                                                    </td>
+                                                </tr>
+                                            {/if}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    {/if}
                 </div>
             {/if}
         </div>

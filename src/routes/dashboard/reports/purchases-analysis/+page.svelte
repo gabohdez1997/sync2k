@@ -62,9 +62,10 @@
     let chartInstance: ChartJS | null = null;
     let mounted = $state(false);
 
-    // Histórico de 12 meses
+    // Histórico por período
     let historyLoading = $state(false);
     let historyData = $state<any[]>([]);
+    let historyTipoAgrupacion = $state<string>("mensual");
     let historyError = $state<string | null>(null);
     let historyChartCanvas = $state<HTMLCanvasElement | null>(null);
     let historyChartInstance: ChartJS | null = null;
@@ -614,12 +615,14 @@
                 selectedBranch && selectedBranch !== "default"
                     ? `&branch_id=${selectedBranch}`
                     : "";
+            const dateParams = `&startDate=${encodeURIComponent(startDate)}&endDate=${encodeURIComponent(endDate)}`;
             const res = await fetch(
-                `/api/agent/purchases-analysis/article-history?co_art=${encodeURIComponent(coArt)}${branchParam}`,
+                `/api/agent/purchases-analysis/article-history?co_art=${encodeURIComponent(coArt)}${branchParam}${dateParams}`,
             );
             const json = await res.json();
             if (json.success && Array.isArray(json.history)) {
                 historyData = json.history;
+                historyTipoAgrupacion = json.tipoAgrupacion || "mensual";
             } else {
                 historyError =
                     json.error ||
@@ -1056,9 +1059,10 @@
 
         <!-- Fila 3: Sucursal, Fechas & Botón Calcular -->
         <div
-            class="grid grid-cols-1 lg:grid-cols-2 gap-4 items-center pt-2 border-t border-border-subtle/50"
+            class="flex flex-col xl:flex-row gap-4 items-stretch xl:items-center justify-between pt-2 border-t border-border-subtle/50"
         >
-            <div class="w-full">
+            <!-- Select de Sucursal -->
+            <div class="w-full xl:w-80 shrink-0">
                 <Combobox
                     options={(data.branches || []).map((b: any) => ({
                         value: b.id,
@@ -1068,14 +1072,16 @@
                     placeholder="Sucursal por defecto"
                     allLabel="Predeterminada"
                     icon={Building}
+                    buttonClass="h-12"
                 />
             </div>
 
+            <!-- Fechas, Atajos y Botón Calcular -->
             <div
-                class="flex flex-col sm:flex-row gap-3 items-center w-full justify-end"
+                class="flex flex-wrap lg:flex-nowrap gap-3 items-center w-full xl:w-auto justify-end"
             >
                 <div
-                    class="flex items-center gap-2 bg-surface-raised border border-border-subtle rounded-2xl px-3 h-12 w-full sm:w-auto flex-1"
+                    class="flex items-center gap-2 bg-surface-raised border border-border-subtle rounded-2xl px-3 h-12 w-full sm:w-auto min-w-[250px] flex-1 lg:flex-initial"
                 >
                     <Calendar size={16} class="text-text-muted shrink-0" />
                     <input
@@ -1094,26 +1100,42 @@
                 </div>
 
                 <div
-                    class="flex items-center gap-1 bg-surface-raised border border-border-subtle rounded-2xl p-1 shrink-0"
+                    class="flex items-center gap-1 bg-surface-raised border border-border-subtle rounded-2xl p-1 shrink-0 overflow-x-auto"
                 >
                     <button
+                        type="button"
                         onclick={() => setQuickDate(7)}
                         class="px-3 py-1.5 text-xs font-bold rounded-xl hover:bg-surface-soft text-text-muted hover:text-text-base transition-colors cursor-pointer"
                         >7d</button
                     >
                     <button
+                        type="button"
                         onclick={() => setQuickDate(30)}
                         class="px-3 py-1.5 text-xs font-bold rounded-xl hover:bg-surface-soft text-text-muted hover:text-text-base transition-colors cursor-pointer"
                         >30d</button
                     >
                     <button
+                        type="button"
                         onclick={() => setQuickDate(90)}
                         class="px-3 py-1.5 text-xs font-bold rounded-xl hover:bg-surface-soft text-text-muted hover:text-text-base transition-colors cursor-pointer"
                         >90d</button
                     >
+                    <button
+                        type="button"
+                        onclick={() => setQuickDate(180)}
+                        class="px-3 py-1.5 text-xs font-bold rounded-xl hover:bg-surface-soft text-text-muted hover:text-text-base transition-colors cursor-pointer"
+                        >6m</button
+                    >
+                    <button
+                        type="button"
+                        onclick={() => setQuickDate(365)}
+                        class="px-3 py-1.5 text-xs font-bold rounded-xl hover:bg-surface-soft text-text-muted hover:text-text-base transition-colors cursor-pointer"
+                        >1a</button
+                    >
                 </div>
 
                 <button
+                    type="button"
                     onclick={applyFilters}
                     class="h-12 px-8 rounded-2xl bg-brand-500 text-white font-black hover:scale-105 transition-all shadow-[0_0_20px_rgba(var(--brand-500-rgb),0.3)] w-full sm:w-auto shrink-0 cursor-pointer"
                 >
@@ -2214,12 +2236,11 @@
                                     class="text-lg font-black text-text-base tracking-tight"
                                 >
                                     Histórico de Ventas, Recepción de Compras,
-                                    Ajustes, Stock Inicial y Documentos (Último
-                                    Año)
+                                    Ajustes, Stock Inicial y Documentos ({historyTipoAgrupacion === 'diario' ? 'Diario' : historyTipoAgrupacion === 'semanal' ? 'Semanal' : 'Mensual'})
                                 </h3>
                             </div>
                             <p class="text-xs text-text-muted">
-                                Evolución mensual de <b class="text-emerald-500"
+                                Evolución {historyTipoAgrupacion === 'diario' ? 'diaria' : historyTipoAgrupacion === 'semanal' ? 'semanal' : 'mensual'} de <b class="text-emerald-500"
                                     >Ventas</b
                                 >, <b class="text-purple-500">Recepciones</b>,
                                 <b class="text-orange-500">Ajustes Entrada</b>,
@@ -2346,7 +2367,7 @@
                             </div>
                         </div>
 
-                        <!-- DESGLOSE EN MINI-CARDS ESTANDARIZADAS DE LOS 12 MESES -->
+                        <!-- DESGLOSE EN MINI-CARDS ESTANDARIZADAS DE LOS PERIODOS -->
                         <div
                             class="pt-4 border-t border-border-subtle/60 space-y-2"
                         >
@@ -2354,19 +2375,19 @@
                                 <span
                                     class="text-xs font-black uppercase tracking-wider text-text-muted"
                                 >
-                                    Detalle Mensual (Últimos 12 Meses)
+                                    Detalle {historyTipoAgrupacion === 'diario' ? 'Diario' : historyTipoAgrupacion === 'semanal' ? 'Semanal' : 'Mensual'} ({historyData.length} {historyTipoAgrupacion === 'diario' ? (historyData.length === 1 ? 'día' : 'días') : historyTipoAgrupacion === 'semanal' ? (historyData.length === 1 ? 'semana' : 'semanas') : (historyData.length === 1 ? 'mes' : 'meses')})
                                 </span>
                                 <span
-                                    class="text-[10px] text-text-muted font-medium lg:hidden"
+                                    class="text-[10px] text-text-muted font-medium"
                                 >
-                                    ← Desliza para ver todos los meses →
+                                    ← Desliza para ver todos los períodos →
                                 </span>
                             </div>
                             <div
                                 class="w-full overflow-x-auto custom-scrollbar pb-2"
                             >
                                 <div
-                                    class="min-w-[880px] lg:min-w-full grid grid-cols-12 gap-2"
+                                    class="flex gap-2 min-w-max pb-1"
                                 >
                                     {#each historyData as m}
                                         {@const isMax =
@@ -2374,7 +2395,7 @@
                                                 historySummary.maxMonth &&
                                             historySummary.max > 0}
                                         <div
-                                            class="p-2.5 rounded-2xl border transition-all {isMax
+                                            class="p-2.5 rounded-2xl border transition-all min-w-[95px] flex-1 {isMax
                                                 ? 'bg-emerald-500/15 border-emerald-500/40 shadow-sm'
                                                 : 'bg-surface-raised border-border-subtle/70'}"
                                         >
@@ -2388,7 +2409,7 @@
                                             >
                                                 <div
                                                     class="flex items-center justify-between gap-1 text-blue-600 dark:text-blue-400 font-bold"
-                                                    title="Stock Inicial del Mes"
+                                                    title="Stock Inicial del Período"
                                                 >
                                                     <span
                                                         class="text-text-muted font-semibold text-[9px]"
@@ -2480,8 +2501,7 @@
                         <div
                             class="p-8 rounded-2xl bg-surface-raised text-center text-text-muted text-xs font-bold"
                         >
-                            No hay movimientos de venta registrados para este
-                            artículo en los últimos 12 meses.
+                            No hay movimientos registrados para este artículo en el rango de fechas seleccionado.
                         </div>
                     {/if}
                 </div>

@@ -7,9 +7,6 @@ export const GET: RequestHandler = async ({ url, locals, fetch }) => {
         const profile = locals.profile;
         if (!profile) return json({ error: 'Sesión no válida' }, { status: 401 });
 
-        const co_art = url.searchParams.get('co_art');
-        if (!co_art) return json({ error: 'Parámetro co_art requerido' }, { status: 400 });
-
         const branchId = url.searchParams.get('branch_id');
         const allowedBranches = profile.allowed_branches || [];
         const branch = allowedBranches.find(b => b.id === branchId) || allowedBranches[0];
@@ -26,10 +23,20 @@ export const GET: RequestHandler = async ({ url, locals, fetch }) => {
 
         const startDate = url.searchParams.get('startDate') || '';
         const endDate = url.searchParams.get('endDate') || '';
+        const coArt = url.searchParams.get('co_art') || '';
+        const coVen = url.searchParams.get('co_ven') || '';
 
-        let agentUrl = `/analisis-compras/article-history?co_art=${encodeURIComponent(co_art)}&sede=${branch.id}`;
-        if (startDate) agentUrl += `&startDate=${encodeURIComponent(startDate)}`;
-        if (endDate) agentUrl += `&endDate=${encodeURIComponent(endDate)}`;
+        let agentUrl = '';
+        if (coArt) {
+            agentUrl = `/analisis-ventas/article-vendors?sede=${branch.id}&co_art=${encodeURIComponent(coArt)}`;
+            if (startDate) agentUrl += `&startDate=${encodeURIComponent(startDate)}`;
+            if (endDate) agentUrl += `&endDate=${encodeURIComponent(endDate)}`;
+        } else {
+            agentUrl = `/analisis-ventas?sede=${branch.id}`;
+            if (startDate) agentUrl += `&startDate=${encodeURIComponent(startDate)}`;
+            if (endDate) agentUrl += `&endDate=${encodeURIComponent(endDate)}`;
+            if (coVen) agentUrl += `&co_ven=${encodeURIComponent(coVen)}`;
+        }
 
         const response = await agentClient.request<any>(
             agentUrl,
@@ -39,10 +46,10 @@ export const GET: RequestHandler = async ({ url, locals, fetch }) => {
         if (response && response.success) {
             return json(response);
         } else {
-            return json({ error: response?.message || 'Error al obtener histórico del agente' }, { status: 500 });
+            return json({ error: response?.message || 'Error al consultar análisis de ventas' }, { status: 500 });
         }
     } catch (e: any) {
-        console.error('[API /agent/analisis-compras/article-history ERROR]:', e);
+        console.error('[API /agent/sales-analysis ERROR]:', e);
         return json({ error: e.message || 'Error interno del servidor' }, { status: 500 });
     }
 };

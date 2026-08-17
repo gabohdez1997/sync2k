@@ -24,8 +24,15 @@ export const GET: RequestHandler = async ({ url, locals, fetch }) => {
             agent_api_key: branch.agent_token
         }, profile, fetch);
 
+        const startDate = url.searchParams.get('startDate') || '';
+        const endDate = url.searchParams.get('endDate') || '';
+
+        let agentUrl = `/analisis-compras/article-history?co_art=${encodeURIComponent(co_art)}&sede=${branch.id}`;
+        if (startDate) agentUrl += `&startDate=${encodeURIComponent(startDate)}`;
+        if (endDate) agentUrl += `&endDate=${encodeURIComponent(endDate)}`;
+
         const response = await agentClient.request<any>(
-            `/analisis-compras/article-history?co_art=${encodeURIComponent(co_art)}&sede=${branch.id}`,
+            agentUrl,
             { method: 'GET' }
         );
 
