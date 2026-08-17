@@ -63,9 +63,21 @@
       label: "Caja",
       icon: DollarSign,
       options: [
-        { id: "cash_billing", label: "Facturas / NE", hasOthers: true, hasVoid: true, excludeDelete: true },
-        { id: "cash_payments", label: "Cobros", hasOthers: true, hasVoid: true, excludeDelete: true },
-        { id: "cash_credits", label: "Devoluciones / NC" },
+        {
+          id: "cash_billing",
+          label: "Facturas / NE",
+          hasOthers: true,
+          hasVoid: true,
+          excludeUpdate: true,
+          excludeDelete: true,
+        },
+        {
+          id: "cash_payments",
+          label: "Cobros",
+          hasOthers: true,
+          hasVoid: true,
+          excludeDelete: true,
+        },
         { id: "cash_exchange", label: "Tasa Cambiaria" },
       ],
     },
@@ -77,8 +89,6 @@
         { id: "sec_articles", label: "Ubicaciones" },
         { id: "sec_article_images", label: "Imágenes de Artículos" },
         { id: "inv_transfers", label: "Traslados entre Sedes", hasOthers: true },
-        { id: "inv_shipping", label: "Despacho" },
-        { id: "inv_void", label: "Anulación" },
       ],
     },
     {
@@ -90,11 +100,6 @@
         { id: "pur_lines", label: "Líneas" },
         { id: "pur_sublines", label: "Sub-Líneas" },
         { id: "pur_categories", label: "Categorías" },
-        { id: "pur_quotes", label: "Cotizaciones" },
-        { id: "pur_orders", label: "Orden de compra" },
-        { id: "pur_invoices", label: "Facturas" },
-        { id: "pur_payments", label: "Pagos" },
-        { id: "pur_returns", label: "Devoluciones" },
       ],
     },
     {
@@ -161,10 +166,9 @@
         {
           id: "reports_collections_summary",
           label: "Resumen de Cobros",
-          actions: [
-            { id: "view", label: "Ver Reporte" },
-            { id: "others", label: "Ver Otras Sucursales" }
-          ]
+          hasOthers: false,
+          hasVoid: false,
+          onlyRead: true,
         },
         {
           id: "reports_exchange_diff",
@@ -349,30 +353,61 @@
     expandedCategories[catId] = !expandedCategories[catId];
   }
 
+  function isActionAllowed(opt: any, action: string): boolean {
+    if (opt.id === "cash_exchange") {
+      return action === "update";
+    }
+    if (opt.onlyRead) {
+      if (action === "read") return true;
+      if (action === "others" && opt.hasOthers) return true;
+      return false;
+    }
+    if (opt.onlyReadAndEdit) {
+      if (action === "read" || action === "update") return true;
+      if (action === "others" && opt.hasOthers) return true;
+      return false;
+    }
+    if (action === "read") return true;
+    if (action === "create") return true;
+    if (action === "update") return !opt.excludeUpdate;
+    if (action === "delete") return !opt.excludeDelete;
+    if (action === "void") return !!opt.hasVoid;
+    if (action === "others") return !!opt.hasOthers;
+    return false;
+  }
+
+  function isControlChecked(opt: any): boolean {
+    const p = rolePermissions[opt.id];
+    if (!p) return false;
+    if (opt.onlyRead) {
+      return p.read && (opt.hasOthers ? p.others : true);
+    }
+    if (opt.onlyReadAndEdit) {
+      return p.read && p.update && (opt.hasOthers ? p.others : true);
+    }
+    if (!p.read || !p.create) return false;
+    if (!opt.excludeUpdate && !p.update) return false;
+    if (!opt.excludeDelete && !p.delete) return false;
+    if (opt.hasOthers && !p.others) return false;
+    if (opt.hasVoid && !p.void) return false;
+    return true;
+  }
+
   function toggleAll(optionId: string) {
     const p = rolePermissions[optionId];
-    // Buscamos si el módulo tiene la opción 'others' o 'void' habilitada estructuralmente
     const option = navStructure
       .flatMap((n) => n.options)
       .find((o) => o.id === optionId);
+    if (!option || option.onlyRead || option.id === "cash_exchange") return;
+
     const supportsOthers = (option as any)?.hasOthers || false;
     const supportsVoid = (option as any)?.hasVoid || false;
     const excludesDelete = (option as any)?.excludeDelete || false;
-    const onlyRead = (option as any)?.onlyRead || false;
+    const excludesUpdate = (option as any)?.excludeUpdate || false;
     const onlyReadAndEdit = (option as any)?.onlyReadAndEdit || false;
 
     let anyOff = false;
-    if (onlyRead) {
-      anyOff = !p.read || (supportsOthers && !p.others);
-      rolePermissions[optionId] = {
-        read: anyOff,
-        create: false,
-        update: false,
-        delete: false,
-        void: false,
-        others: supportsOthers ? anyOff : false,
-      };
-    } else if (onlyReadAndEdit) {
+    if (onlyReadAndEdit) {
       anyOff = !p.read || !p.update || (supportsOthers && !p.others);
       rolePermissions[optionId] = {
         read: anyOff,
@@ -386,14 +421,14 @@
       anyOff =
         !p.read ||
         !p.create ||
-        !p.update ||
+        (!excludesUpdate && !p.update) ||
         (!excludesDelete && !p.delete) ||
         (supportsOthers && !p.others) ||
         (supportsVoid && !p.void);
       rolePermissions[optionId] = {
         read: anyOff,
         create: anyOff,
-        update: anyOff,
+        update: excludesUpdate ? false : anyOff,
         delete: excludesDelete ? false : anyOff,
         void: supportsVoid ? anyOff : false,
         others: supportsOthers ? anyOff : false,
@@ -591,9 +626,6 @@
                     onchange={(e) => {
                       if (e.currentTarget.checked) {
                         loadWarehouses(branch.id);
-                      } else {
-                        // Opcional: filtrar disponibleWarehouses para quitar los de esta sede si no están seleccionados
-                        // Por simplicidad los dejamos ahí, solo se enviarán si están en warehouseIds
                       }
                     }}
                     class="w-4 h-4 rounded border-border-subtle text-brand-500 focus:ring-brand-500 bg-black/20"
@@ -693,7 +725,6 @@
               return async ({ result, update }) => {
                 deleting = false;
                 if (result.type === "success" || result.type === "redirect") {
-                  // El $effect de `form` se encargará de actualizar la lista
                   await update();
                 } else if (
                   result.type === "error" ||
@@ -756,8 +787,8 @@
         >
           <Info size={18} class="text-brand-500 shrink-0 mt-0.5" />
           <p class="text-[10px] text-text-muted leading-relaxed">
-            Al activar <strong>Crear</strong>, <strong>Editar</strong> o
-            <strong>Eliminar</strong>, el permiso de <strong>Lectura</strong> se
+            Al activar <strong>Crear</strong>, <strong>Editar</strong>, 
+            <strong>Eliminar</strong> o <strong>Anular</strong>, el permiso de <strong>Lectura</strong> se
             habilita automáticamente.
           </p>
         </div>
@@ -864,37 +895,15 @@
                       <td
                         class="px-6 py-4 text-center border-b border-border-subtle"
                       >
-                        {#if opt.id !== "cash_exchange"}
+                        {#if opt.id !== "cash_exchange" && !opt.onlyRead}
                           <button
                             type="button"
                             onclick={() => toggleAll(opt.id)}
-                            class="w-6 h-6 rounded-lg border-2 border-brand-500/30 flex items-center justify-center transition-all {(
-                              opt.onlyRead
-                                ? rolePermissions[opt.id].read &&
-                                  (opt.hasOthers
-                                    ? rolePermissions[opt.id].others
-                                    : true)
-                                : opt.onlyReadAndEdit
-                                  ? rolePermissions[opt.id].read &&
-                                    rolePermissions[opt.id].update &&
-                                    (opt.hasOthers
-                                      ? rolePermissions[opt.id].others
-                                      : true)
-                                  : rolePermissions[opt.id].read &&
-                                    rolePermissions[opt.id].create &&
-                                    rolePermissions[opt.id].update &&
-                                    (opt.excludeDelete ? true : rolePermissions[opt.id].delete) &&
-                                    (opt.hasOthers
-                                      ? rolePermissions[opt.id].others
-                                      : true) &&
-                                    (opt.hasVoid
-                                      ? rolePermissions[opt.id].void
-                                      : true)
-                            )
+                            class="w-6 h-6 rounded-lg border-2 border-brand-500/30 flex items-center justify-center transition-all {isControlChecked(opt)
                               ? 'bg-brand-500 border-brand-500'
                               : 'hover:bg-brand-500/10'}"
                           >
-                            {#if opt.onlyRead ? rolePermissions[opt.id].read && (opt.hasOthers ? rolePermissions[opt.id].others : true) : opt.onlyReadAndEdit ? rolePermissions[opt.id].read && rolePermissions[opt.id].update && (opt.hasOthers ? rolePermissions[opt.id].others : true) : rolePermissions[opt.id].read && rolePermissions[opt.id].create && rolePermissions[opt.id].update && (opt.excludeDelete ? true : rolePermissions[opt.id].delete) && (opt.hasOthers ? rolePermissions[opt.id].others : true) && (opt.hasVoid ? rolePermissions[opt.id].void : true)}
+                            {#if isControlChecked(opt)}
                               <div in:fade={{ duration: 100 }}>
                                 <Check
                                   size={14}
@@ -913,7 +922,7 @@
                         <td
                           class="px-6 py-4 text-center border-b border-border-subtle"
                         >
-                          {#if opt.onlyRead ? action === "read" || (action === "others" && opt.hasOthers) : opt.onlyReadAndEdit ? action === "read" || action === "update" || (action === "others" && opt.hasOthers) : (opt.id !== "cash_exchange" && (action !== "others" || opt.hasOthers) && (action !== "void" || opt.hasVoid) && (action !== "delete" || !opt.excludeDelete)) || (opt.id === "cash_exchange" && action === "update")}
+                          {#if isActionAllowed(opt, action)}
                             <label
                               class="relative inline-flex items-center cursor-pointer justify-center"
                             >
