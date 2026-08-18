@@ -82,6 +82,7 @@ export const load: PageServerLoad = protectLoad('reports_sales_analysis', async 
                 analysisData: response.data || [],
                 kpis: response.kpis,
                 businessDays: response.businessDays,
+                totalVendedores: response.totalVendedores || response.kpis?.total_vendedores || 1,
                 catalogs: {
                     lineas,
                     sublineas,

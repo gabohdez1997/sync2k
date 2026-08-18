@@ -239,44 +239,44 @@
     </div>
 
     <!-- METRICS CARDS -->
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 print:grid-cols-3 print:gap-3">
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-5 print:grid-cols-3 print:gap-3">
         <!-- Card 1: Usuarios -->
-        <div class="glass p-6 rounded-3xl border border-border-subtle shadow-xl relative overflow-hidden group print:p-3 print:rounded-xl">
-            <div class="flex items-start justify-between">
-                <div class="space-y-2">
-                    <span class="text-xs font-black uppercase tracking-widest text-text-muted print:text-[9px]">Cajas/Usuarios</span>
-                    <h2 class="text-2xl font-black text-text-base tracking-tight print:text-lg">{stats.count}</h2>
-                </div>
-                <div class="h-10 w-10 rounded-xl bg-brand-500/10 border border-brand-500/20 flex items-center justify-center text-brand-500 print:hidden">
+        <div class="bg-surface-raised border border-border-subtle hover:border-brand-500/30 transition-all rounded-3xl p-5 relative overflow-hidden group print:p-3 print:rounded-xl">
+            <div class="absolute right-0 top-0 w-28 h-28 bg-brand-500/5 rounded-full blur-2xl group-hover:bg-brand-500/10 transition-colors print:hidden"></div>
+            <div class="flex items-center justify-between mb-3">
+                <div class="p-2 rounded-xl bg-brand-500/10 text-brand-700 dark:text-brand-400 border border-brand-500/20 print:hidden">
                     <User size={20} />
                 </div>
             </div>
+            <p class="text-text-muted text-[11px] font-bold uppercase tracking-wider mb-0.5 print:text-[9px]">Cajas / Usuarios</p>
+            <p class="text-2xl sm:text-3xl font-black text-text-base tracking-tight print:text-lg">{stats.count}</p>
+            <p class="text-[10px] text-text-muted font-bold mt-1.5 line-clamp-1">Operadores con cobros</p>
         </div>
 
         <!-- Card 2: Total BS -->
-        <div class="glass p-6 rounded-3xl border border-blue-500/20 bg-blue-500/5 shadow-xl shadow-blue-500/10 relative overflow-hidden print:p-3 print:rounded-xl">
-            <div class="flex items-start justify-between">
-                <div class="space-y-2 relative z-10">
-                    <span class="text-xs font-black uppercase tracking-widest text-blue-500 print:text-[9px]">Total Cobrado (BS)</span>
-                    <h2 class="text-2xl font-black text-blue-500 tracking-tight print:text-lg">{formatBS(stats.totalBs)}</h2>
-                </div>
-                <div class="h-10 w-10 rounded-xl bg-blue-500/20 flex items-center justify-center text-blue-500 relative z-10 print:hidden">
+        <div class="bg-surface-raised border border-border-subtle hover:border-blue-500/30 transition-all rounded-3xl p-5 relative overflow-hidden group print:p-3 print:rounded-xl">
+            <div class="absolute right-0 top-0 w-28 h-28 bg-blue-500/5 rounded-full blur-2xl group-hover:bg-blue-500/10 transition-colors print:hidden"></div>
+            <div class="flex items-center justify-between mb-3">
+                <div class="p-2 rounded-xl bg-blue-500/10 text-blue-700 dark:text-blue-400 border border-blue-500/20 print:hidden">
                     <Wallet size={20} />
                 </div>
             </div>
+            <p class="text-text-muted text-[11px] font-bold uppercase tracking-wider mb-0.5 text-blue-600 dark:text-blue-400 print:text-[9px]">Total Cobrado (BS)</p>
+            <p class="text-2xl sm:text-3xl font-black text-blue-600 dark:text-blue-400 tracking-tight print:text-lg">{formatBS(stats.totalBs)}</p>
+            <p class="text-[10px] text-text-muted font-bold mt-1.5 line-clamp-1">Moneda Nacional</p>
         </div>
 
         <!-- Card 3: Total USD -->
-        <div class="glass p-6 rounded-3xl border border-emerald-500/20 bg-emerald-500/5 shadow-xl shadow-emerald-500/10 relative overflow-hidden print:p-3 print:rounded-xl">
-            <div class="flex items-start justify-between">
-                <div class="space-y-2 relative z-10">
-                    <span class="text-xs font-black uppercase tracking-widest text-emerald-500 print:text-[9px]">Equivalente (USD)</span>
-                    <h2 class="text-2xl font-black text-emerald-500 tracking-tight print:text-lg">{formatUSD(stats.totalUsd)}</h2>
-                </div>
-                <div class="h-10 w-10 rounded-xl bg-emerald-500/20 flex items-center justify-center text-emerald-500 relative z-10 print:hidden">
+        <div class="bg-surface-raised border border-border-subtle hover:border-emerald-500/30 transition-all rounded-3xl p-5 relative overflow-hidden group print:p-3 print:rounded-xl">
+            <div class="absolute right-0 top-0 w-28 h-28 bg-emerald-500/5 rounded-full blur-2xl group-hover:bg-emerald-500/10 transition-colors print:hidden"></div>
+            <div class="flex items-center justify-between mb-3">
+                <div class="p-2 rounded-xl bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20 print:hidden">
                     <Wallet size={20} />
                 </div>
             </div>
+            <p class="text-text-muted text-[11px] font-bold uppercase tracking-wider mb-0.5 text-emerald-600 dark:text-emerald-400 print:text-[9px]">Equivalente (USD)</p>
+            <p class="text-2xl sm:text-3xl font-black text-emerald-600 dark:text-emerald-400 tracking-tight print:text-lg">{formatUSD(stats.totalUsd)}</p>
+            <p class="text-[10px] text-text-muted font-bold mt-1.5 line-clamp-1">A tasa de cambio del día</p>
         </div>
     </div>
 

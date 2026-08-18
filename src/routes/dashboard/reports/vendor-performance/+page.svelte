@@ -1171,97 +1171,6 @@
         </div>
     </div>
 
-    <!-- FILTROS PRINCIPALES -->
-    <div
-        class="bg-surface-base border border-border-subtle rounded-[32px] p-6 shadow-xl space-y-4"
-    >
-        <div
-            class="flex flex-col xl:flex-row gap-4 items-stretch xl:items-center justify-between"
-        >
-            <!-- Select de Sucursal -->
-            <div class="w-full xl:w-80 shrink-0">
-                <Combobox
-                    options={(data.branches || []).map((b: any) => ({
-                        value: b.id,
-                        label: b.name,
-                    }))}
-                    bind:value={selectedBranch}
-                    placeholder="Sucursal por defecto"
-                    allLabel="Predeterminada"
-                    icon={Building}
-                    buttonClass="h-12"
-                />
-            </div>
-
-            <!-- Fechas, Atajos y Botón Calcular -->
-            <div
-                class="flex flex-wrap lg:flex-nowrap gap-3 items-center w-full xl:w-auto justify-end"
-            >
-                <div
-                    class="flex items-center gap-2 bg-surface-raised border border-border-subtle rounded-2xl px-3 h-12 w-full sm:w-auto min-w-[250px] flex-1 lg:flex-initial"
-                >
-                    <Calendar size={16} class="text-text-muted shrink-0" />
-                    <input
-                        type="date"
-                        bind:value={startDate}
-                        class="bg-transparent border-0 text-text-base focus:outline-none text-xs cursor-pointer font-bold w-full"
-                    />
-                    <span class="text-text-muted font-bold text-xs shrink-0"
-                        >a</span
-                    >
-                    <input
-                        type="date"
-                        bind:value={endDate}
-                        class="bg-transparent border-0 text-text-base focus:outline-none text-xs cursor-pointer font-bold w-full"
-                    />
-                </div>
-
-                <div
-                    class="flex items-center gap-1 bg-surface-raised border border-border-subtle rounded-2xl p-1 shrink-0 overflow-x-auto"
-                >
-                    <button
-                        type="button"
-                        onclick={() => setQuickDate(7)}
-                        class="px-3 py-1.5 text-xs font-bold rounded-xl hover:bg-surface-soft text-text-muted hover:text-text-base transition-colors cursor-pointer"
-                        >7d</button
-                    >
-                    <button
-                        type="button"
-                        onclick={() => setQuickDate(30)}
-                        class="px-3 py-1.5 text-xs font-bold rounded-xl hover:bg-surface-soft text-text-muted hover:text-text-base transition-colors cursor-pointer"
-                        >30d</button
-                    >
-                    <button
-                        type="button"
-                        onclick={() => setQuickDate(90)}
-                        class="px-3 py-1.5 text-xs font-bold rounded-xl hover:bg-surface-soft text-text-muted hover:text-text-base transition-colors cursor-pointer"
-                        >90d</button
-                    >
-                    <button
-                        type="button"
-                        onclick={() => setQuickDate(180)}
-                        class="px-3 py-1.5 text-xs font-bold rounded-xl hover:bg-surface-soft text-text-muted hover:text-text-base transition-colors cursor-pointer"
-                        >6m</button
-                    >
-                    <button
-                        type="button"
-                        onclick={() => setQuickDate(365)}
-                        class="px-3 py-1.5 text-xs font-bold rounded-xl hover:bg-surface-soft text-text-muted hover:text-text-base transition-colors cursor-pointer"
-                        >1a</button
-                    >
-                </div>
-
-                <button
-                    type="button"
-                    onclick={() => applyFilters()}
-                    class="h-12 px-8 rounded-2xl bg-brand-500 text-white font-black hover:scale-105 transition-all shadow-[0_0_20px_rgba(var(--brand-500-rgb),0.3)] w-full sm:w-auto shrink-0 cursor-pointer"
-                >
-                    Calcular
-                </button>
-            </div>
-        </div>
-    </div>
-
     {#if data.error}
         <div
             class="bg-red-500/10 border border-red-500/30 text-red-500 p-6 rounded-2xl flex items-start gap-4"
@@ -1413,6 +1322,97 @@
                 <p class="text-[10px] text-text-muted mt-1.5 line-clamp-1">
                     Devoluciones de clientes en el período.
                 </p>
+            </div>
+        </div>
+
+        <!-- FILTROS PRINCIPALES -->
+        <div
+            class="bg-surface-base border border-border-subtle rounded-[32px] p-6 shadow-xl space-y-4"
+        >
+            <div
+                class="flex flex-col xl:flex-row gap-4 items-stretch xl:items-center justify-between"
+            >
+                <!-- Select de Sucursal -->
+                <div class="w-full xl:w-80 shrink-0">
+                    <Combobox
+                        options={(data.branches || []).map((b: any) => ({
+                            value: b.id,
+                            label: b.name,
+                        }))}
+                        bind:value={selectedBranch}
+                        placeholder="Sucursal por defecto"
+                        allLabel="Predeterminada"
+                        icon={Building}
+                        buttonClass="h-12"
+                    />
+                </div>
+
+                <!-- Fechas, Atajos y Botón Calcular -->
+                <div
+                    class="flex flex-wrap lg:flex-nowrap gap-3 items-center w-full xl:w-auto justify-end"
+                >
+                    <div
+                        class="flex items-center gap-2 bg-surface-raised border border-border-subtle rounded-2xl px-3 h-12 w-full sm:w-auto min-w-[250px] flex-1 lg:flex-initial"
+                    >
+                        <Calendar size={16} class="text-text-muted shrink-0" />
+                        <input
+                            type="date"
+                            bind:value={startDate}
+                            class="bg-transparent border-0 text-text-base focus:outline-none text-xs cursor-pointer font-bold w-full"
+                        />
+                        <span class="text-text-muted font-bold text-xs shrink-0"
+                            >a</span
+                        >
+                        <input
+                            type="date"
+                            bind:value={endDate}
+                            class="bg-transparent border-0 text-text-base focus:outline-none text-xs cursor-pointer font-bold w-full"
+                        />
+                    </div>
+
+                    <div
+                        class="flex items-center gap-1 bg-surface-raised border border-border-subtle rounded-2xl p-1 shrink-0 overflow-x-auto"
+                    >
+                        <button
+                            type="button"
+                            onclick={() => setQuickDate(7)}
+                            class="px-3 py-1.5 text-xs font-bold rounded-xl hover:bg-surface-soft text-text-muted hover:text-text-base transition-colors cursor-pointer"
+                            >7d</button
+                        >
+                        <button
+                            type="button"
+                            onclick={() => setQuickDate(30)}
+                            class="px-3 py-1.5 text-xs font-bold rounded-xl hover:bg-surface-soft text-text-muted hover:text-text-base transition-colors cursor-pointer"
+                            >30d</button
+                        >
+                        <button
+                            type="button"
+                            onclick={() => setQuickDate(90)}
+                            class="px-3 py-1.5 text-xs font-bold rounded-xl hover:bg-surface-soft text-text-muted hover:text-text-base transition-colors cursor-pointer"
+                            >90d</button
+                        >
+                        <button
+                            type="button"
+                            onclick={() => setQuickDate(180)}
+                            class="px-3 py-1.5 text-xs font-bold rounded-xl hover:bg-surface-soft text-text-muted hover:text-text-base transition-colors cursor-pointer"
+                            >6m</button
+                        >
+                        <button
+                            type="button"
+                            onclick={() => setQuickDate(365)}
+                            class="px-3 py-1.5 text-xs font-bold rounded-xl hover:bg-surface-soft text-text-muted hover:text-text-base transition-colors cursor-pointer"
+                            >1a</button
+                        >
+                    </div>
+
+                    <button
+                        type="button"
+                        onclick={() => applyFilters()}
+                        class="h-12 px-8 rounded-2xl bg-brand-500 text-white font-black hover:scale-105 transition-all shadow-[0_0_20px_rgba(var(--brand-500-rgb),0.3)] w-full sm:w-auto shrink-0 cursor-pointer"
+                    >
+                        Calcular
+                    </button>
+                </div>
             </div>
         </div>
 

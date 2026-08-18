@@ -8,6 +8,8 @@
         AlertTriangle,
         FileText,
         Search,
+        X,
+        Building,
         Printer,
         FileSpreadsheet,
         Tag,
@@ -19,6 +21,7 @@
     import { goto } from "$app/navigation";
     import { page } from "$app/stores";
     import Combobox from "$lib/components/ui/Combobox.svelte";
+    import BarcodeScanner from "$lib/components/ui/BarcodeScanner.svelte";
     import dayjs from "dayjs";
     import "dayjs/locale/es";
 
@@ -29,10 +32,11 @@
     let isSearching = $state(false);
 
     // Filter states
-    let filterBranch = $state('all');
+    let filterBranch = $state(data.selectedBranchId || '');
     let filterSearch = $state('');
-    let filterLine = $state('all');
-    let filterCategory = $state('all');
+    let filterLine = $state('');
+    let filterSubline = $state('');
+    let filterCategory = $state('');
 
     // Advanced toggle filters
     let filterPrecio1 = $state('all'); // 'all' | 'with' | 'without'
@@ -43,15 +47,108 @@
     let filterMargen2 = $state('all'); // 'all' | 'with' | 'without'
     let filterEstatus = $state('all'); // 'all' | 'active' | 'inactive'
 
+    // Derived options with dynamic cascaded filtering
+    const lineasOptions = $derived(
+        (data.catalogs?.lineas || []).map((l: any) => ({
+            value: (l.co_lin || "").trim(),
+            label: l.lin_des ? `${l.lin_des.trim()} (${l.co_lin.trim()})` : l.co_lin,
+        })),
+    );
+
+    const sublineasOptions = $derived(
+        (data.catalogs?.sublineas || [])
+            .filter(
+                (sl: any) =>
+                    !filterLine ||
+                    filterLine === "all" ||
+                    (sl.co_lin && sl.co_lin.trim() === filterLine.trim()),
+            )
+            .map((sl: any) => ({
+                value: (sl.co_subl || "").trim(),
+                label: sl.subl_des ? `${sl.subl_des.trim()} (${sl.co_subl.trim()})` : sl.co_subl,
+            })),
+    );
+
+    const categoriasOptions = $derived.by(() => {
+        const cats: any[] = data.catalogs?.categorias || [];
+        const reportCats = (data.report?.data || []).map((a: any) => ({
+            co_cat: a.co_cat,
+            cat_des: a.des_cat,
+            co_subl: a.co_subl,
+            co_lin: a.co_lin,
+        }));
+        const combined = [...cats, ...reportCats];
+
+        let filtered = combined;
+        if (filterSubline && filterSubline !== "all") {
+            filtered = filtered.filter(
+                (c: any) =>
+                    c.co_subl &&
+                    c.co_subl.trim() === filterSubline.trim(),
+            );
+        } else if (filterLine && filterLine !== "all") {
+            filtered = filtered.filter(
+                (c: any) =>
+                    c.co_lin &&
+                    c.co_lin.trim() === filterLine.trim(),
+            );
+        }
+
+        const seen = new Set();
+        const result: { value: string; label: string }[] = [];
+        for (const c of filtered) {
+            const val = (c.co_cat || "").trim();
+            if (val && !seen.has(val)) {
+                seen.add(val);
+                const desc = (c.cat_des || val).trim();
+                result.push({
+                    value: val,
+                    label: desc ? `${desc} (${val})` : val,
+                });
+            }
+        }
+        result.sort((a, b) => a.label.localeCompare(b.label));
+        return result;
+    });
+
+    // Auto-limpiar sublínea si la línea cambia y ya no pertenece
+    $effect(() => {
+        if (filterLine && filterLine !== "all" && filterSubline && filterSubline !== "all") {
+            const valid = (data.catalogs?.sublineas || []).some(
+                (sl: any) =>
+                    sl.co_lin &&
+                    sl.co_lin.trim() === filterLine.trim() &&
+                    sl.co_subl &&
+                    sl.co_subl.trim() === filterSubline.trim(),
+            );
+            if (!valid) {
+                filterSubline = "";
+            }
+        }
+    });
+
+    // Auto-limpiar categoría si la sublínea o línea cambia y ya no pertenece
+    $effect(() => {
+        if (filterCategory && filterCategory !== "all" && ((filterSubline && filterSubline !== "all") || (filterLine && filterLine !== "all"))) {
+            const valid = categoriasOptions.some(
+                (c) => c.value.trim() === filterCategory.trim(),
+            );
+            if (!valid) {
+                filterCategory = "";
+            }
+        }
+    });
+
     // Sync filter states with URL search params
     $effect(() => {
         filterBranch =
             $page.url.searchParams.get("branch_id") ||
             data.selectedBranchId ||
-            "all";
+            "";
         filterSearch = $page.url.searchParams.get("search") || "";
-        filterLine = $page.url.searchParams.get("linea") || "all";
-        filterCategory = $page.url.searchParams.get("categoria") || "all";
+        filterLine = $page.url.searchParams.get("linea") || "";
+        filterSubline = $page.url.searchParams.get("sublinea") || "";
+        filterCategory = $page.url.searchParams.get("categoria") || "";
     });
 
     function applyFilters() {
@@ -76,6 +173,12 @@
             params.delete("linea");
         }
 
+        if (filterSubline && filterSubline !== "all") {
+            params.set("sublinea", filterSubline);
+        } else {
+            params.delete("sublinea");
+        }
+
         if (filterCategory && filterCategory !== "all") {
             params.set("categoria", filterCategory);
         } else {
@@ -92,8 +195,9 @@
 
     function clearFilters() {
         filterSearch = '';
-        filterLine = 'all';
-        filterCategory = 'all';
+        filterLine = '';
+        filterSubline = '';
+        filterCategory = '';
         filterPrecio1 = 'all';
         filterMargen1 = 'all';
         filterPrecio2 = 'all';
@@ -225,7 +329,7 @@
         // Start with UTF-8 BOM and sep=; directive for Excel
         let csvContent = '\uFEFFsep=;\n';
         csvContent +=
-            "Codigo;Descripcion;Modelo;Precio 1 (USD);Margen 1 (%);Precio 2 (USD);Margen 2 (%);Costo (USD);Stock Global;Estatus\n";
+            "Codigo;Descripcion;Linea;Sublinea;Categoria;Modelo;Precio 1 (USD);Margen 1 (%);Precio 2 (USD);Margen 2 (%);Costo (USD);Stock Global;Estatus\n";
 
         for (const item of filteredReportData) {
             // Formula trick to preserve leading zeros in Excel: ="CODE"
@@ -233,6 +337,15 @@
                 .trim()
                 .replace(/"/g, '""')}"`;
             const art_des = `"${String(item.art_des || "")
+                .trim()
+                .replace(/"/g, '""')}"`;
+            const des_lin = `"${String(item.des_lin || "")
+                .trim()
+                .replace(/"/g, '""')}"`;
+            const des_subl = `"${String(item.des_subl || "")
+                .trim()
+                .replace(/"/g, '""')}"`;
+            const des_cat = `"${String(item.des_cat || "")
                 .trim()
                 .replace(/"/g, '""')}"`;
             const modelo = `"${String(item.modelo || "")
@@ -260,7 +373,7 @@
                 .replace(".", ",");
             const statusLabel = item.anulado ? "Inactivo" : "Activo";
 
-            csvContent += `${co_art};${art_des};${modelo};${precio1};${margen1};${precio2};${margen2};${costo};${stock_global};${statusLabel}\n`;
+            csvContent += `${co_art};${art_des};${des_lin};${des_subl};${des_cat};${modelo};${precio1};${margen1};${precio2};${margen2};${costo};${stock_global};${statusLabel}\n`;
         }
 
         const blob = new Blob([csvContent], {
@@ -367,347 +480,372 @@
 
     <!-- METRICS CARDS -->
     <div
-        class="grid grid-cols-1 md:grid-cols-4 gap-6 print:grid-cols-4 print:gap-3"
+        class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5 print:grid-cols-4 print:gap-3"
     >
         <!-- Card 1: Total Artículos -->
         <div
-            class="glass p-6 rounded-3xl border border-border-subtle shadow-xl relative overflow-hidden group print:p-3 print:rounded-xl"
+            class="bg-surface-raised border border-border-subtle hover:border-brand-500/30 transition-all rounded-3xl p-5 relative overflow-hidden group print:p-3 print:rounded-xl"
         >
             <div
-                class="absolute -right-4 -bottom-4 w-24 h-24 bg-brand-500/5 rounded-full blur-2xl"
+                class="absolute right-0 top-0 w-28 h-28 bg-brand-500/5 rounded-full blur-2xl group-hover:bg-brand-500/10 transition-colors print:hidden"
             ></div>
-            <div class="flex items-start justify-between">
-                <div class="space-y-2">
-                    <span
-                        class="text-xs font-black uppercase tracking-widest text-text-muted print:text-[9px]"
-                        >Total Artículos</span
-                    >
-                    <h2
-                        class="text-2xl font-black text-text-base tracking-tight print:text-lg"
-                    >
-                        {stats.total}
-                    </h2>
-                    <p
-                        class="text-xs text-text-muted font-bold print:text-[8px]"
-                    >
-                        Encontrados en catálogo
-                    </p>
-                </div>
+            <div class="flex items-center justify-between mb-3">
                 <div
-                    class="h-10 w-10 rounded-xl bg-brand-500/10 border border-brand-500/20 flex items-center justify-center text-brand-500 print:hidden"
+                    class="p-2 rounded-xl bg-brand-500/10 text-brand-700 dark:text-brand-400 border border-brand-500/20 print:hidden"
                 >
                     <ClipboardList size={20} />
                 </div>
             </div>
+            <p
+                class="text-text-muted text-[11px] font-bold uppercase tracking-wider mb-0.5 print:text-[9px]"
+            >
+                Total Artículos
+            </p>
+            <p
+                class="text-2xl sm:text-3xl font-black text-text-base tracking-tight print:text-lg"
+            >
+                {stats.total}
+            </p>
+            <p
+                class="text-[10px] text-text-muted font-bold mt-1.5 line-clamp-1 print:text-[8px]"
+            >
+                Encontrados en catálogo
+            </p>
         </div>
 
         <!-- Card 2: Costo Promedio -->
         <div
-            class="glass p-6 rounded-3xl border border-border-subtle shadow-xl relative overflow-hidden group print:p-3 print:rounded-xl"
+            class="bg-surface-raised border border-border-subtle hover:border-red-500/30 transition-all rounded-3xl p-5 relative overflow-hidden group print:p-3 print:rounded-xl"
         >
             <div
-                class="absolute -right-4 -bottom-4 w-24 h-24 bg-red-500/5 rounded-full blur-2xl"
+                class="absolute right-0 top-0 w-28 h-28 bg-red-500/5 rounded-full blur-2xl group-hover:bg-red-500/10 transition-colors print:hidden"
             ></div>
-            <div class="flex items-start justify-between">
-                <div class="space-y-2">
-                    <span
-                        class="text-xs font-black uppercase tracking-widest text-text-muted print:text-[9px]"
-                        >Costo Promedio</span
-                    >
-                    <h2
-                        class="text-2xl font-black text-text-base tracking-tight print:text-lg"
-                    >
-                        {formatUSD(stats.avgCosto)}
-                    </h2>
-                    <p
-                        class="text-xs text-text-muted font-bold print:text-[8px]"
-                    >
-                        Promedio en USD
-                    </p>
-                </div>
+            <div class="flex items-center justify-between mb-3">
                 <div
-                    class="h-10 w-10 rounded-xl bg-red-500/10 border border-red-500/20 flex items-center justify-center text-red-500 print:hidden"
+                    class="p-2 rounded-xl bg-red-500/10 text-red-700 dark:text-red-400 border border-red-500/20 print:hidden"
                 >
                     <DollarSign size={20} />
                 </div>
             </div>
+            <p
+                class="text-text-muted text-[11px] font-bold uppercase tracking-wider mb-0.5 print:text-[9px]"
+            >
+                Costo Promedio
+            </p>
+            <p
+                class="text-2xl sm:text-3xl font-black text-text-base tracking-tight print:text-lg"
+            >
+                {formatUSD(stats.avgCosto)}
+            </p>
+            <p
+                class="text-[10px] text-text-muted font-bold mt-1.5 line-clamp-1 print:text-[8px]"
+            >
+                Promedio en USD
+            </p>
         </div>
 
         <!-- Card 3: Precio Promedio 1 -->
         <div
-            class="glass p-6 rounded-3xl border border-border-subtle shadow-xl relative overflow-hidden group print:p-3 print:rounded-xl"
+            class="bg-surface-raised border border-border-subtle hover:border-blue-500/30 transition-all rounded-3xl p-5 relative overflow-hidden group print:p-3 print:rounded-xl"
         >
             <div
-                class="absolute -right-4 -bottom-4 w-24 h-24 bg-blue-500/5 rounded-full blur-2xl"
+                class="absolute right-0 top-0 w-28 h-28 bg-blue-500/5 rounded-full blur-2xl group-hover:bg-blue-500/10 transition-colors print:hidden"
             ></div>
-            <div class="flex items-start justify-between">
-                <div class="space-y-2">
-                    <span
-                        class="text-xs font-black uppercase tracking-widest text-text-muted print:text-[9px]"
-                        >Precio Prom. 1</span
-                    >
-                    <h2
-                        class="text-2xl font-black text-text-base tracking-tight print:text-lg"
-                    >
-                        {formatUSD(stats.avgPrice1)}
-                    </h2>
-                    <p
-                        class="text-xs text-text-muted font-bold print:text-[8px]"
-                    >
-                        Precio 1 Promedio
-                    </p>
-                </div>
+            <div class="flex items-center justify-between mb-3">
                 <div
-                    class="h-10 w-10 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-500 print:hidden"
+                    class="p-2 rounded-xl bg-blue-500/10 text-blue-700 dark:text-blue-400 border border-blue-500/20 print:hidden"
                 >
                     <DollarSign size={20} />
                 </div>
             </div>
+            <p
+                class="text-text-muted text-[11px] font-bold uppercase tracking-wider mb-0.5 text-blue-600 dark:text-blue-400 print:text-[9px]"
+            >
+                Precio Prom. 1
+            </p>
+            <p
+                class="text-2xl sm:text-3xl font-black text-blue-600 dark:text-blue-400 tracking-tight print:text-lg"
+            >
+                {formatUSD(stats.avgPrice1)}
+            </p>
+            <p
+                class="text-[10px] text-text-muted font-bold mt-1.5 line-clamp-1 print:text-[8px]"
+            >
+                Precio 1 Promedio
+            </p>
         </div>
 
         <!-- Card 4: Margen Promedio 1 -->
         <div
-            class="glass p-6 rounded-3xl border border-border-subtle shadow-xl relative overflow-hidden group print:p-3 print:rounded-xl"
+            class="bg-surface-raised border border-border-subtle hover:border-emerald-500/30 transition-all rounded-3xl p-5 relative overflow-hidden group print:p-3 print:rounded-xl"
         >
             <div
-                class="absolute -right-4 -bottom-4 w-24 h-24 bg-emerald-500/5 rounded-full blur-2xl"
+                class="absolute right-0 top-0 w-28 h-28 bg-emerald-500/5 rounded-full blur-2xl group-hover:bg-emerald-500/10 transition-colors print:hidden"
             ></div>
-            <div class="flex items-start justify-between">
-                <div class="space-y-2">
-                    <span
-                        class="text-xs font-black uppercase tracking-widest text-text-muted print:text-[9px]"
-                        >Margen Prom. 1</span
-                    >
-                    <h2
-                        class="text-2xl font-black text-text-base tracking-tight print:text-lg"
-                    >
-                        {formatPercent(stats.avgMargin1)}
-                    </h2>
-                    <p
-                        class="text-xs text-text-muted font-bold print:text-[8px]"
-                    >
-                        Margen 1 Promedio
-                    </p>
-                </div>
+            <div class="flex items-center justify-between mb-3">
                 <div
-                    class="h-10 w-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-500 print:hidden"
+                    class="p-2 rounded-xl bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20 print:hidden"
                 >
                     <Percent size={20} />
                 </div>
             </div>
+            <p
+                class="text-text-muted text-[11px] font-bold uppercase tracking-wider mb-0.5 text-emerald-600 dark:text-emerald-400 print:text-[9px]"
+            >
+                Margen Prom. 1
+            </p>
+            <p
+                class="text-2xl sm:text-3xl font-black text-emerald-600 dark:text-emerald-400 tracking-tight print:text-lg"
+            >
+                {formatPercent(stats.avgMargin1)}
+            </p>
+            <p
+                class="text-[10px] text-text-muted font-bold mt-1.5 line-clamp-1 print:text-[8px]"
+            >
+                Margen 1 Promedio
+            </p>
         </div>
     </div>
 
-    <!-- FILTERS PANEL -->
-    <div class="glass p-6 rounded-3xl border border-border-subtle shadow-2xl flex flex-col gap-6 w-full relative z-10 print:hidden">
-        <!-- Top Row: Selectors & Search -->
-        <div class="flex flex-col xl:flex-row gap-4 items-center w-full">
-            <!-- Sede Selector -->
-            {#if data.branches && data.branches.length > 1}
-                <div class="w-full xl:w-72">
+    <!-- FILTROS Y BÚSQUEDA -->
+    <div
+        class="bg-surface-base border border-border-subtle rounded-[32px] p-6 shadow-xl space-y-4 print:hidden"
+    >
+        <!-- Fila 1: Buscador (con escáner), Líneas, Sub-Líneas, Categorías -->
+        <div
+            class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 items-center"
+        >
+            <!-- 1. Buscador + Escáner -->
+            <div class="flex items-center gap-2 w-full">
+                <form onsubmit={(e) => { e.preventDefault(); applyFilters(); }} class="relative flex-1 h-12">
+                    <input
+                        type="text"
+                        placeholder="Buscar por código o descripción..."
+                        bind:value={filterSearch}
+                        class="w-full h-full bg-surface-raised pl-10 pr-8 rounded-2xl border border-border-subtle focus:border-brand-500/30 outline-none text-text-base text-sm font-bold placeholder:font-normal placeholder:text-text-muted transition-all"
+                    />
+                    <Search
+                        size={18}
+                        class="absolute left-3.5 top-1/2 -translate-y-1/2 text-text-muted"
+                    />
+                    {#if filterSearch}
+                        <button
+                            type="button"
+                            onclick={() => {
+                                filterSearch = "";
+                                applyFilters();
+                            }}
+                            class="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-base cursor-pointer"
+                        >
+                            <X size={14} />
+                        </button>
+                    {/if}
+                </form>
+                <BarcodeScanner onScan={(code) => { filterSearch = code; applyFilters(); }} />
+            </div>
+
+            <!-- 2. Líneas -->
+            <Combobox
+                options={lineasOptions}
+                bind:value={filterLine}
+                placeholder="Líneas (Todas)"
+                allLabel="Líneas (Todas)"
+                onchange={() => applyFilters()}
+            />
+
+            <!-- 3. Sub-Líneas -->
+            <Combobox
+                options={sublineasOptions}
+                bind:value={filterSubline}
+                placeholder="Sub-Líneas (Todas)"
+                allLabel="Sub-Líneas (Todas)"
+                onchange={() => applyFilters()}
+            />
+
+            <!-- 4. Categorías -->
+            <Combobox
+                options={categoriasOptions}
+                bind:value={filterCategory}
+                placeholder="Categorías (Todas)"
+                allLabel="Categorías (Todas)"
+                onchange={() => applyFilters()}
+            />
+        </div>
+
+        <!-- Fila 2: Sucursal (si aplica) -->
+        {#if data.branches && data.branches.length > 1}
+            <div class="pt-2 border-t border-border-subtle/50 flex flex-col sm:flex-row items-start sm:items-center gap-2">
+                <div class="w-full sm:w-80">
                     <Combobox
-                        options={data.branches.map((b: any) => ({ value: b.id, label: b.name }))}
+                        options={data.branches.map((b: any) => ({
+                            value: b.id,
+                            label: b.name,
+                        }))}
                         bind:value={filterBranch}
-                        placeholder="Sucursal..."
+                        placeholder="Sucursal por defecto"
                         allLabel="Todas las Sucursales"
-                        icon={Store}
-                        class="w-full h-14"
+                        icon={Building}
+                        buttonClass="h-12"
                         onchange={() => applyFilters()}
                     />
                 </div>
-            {/if}
-
-            <!-- Línea Selector -->
-            <div class="w-full xl:w-64">
-                <Combobox
-                    options={data.catalogs?.lineas?.map((l: any) => ({ value: l.co_lin.trim(), label: `${l.co_lin.trim()} - ${l.lin_des.trim()}` })) || []}
-                    bind:value={filterLine}
-                    placeholder="Línea..."
-                    allLabel="Todas las Líneas"
-                    icon={Layers}
-                    class="w-full h-14"
-                    onchange={() => applyFilters()}
-                />
             </div>
+        {/if}
 
-            <!-- Categoría Selector -->
-            <div class="w-full xl:w-64">
-                <Combobox
-                    options={data.catalogs?.categorias?.map((c: any) => ({ value: c.co_cat.trim(), label: `${c.co_cat.trim()} - ${c.cat_des.trim()}` })) || []}
-                    bind:value={filterCategory}
-                    placeholder="Categoría..."
-                    allLabel="Todas las Categorías"
-                    icon={Tag}
-                    class="w-full h-14"
-                    onchange={() => applyFilters()}
-                />
-            </div>
-
-            <!-- Search Bar Form (embedded search button) -->
-            <form onsubmit={(e) => { e.preventDefault(); applyFilters(); }} class="relative group w-full xl:flex-1 h-14">
-                <input 
-                    type="text"
-                    bind:value={filterSearch}
-                    placeholder="Buscar por código o descripción..."
-                    class="w-full h-full bg-surface-soft pl-6 pr-14 rounded-2xl border border-border-subtle focus:border-brand-500/50 outline-none transition-all font-bold text-sm text-text-base placeholder:font-normal placeholder:text-text-muted/40"
-                />
-                <button 
-                    type="submit"
-                    disabled={isSearching}
-                    class="absolute right-1 top-1 bottom-1 w-12 flex items-center justify-center bg-surface-soft hover:bg-surface-strong text-brand-400 rounded-xl transition-all border border-border-subtle active:scale-95 cursor-pointer disabled:opacity-50"
-                    title="Buscar Artículos"
-                >
-                    {#if isSearching}
-                        <div class="w-4 h-4 border-2 border-brand-500/20 border-t-brand-500 rounded-full animate-spin"></div>
-                    {:else}
-                        <Search size={18} />
-                    {/if}
-                </button>
-            </form>
-
-            <button 
-                onclick={clearFilters} 
-                class="h-14 w-full xl:w-auto px-6 bg-surface-soft/40 border border-border-subtle hover:bg-surface-soft text-text-muted font-bold text-sm rounded-2xl transition-all flex items-center justify-center cursor-pointer shrink-0"
-                title="Limpiar filtros"
-            >
-                Limpiar
-            </button>
-        </div>
-
-        <!-- Subtle Divider Line -->
-        <div class="h-[1px] w-full bg-border-subtle opacity-10"></div>
-
-        <!-- Bottom Row: Advanced switches -->
-        <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3 w-full">
+        <!-- Fila 3: Filtros Avanzados (Switches de Estado y Precios) -->
+        <div
+            class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-7 gap-4 items-center pt-2 border-t border-border-subtle/50"
+        >
             <!-- Precio 1 Switch -->
-            <div class="flex flex-col gap-1.5">
-                <span class="text-[9px] font-black uppercase tracking-widest text-text-muted ml-1">Precio 1</span>
-                <div class="flex items-center bg-white/5 border border-white/5 p-1 rounded-xl h-12 w-full">
+            <div class="flex flex-col gap-1.5 min-w-0">
+                <span class="text-[10px] font-black uppercase tracking-wider text-text-muted ml-1">Precio 1</span>
+                <div class="flex items-center bg-surface-raised border border-border-subtle p-1 rounded-2xl h-12 w-full">
                     <button 
+                        type="button"
                         onclick={() => filterPrecio1 = 'all'} 
-                        class="flex-1 h-full rounded-lg text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer {filterPrecio1 === 'all' ? 'bg-brand-500 text-white shadow-md' : 'text-text-muted hover:text-white'}"
+                        class="flex-1 h-full rounded-xl text-xs font-bold transition-all cursor-pointer px-2 {filterPrecio1 === 'all' ? 'bg-brand-500 text-white shadow-md' : 'text-text-muted hover:text-text-base'}"
                     >Todos</button>
                     <button 
+                        type="button"
                         onclick={() => filterPrecio1 = 'with'} 
-                        class="flex-1 h-full rounded-lg text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer {filterPrecio1 === 'with' ? 'bg-brand-500 text-white shadow-md' : 'text-text-muted hover:text-white'}"
+                        class="flex-1 h-full rounded-xl text-xs font-bold transition-all cursor-pointer px-2 {filterPrecio1 === 'with' ? 'bg-brand-500 text-white shadow-md' : 'text-text-muted hover:text-text-base'}"
                     >Con P1</button>
                     <button 
+                        type="button"
                         onclick={() => filterPrecio1 = 'without'} 
-                        class="flex-1 h-full rounded-lg text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer {filterPrecio1 === 'without' ? 'bg-brand-500 text-white shadow-md' : 'text-text-muted hover:text-white'}"
+                        class="flex-1 h-full rounded-xl text-xs font-bold transition-all cursor-pointer px-2 {filterPrecio1 === 'without' ? 'bg-brand-500 text-white shadow-md' : 'text-text-muted hover:text-text-base'}"
                     >Sin P1</button>
                 </div>
             </div>
 
             <!-- Margen 1 Switch -->
-            <div class="flex flex-col gap-1.5">
-                <span class="text-[9px] font-black uppercase tracking-widest text-text-muted ml-1">Margen 1</span>
-                <div class="flex items-center bg-white/5 border border-white/5 p-1 rounded-xl h-12 w-full">
+            <div class="flex flex-col gap-1.5 min-w-0">
+                <span class="text-[10px] font-black uppercase tracking-wider text-text-muted ml-1">Margen 1</span>
+                <div class="flex items-center bg-surface-raised border border-border-subtle p-1 rounded-2xl h-12 w-full">
                     <button 
+                        type="button"
                         onclick={() => filterMargen1 = 'all'} 
-                        class="flex-1 h-full rounded-lg text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer {filterMargen1 === 'all' ? 'bg-brand-500 text-white shadow-md' : 'text-text-muted hover:text-white'}"
+                        class="flex-1 h-full rounded-xl text-xs font-bold transition-all cursor-pointer px-2 {filterMargen1 === 'all' ? 'bg-brand-500 text-white shadow-md' : 'text-text-muted hover:text-text-base'}"
                     >Todos</button>
                     <button 
+                        type="button"
                         onclick={() => filterMargen1 = 'with'} 
-                        class="flex-1 h-full rounded-lg text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer {filterMargen1 === 'with' ? 'bg-brand-500 text-white shadow-md' : 'text-text-muted hover:text-white'}"
+                        class="flex-1 h-full rounded-xl text-xs font-bold transition-all cursor-pointer px-2 {filterMargen1 === 'with' ? 'bg-brand-500 text-white shadow-md' : 'text-text-muted hover:text-text-base'}"
                     >Con M1</button>
                     <button 
+                        type="button"
                         onclick={() => filterMargen1 = 'without'} 
-                        class="flex-1 h-full rounded-lg text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer {filterMargen1 === 'without' ? 'bg-brand-500 text-white shadow-md' : 'text-text-muted hover:text-white'}"
+                        class="flex-1 h-full rounded-xl text-xs font-bold transition-all cursor-pointer px-2 {filterMargen1 === 'without' ? 'bg-brand-500 text-white shadow-md' : 'text-text-muted hover:text-text-base'}"
                     >Sin M1</button>
                 </div>
             </div>
 
             <!-- Precio 2 Switch -->
-            <div class="flex flex-col gap-1.5">
-                <span class="text-[9px] font-black uppercase tracking-widest text-text-muted ml-1">Precio 2</span>
-                <div class="flex items-center bg-white/5 border border-white/5 p-1 rounded-xl h-12 w-full">
+            <div class="flex flex-col gap-1.5 min-w-0">
+                <span class="text-[10px] font-black uppercase tracking-wider text-text-muted ml-1">Precio 2</span>
+                <div class="flex items-center bg-surface-raised border border-border-subtle p-1 rounded-2xl h-12 w-full">
                     <button 
+                        type="button"
                         onclick={() => filterPrecio2 = 'all'} 
-                        class="flex-1 h-full rounded-lg text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer {filterPrecio2 === 'all' ? 'bg-brand-500 text-white shadow-md' : 'text-text-muted hover:text-white'}"
+                        class="flex-1 h-full rounded-xl text-xs font-bold transition-all cursor-pointer px-2 {filterPrecio2 === 'all' ? 'bg-brand-500 text-white shadow-md' : 'text-text-muted hover:text-text-base'}"
                     >Todos</button>
                     <button 
+                        type="button"
                         onclick={() => filterPrecio2 = 'with'} 
-                        class="flex-1 h-full rounded-lg text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer {filterPrecio2 === 'with' ? 'bg-brand-500 text-white shadow-md' : 'text-text-muted hover:text-white'}"
+                        class="flex-1 h-full rounded-xl text-xs font-bold transition-all cursor-pointer px-2 {filterPrecio2 === 'with' ? 'bg-brand-500 text-white shadow-md' : 'text-text-muted hover:text-text-base'}"
                     >Con P2</button>
                     <button 
+                        type="button"
                         onclick={() => filterPrecio2 = 'without'} 
-                        class="flex-1 h-full rounded-lg text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer {filterPrecio2 === 'without' ? 'bg-brand-500 text-white shadow-md' : 'text-text-muted hover:text-white'}"
+                        class="flex-1 h-full rounded-xl text-xs font-bold transition-all cursor-pointer px-2 {filterPrecio2 === 'without' ? 'bg-brand-500 text-white shadow-md' : 'text-text-muted hover:text-text-base'}"
                     >Sin P2</button>
                 </div>
             </div>
 
             <!-- Margen 2 Switch -->
-            <div class="flex flex-col gap-1.5">
-                <span class="text-[9px] font-black uppercase tracking-widest text-text-muted ml-1">Margen 2</span>
-                <div class="flex items-center bg-white/5 border border-white/5 p-1 rounded-xl h-12 w-full">
+            <div class="flex flex-col gap-1.5 min-w-0">
+                <span class="text-[10px] font-black uppercase tracking-wider text-text-muted ml-1">Margen 2</span>
+                <div class="flex items-center bg-surface-raised border border-border-subtle p-1 rounded-2xl h-12 w-full">
                     <button 
+                        type="button"
                         onclick={() => filterMargen2 = 'all'} 
-                        class="flex-1 h-full rounded-lg text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer {filterMargen2 === 'all' ? 'bg-brand-500 text-white shadow-md' : 'text-text-muted hover:text-white'}"
+                        class="flex-1 h-full rounded-xl text-xs font-bold transition-all cursor-pointer px-2 {filterMargen2 === 'all' ? 'bg-brand-500 text-white shadow-md' : 'text-text-muted hover:text-text-base'}"
                     >Todos</button>
                     <button 
+                        type="button"
                         onclick={() => filterMargen2 = 'with'} 
-                        class="flex-1 h-full rounded-lg text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer {filterMargen2 === 'with' ? 'bg-brand-500 text-white shadow-md' : 'text-text-muted hover:text-white'}"
+                        class="flex-1 h-full rounded-xl text-xs font-bold transition-all cursor-pointer px-2 {filterMargen2 === 'with' ? 'bg-brand-500 text-white shadow-md' : 'text-text-muted hover:text-text-base'}"
                     >Con M2</button>
                     <button 
+                        type="button"
                         onclick={() => filterMargen2 = 'without'} 
-                        class="flex-1 h-full rounded-lg text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer {filterMargen2 === 'without' ? 'bg-brand-500 text-white shadow-md' : 'text-text-muted hover:text-white'}"
+                        class="flex-1 h-full rounded-xl text-xs font-bold transition-all cursor-pointer px-2 {filterMargen2 === 'without' ? 'bg-brand-500 text-white shadow-md' : 'text-text-muted hover:text-text-base'}"
                     >Sin M2</button>
                 </div>
             </div>
 
             <!-- Costo Switch -->
-            <div class="flex flex-col gap-1.5">
-                <span class="text-[9px] font-black uppercase tracking-widest text-text-muted ml-1">Costo</span>
-                <div class="flex items-center bg-white/5 border border-white/5 p-1 rounded-xl h-12 w-full">
+            <div class="flex flex-col gap-1.5 min-w-0">
+                <span class="text-[10px] font-black uppercase tracking-wider text-text-muted ml-1">Costo</span>
+                <div class="flex items-center bg-surface-raised border border-border-subtle p-1 rounded-2xl h-12 w-full">
                     <button 
+                        type="button"
                         onclick={() => filterCosto = 'all'} 
-                        class="flex-1 h-full rounded-lg text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer {filterCosto === 'all' ? 'bg-brand-500 text-white shadow-md' : 'text-text-muted hover:text-white'}"
+                        class="flex-1 h-full rounded-xl text-xs font-bold transition-all cursor-pointer px-2 {filterCosto === 'all' ? 'bg-brand-500 text-white shadow-md' : 'text-text-muted hover:text-text-base'}"
                     >Todos</button>
                     <button 
+                        type="button"
                         onclick={() => filterCosto = 'with'} 
-                        class="flex-1 h-full rounded-lg text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer {filterCosto === 'with' ? 'bg-brand-500 text-white shadow-md' : 'text-text-muted hover:text-white'}"
+                        class="flex-1 h-full rounded-xl text-xs font-bold transition-all cursor-pointer px-2 {filterCosto === 'with' ? 'bg-brand-500 text-white shadow-md' : 'text-text-muted hover:text-text-base'}"
                     >Con Costo</button>
                     <button 
+                        type="button"
                         onclick={() => filterCosto = 'without'} 
-                        class="flex-1 h-full rounded-lg text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer {filterCosto === 'without' ? 'bg-brand-500 text-white shadow-md' : 'text-text-muted hover:text-white'}"
+                        class="flex-1 h-full rounded-xl text-xs font-bold transition-all cursor-pointer px-2 {filterCosto === 'without' ? 'bg-brand-500 text-white shadow-md' : 'text-text-muted hover:text-text-base'}"
                     >Sin Costo</button>
                 </div>
             </div>
 
             <!-- Stock Switch -->
-            <div class="flex flex-col gap-1.5">
-                <span class="text-[9px] font-black uppercase tracking-widest text-text-muted ml-1">Stock Global</span>
-                <div class="flex items-center bg-white/5 border border-white/5 p-1 rounded-xl h-12 w-full">
+            <div class="flex flex-col gap-1.5 min-w-0">
+                <span class="text-[10px] font-black uppercase tracking-wider text-text-muted ml-1">Stock Global</span>
+                <div class="flex items-center bg-surface-raised border border-border-subtle p-1 rounded-2xl h-12 w-full">
                     <button 
+                        type="button"
                         onclick={() => filterStock = 'all'} 
-                        class="flex-1 h-full rounded-lg text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer {filterStock === 'all' ? 'bg-brand-500 text-white shadow-md' : 'text-text-muted hover:text-white'}"
+                        class="flex-1 h-full rounded-xl text-xs font-bold transition-all cursor-pointer px-2 {filterStock === 'all' ? 'bg-brand-500 text-white shadow-md' : 'text-text-muted hover:text-text-base'}"
                     >Todos</button>
                     <button 
+                        type="button"
                         onclick={() => filterStock = 'with'} 
-                        class="flex-1 h-full rounded-lg text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer {filterStock === 'with' ? 'bg-brand-500 text-white shadow-md' : 'text-text-muted hover:text-white'}"
+                        class="flex-1 h-full rounded-xl text-xs font-bold transition-all cursor-pointer px-2 {filterStock === 'with' ? 'bg-brand-500 text-white shadow-md' : 'text-text-muted hover:text-text-base'}"
                     >Con Stock</button>
                     <button 
+                        type="button"
                         onclick={() => filterStock = 'without'} 
-                        class="flex-1 h-full rounded-lg text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer {filterStock === 'without' ? 'bg-brand-500 text-white shadow-md' : 'text-text-muted hover:text-white'}"
+                        class="flex-1 h-full rounded-xl text-xs font-bold transition-all cursor-pointer px-2 {filterStock === 'without' ? 'bg-brand-500 text-white shadow-md' : 'text-text-muted hover:text-text-base'}"
                     >Sin Stock</button>
                 </div>
             </div>
 
             <!-- Estatus Switch -->
-            <div class="flex flex-col gap-1.5">
-                <span class="text-[9px] font-black uppercase tracking-widest text-text-muted ml-1">Estatus</span>
-                <div class="flex items-center bg-white/5 border border-white/5 p-1 rounded-xl h-12 w-full">
+            <div class="flex flex-col gap-1.5 min-w-0">
+                <span class="text-[10px] font-black uppercase tracking-wider text-text-muted ml-1">Estatus</span>
+                <div class="flex items-center bg-surface-raised border border-border-subtle p-1 rounded-2xl h-12 w-full">
                     <button 
+                        type="button"
                         onclick={() => filterEstatus = 'all'} 
-                        class="flex-1 h-full rounded-lg text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer {filterEstatus === 'all' ? 'bg-brand-500 text-white shadow-md' : 'text-text-muted hover:text-white'}"
+                        class="flex-1 h-full rounded-xl text-xs font-bold transition-all cursor-pointer px-2 {filterEstatus === 'all' ? 'bg-brand-500 text-white shadow-md' : 'text-text-muted hover:text-text-base'}"
                     >Todos</button>
                     <button 
+                        type="button"
                         onclick={() => filterEstatus = 'active'} 
-                        class="flex-1 h-full rounded-lg text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer {filterEstatus === 'active' ? 'bg-emerald-500 text-white shadow-md' : 'text-text-muted hover:text-white'}"
+                        class="flex-1 h-full rounded-xl text-xs font-bold transition-all cursor-pointer px-2 {filterEstatus === 'active' ? 'bg-emerald-500 text-white shadow-md' : 'text-text-muted hover:text-text-base'}"
                     >Activos</button>
                     <button 
+                        type="button"
                         onclick={() => filterEstatus = 'inactive'} 
-                        class="flex-1 h-full rounded-lg text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer {filterEstatus === 'inactive' ? 'bg-red-500 text-white shadow-md' : 'text-text-muted hover:text-white'}"
+                        class="flex-1 h-full rounded-xl text-xs font-bold transition-all cursor-pointer px-2 {filterEstatus === 'inactive' ? 'bg-red-500 text-white shadow-md' : 'text-text-muted hover:text-text-base'}"
                     >Inactivos</button>
                 </div>
             </div>
@@ -781,7 +919,24 @@
                             <td
                                 class="px-6 py-4 font-semibold text-text-base print:text-black print:px-3 print:py-2"
                             >
-                                {item.art_des.trim()}
+                                <div class="flex flex-col">
+                                    <span>{item.art_des.trim()}</span>
+                                    {#if item.des_lin || item.des_subl || item.des_cat}
+                                        <div class="flex items-center gap-1.5 text-[10px] text-text-muted mt-0.5 print:hidden flex-wrap">
+                                            {#if item.des_lin}
+                                                <span class="truncate max-w-[120px]">{item.des_lin}</span>
+                                            {/if}
+                                            {#if item.des_subl}
+                                                <span>•</span>
+                                                <span class="truncate max-w-[120px]">{item.des_subl}</span>
+                                            {/if}
+                                            {#if item.des_cat}
+                                                <span>•</span>
+                                                <span class="truncate max-w-[120px]">{item.des_cat}</span>
+                                            {/if}
+                                        </div>
+                                    {/if}
+                                </div>
                             </td>
                             <td
                                 class="px-6 py-4 font-medium text-text-muted text-xs print:text-black print:px-3 print:py-2"

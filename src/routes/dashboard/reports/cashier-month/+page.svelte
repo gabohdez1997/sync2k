@@ -129,50 +129,44 @@
     </div>
 
     <!-- METRICS CARDS -->
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 print:grid-cols-3">
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-5 print:grid-cols-3">
         <!-- Card 1: Facturas Totales -->
-        <div class="glass p-6 rounded-3xl border border-border-subtle shadow-xl relative overflow-hidden group print:p-4">
-            <div class="absolute -right-4 -bottom-4 w-24 h-24 bg-blue-500/5 rounded-full blur-2xl"></div>
-            <div class="flex items-start justify-between">
-                <div class="space-y-2">
-                    <span class="text-xs font-black uppercase tracking-widest text-text-muted">Documentos Procesados</span>
-                    <h2 class="text-2xl font-black text-text-base tracking-tight">{metrics.docs} docs</h2>
-                    <p class="text-xs text-text-muted font-bold">Total facturado en el mes</p>
-                </div>
-                <div class="h-10 w-10 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-500 print:hidden">
+        <div class="bg-surface-raised border border-border-subtle hover:border-blue-500/30 transition-all rounded-3xl p-5 relative overflow-hidden group print:p-4">
+            <div class="absolute right-0 top-0 w-28 h-28 bg-blue-500/5 rounded-full blur-2xl group-hover:bg-blue-500/10 transition-colors print:hidden"></div>
+            <div class="flex items-center justify-between mb-3">
+                <div class="p-2 rounded-xl bg-blue-500/10 text-blue-700 dark:text-blue-400 border border-blue-500/20 print:hidden">
                     <FileText size={20} />
                 </div>
             </div>
+            <p class="text-text-muted text-[11px] font-bold uppercase tracking-wider mb-0.5">Documentos Procesados</p>
+            <p class="text-2xl sm:text-3xl font-black text-text-base tracking-tight">{metrics.docs} docs</p>
+            <p class="text-[10px] text-text-muted font-bold mt-1.5 line-clamp-1">Total facturado en el mes</p>
         </div>
 
         <!-- Card 2: Cajeros Activos -->
-        <div class="glass p-6 rounded-3xl border border-border-subtle shadow-xl relative overflow-hidden group print:p-4">
-            <div class="absolute -right-4 -bottom-4 w-24 h-24 bg-green-500/5 rounded-full blur-2xl"></div>
-            <div class="flex items-start justify-between">
-                <div class="space-y-2">
-                    <span class="text-xs font-black uppercase tracking-widest text-text-muted">Cajeros Activos</span>
-                    <h2 class="text-2xl font-black text-text-base tracking-tight">{cashiers.length} cajeros</h2>
-                    <p class="text-xs text-text-muted font-bold">Con operaciones registradas</p>
-                </div>
-                <div class="h-10 w-10 rounded-xl bg-green-500/10 border border-green-500/20 flex items-center justify-center text-green-500 print:hidden">
+        <div class="bg-surface-raised border border-border-subtle hover:border-emerald-500/30 transition-all rounded-3xl p-5 relative overflow-hidden group print:p-4">
+            <div class="absolute right-0 top-0 w-28 h-28 bg-emerald-500/5 rounded-full blur-2xl group-hover:bg-emerald-500/10 transition-colors print:hidden"></div>
+            <div class="flex items-center justify-between mb-3">
+                <div class="p-2 rounded-xl bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20 print:hidden">
                     <Users size={20} />
                 </div>
             </div>
+            <p class="text-text-muted text-[11px] font-bold uppercase tracking-wider mb-0.5">Cajeros Activos</p>
+            <p class="text-2xl sm:text-3xl font-black text-text-base tracking-tight">{cashiers.length} cajeros</p>
+            <p class="text-[10px] text-text-muted font-bold mt-1.5 line-clamp-1">Con operaciones registradas</p>
         </div>
 
         <!-- Card 3: Promedio de Documentos -->
-        <div class="glass p-6 rounded-3xl border border-border-subtle shadow-xl relative overflow-hidden group print:p-4">
-            <div class="absolute -right-4 -bottom-4 w-24 h-24 bg-amber-500/5 rounded-full blur-2xl"></div>
-            <div class="flex items-start justify-between">
-                <div class="space-y-2">
-                    <span class="text-xs font-black uppercase tracking-widest text-text-muted">Promedio por Cajero</span>
-                    <h2 class="text-2xl font-black text-text-base tracking-tight">{(cashiers.length > 0 ? metrics.docs / cashiers.length : 0).toFixed(1)} docs</h2>
-                    <p class="text-xs text-text-muted font-bold">Rendimiento medio mensual</p>
-                </div>
-                <div class="h-10 w-10 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-500 print:hidden">
+        <div class="bg-surface-raised border border-border-subtle hover:border-amber-500/30 transition-all rounded-3xl p-5 relative overflow-hidden group print:p-4">
+            <div class="absolute right-0 top-0 w-28 h-28 bg-amber-500/5 rounded-full blur-2xl group-hover:bg-amber-500/10 transition-colors print:hidden"></div>
+            <div class="flex items-center justify-between mb-3">
+                <div class="p-2 rounded-xl bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/20 print:hidden">
                     <TrendingUp size={20} />
                 </div>
             </div>
+            <p class="text-text-muted text-[11px] font-bold uppercase tracking-wider mb-0.5">Promedio por Cajero</p>
+            <p class="text-2xl sm:text-3xl font-black text-text-base tracking-tight">{(cashiers.length > 0 ? metrics.docs / cashiers.length : 0).toFixed(1)} docs</p>
+            <p class="text-[10px] text-text-muted font-bold mt-1.5 line-clamp-1">Rendimiento medio mensual</p>
         </div>
     </div>
 

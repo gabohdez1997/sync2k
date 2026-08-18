@@ -17,31 +17,16 @@
         Building,
         Calendar,
         TrendingUp,
-        ShoppingBag,
         Package,
-        Award,
-        Layers,
-        Eye,
-        EyeOff,
         Search,
         BarChart2,
-        CheckCircle2,
-        FileCheck,
         RefreshCw,
         X,
-        Box,
-        ShoppingCart,
-        Tag,
-        Filter,
-        ArrowUpRight,
         Users,
         Flame,
-        Sparkles,
-        ChevronRight,
-        Percent,
-        Clock,
-        FileText,
         ArrowUpDown,
+        FileSpreadsheet,
+        AlertTriangle,
     } from "lucide-svelte";
     import Combobox from "$lib/components/ui/Combobox.svelte";
     import BarcodeScanner from "$lib/components/ui/BarcodeScanner.svelte";
@@ -77,10 +62,9 @@
     let selectedLinea = $state("");
     let selectedSublinea = $state("");
     let selectedCategoria = $state("");
-    let selectedABC = $state("");
-    let selectedXYZ = $state("");
+    let selectedCategorizacion = $state(""); // "A", "B", "C", "D", "F"
     let selectedStockStatus = $state(""); // "con_stock", "sin_stock"
-    let sortBy = $state<"ventas" | "vpd" | "stock" | "codigo" | "monto">("ventas");
+    let sortBy = $state<"ventas" | "stock" | "codigo" | "categorizacion">("categorizacion");
     let sortAsc = $state(false);
 
     // Modal de Detalle por Artículo y Vendedores
@@ -148,36 +132,99 @@
     const lineasOptions = $derived(
         (data.catalogs?.lineas || []).map((l: any) => ({
             value: l.co_lin,
-            label: `${(l.lin_des || l.co_lin).trim()} (${l.co_lin.trim()})`,
+            label: l.lin_des ? `${l.lin_des.trim()} (${l.co_lin.trim()})` : l.co_lin,
         })),
     );
 
     const sublineasOptions = $derived(
         (data.catalogs?.sublineas || [])
-            .filter((sl: any) => !selectedLinea || (sl.co_lin && sl.co_lin.trim() === selectedLinea.trim()))
+            .filter(
+                (sl: any) =>
+                    !selectedLinea ||
+                    (sl.co_lin && sl.co_lin.trim() === selectedLinea.trim()),
+            )
             .map((sl: any) => ({
                 value: sl.co_subl,
-                label: `${(sl.subl_des || sl.co_subl).trim()} (${sl.co_subl.trim()})`,
+                label: sl.subl_des ? `${sl.subl_des.trim()} (${sl.co_subl.trim()})` : sl.co_subl,
             })),
     );
 
-    const categoriasOptions = $derived(
-        (data.catalogs?.categorias || []).map((c: any) => ({
-            value: c.co_cat,
-            label: `${(c.cat_des || c.co_cat).trim()} (${c.co_cat.trim()})`,
-        })),
-    );
+    const categoriasOptions = $derived.by(() => {
+        const cats: any[] = data.catalogs?.categorias || [];
+        const analysisCats = (data.analysisData || []).map((a: any) => ({
+            co_cat: a.co_cat,
+            cat_des: a.des_cat,
+            co_subl: a.co_subl,
+            co_lin: a.co_lin,
+        }));
+        const combined = [...cats, ...analysisCats];
 
-    const abcOptions = [
-        { value: "A", label: "Clase A (80% Valor de Ventas)" },
-        { value: "B", label: "Clase B (15% Valor de Ventas)" },
-        { value: "C", label: "Clase C (5% Valor de Ventas)" },
-    ];
+        let filtered = combined;
+        if (selectedSublinea) {
+            filtered = filtered.filter(
+                (c: any) =>
+                    c.co_subl &&
+                    c.co_subl.trim() === selectedSublinea.trim(),
+            );
+        } else if (selectedLinea) {
+            filtered = filtered.filter(
+                (c: any) =>
+                    c.co_lin &&
+                    c.co_lin.trim() === selectedLinea.trim(),
+            );
+        }
 
-    const xyzOptions = [
-        { value: "X", label: "Clase X (Demanda muy regular ≤ 20%)" },
-        { value: "Y", label: "Clase Y (Demanda moderada ≤ 60%)" },
-        { value: "Z", label: "Clase Z (Demanda esporádica > 60%)" },
+        const seen = new Set();
+        const result: { value: string; label: string }[] = [];
+        for (const c of filtered) {
+            const val = (c.co_cat || "").trim();
+            if (val && !seen.has(val)) {
+                seen.add(val);
+                const desc = (c.cat_des || val).trim();
+                result.push({
+                    value: val,
+                    label: desc ? `${desc} (${val})` : val,
+                });
+            }
+        }
+        result.sort((a, b) => a.label.localeCompare(b.label));
+        return result;
+    });
+
+    // Auto-limpiar sublínea si la línea seleccionada cambia y ya no coincide
+    $effect(() => {
+        if (selectedLinea && selectedSublinea) {
+            const valid = (data.catalogs?.sublineas || []).some(
+                (sl: any) =>
+                    sl.co_lin &&
+                    sl.co_lin.trim() === selectedLinea.trim() &&
+                    sl.co_subl &&
+                    sl.co_subl.trim() === selectedSublinea.trim(),
+            );
+            if (!valid) {
+                selectedSublinea = "";
+            }
+        }
+    });
+
+    // Auto-limpiar categoría si la sublínea o línea cambia y la categoría ya no pertenece a las opciones disponibles
+    $effect(() => {
+        if (selectedCategoria && (selectedSublinea || selectedLinea)) {
+            const valid = categoriasOptions.some(
+                (c) => c.value.trim() === selectedCategoria.trim(),
+            );
+            if (!valid) {
+                selectedCategoria = "";
+            }
+        }
+    });
+
+    const categorizacionOptions = [
+        { value: "A", label: "Clase A (> 75% de vendedores)" },
+        { value: "B", label: "Clase B (50% a 75% de vendedores)" },
+        { value: "C", label: "Clase C (25% a 50% de vendedores)" },
+        { value: "D", label: "Clase D (< 25% de vendedores)" },
+        { value: "F", label: "Clase F (Sin ventas - 0% de vendedores)" },
     ];
 
     const stockStatusOptions = [
@@ -242,13 +289,6 @@
         return Math.ceil(val).toLocaleString("es-VE");
     }
 
-    function formatCurrency(val: number): string {
-        return Number(val || 0).toLocaleString("es-VE", {
-            minimumFractionDigits: 2,
-            maximumFractionDigits: 2,
-        });
-    }
-
     function setQuickDate(days: number) {
         const end = new Date();
         const start = new Date();
@@ -269,27 +309,152 @@
         isSyncing = false;
     }
 
-    function resetLocalFilters() {
-        searchTerm = "";
-        selectedLinea = "";
-        selectedSublinea = "";
-        selectedCategoria = "";
-        selectedABC = "";
-        selectedXYZ = "";
-        selectedStockStatus = "";
+    function getCategorizacion(item: any) {
+        if (item.categorizacion) {
+            const grade = item.categorizacion;
+            const ventas = Number(item.ventas_netas) || 0;
+            const cant = (grade === "F" || ventas <= 0) ? 0 : (Number(item.cant_vendedores) || 0);
+            const pct = (grade === "F" || ventas <= 0) ? 0 : (Number(item.pct_vendedores) || 0);
+            const total = Number(item.total_vendedores) || (data.totalVendedores || 1);
+            const configs: Record<string, { label: string; badgeClass: string; desc: string }> = {
+                A: {
+                    label: "Clase A",
+                    desc: "Más del 75% de vendedores",
+                    badgeClass: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30",
+                },
+                B: {
+                    label: "Clase B",
+                    desc: "50% a 75% de vendedores",
+                    badgeClass: "bg-blue-500/15 text-blue-600 dark:text-blue-400 border-blue-500/30",
+                },
+                C: {
+                    label: "Clase C",
+                    desc: "25% a 50% de vendedores",
+                    badgeClass: "bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30",
+                },
+                D: {
+                    label: "Clase D",
+                    desc: "Menos del 25% de vendedores",
+                    badgeClass: "bg-orange-500/15 text-orange-600 dark:text-orange-400 border-orange-500/30",
+                },
+                F: {
+                    label: "Clase F",
+                    desc: "Sin ventas (0% de vendedores)",
+                    badgeClass: "bg-rose-500/15 text-rose-600 dark:text-rose-400 border-rose-500/30",
+                },
+            };
+            const cfg = configs[grade] || configs.F;
+            return {
+                grade,
+                label: cfg.label,
+                desc: cfg.desc,
+                badgeClass: cfg.badgeClass,
+                pct,
+                cant,
+                total,
+            };
+        }
+
+        const total = Number(data.totalVendedores || data.kpis?.total_vendedores || 1);
+        const cant = Number(item.cant_vendedores) || 0;
+        const ventas = Number(item.ventas_netas) || 0;
+        const pct = total > 0 ? (cant / total) * 100 : 0;
+
+        if (ventas <= 0 || cant <= 0) {
+            return {
+                grade: "F",
+                label: "Clase F",
+                desc: "Sin ventas (0% de vendedores)",
+                badgeClass: "bg-rose-500/15 text-rose-600 dark:text-rose-400 border-rose-500/30",
+                pct: 0,
+                cant: 0,
+                total,
+            };
+        }
+        if (pct > 75) {
+            return {
+                grade: "A",
+                label: "Clase A",
+                desc: "Más del 75% de vendedores",
+                badgeClass: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30",
+                pct,
+                cant,
+                total,
+            };
+        }
+        if (pct >= 50) {
+            return {
+                grade: "B",
+                label: "Clase B",
+                desc: "50% a 75% de vendedores",
+                badgeClass: "bg-blue-500/15 text-blue-600 dark:text-blue-400 border-blue-500/30",
+                pct,
+                cant,
+                total,
+            };
+        }
+        if (pct >= 25) {
+            return {
+                grade: "C",
+                label: "Clase C",
+                desc: "25% a 50% de vendedores",
+                badgeClass: "bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30",
+                pct,
+                cant,
+                total,
+            };
+        }
+        return {
+            grade: "D",
+            label: "Clase D",
+            desc: "Menos del 25% de vendedores",
+            badgeClass: "bg-orange-500/15 text-orange-600 dark:text-orange-400 border-orange-500/30",
+            pct,
+            cant,
+            total,
+        };
     }
 
-    const hasActiveLocalFilters = $derived(
-        Boolean(
-            searchTerm ||
-            selectedLinea ||
-            selectedSublinea ||
-            selectedCategoria ||
-            selectedABC ||
-            selectedXYZ ||
-            selectedStockStatus
-        )
-    );
+    function exportToExcel() {
+        if (!filteredItems || filteredItems.length === 0) return;
+
+        let csvContent = "\uFEFFsep=;\n";
+        csvContent +=
+            "Codigo;Descripcion;Linea;Categoria;Unidad;Categorizacion;Vendedores que vendieron;Total Vendedores;Pct Participacion Vendedores;Stock Actual;Ventas Netas;Estado\n";
+
+        for (const item of filteredItems) {
+            const co_art = `="${String(item.co_art || "").trim().replace(/"/g, '""')}"`;
+            const des_art = `"${String(item.des_art || "").trim().replace(/"/g, '""')}"`;
+            const des_lin = `"${String(item.des_lin || "").trim().replace(/"/g, '""')}"`;
+            const des_cat = `"${String(item.des_cat || "").trim().replace(/"/g, '""')}"`;
+            const uni = `"${getUnitLabel(item)}"`;
+            const catInfo = getCategorizacion(item);
+            const cat = `"${catInfo.grade}"`;
+            const cantVend = catInfo.cant.toString();
+            const totVend = catInfo.total.toString();
+            const pctVend = `${catInfo.pct.toFixed(2)}%`.replace(".", ",");
+
+            const stock = formatUnitQty(Number(item.stock_actual) || 0, item).replace(".", ",");
+            const ventas = formatUnitQty(Number(item.ventas_netas) || 0, item).replace(".", ",");
+            const estado = (Number(item.stock_actual) || 0) > 0 ? "Con Stock" : "Sin Stock";
+
+            csvContent += `${co_art};${des_art};${des_lin};${des_cat};${uni};${cat};${cantVend};${totVend};${pctVend};${stock};${ventas};${estado}\n`;
+        }
+
+        const blob = new Blob([csvContent], {
+            type: "text/csv;charset=utf-8;",
+        });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        const filename = `analisis_ventas_${startDate.replace(/-/g, "")}_a_${endDate.replace(/-/g, "")}.csv`;
+
+        link.setAttribute("href", url);
+        link.setAttribute("download", filename);
+        link.style.visibility = "hidden";
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    }
 
     // Filtrado de artículos
     const filteredItems = $derived.by(() => {
@@ -319,11 +484,14 @@
                 (i: any) => i.co_cat && i.co_cat.trim() === selectedCategoria.trim(),
             );
         }
-        if (selectedABC) {
-            list = list.filter((i: any) => i.clasificacion_abc === selectedABC);
-        }
-        if (selectedXYZ) {
-            list = list.filter((i: any) => i.clasificacion_xyz === selectedXYZ);
+        if (selectedCategorizacion) {
+            list = list.filter((i: any) => {
+                const cat = getCategorizacion(i);
+                if (selectedCategorizacion === "CD") {
+                    return cat.grade === "C" || cat.grade === "D";
+                }
+                return cat.grade === selectedCategorizacion;
+            });
         }
         if (selectedStockStatus) {
             if (selectedStockStatus === "con_stock") {
@@ -337,16 +505,19 @@
         const sorted = [...list];
         sorted.sort((a, b) => {
             let res = 0;
-            if (sortBy === "ventas") {
-                res = (b.ventas_netas || 0) - (a.ventas_netas || 0);
-            } else if (sortBy === "vpd") {
-                res = (b.vpd || 0) - (a.vpd || 0);
+            if (sortBy === "categorizacion") {
+                const weights: Record<string, number> = { A: 5, B: 4, C: 3, D: 2, F: 1 };
+                const catA = getCategorizacion(a);
+                const catB = getCategorizacion(b);
+                const wA = weights[catA.grade] || 0;
+                const wB = weights[catB.grade] || 0;
+                res = (wB - wA) || (catB.pct - catA.pct) || ((Number(b.ventas_netas) || 0) - (Number(a.ventas_netas) || 0));
+            } else if (sortBy === "ventas") {
+                res = (Number(b.ventas_netas) || 0) - (Number(a.ventas_netas) || 0);
             } else if (sortBy === "stock") {
-                res = (b.stock_actual || 0) - (a.stock_actual || 0);
-            } else if (sortBy === "monto") {
-                res = (b.valor_ventas || 0) - (a.valor_ventas || 0);
+                res = (Number(b.stock_actual) || 0) - (Number(a.stock_actual) || 0);
             } else if (sortBy === "codigo") {
-                res = a.co_art.localeCompare(b.co_art);
+                res = (a.co_art || "").localeCompare(b.co_art || "");
             }
             return sortAsc ? -res : res;
         });
@@ -354,7 +525,43 @@
         return sorted;
     });
 
-    function toggleSort(type: "ventas" | "vpd" | "stock" | "codigo" | "monto") {
+    const stats = $derived.by(() => {
+        const items: any[] = data.analysisData || [];
+        let countA = 0;
+        let countB = 0;
+        let countCD = 0;
+        let countF = 0;
+        let countConStock = 0;
+        let countSinStock = 0;
+        let totalVentasNetas = 0;
+
+        for (const item of items) {
+            const cat = getCategorizacion(item);
+            if (cat.grade === "A") countA++;
+            else if (cat.grade === "B") countB++;
+            else if (cat.grade === "C" || cat.grade === "D") countCD++;
+            else if (cat.grade === "F") countF++;
+
+            const stock = Number(item.stock_actual) || 0;
+            if (stock > 0) countConStock++;
+            else countSinStock++;
+
+            totalVentasNetas += Number(item.ventas_netas) || 0;
+        }
+
+        return {
+            total: items.length,
+            countA,
+            countB,
+            countCD,
+            countF,
+            countConStock,
+            countSinStock,
+            totalVentasNetas,
+        };
+    });
+
+    function toggleSort(type: "ventas" | "stock" | "codigo" | "categorizacion") {
         if (sortBy === type) {
             sortAsc = !sortAsc;
         } else {
@@ -362,37 +569,6 @@
             sortAsc = false;
         }
     }
-
-    // Estadísticas de los datos filtrados
-    const summaryStats = $derived.by(() => {
-        const list = filteredItems;
-        let totalVentas = 0;
-        let totalMonto = 0;
-        let conStock = 0;
-        let sinStock = 0;
-
-        for (const item of list) {
-            totalVentas += Number(item.ventas_netas) || 0;
-            totalMonto += Number(item.valor_ventas) || 0;
-            if ((Number(item.stock_actual) || 0) > 0) {
-                conStock++;
-            } else {
-                sinStock++;
-            }
-        }
-
-        const businessDays = data.businessDays || 1;
-        const vpdGlobal = businessDays > 0 ? totalVentas / businessDays : 0;
-
-        return {
-            totalArticulos: list.length,
-            totalVentas,
-            totalMonto,
-            conStock,
-            sinStock,
-            vpdGlobal,
-        };
-    });
 
     // Abrir Modal de Detalle de Artículo y Vendedores
     async function openArticleModal(item: any) {
@@ -415,7 +591,6 @@
             const json = await res.json();
             if (res.ok && json.success) {
                 articleData = json;
-                // Inicializar gráfica cuando se cargue la data
                 setTimeout(() => {
                     renderModalChart();
                 }, 80);
@@ -453,7 +628,6 @@
         const ctx = modalChartCanvas.getContext("2d");
         if (!ctx) return;
 
-        // Gradiente elegante
         const gradient = ctx.createLinearGradient(0, 0, 0, 300);
         gradient.addColorStop(0, "rgba(59, 130, 246, 0.45)");
         gradient.addColorStop(1, "rgba(59, 130, 246, 0.0)");
@@ -464,7 +638,7 @@
                 labels,
                 datasets: [
                     {
-                        label: `Ventas de ${selectedArticle.des_art || selectedArticle.co_art}`,
+                        label: `Unidades vendidas de ${selectedArticle.des_art || selectedArticle.co_art}`,
                         data: dataPoints,
                         borderColor: "#3b82f6",
                         backgroundColor: gradient,
@@ -497,8 +671,6 @@
                         cornerRadius: 12,
                         callbacks: {
                             label: function (context) {
-                                const idx = context.dataIndex;
-                                const periodObj = timeline[idx];
                                 const total = Number(context.parsed.y || 0);
                                 const unit = getUnitLabel(selectedArticle);
                                 return ` Total Período: ${formatUnitQty(total, selectedArticle)} ${unit}`;
@@ -510,7 +682,7 @@
                                 if (!periodObj || !periodObj.vendedores || periodObj.vendedores.length === 0) {
                                     return [];
                                 }
-                                const lines = ["", "Vendedores en este período:"];
+                                const lines = ["", "Asesores con ventas en este período:"];
                                 periodObj.vendedores.forEach((v: any) => {
                                     lines.push(` • ${v.ven_des}: ${formatUnitQty(v.cant, selectedArticle)}`);
                                 });
@@ -548,7 +720,10 @@
 
     const topArticleSeller = $derived.by(() => {
         if (!articleData || !articleData.ranking || articleData.ranking.length === 0) return null;
-        return articleData.ranking[0];
+        const activeList = articleData.ranking.filter((r: any) => !r.inactivo && (Number(r.cant_vendida) || 0) > 0);
+        if (activeList.length > 0) return activeList[0];
+        const anySellerWithSales = articleData.ranking.filter((r: any) => (Number(r.cant_vendida) || 0) > 0);
+        return anySellerWithSales.length > 0 ? anySellerWithSales[0] : null;
     });
 </script>
 
@@ -556,527 +731,569 @@
     <title>Análisis de Ventas por Artículo | Profit Web</title>
 </svelte:head>
 
-<div class="space-y-6 max-w-[1600px] mx-auto pb-16">
-    <!-- CABECERA PRINCIPAL Y FILTROS GENERALES -->
-    <div
-        class="bg-surface-raised border border-border-subtle rounded-3xl p-6 shadow-xl space-y-6"
-    >
-        <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+<div class="p-6 md:p-8 space-y-8 animate-fade-in pb-32 max-w-[1600px] mx-auto">
+    <!-- HEADER -->
+    <div class="flex flex-col md:flex-row md:items-end justify-between gap-6">
+        <div class="space-y-2">
+            <h1
+                class="text-3xl md:text-5xl font-black text-text-base tracking-tight flex items-center gap-3"
+            >
+                <TrendingUp size={40} class="text-brand-500 shrink-0" />
+                Análisis de Ventas
+            </h1>
+            <p class="text-text-muted text-sm max-w-2xl">
+                Monitoreo de rotación, stock disponible y categorización de artículos según la cantidad de vendedores que los comercializan. Basado en <b>{data.businessDays || "?"} días hábiles</b> históricos.
+            </p>
+        </div>
+
+        <div class="flex items-center gap-3 shrink-0">
+            <button
+                onclick={exportToExcel}
+                disabled={!filteredItems || filteredItems.length === 0}
+                class="px-5 py-2.5 bg-brand-600 hover:bg-brand-500 text-white text-xs font-black rounded-xl shadow-lg shadow-brand-600/20 hover:shadow-brand-500/30 transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                title="Exportar a Excel (CSV)"
+            >
+                <FileSpreadsheet size={16} />
+                Exportar Excel
+            </button>
+        </div>
+    </div>
+
+    {#if data.error}
+        <div
+            class="bg-red-500/10 border border-red-500/30 text-red-500 p-6 rounded-2xl flex items-start gap-4"
+        >
+            <AlertTriangle size={24} class="shrink-0 mt-1" />
             <div>
-                <div class="flex items-center gap-3 mb-1">
+                <h3 class="font-bold text-lg mb-1">
+                    Error al procesar el reporte
+                </h3>
+                <p class="text-sm opacity-80">{data.error}</p>
+            </div>
+        </div>
+    {:else}
+        <!-- CARDS RESUMEN DE ROTACIÓN / PENETRACIÓN DE VENTAS -->
+        <div
+            class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5"
+        >
+            <!-- 1. VERDE: CLASE A -->
+            <div
+                class="bg-surface-raised border transition-all rounded-3xl p-5 relative overflow-hidden group cursor-pointer {selectedCategorizacion ===
+                'A'
+                    ? 'border-emerald-500 ring-2 ring-emerald-500/20 bg-emerald-500/10'
+                    : 'border-border-subtle hover:border-emerald-500/40'}"
+                onclick={() =>
+                    (selectedCategorizacion =
+                        selectedCategorizacion === 'A' ? '' : 'A')}
+                title="Filtrar por artículos Clase A"
+            >
+                <div
+                    class="absolute right-0 top-0 w-28 h-28 bg-emerald-500/5 rounded-full blur-2xl group-hover:bg-emerald-500/10 transition-colors"
+                ></div>
+                <div class="flex items-center justify-between mb-3">
                     <div
-                        class="p-2.5 rounded-2xl bg-brand-500/10 text-brand-500 border border-brand-500/20"
+                        class="p-2 rounded-xl bg-emerald-500/15 text-emerald-800 dark:text-emerald-300 border border-emerald-500/30"
                     >
-                        <TrendingUp size={24} />
+                        <Flame size={20} />
                     </div>
-                    <div>
-                        <h1 class="text-xl sm:text-2xl font-black text-text-base flex items-center gap-2">
-                            Análisis de Ventas por Artículo
-                        </h1>
-                        <p class="text-xs text-text-muted">
-                            Monitoreo de rotación, stock disponible, promedio diario de ventas y rendimiento por asesor comercial.
-                        </p>
-                    </div>
+                    <span
+                        class="text-[10px] font-black uppercase px-2 py-0.5 rounded-full {selectedCategorizacion ===
+                        'A'
+                            ? 'bg-emerald-600 text-white'
+                            : 'bg-emerald-500/15 text-emerald-900 dark:text-emerald-300 border border-emerald-500/30'}"
+                    >
+                        {selectedCategorizacion === 'A'
+                            ? 'Filtrando'
+                            : '> 75% Asesores'}
+                    </span>
                 </div>
-            </div>
-
-            <!-- CONTROLES SUPERIORES (SEDE Y RANGOS RÁPIDOS) -->
-            <div class="flex flex-wrap items-center gap-2.5">
-                {#if (data.branches || []).length > 1}
-                    <div class="w-full sm:w-56">
-                        <Combobox
-                            options={branchesOptions}
-                            bind:value={selectedBranch}
-                            onchange={applyFilters}
-                            placeholder="Seleccionar sede..."
-                            icon={Building}
-                            buttonClass="h-10 text-xs"
-                        />
-                    </div>
-                {/if}
-
-                <div class="flex items-center bg-surface-base p-1 rounded-2xl border border-border-subtle">
-                    <button
-                        type="button"
-                        onclick={() => setQuickDate(30)}
-                        class="px-2.5 py-1.5 rounded-xl text-[11px] font-bold text-text-muted hover:text-text-base hover:bg-surface-soft transition-colors cursor-pointer"
-                    >
-                        30D
-                    </button>
-                    <button
-                        type="button"
-                        onclick={() => setQuickDate(60)}
-                        class="px-2.5 py-1.5 rounded-xl text-[11px] font-bold text-text-muted hover:text-text-base hover:bg-surface-soft transition-colors cursor-pointer"
-                    >
-                        60D
-                    </button>
-                    <button
-                        type="button"
-                        onclick={() => setQuickDate(90)}
-                        class="px-2.5 py-1.5 rounded-xl text-[11px] font-bold text-text-muted hover:text-text-base hover:bg-surface-soft transition-colors cursor-pointer"
-                    >
-                        90D
-                    </button>
-                    <button
-                        type="button"
-                        onclick={() => setQuickDate(180)}
-                        class="px-2.5 py-1.5 rounded-xl text-[11px] font-bold text-text-muted hover:text-text-base hover:bg-surface-soft transition-colors cursor-pointer"
-                    >
-                        180D
-                    </button>
-                    <button
-                        type="button"
-                        onclick={() => setQuickDate(365)}
-                        class="px-2.5 py-1.5 rounded-xl text-[11px] font-bold text-text-muted hover:text-text-base hover:bg-surface-soft transition-colors cursor-pointer"
-                    >
-                        1 Año
-                    </button>
-                </div>
-            </div>
-        </div>
-
-        <!-- SELECTORES DE FECHA Y BOTÓN APLICAR -->
-        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-3 pt-4 border-t border-border-subtle/60">
-            <div class="lg:col-span-4 flex items-center gap-2 bg-surface-base border border-border-subtle rounded-2xl px-3 py-1.5">
-                <Calendar size={16} class="text-text-muted shrink-0" />
-                <div class="flex-1">
-                    <label for="startDateInput" class="block text-[9px] font-black uppercase tracking-wider text-text-muted">Desde</label>
-                    <input
-                        id="startDateInput"
-                        type="date"
-                        bind:value={startDate}
-                        class="w-full bg-transparent text-xs font-bold text-text-base focus:outline-none"
-                    />
-                </div>
-            </div>
-
-            <div class="lg:col-span-4 flex items-center gap-2 bg-surface-base border border-border-subtle rounded-2xl px-3 py-1.5">
-                <Calendar size={16} class="text-text-muted shrink-0" />
-                <div class="flex-1">
-                    <label for="endDateInput" class="block text-[9px] font-black uppercase tracking-wider text-text-muted">Hasta</label>
-                    <input
-                        id="endDateInput"
-                        type="date"
-                        bind:value={endDate}
-                        class="w-full bg-transparent text-xs font-bold text-text-base focus:outline-none"
-                    />
-                </div>
-            </div>
-
-            <div class="lg:col-span-4 flex items-center gap-2">
-                <button
-                    type="button"
-                    onclick={applyFilters}
-                    disabled={isSyncing}
-                    class="w-full h-11 rounded-2xl bg-brand-500 hover:bg-brand-600 active:scale-[0.98] text-white font-bold text-xs flex items-center justify-center gap-2 shadow-lg shadow-brand-500/20 transition-all cursor-pointer disabled:opacity-50"
+                <p
+                    class="text-text-muted text-[11px] font-bold uppercase tracking-wider mb-0.5"
                 >
-                    <RefreshCw size={16} class={isSyncing ? "animate-spin" : ""} />
-                    <span>{isSyncing ? "Consultando..." : "Actualizar Reporte"}</span>
-                </button>
-            </div>
-        </div>
-    </div>
-
-    <!-- CARDS DE RESUMEN KPI -->
-    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <!-- Total Artículos -->
-        <div class="bg-surface-raised border border-border-subtle rounded-3xl p-5 shadow-lg relative overflow-hidden group hover:border-brand-500/40 transition-all">
-            <div class="flex items-center justify-between mb-3">
-                <div class="p-2.5 rounded-2xl bg-blue-500/10 text-blue-500 border border-blue-500/20">
-                    <Package size={22} />
-                </div>
-                <span class="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-surface-base text-text-muted border border-border-subtle">
-                    Catálogo
-                </span>
-            </div>
-            <p class="text-[11px] font-bold text-text-muted uppercase tracking-wider mb-0.5">Artículos Analizados</p>
-            <p class="text-2xl sm:text-3xl font-black text-text-base">
-                {summaryStats.totalArticulos.toLocaleString("es-VE")}
-            </p>
-            <p class="text-[10px] text-text-muted mt-1.5 flex items-center gap-1.5">
-                <span class="text-emerald-500 font-bold">{summaryStats.conStock} con stock</span> • 
-                <span class="text-rose-500 font-bold">{summaryStats.sinStock} sin stock</span>
-            </p>
-        </div>
-
-        <!-- Unidades Vendidas -->
-        <div class="bg-surface-raised border border-border-subtle rounded-3xl p-5 shadow-lg relative overflow-hidden group hover:border-emerald-500/40 transition-all">
-            <div class="flex items-center justify-between mb-3">
-                <div class="p-2.5 rounded-2xl bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">
-                    <ShoppingCart size={22} />
-                </div>
-                <span class="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
-                    Neto Facturado
-                </span>
-            </div>
-            <p class="text-[11px] font-bold text-text-muted uppercase tracking-wider mb-0.5">Unidades Vendidas</p>
-            <p class="text-2xl sm:text-3xl font-black text-emerald-600 dark:text-emerald-400">
-                {Number(summaryStats.totalVentas.toFixed(2)).toLocaleString("es-VE")}
-            </p>
-            <p class="text-[10px] text-text-muted mt-1.5">
-                Total acumulado en el rango seleccionado.
-            </p>
-        </div>
-
-        <!-- Monto Total Ventas -->
-        <div class="bg-surface-raised border border-border-subtle rounded-3xl p-5 shadow-lg relative overflow-hidden group hover:border-purple-500/40 transition-all">
-            <div class="flex items-center justify-between mb-3">
-                <div class="p-2.5 rounded-2xl bg-purple-500/10 text-purple-500 border border-purple-500/20">
-                    <ShoppingBag size={22} />
-                </div>
-                <span class="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20">
-                    Total Facturado
-                </span>
-            </div>
-            <p class="text-[11px] font-bold text-text-muted uppercase tracking-wider mb-0.5">Valor de Ventas</p>
-            <p class="text-2xl sm:text-3xl font-black text-purple-600 dark:text-purple-400">
-                ${formatCurrency(summaryStats.totalMonto)}
-            </p>
-            <p class="text-[10px] text-text-muted mt-1.5">
-                Facturas menos devoluciones en el rango.
-            </p>
-        </div>
-
-        <!-- Promedio Diario Global (VPD) -->
-        <div class="bg-surface-raised border border-border-subtle rounded-3xl p-5 shadow-lg relative overflow-hidden group hover:border-amber-500/40 transition-all">
-            <div class="flex items-center justify-between mb-3">
-                <div class="p-2.5 rounded-2xl bg-amber-500/10 text-amber-500 border border-amber-500/20">
-                    <Clock size={22} />
-                </div>
-                <span class="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
-                    {data.businessDays || 1} días hábiles
-                </span>
-            </div>
-            <p class="text-[11px] font-bold text-text-muted uppercase tracking-wider mb-0.5">Promedio de Ventas Diario</p>
-            <p class="text-2xl sm:text-3xl font-black text-amber-600 dark:text-amber-400">
-                {Number(summaryStats.vpdGlobal.toFixed(2)).toLocaleString("es-VE")}
-            </p>
-            <p class="text-[10px] text-text-muted mt-1.5">
-                Ritmo promedio global de unidades / día.
-            </p>
-        </div>
-    </div>
-
-    <!-- SECCIÓN DE TABLA Y FILTROS AVANZADOS (LÍNEA, SUBLÍNEA, CATEGORÍA, ABC, XYZ, BUSCADOR) -->
-    <div class="bg-surface-raised border border-border-subtle rounded-3xl p-6 shadow-xl space-y-6">
-        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-border-subtle/60">
-            <div>
-                <h2 class="text-lg font-black text-text-base flex items-center gap-2">
-                    <Layers size={20} class="text-brand-500" />
-                    Listado de Artículos Categorizados
-                </h2>
-                <p class="text-xs text-text-muted">
-                    Haz clic en cualquier artículo para abrir su gráfica histórica y ver qué asesor comercial lo vendió más.
+                    Clase A (Líderes)
+                </p>
+                <p
+                    class="text-2xl sm:text-3xl font-black text-emerald-800 dark:text-emerald-300"
+                >
+                    {stats.countA.toLocaleString()}
+                </p>
+                <p class="text-[10px] text-text-muted mt-1.5 line-clamp-1">
+                    Vendidos por más del 75% del equipo.
                 </p>
             </div>
 
-            {#if hasActiveLocalFilters}
-                <button
-                    type="button"
-                    onclick={resetLocalFilters}
-                    class="self-start sm:self-auto px-3 py-1.5 rounded-xl text-xs font-bold bg-surface-base border border-border-subtle text-text-muted hover:text-rose-500 hover:border-rose-500/30 transition-colors flex items-center gap-1.5 cursor-pointer"
-                >
-                    <X size={14} />
-                    <span>Limpiar Filtros</span>
-                </button>
-            {/if}
-        </div>
-
-        <!-- BARRA DE FILTROS AVANZADOS -->
-        <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-            <!-- Buscador -->
-            <div class="sm:col-span-2 relative">
-                <Search size={16} class="absolute left-3.5 top-1/2 -translate-y-1/2 text-text-muted" />
-                <input
-                    type="text"
-                    bind:value={searchTerm}
-                    placeholder="Buscar código, descripción..."
-                    class="w-full bg-surface-base border border-border-subtle rounded-2xl pl-10 pr-10 py-2.5 text-xs text-text-base focus:outline-none focus:border-brand-500"
-                />
-                {#if searchTerm}
-                    <button
-                        type="button"
-                        onclick={() => (searchTerm = "")}
-                        class="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-base cursor-pointer"
+            <!-- 2. AZUL: CLASE B -->
+            <div
+                class="bg-surface-raised border transition-all rounded-3xl p-5 relative overflow-hidden group cursor-pointer {selectedCategorizacion ===
+                'B'
+                    ? 'border-blue-500 ring-2 ring-blue-500/20 bg-blue-500/10'
+                    : 'border-border-subtle hover:border-blue-500/40'}"
+                onclick={() =>
+                    (selectedCategorizacion =
+                        selectedCategorizacion === 'B' ? '' : 'B')}
+                title="Filtrar por artículos Clase B"
+            >
+                <div
+                    class="absolute right-0 top-0 w-28 h-28 bg-blue-500/5 rounded-full blur-2xl group-hover:bg-blue-500/10 transition-colors"
+                ></div>
+                <div class="flex items-center justify-between mb-3">
+                    <div
+                        class="p-2 rounded-xl bg-blue-500/10 text-blue-700 dark:text-blue-400 border border-blue-500/20"
                     >
-                        <X size={14} />
-                    </button>
-                {/if}
+                        <Users size={20} />
+                    </div>
+                    <span
+                        class="text-[10px] font-black uppercase px-2 py-0.5 rounded-full {selectedCategorizacion ===
+                        'B'
+                            ? 'bg-blue-600 text-white'
+                            : 'bg-blue-500/10 text-blue-700 dark:text-blue-400 border border-blue-500/20'}"
+                    >
+                        {selectedCategorizacion === 'B'
+                            ? 'Filtrando'
+                            : '50% - 75% Asesores'}
+                    </span>
+                </div>
+                <p
+                    class="text-text-muted text-[11px] font-bold uppercase tracking-wider mb-0.5"
+                >
+                    Clase B (Populares)
+                </p>
+                <p
+                    class="text-2xl sm:text-3xl font-black text-blue-700 dark:text-blue-400"
+                >
+                    {stats.countB.toLocaleString()}
+                </p>
+                <p class="text-[10px] text-text-muted mt-1.5 line-clamp-1">
+                    Vendidos por el 50% al 75% de asesores.
+                </p>
             </div>
 
-            <!-- Línea -->
-            <div>
+            <!-- 3. ÁMBAR: CLASE C / D -->
+            <div
+                class="bg-surface-raised border transition-all rounded-3xl p-5 relative overflow-hidden group cursor-pointer {selectedCategorizacion ===
+                'CD' ||
+                selectedCategorizacion === 'C' ||
+                selectedCategorizacion === 'D'
+                    ? 'border-amber-500 ring-2 ring-amber-500/20 bg-amber-500/10'
+                    : 'border-border-subtle hover:border-amber-500/40'}"
+                onclick={() =>
+                    (selectedCategorizacion =
+                        selectedCategorizacion === 'CD' ||
+                        selectedCategorizacion === 'C' ||
+                        selectedCategorizacion === 'D'
+                            ? ''
+                            : 'CD')}
+                title="Filtrar por artículos Clase C y D"
+            >
+                <div
+                    class="absolute right-0 top-0 w-28 h-28 bg-amber-500/5 rounded-full blur-2xl group-hover:bg-amber-500/10 transition-colors"
+                ></div>
+                <div class="flex items-center justify-between mb-3">
+                    <div
+                        class="p-2 rounded-xl bg-amber-500/15 text-amber-800 dark:text-yellow-300 border border-amber-500/30"
+                    >
+                        <Package size={20} />
+                    </div>
+                    <span
+                        class="text-[10px] font-black uppercase px-2 py-0.5 rounded-full {selectedCategorizacion ===
+                        'CD' ||
+                        selectedCategorizacion === 'C' ||
+                        selectedCategorizacion === 'D'
+                            ? 'bg-amber-600 text-white'
+                            : 'bg-amber-500/15 text-amber-900 dark:text-yellow-300 border border-amber-500/30'}"
+                    >
+                        {selectedCategorizacion === 'CD' ||
+                        selectedCategorizacion === 'C' ||
+                        selectedCategorizacion === 'D'
+                            ? 'Filtrando'
+                            : '< 50% Asesores'}
+                    </span>
+                </div>
+                <p
+                    class="text-text-muted text-[11px] font-bold uppercase tracking-wider mb-0.5"
+                >
+                    Clase C / D (Ocasionales)
+                </p>
+                <p
+                    class="text-2xl sm:text-3xl font-black text-amber-800 dark:text-yellow-300"
+                >
+                    {stats.countCD.toLocaleString()}
+                </p>
+                <p class="text-[10px] text-text-muted mt-1.5 line-clamp-1">
+                    Vendidos por menos del 50% de asesores.
+                </p>
+            </div>
+
+            <!-- 4. ROJO / ROSE: CLASE F -->
+            <div
+                class="bg-surface-raised border transition-all rounded-3xl p-5 relative overflow-hidden group cursor-pointer {selectedCategorizacion ===
+                'F'
+                    ? 'border-rose-500 ring-2 ring-rose-500/20 bg-rose-500/10'
+                    : 'border-border-subtle hover:border-rose-500/40'}"
+                onclick={() =>
+                    (selectedCategorizacion =
+                        selectedCategorizacion === 'F' ? '' : 'F')}
+                title="Filtrar por artículos Clase F (Sin ventas)"
+            >
+                <div
+                    class="absolute right-0 top-0 w-28 h-28 bg-rose-500/5 rounded-full blur-2xl group-hover:bg-rose-500/10 transition-colors"
+                ></div>
+                <div class="flex items-center justify-between mb-3">
+                    <div
+                        class="p-2 rounded-xl bg-rose-500/10 text-rose-700 dark:text-rose-400 border border-rose-500/20"
+                    >
+                        <AlertTriangle size={20} />
+                    </div>
+                    <span
+                        class="text-[10px] font-black uppercase px-2 py-0.5 rounded-full {selectedCategorizacion ===
+                        'F'
+                            ? 'bg-rose-600 text-white'
+                            : 'bg-rose-500/10 text-rose-700 dark:text-rose-400 border border-rose-500/20'}"
+                    >
+                        {selectedCategorizacion === 'F'
+                            ? 'Filtrando'
+                            : '0% Ventas'}
+                    </span>
+                </div>
+                <p
+                    class="text-text-muted text-[11px] font-bold uppercase tracking-wider mb-0.5"
+                >
+                    Clase F (Sin Ventas)
+                </p>
+                <p
+                    class="text-2xl sm:text-3xl font-black text-rose-700 dark:text-rose-400"
+                >
+                    {stats.countF.toLocaleString()}
+                </p>
+                <p class="text-[10px] text-text-muted mt-1.5 line-clamp-1">
+                    Artículos sin ventas en el período.
+                </p>
+            </div>
+        </div>
+
+        <!-- FILTROS Y BÚSQUEDA -->
+        <div
+            class="bg-surface-base border border-border-subtle rounded-[32px] p-6 shadow-xl space-y-4"
+        >
+            <!-- Fila 1: Buscador (con escáner), Líneas, Sub-Líneas, Categorías -->
+            <div
+                class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 items-center"
+            >
+                <!-- 1. Buscador + Escáner -->
+                <div class="flex items-center gap-2 w-full">
+                    <div class="relative flex-1 h-12">
+                        <input
+                            type="text"
+                            placeholder="Buscar por código o descripción..."
+                            bind:value={searchTerm}
+                            class="w-full h-full bg-surface-raised pl-10 pr-8 rounded-2xl border border-border-subtle focus:border-brand-500/30 outline-none text-text-base text-sm font-bold placeholder:font-normal placeholder:text-text-muted transition-all"
+                        />
+                        <Search
+                            size={18}
+                            class="absolute left-3.5 top-1/2 -translate-y-1/2 text-text-muted"
+                        />
+                        {#if searchTerm}
+                            <button
+                                onclick={() => (searchTerm = "")}
+                                class="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-base cursor-pointer"
+                            >
+                                <X size={14} />
+                            </button>
+                        {/if}
+                    </div>
+                    <BarcodeScanner onScan={(code) => (searchTerm = code)} />
+                </div>
+
+                <!-- 2. Líneas -->
                 <Combobox
                     options={lineasOptions}
                     bind:value={selectedLinea}
-                    placeholder="Todas las Líneas"
-                    allLabel="Todas las Líneas"
-                    icon={Tag}
-                    buttonClass="h-10 text-xs"
+                    placeholder="Líneas (Todas)"
+                    allLabel="Líneas (Todas)"
                 />
-            </div>
 
-            <!-- Sublínea -->
-            <div>
+                <!-- 3. Sub-Líneas -->
                 <Combobox
                     options={sublineasOptions}
                     bind:value={selectedSublinea}
-                    placeholder="Todas las Sublíneas"
-                    allLabel="Todas las Sublíneas"
-                    icon={Tag}
-                    buttonClass="h-10 text-xs"
+                    placeholder="Sub-Líneas (Todas)"
+                    allLabel="Sub-Líneas (Todas)"
                 />
-            </div>
 
-            <!-- Categoría -->
-            <div>
+                <!-- 4. Categorías -->
                 <Combobox
                     options={categoriasOptions}
                     bind:value={selectedCategoria}
-                    placeholder="Todas las Categorías"
-                    allLabel="Todas las Categorías"
-                    icon={Layers}
-                    buttonClass="h-10 text-xs"
+                    placeholder="Categorías (Todas)"
+                    allLabel="Categorías (Todas)"
                 />
             </div>
 
-            <!-- Clasificación ABC -->
-            <div>
+            <!-- Fila 2: Categorización (por vendedores) & Estado de Stock -->
+            <div
+                class="grid grid-cols-1 md:grid-cols-2 gap-4 items-center pt-2 border-t border-border-subtle/50"
+            >
                 <Combobox
-                    options={abcOptions}
-                    bind:value={selectedABC}
-                    placeholder="Clasificación ABC"
-                    allLabel="Todos (ABC)"
-                    icon={Award}
-                    buttonClass="h-10 text-xs"
+                    options={categorizacionOptions}
+                    bind:value={selectedCategorizacion}
+                    placeholder="Categorización (Todas)"
+                    allLabel="Categorización (Todas)"
                 />
-            </div>
-        </div>
-
-        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 pt-2">
-            <!-- Clasificación XYZ -->
-            <div>
-                <Combobox
-                    options={xyzOptions}
-                    bind:value={selectedXYZ}
-                    placeholder="Clasificación XYZ"
-                    allLabel="Todos (XYZ)"
-                    icon={TrendingUp}
-                    buttonClass="h-10 text-xs"
-                />
-            </div>
-
-            <!-- Estado de Stock -->
-            <div>
                 <Combobox
                     options={stockStatusOptions}
                     bind:value={selectedStockStatus}
-                    placeholder="Estado de Stock"
-                    allLabel="Todos los Stocks"
-                    icon={Box}
-                    buttonClass="h-10 text-xs"
+                    placeholder="Estado de Stock (Todos)"
+                    allLabel="Estado de Stock (Todos)"
                 />
             </div>
 
-            <!-- Total de resultados -->
-            <div class="sm:col-span-2 flex items-center justify-end gap-3 text-xs text-text-muted font-bold">
-                <span>
-                    Mostrando <strong class="text-text-base">{filteredItems.length}</strong> de <strong class="text-text-base">{(data.analysisData || []).length}</strong> artículos
-                </span>
+            <!-- Fila 3: Sucursal, Fechas & Botón Calcular -->
+            <div
+                class="flex flex-col xl:flex-row gap-4 items-stretch xl:items-center justify-between pt-2 border-t border-border-subtle/50"
+            >
+                <!-- Select de Sucursal -->
+                <div class="w-full xl:w-80 shrink-0">
+                    <Combobox
+                        options={branchesOptions}
+                        bind:value={selectedBranch}
+                        placeholder="Sucursal por defecto"
+                        allLabel="Predeterminada"
+                        icon={Building}
+                        buttonClass="h-12"
+                    />
+                </div>
+
+                <!-- Fechas, Atajos y Botón Calcular -->
+                <div
+                    class="flex flex-wrap lg:flex-nowrap gap-3 items-center w-full xl:w-auto justify-end"
+                >
+                    <div
+                        class="flex items-center gap-2 bg-surface-raised border border-border-subtle rounded-2xl px-3 h-12 w-full sm:w-auto min-w-[250px] flex-1 lg:flex-initial"
+                    >
+                        <Calendar size={16} class="text-text-muted shrink-0" />
+                        <input
+                            type="date"
+                            bind:value={startDate}
+                            class="bg-transparent border-0 text-text-base focus:outline-none text-xs cursor-pointer font-bold w-full"
+                        />
+                        <span class="text-text-muted font-bold text-xs shrink-0"
+                            >a</span
+                        >
+                        <input
+                            type="date"
+                            bind:value={endDate}
+                            class="bg-transparent border-0 text-text-base focus:outline-none text-xs cursor-pointer font-bold w-full"
+                        />
+                    </div>
+
+                    <div
+                        class="flex items-center gap-1 bg-surface-raised border border-border-subtle rounded-2xl p-1 shrink-0 overflow-x-auto"
+                    >
+                        <button
+                            type="button"
+                            onclick={() => setQuickDate(7)}
+                            class="px-3 py-1.5 text-xs font-bold rounded-xl hover:bg-surface-soft text-text-muted hover:text-text-base transition-colors cursor-pointer"
+                            >7d</button
+                        >
+                        <button
+                            type="button"
+                            onclick={() => setQuickDate(30)}
+                            class="px-3 py-1.5 text-xs font-bold rounded-xl hover:bg-surface-soft text-text-muted hover:text-text-base transition-colors cursor-pointer"
+                            >30d</button
+                        >
+                        <button
+                            type="button"
+                            onclick={() => setQuickDate(90)}
+                            class="px-3 py-1.5 text-xs font-bold rounded-xl hover:bg-surface-soft text-text-muted hover:text-text-base transition-colors cursor-pointer"
+                            >90d</button
+                        >
+                        <button
+                            type="button"
+                            onclick={() => setQuickDate(180)}
+                            class="px-3 py-1.5 text-xs font-bold rounded-xl hover:bg-surface-soft text-text-muted hover:text-text-base transition-colors cursor-pointer"
+                            >6m</button
+                        >
+                        <button
+                            type="button"
+                            onclick={() => setQuickDate(365)}
+                            class="px-3 py-1.5 text-xs font-bold rounded-xl hover:bg-surface-soft text-text-muted hover:text-text-base transition-colors cursor-pointer"
+                            >1a</button
+                        >
+                    </div>
+
+                    <button
+                        type="button"
+                        onclick={applyFilters}
+                        disabled={isSyncing}
+                        class="h-12 px-8 rounded-2xl bg-brand-500 text-white font-black hover:scale-105 transition-all shadow-[0_0_20px_rgba(var(--brand-500-rgb),0.3)] w-full sm:w-auto shrink-0 cursor-pointer flex items-center justify-center gap-2"
+                    >
+                        {#if isSyncing}
+                            <RefreshCw size={16} class="animate-spin" />
+                        {/if}
+                        Calcular
+                    </button>
+                </div>
             </div>
         </div>
-
-        <!-- TABLA DE ARTÍCULOS CATEGORIZADOS -->
-        <div class="overflow-x-auto custom-scrollbar border border-border-subtle/80 rounded-2xl">
-            <table class="w-full text-left text-xs border-collapse">
-                <thead>
-                    <tr class="bg-surface-base/80 border-b border-border-subtle text-text-muted font-black uppercase text-[10px] tracking-wider">
-                        <th class="py-3.5 px-4 w-12 text-center">#</th>
-                        <th class="py-3.5 px-4">
-                            <button
-                                type="button"
-                                onclick={() => toggleSort("codigo")}
-                                class="flex items-center gap-1.5 hover:text-text-base uppercase cursor-pointer"
-                            >
-                                Artículo
-                                <ArrowUpDown size={12} class={sortBy === "codigo" ? "text-brand-500" : "opacity-40"} />
-                            </button>
-                        </th>
-                        <th class="py-3.5 px-4 text-center">Categorización</th>
-                        <th class="py-3.5 px-4 text-right">
-                            <button
-                                type="button"
-                                onclick={() => toggleSort("stock")}
-                                class="inline-flex items-center gap-1.5 hover:text-text-base uppercase cursor-pointer"
-                            >
-                                Stock Actual
-                                <ArrowUpDown size={12} class={sortBy === "stock" ? "text-brand-500" : "opacity-40"} />
-                            </button>
-                        </th>
-                        <th class="py-3.5 px-4 text-right">
-                            <button
-                                type="button"
-                                onclick={() => toggleSort("ventas")}
-                                class="inline-flex items-center gap-1.5 hover:text-text-base uppercase cursor-pointer"
-                            >
-                                Ventas (Rango)
-                                <ArrowUpDown size={12} class={sortBy === "ventas" ? "text-brand-500" : "opacity-40"} />
-                            </button>
-                        </th>
-                        <th class="py-3.5 px-4 text-right">
-                            <button
-                                type="button"
-                                onclick={() => toggleSort("vpd")}
-                                class="inline-flex items-center gap-1.5 hover:text-text-base uppercase cursor-pointer"
-                            >
-                                Promedio Diario (VPD)
-                                <ArrowUpDown size={12} class={sortBy === "vpd" ? "text-brand-500" : "opacity-40"} />
-                            </button>
-                        </th>
-                        <th class="py-3.5 px-4 text-right">
-                            <button
-                                type="button"
-                                onclick={() => toggleSort("monto")}
-                                class="inline-flex items-center gap-1.5 hover:text-text-base uppercase cursor-pointer"
-                            >
-                                Monto ($)
-                                <ArrowUpDown size={12} class={sortBy === "monto" ? "text-brand-500" : "opacity-40"} />
-                            </button>
-                        </th>
-                        <th class="py-3.5 px-4 text-center">Acción</th>
-                    </tr>
-                </thead>
-                <tbody class="divide-y divide-border-subtle/40 font-medium">
-                    {#each filteredItems as item, idx}
-                        {@const stockVal = Number(item.stock_actual) || 0}
-                        {@const hasStock = stockVal > 0}
-                        {@const unit = getUnitLabel(item)}
-                        <tr
-                            onclick={() => openArticleModal(item)}
-                            class="hover:bg-surface-soft/80 transition-colors cursor-pointer group"
-                        >
-                            <!-- Índice -->
-                            <td class="py-3.5 px-4 text-center font-mono font-bold text-text-muted text-[11px]">
-                                {idx + 1}
-                            </td>
-
-                            <!-- Artículo (Código + Descripción + Categorías) -->
-                            <td class="py-3.5 px-4 min-w-[280px]">
-                                <div class="space-y-0.5">
-                                    <div class="flex items-center gap-2">
-                                        <span class="font-mono font-black text-brand-600 dark:text-brand-400 text-xs">
-                                            {item.co_art}
-                                        </span>
-                                        <span class="text-[9px] font-black uppercase px-1.5 py-0.5 rounded bg-surface-base text-text-muted border border-border-subtle">
-                                            {unit}
-                                        </span>
-                                    </div>
-                                    <p class="font-bold text-text-base text-xs group-hover:text-brand-500 transition-colors line-clamp-2">
-                                        {item.des_art || item.co_art}
-                                    </p>
-                                    <div class="flex items-center gap-2 text-[10px] text-text-muted">
-                                        {#if item.des_lin}
-                                            <span class="truncate max-w-[130px]">{item.des_lin}</span>
-                                        {/if}
-                                        {#if item.des_cat}
-                                            <span>•</span>
-                                            <span class="truncate max-w-[130px]">{item.des_cat}</span>
-                                        {/if}
-                                    </div>
-                                </div>
-                            </td>
-
-                            <!-- Categorización ABC / XYZ -->
-                            <td class="py-3.5 px-4 text-center">
-                                <div class="inline-flex items-center gap-1.5">
-                                    <!-- ABC -->
-                                    <span
-                                        class="text-[10px] font-black px-2 py-0.5 rounded-lg border {item.clasificacion_abc === 'A'
-                                            ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30'
-                                            : item.clasificacion_abc === 'B'
-                                              ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30'
-                                              : 'bg-slate-500/15 text-slate-600 dark:text-slate-400 border-slate-500/30'}"
-                                        title="Clasificación ABC por Valor de Ventas"
-                                    >
-                                        {item.clasificacion_abc || 'C'}
-                                    </span>
-                                    <!-- XYZ -->
-                                    <span
-                                        class="text-[10px] font-black px-2 py-0.5 rounded-lg border {item.clasificacion_xyz === 'X'
-                                            ? 'bg-blue-500/15 text-blue-600 dark:text-blue-400 border-blue-500/30'
-                                            : item.clasificacion_xyz === 'Y'
-                                              ? 'bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 border-indigo-500/30'
-                                              : 'bg-purple-500/15 text-purple-600 dark:text-purple-400 border-purple-500/30'}"
-                                        title="Clasificación XYZ por Regularidad de Demanda"
-                                    >
-                                        {item.clasificacion_xyz || 'Z'}
-                                    </span>
-                                </div>
-                            </td>
-
-                            <!-- Stock Actual -->
-                            <td class="py-3.5 px-4 text-right font-mono">
-                                <div class="inline-flex flex-col items-end">
-                                    <span class="font-black text-xs {hasStock ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-500'}">
-                                        {formatUnitQty(stockVal, item)}
-                                    </span>
-                                    <span class="text-[9px] font-bold {hasStock ? 'text-emerald-600/70 dark:text-emerald-400/70' : 'text-rose-500/70'}">
-                                        {hasStock ? 'Disponible' : 'Agotado'}
-                                    </span>
-                                </div>
-                            </td>
-
-                            <!-- Ventas Netas Totales -->
-                            <td class="py-3.5 px-4 text-right font-mono font-black text-xs text-text-base">
-                                {formatUnitQty(item.ventas_netas, item)}
-                            </td>
-
-                            <!-- Promedio Diario (VPD) -->
-                            <td class="py-3.5 px-4 text-right font-mono">
-                                <span class="font-bold text-xs text-amber-600 dark:text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded-lg border border-amber-500/20">
-                                    {Number((item.vpd || 0).toFixed(2)).toLocaleString("es-VE")} / día
-                                </span>
-                            </td>
-
-                            <!-- Monto ($) -->
-                            <td class="py-3.5 px-4 text-right font-mono font-black text-xs text-purple-600 dark:text-purple-400">
-                                ${formatCurrency(item.valor_ventas)}
-                            </td>
-
-                            <!-- Botón Acción -->
-                            <td class="py-3.5 px-4 text-center">
+        <!-- TABLA PRINCIPAL 100% ANCHO DE LA CARD -->
+        <div class="w-full bg-surface-raised border border-border-subtle rounded-3xl overflow-hidden shadow-xl">
+            <div class="overflow-x-auto h-[78vh] min-h-[500px] custom-scrollbar">
+                <table class="w-full text-left text-xs border-collapse relative">
+                    <thead class="sticky top-0 bg-surface-base/95 backdrop-blur-md z-20 shadow-sm">
+                        <tr class="border-b border-border-subtle text-text-muted font-black uppercase text-[10px] tracking-wider">
+                            <th class="py-3.5 px-4 w-12 text-center">#</th>
+                            <th class="py-3.5 px-4">
                                 <button
                                     type="button"
-                                    onclick={(e) => {
-                                        e.stopPropagation();
-                                        openArticleModal(item);
-                                    }}
-                                    class="px-3 py-1.5 rounded-xl text-xs font-bold bg-brand-500/10 hover:bg-brand-500 hover:text-white text-brand-500 border border-brand-500/20 transition-all flex items-center gap-1.5 mx-auto cursor-pointer"
+                                    onclick={() => toggleSort("codigo")}
+                                    class="flex items-center gap-1.5 hover:text-text-base uppercase cursor-pointer"
                                 >
-                                    <BarChart2 size={13} />
-                                    <span>Vendedores</span>
+                                    Artículo
+                                    <ArrowUpDown size={12} class={sortBy === "codigo" ? "text-brand-500" : "opacity-40"} />
                                 </button>
-                            </td>
+                            </th>
+                            <th class="py-3.5 px-4 text-center">
+                                <button
+                                    type="button"
+                                    onclick={() => toggleSort("categorizacion")}
+                                    class="inline-flex items-center gap-1.5 hover:text-text-base uppercase cursor-pointer justify-center"
+                                >
+                                    Categorización
+                                    <ArrowUpDown size={12} class={sortBy === "categorizacion" ? "text-brand-500" : "opacity-40"} />
+                                </button>
+                            </th>
+                            <th class="py-3.5 px-4 text-right">
+                                <button
+                                    type="button"
+                                    onclick={() => toggleSort("stock")}
+                                    class="inline-flex items-center gap-1.5 hover:text-text-base uppercase cursor-pointer"
+                                >
+                                    Stock Actual
+                                    <ArrowUpDown size={12} class={sortBy === "stock" ? "text-brand-500" : "opacity-40"} />
+                                </button>
+                            </th>
+                            <th class="py-3.5 px-4 text-right">
+                                <button
+                                    type="button"
+                                    onclick={() => toggleSort("ventas")}
+                                    class="inline-flex items-center gap-1.5 hover:text-text-base uppercase cursor-pointer"
+                                >
+                                    Ventas (Rango)
+                                    <ArrowUpDown size={12} class={sortBy === "ventas" ? "text-brand-500" : "opacity-40"} />
+                                </button>
+                            </th>
+                            <th class="py-3.5 px-4 text-center">Acción</th>
                         </tr>
-                    {/each}
+                    </thead>
+                    <tbody class="divide-y divide-border-subtle font-medium">
+                        {#each filteredItems as item, idx}
+                            {@const stockVal = Number(item.stock_actual) || 0}
+                            {@const hasStock = stockVal > 0}
+                            {@const unit = getUnitLabel(item)}
+                            {@const catInfo = getCategorizacion(item)}
+                            <tr
+                                onclick={() => openArticleModal(item)}
+                                class="hover:bg-surface-soft/80 transition-colors cursor-pointer group {selectedArticle?.co_art === item.co_art && detailModalOpen ? 'bg-brand-500/10' : ''}"
+                            >
+                                <!-- Índice -->
+                                <td class="py-3.5 px-4 text-center font-mono font-bold text-text-muted text-[11px]">
+                                    {idx + 1}
+                                </td>
 
-                    {#if filteredItems.length === 0}
-                        <tr>
-                            <td colspan="8" class="py-16 text-center text-text-muted space-y-2">
-                                <Package size={36} class="mx-auto opacity-30 mb-2" />
-                                <p class="text-sm font-bold text-text-base">No se encontraron artículos</p>
-                                <p class="text-xs">Prueba ajustando los filtros de búsqueda, categorías o rango de fechas.</p>
-                            </td>
-                        </tr>
-                    {/if}
-                </tbody>
-            </table>
+                                <!-- Artículo (Código + Descripción + Categorías) -->
+                                <td class="py-3.5 px-4 min-w-[280px]">
+                                    <div class="space-y-0.5">
+                                        <div class="flex items-center gap-2">
+                                            <span class="font-mono font-black text-brand-600 dark:text-brand-400 text-xs">
+                                                {item.co_art}
+                                            </span>
+                                            <span class="text-[9px] font-black uppercase px-1.5 py-0.5 rounded bg-surface-base text-text-muted border border-border-subtle">
+                                                {unit}
+                                            </span>
+                                        </div>
+                                        <p class="font-bold text-text-base text-xs group-hover:text-brand-500 transition-colors line-clamp-2">
+                                            {item.des_art || item.co_art}
+                                        </p>
+                                        <div class="flex items-center gap-2 text-[10px] text-text-muted">
+                                            {#if item.des_lin}
+                                                <span class="truncate max-w-[150px]">{item.des_lin}</span>
+                                            {/if}
+                                            {#if item.des_cat}
+                                                <span>•</span>
+                                                <span class="truncate max-w-[150px]">{item.des_cat}</span>
+                                            {/if}
+                                        </div>
+                                    </div>
+                                </td>
+
+                                <!-- Categorización según vendedores -->
+                                <td class="py-3.5 px-4 text-center">
+                                    <div class="inline-flex flex-col items-center gap-0.5">
+                                        <span
+                                            class="text-xs font-black px-2.5 py-0.5 rounded-lg border {catInfo.badgeClass}"
+                                            title="{catInfo.label}: {catInfo.desc} ({catInfo.cant}/{catInfo.total} asesores)"
+                                        >
+                                            {catInfo.label}
+                                        </span>
+                                        <span class="text-[10px] text-text-muted font-mono font-bold">
+                                            {catInfo.pct.toFixed(0)}% ({catInfo.cant}/{catInfo.total} vend.)
+                                        </span>
+                                    </div>
+                                </td>
+
+                                <!-- Stock Actual -->
+                                <td class="py-3.5 px-4 text-right font-mono">
+                                    <div class="inline-flex flex-col items-end">
+                                        <span class="font-black text-xs {hasStock ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-500'}">
+                                            {formatUnitQty(stockVal, item)}
+                                        </span>
+                                        <span class="text-[9px] font-bold {hasStock ? 'text-emerald-600/70 dark:text-emerald-400/70' : 'text-rose-500/70'}">
+                                            {hasStock ? 'Disponible' : 'Agotado'}
+                                        </span>
+                                    </div>
+                                </td>
+
+                                <!-- Ventas Netas Totales -->
+                                <td class="py-3.5 px-4 text-right font-mono font-black text-xs text-text-base">
+                                    {formatUnitQty(Number(item.ventas_netas) || 0, item)}
+                                </td>
+
+                                <!-- Botón Acción -->
+                                <td class="py-3.5 px-4 text-center">
+                                    <button
+                                        type="button"
+                                        onclick={(e) => {
+                                            e.stopPropagation();
+                                            openArticleModal(item);
+                                        }}
+                                        class="px-3 py-1.5 rounded-xl text-xs font-bold bg-brand-500/10 hover:bg-brand-500 hover:text-white text-brand-500 border border-brand-500/20 transition-all flex items-center gap-1.5 mx-auto cursor-pointer"
+                                    >
+                                        <BarChart2 size={13} />
+                                        <span>Vendedores</span>
+                                    </button>
+                                </td>
+                            </tr>
+                        {/each}
+
+                        {#if filteredItems.length === 0}
+                            <tr>
+                                <td colspan="6" class="py-16 text-center text-text-muted space-y-2">
+                                    <Package size={36} class="mx-auto opacity-30 mb-2" />
+                                    <p class="text-sm font-bold text-text-base">No se encontraron artículos</p>
+                                    <p class="text-xs">Prueba ajustando los filtros de búsqueda, categorías o rango de fechas.</p>
+                                </td>
+                            </tr>
+                        {/if}
+                    </tbody>
+                </table>
+            </div>
         </div>
-    </div>
+    {/if}
 </div>
 
 <!-- MODAL: DETALLE DE ARTÍCULO Y RENDIMIENTO POR VENDEDOR -->
 {#if detailModalOpen && selectedArticle}
+    {@const catModal = getCategorizacion(selectedArticle)}
     <div
         class="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-black/75 backdrop-blur-sm animate-in fade-in duration-200"
         onclick={closeArticleModal}
@@ -1098,11 +1315,9 @@
                         <span class="text-xs font-black uppercase px-2 py-0.5 rounded-lg bg-surface-raised text-text-muted border border-border-subtle">
                             {getUnitLabel(selectedArticle)}
                         </span>
-                        {#if selectedArticle.clasificacion_abc}
-                            <span class="text-xs font-black px-2 py-0.5 rounded-lg bg-emerald-500/15 text-emerald-500 border border-emerald-500/20">
-                                Clase {selectedArticle.clasificacion_abc}{selectedArticle.clasificacion_xyz || ''}
-                            </span>
-                        {/if}
+                        <span class="text-xs font-black px-2.5 py-0.5 rounded-lg border {catModal.badgeClass}">
+                            {catModal.label} ({catModal.pct.toFixed(0)}% asesores)
+                        </span>
                     </div>
                     <h2 class="text-lg sm:text-xl font-black text-text-base">
                         {selectedArticle.des_art || selectedArticle.co_art}
@@ -1148,8 +1363,8 @@
                         </button>
                     </div>
                 {:else if articleData}
-                    <!-- MINI KPIS DEL ARTÍCULO -->
-                    <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    <!-- MINI KPIS DEL ARTÍCULO (SOLO CANTIDADES Y VENDEDORES) -->
+                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
                         <div class="p-4 rounded-2xl bg-surface-base/80 border border-border-subtle/80 space-y-1">
                             <span class="text-[10px] font-bold uppercase tracking-wider text-text-muted">Stock Actual</span>
                             <p class="text-lg sm:text-xl font-black {selectedArticle.stock_actual > 0 ? 'text-emerald-500' : 'text-rose-500'}">
@@ -1165,21 +1380,14 @@
                         </div>
 
                         <div class="p-4 rounded-2xl bg-surface-base/80 border border-border-subtle/80 space-y-1">
-                            <span class="text-[10px] font-bold uppercase tracking-wider text-text-muted">Promedio Diario (VPD)</span>
-                            <p class="text-lg sm:text-xl font-black text-amber-500">
-                                {Number((selectedArticle.vpd || 0).toFixed(2)).toLocaleString("es-VE")} / día
-                            </p>
-                        </div>
-
-                        <div class="p-4 rounded-2xl bg-surface-base/80 border border-border-subtle/80 space-y-1">
-                            <span class="text-[10px] font-bold uppercase tracking-wider text-text-muted">Monto Total</span>
-                            <p class="text-lg sm:text-xl font-black text-purple-500">
-                                ${formatCurrency(articleData.totals?.total_monto_vendidos || 0)}
+                            <span class="text-[10px] font-bold uppercase tracking-wider text-text-muted">Asesores Activos</span>
+                            <p class="text-lg sm:text-xl font-black text-blue-500">
+                                {(articleData.ranking || []).filter((r) => !r.inactivo).length} / {catModal.total} ({catModal.pct.toFixed(0)}%)
                             </p>
                         </div>
                     </div>
 
-                    <!-- HERO: TOP VENDEDOR DEL ARTÍCULO -->
+                    <!-- HERO: TOP VENDEDOR DEL ARTÍCULO (SIN MONTO EN $) -->
                     {#if topArticleSeller}
                         <div class="p-5 rounded-3xl bg-gradient-to-r from-brand-500/15 via-purple-500/10 to-transparent border border-brand-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-md">
                             <div class="flex items-center gap-3.5">
@@ -1209,19 +1417,19 @@
                                 <p class="text-xl font-black text-brand-500">
                                     {formatUnitQty(topArticleSeller.cant_vendida, selectedArticle)} {getUnitLabel(selectedArticle)}
                                 </p>
-                                <p class="text-[10px] font-mono text-text-muted">
-                                    ${formatCurrency(topArticleSeller.monto_total)} ({topArticleSeller.facturas_count} docs)
+                                <p class="text-[10px] font-mono text-text-muted font-bold">
+                                    {topArticleSeller.facturas_count} {topArticleSeller.facturas_count === 1 ? 'documento' : 'documentos'}
                                 </p>
                             </div>
                         </div>
                     {/if}
 
-                    <!-- GRÁFICA DE EVOLUCIÓN TEMPORAL -->
+                    <!-- GRÁFICA DE EVOLUCIÓN TEMPORAL EN CANTIDAD VENDIDA -->
                     <div class="p-5 rounded-3xl bg-surface-base/80 border border-border-subtle space-y-4 shadow-sm">
                         <div class="flex items-center justify-between">
                             <h3 class="text-sm font-black text-text-base flex items-center gap-2">
                                 <TrendingUp size={18} class="text-blue-500" />
-                                Evolución Temporal de Ventas ({articleData.tipoAgrupacion === 'diario' ? 'Diaria' : articleData.tipoAgrupacion === 'semanal' ? 'Semanal' : 'Mensual'})
+                                Evolución Temporal de Unidades Vendidas ({articleData.tipoAgrupacion === 'diario' ? 'Diaria' : articleData.tipoAgrupacion === 'semanal' ? 'Semanal' : 'Mensual'})
                             </h3>
                             <span class="text-xs text-text-muted font-bold">
                                 {articleData.timeline?.length || 0} períodos
@@ -1233,30 +1441,34 @@
                         </div>
                     </div>
 
-                    <!-- RANKING COMPLETO DE VENDEDORES PARA ESTE ARTÍCULO -->
+                    <!-- RANKING COMPLETO DE VENDEDORES (SOLO CANTIDADES Y DOCUMENTOS) -->
                     <div class="space-y-4">
                         <div class="flex items-center justify-between pb-2 border-b border-border-subtle/60">
                             <h3 class="text-sm font-black text-text-base flex items-center gap-2">
                                 <Users size={18} class="text-purple-500" />
-                                Desglose y Ranking de Ventas por Asesor Comercial
+                                Desglose y Ranking de Unidades Vendidas por Asesor Comercial
                             </h3>
                             <span class="text-xs text-text-muted">
-                                {articleData.ranking?.length || 0} asesores con ventas
+                                {articleData.ranking?.length || 0} asesores registrados
                             </span>
                         </div>
 
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
                             {#each (articleData.ranking || []) as ven, rankIdx}
-                                {@const isTop = rankIdx === 0}
-                                {@const color = VENDOR_COLORS[rankIdx % VENDOR_COLORS.length]}
+                                {@const hasSales = (Number(ven.cant_vendida) || 0) > 0}
+                                {@const isTop = rankIdx === 0 && hasSales && !ven.inactivo}
                                 <div class="p-4 rounded-2xl border transition-all flex flex-col justify-between {isTop
                                     ? 'bg-brand-500/10 border-brand-500/40 shadow-sm'
-                                    : 'bg-surface-base/80 border-border-subtle hover:border-border-subtle/80'}">
+                                    : hasSales
+                                    ? 'bg-surface-base/80 border-border-subtle hover:border-border-subtle/80'
+                                    : 'bg-surface-base/40 border-border-subtle/50 opacity-80'}">
                                     <div class="flex items-start justify-between gap-2 mb-2">
                                         <div class="flex items-center gap-2.5 min-w-0">
                                             <span class="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-black shrink-0 {isTop
                                                 ? 'bg-brand-500 text-white shadow-sm'
-                                                : 'bg-surface-raised text-text-muted border border-border-subtle'}">
+                                                : hasSales
+                                                ? 'bg-surface-raised text-text-muted border border-border-subtle'
+                                                : 'bg-surface-base text-text-muted/60 border border-border-subtle/40'}">
                                                 {rankIdx + 1}
                                             </span>
                                             <div class="min-w-0">
@@ -1264,18 +1476,20 @@
                                                     {ven.ven_des}
                                                     {#if ven.inactivo}
                                                         <span class="text-[8px] font-bold text-rose-500 bg-rose-500/10 px-1 py-0.2 rounded">Inactivo</span>
+                                                    {:else if !hasSales}
+                                                        <span class="text-[8px] font-bold text-amber-500 bg-amber-500/10 px-1 py-0.2 rounded">Sin ventas</span>
                                                     {/if}
                                                 </h4>
-                                                <p class="text-[10px] font-mono text-text-muted">{ven.co_ven} • {ven.facturas_count} facturas</p>
+                                                <p class="text-[10px] font-mono text-text-muted">{ven.co_ven} • {ven.facturas_count} {ven.facturas_count === 1 ? 'factura' : 'facturas'}</p>
                                             </div>
                                         </div>
 
                                         <div class="text-right shrink-0">
-                                            <span class="font-mono font-black text-sm text-text-base">
-                                                {formatUnitQty(ven.cant_vendida, selectedArticle)}
+                                            <span class="font-mono font-black text-sm {hasSales ? 'text-text-base' : 'text-text-muted'}">
+                                                {formatUnitQty(ven.cant_vendida, selectedArticle)} {getUnitLabel(selectedArticle)}
                                             </span>
-                                            <span class="text-[10px] text-text-muted block">
-                                                ${formatCurrency(ven.monto_total)}
+                                            <span class="text-[10px] text-text-muted block font-medium">
+                                                {hasSales ? `${ven.facturas_count} ${ven.facturas_count === 1 ? 'doc' : 'docs'}` : '0 docs'}
                                             </span>
                                         </div>
                                     </div>
@@ -1284,11 +1498,11 @@
                                     <div class="space-y-1 mt-1">
                                         <div class="flex items-center justify-between text-[10px] font-mono">
                                             <span class="text-text-muted">Participación</span>
-                                            <span class="font-bold text-brand-500">{ven.pct_participacion}%</span>
+                                            <span class="font-bold {hasSales ? 'text-brand-500' : 'text-text-muted'}">{ven.pct_participacion}%</span>
                                         </div>
                                         <div class="w-full bg-surface-raised h-2 rounded-full overflow-hidden border border-border-subtle/50">
                                             <div
-                                                class="h-full rounded-full transition-all duration-500 {isTop ? 'bg-brand-500' : 'bg-blue-500/80'}"
+                                                class="h-full rounded-full transition-all duration-500 {isTop ? 'bg-brand-500' : hasSales ? 'bg-blue-500/80' : 'bg-transparent'}"
                                                 style="width: {ven.pct_participacion}%"
                                             ></div>
                                         </div>

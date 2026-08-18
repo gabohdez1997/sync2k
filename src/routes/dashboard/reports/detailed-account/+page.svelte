@@ -216,36 +216,32 @@
     <!-- METRICS CARDS -->
     {#if data.report?.metrics}
         {@const metrics = data.report.metrics}
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-6" in:slide>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-5" in:slide>
             
-            <!-- Card 1: Documentos Activos -->
-            <div class="glass p-6 rounded-3xl border border-border-subtle shadow-xl relative overflow-hidden group">
-                <div class="absolute -right-4 -bottom-4 w-24 h-24 bg-blue-500/10 rounded-full blur-2xl group-hover:scale-125 transition-transform duration-500"></div>
-                <div class="flex items-start justify-between">
-                    <div class="space-y-2">
-                        <span class="text-xs font-black uppercase tracking-widest text-text-muted">Documentos Totales</span>
-                        <h2 class="text-2xl font-black text-text-base tracking-tight">{metrics.doc_count}</h2>
-                        <p class="text-xs text-text-muted font-bold">Registrados en Sistema</p>
-                    </div>
-                    <div class="h-10 w-10 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-500">
+            <!-- Card 1: Documentos Totales -->
+            <div class="bg-surface-raised border border-border-subtle hover:border-blue-500/30 transition-all rounded-3xl p-5 relative overflow-hidden group">
+                <div class="absolute right-0 top-0 w-28 h-28 bg-blue-500/5 rounded-full blur-2xl group-hover:bg-blue-500/10 transition-colors"></div>
+                <div class="flex items-center justify-between mb-3">
+                    <div class="p-2 rounded-xl bg-blue-500/10 text-blue-700 dark:text-blue-400 border border-blue-500/20">
                         <FileText size={20} />
                     </div>
                 </div>
+                <p class="text-text-muted text-[11px] font-bold uppercase tracking-wider mb-0.5">Documentos Totales</p>
+                <p class="text-2xl sm:text-3xl font-black text-text-base tracking-tight">{metrics.doc_count}</p>
+                <p class="text-[10px] text-text-muted font-bold mt-1.5 line-clamp-1">Registrados en Sistema</p>
             </div>
 
-            <!-- Card 2: Clientes Registrados -->
-            <div class="glass p-6 rounded-3xl border border-border-subtle shadow-xl relative overflow-hidden group">
-                <div class="absolute -right-4 -bottom-4 w-24 h-24 bg-green-500/10 rounded-full blur-2xl group-hover:scale-125 transition-transform duration-500"></div>
-                <div class="flex items-start justify-between">
-                    <div class="space-y-2">
-                        <span class="text-xs font-black uppercase tracking-widest text-text-muted">Clientes Encontrados</span>
-                        <h2 class="text-2xl font-black text-text-base tracking-tight">{groupedClients.length}</h2>
-                        <p class="text-xs text-text-muted font-bold">Asociados a Documentos</p>
-                    </div>
-                    <div class="h-10 w-10 rounded-xl bg-green-500/10 border border-green-500/20 flex items-center justify-center text-green-500">
+            <!-- Card 2: Clientes Encontrados -->
+            <div class="bg-surface-raised border border-border-subtle hover:border-emerald-500/30 transition-all rounded-3xl p-5 relative overflow-hidden group">
+                <div class="absolute right-0 top-0 w-28 h-28 bg-emerald-500/5 rounded-full blur-2xl group-hover:bg-emerald-500/10 transition-colors"></div>
+                <div class="flex items-center justify-between mb-3">
+                    <div class="p-2 rounded-xl bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20">
                         <User size={20} />
                     </div>
                 </div>
+                <p class="text-text-muted text-[11px] font-bold uppercase tracking-wider mb-0.5">Clientes Encontrados</p>
+                <p class="text-2xl sm:text-3xl font-black text-text-base tracking-tight">{groupedClients.length}</p>
+                <p class="text-[10px] text-text-muted font-bold mt-1.5 line-clamp-1">Asociados a Documentos</p>
             </div>
 
         </div>

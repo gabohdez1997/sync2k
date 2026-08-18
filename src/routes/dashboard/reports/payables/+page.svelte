@@ -389,133 +389,129 @@
     {#if data.cxp?.metrics}
         {@const metrics = data.cxp.metrics}
         <div
-            class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6"
+            class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5"
             in:slide
         >
             <!-- Card 1: Cartera Total -->
             <div
-                class="glass p-6 rounded-3xl border border-border-subtle shadow-xl relative overflow-hidden group"
+                class="bg-surface-raised border border-border-subtle hover:border-brand-500/30 transition-all rounded-3xl p-5 relative overflow-hidden group"
             >
                 <div
-                    class="absolute -right-4 -bottom-4 w-24 h-24 bg-brand-500/10 rounded-full blur-2xl group-hover:scale-125 transition-transform duration-500"
+                    class="absolute right-0 top-0 w-28 h-28 bg-brand-500/5 rounded-full blur-2xl group-hover:bg-brand-500/10 transition-colors"
                 ></div>
-                <div class="flex items-start justify-between">
-                    <div class="space-y-2">
-                        <span
-                            class="text-xs font-black uppercase tracking-widest text-text-muted"
-                            >Saldo Total</span
-                        >
-                        <h2
-                            class="text-2xl font-black text-text-base tracking-tight"
-                        >
-                            {formatCurrency(
-                                metrics.total_outstanding_usd,
-                                "USD",
-                            )}
-                        </h2>
-                        <p class="text-xs text-text-muted font-bold">
-                            {formatCurrency(
-                                metrics.total_outstanding_bs,
-                                "VES",
-                            )}
-                        </p>
-                    </div>
+                <div class="flex items-center justify-between mb-3">
                     <div
-                        class="h-10 w-10 rounded-xl bg-brand-500/10 border border-brand-500/20 flex items-center justify-center text-brand-500"
+                        class="p-2 rounded-xl bg-brand-500/10 text-brand-700 dark:text-brand-400 border border-brand-500/20"
                     >
                         <Wallet size={20} />
                     </div>
                 </div>
+                <p
+                    class="text-text-muted text-[11px] font-bold uppercase tracking-wider mb-0.5"
+                >
+                    Saldo Total
+                </p>
+                <p
+                    class="text-2xl sm:text-3xl font-black text-text-base tracking-tight"
+                >
+                    {formatCurrency(
+                        metrics.total_outstanding_usd,
+                        "USD",
+                    )}
+                </p>
+                <p class="text-[10px] text-text-muted font-bold mt-1.5 line-clamp-1">
+                    {formatCurrency(
+                        metrics.total_outstanding_bs,
+                        "VES",
+                    )}
+                </p>
             </div>
 
             <!-- Card 2: Cartera Vencida -->
             <div
-                class="glass p-6 rounded-3xl border border-border-subtle shadow-xl relative overflow-hidden group"
+                class="bg-surface-raised border border-border-subtle hover:border-red-500/30 transition-all rounded-3xl p-5 relative overflow-hidden group"
             >
                 <div
-                    class="absolute -right-4 -bottom-4 w-24 h-24 bg-red-500/10 rounded-full blur-2xl group-hover:scale-125 transition-transform duration-500"
+                    class="absolute right-0 top-0 w-28 h-28 bg-red-500/5 rounded-full blur-2xl group-hover:bg-red-500/10 transition-colors"
                 ></div>
-                <div class="flex items-start justify-between">
-                    <div class="space-y-2">
-                        <span
-                            class="text-xs font-black uppercase tracking-widest text-red-500/80"
-                            >Saldo Vencido</span
-                        >
-                        <h2
-                            class="text-2xl font-black text-red-500 tracking-tight"
-                        >
-                            {formatCurrency(metrics.total_overdue_usd, "USD")}
-                        </h2>
-                        <p class="text-xs text-text-muted font-bold">
-                            {formatCurrency(metrics.total_overdue_bs, "VES")}
-                        </p>
-                    </div>
+                <div class="flex items-center justify-between mb-3">
                     <div
-                        class="h-10 w-10 rounded-xl bg-red-500/10 border border-red-500/20 flex items-center justify-center text-red-500"
+                        class="p-2 rounded-xl bg-red-500/10 text-red-700 dark:text-red-400 border border-red-500/20"
                     >
                         <TrendingDown size={20} />
                     </div>
                 </div>
+                <p
+                    class="text-text-muted text-[11px] font-bold uppercase tracking-wider mb-0.5 text-red-600 dark:text-red-400"
+                >
+                    Saldo Vencido
+                </p>
+                <p
+                    class="text-2xl sm:text-3xl font-black text-red-600 dark:text-red-400 tracking-tight"
+                >
+                    {formatCurrency(metrics.total_overdue_usd, "USD")}
+                </p>
+                <p class="text-[10px] text-text-muted font-bold mt-1.5 line-clamp-1">
+                    {formatCurrency(metrics.total_overdue_bs, "VES")}
+                </p>
             </div>
 
             <!-- Card 3: Cartera Por Vencer -->
             <div
-                class="glass p-6 rounded-3xl border border-border-subtle shadow-xl relative overflow-hidden group"
+                class="bg-surface-raised border border-border-subtle hover:border-emerald-500/30 transition-all rounded-3xl p-5 relative overflow-hidden group"
             >
                 <div
-                    class="absolute -right-4 -bottom-4 w-24 h-24 bg-green-500/10 rounded-full blur-2xl group-hover:scale-125 transition-transform duration-500"
+                    class="absolute right-0 top-0 w-28 h-28 bg-emerald-500/5 rounded-full blur-2xl group-hover:bg-emerald-500/10 transition-colors"
                 ></div>
-                <div class="flex items-start justify-between">
-                    <div class="space-y-2">
-                        <span
-                            class="text-xs font-black uppercase tracking-widest text-green-500/80"
-                            >Saldo por Vencer</span
-                        >
-                        <h2
-                            class="text-2xl font-black text-green-500 tracking-tight"
-                        >
-                            {formatCurrency(metrics.total_upcoming_usd, "USD")}
-                        </h2>
-                        <p class="text-xs text-text-muted font-bold">
-                            {formatCurrency(metrics.total_upcoming_bs, "VES")}
-                        </p>
-                    </div>
+                <div class="flex items-center justify-between mb-3">
                     <div
-                        class="h-10 w-10 rounded-xl bg-green-500/10 border border-green-500/20 flex items-center justify-center text-green-500"
+                        class="p-2 rounded-xl bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20"
                     >
                         <TrendingUp size={20} />
                     </div>
                 </div>
+                <p
+                    class="text-text-muted text-[11px] font-bold uppercase tracking-wider mb-0.5 text-emerald-600 dark:text-emerald-400"
+                >
+                    Saldo por Vencer
+                </p>
+                <p
+                    class="text-2xl sm:text-3xl font-black text-emerald-600 dark:text-emerald-400 tracking-tight"
+                >
+                    {formatCurrency(metrics.total_upcoming_usd, "USD")}
+                </p>
+                <p class="text-[10px] text-text-muted font-bold mt-1.5 line-clamp-1">
+                    {formatCurrency(metrics.total_upcoming_bs, "VES")}
+                </p>
             </div>
 
             <!-- Card 4: Conteo Documentos -->
             <div
-                class="glass p-6 rounded-3xl border border-border-subtle shadow-xl relative overflow-hidden group"
+                class="bg-surface-raised border border-border-subtle hover:border-blue-500/30 transition-all rounded-3xl p-5 relative overflow-hidden group"
             >
                 <div
-                    class="absolute -right-4 -bottom-4 w-24 h-24 bg-blue-500/10 rounded-full blur-2xl group-hover:scale-125 transition-transform duration-500"
+                    class="absolute right-0 top-0 w-28 h-28 bg-blue-500/5 rounded-full blur-2xl group-hover:bg-blue-500/10 transition-colors"
                 ></div>
-                <div class="flex items-start justify-between">
-                    <div class="space-y-2">
-                        <span
-                            class="text-xs font-black uppercase tracking-widest text-text-muted"
-                            >Documentos Activos</span
-                        >
-                        <h2
-                            class="text-2xl font-black text-text-base tracking-tight"
-                        >
-                            {metrics.doc_count}
-                        </h2>
-                        <p class="text-xs text-text-muted font-bold">
-                            Facturas / Notas
-                        </p>
-                    </div>
+                <div class="flex items-center justify-between mb-3">
                     <div
-                        class="h-10 w-10 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-500"
+                        class="p-2 rounded-xl bg-blue-500/10 text-blue-700 dark:text-blue-400 border border-blue-500/20"
                     >
                         <FileText size={20} />
                     </div>
                 </div>
+                <p
+                    class="text-text-muted text-[11px] font-bold uppercase tracking-wider mb-0.5"
+                >
+                    Documentos Activos
+                </p>
+                <p
+                    class="text-2xl sm:text-3xl font-black text-text-base tracking-tight"
+                >
+                    {metrics.doc_count}
+                </p>
+                <p class="text-[10px] text-text-muted font-bold mt-1.5 line-clamp-1">
+                    Facturas / Notas
+                </p>
             </div>
         </div>
     {/if}

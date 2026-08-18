@@ -116,6 +116,96 @@
         { value: "saludable", label: "🟢 Stock Saludable (SDR > ROP+SS)" },
     ];
 
+    const lineasOptions = $derived(
+        (data.catalogs?.lineas || []).map((l: any) => ({
+            value: l.co_lin,
+            label: l.lin_des ? `${l.lin_des.trim()} (${l.co_lin.trim()})` : l.co_lin,
+        })),
+    );
+
+    const sublineasOptions = $derived(
+        (data.catalogs?.sublineas || [])
+            .filter(
+                (sl: any) =>
+                    !selectedLinea ||
+                    (sl.co_lin && sl.co_lin.trim() === selectedLinea.trim()),
+            )
+            .map((sl: any) => ({
+                value: sl.co_subl,
+                label: sl.subl_des ? `${sl.subl_des.trim()} (${sl.co_subl.trim()})` : sl.co_subl,
+            })),
+    );
+
+    const categoriasOptions = $derived.by(() => {
+        const cats: any[] = data.catalogs?.categorias || [];
+        const analysisCats = (data.analysisData || []).map((a: any) => ({
+            co_cat: a.co_cat,
+            cat_des: a.des_cat,
+            co_subl: a.co_subl,
+            co_lin: a.co_lin,
+        }));
+        const combined = [...cats, ...analysisCats];
+
+        let filtered = combined;
+        if (selectedSublinea) {
+            filtered = filtered.filter(
+                (c: any) =>
+                    c.co_subl &&
+                    c.co_subl.trim() === selectedSublinea.trim(),
+            );
+        } else if (selectedLinea) {
+            filtered = filtered.filter(
+                (c: any) =>
+                    c.co_lin &&
+                    c.co_lin.trim() === selectedLinea.trim(),
+            );
+        }
+
+        const seen = new Set();
+        const result: { value: string; label: string }[] = [];
+        for (const c of filtered) {
+            const val = (c.co_cat || "").trim();
+            if (val && !seen.has(val)) {
+                seen.add(val);
+                const desc = (c.cat_des || val).trim();
+                result.push({
+                    value: val,
+                    label: desc ? `${desc} (${val})` : val,
+                });
+            }
+        }
+        result.sort((a, b) => a.label.localeCompare(b.label));
+        return result;
+    });
+
+    // Auto-limpiar sublínea si la línea seleccionada cambia y ya no coincide
+    $effect(() => {
+        if (selectedLinea && selectedSublinea) {
+            const valid = (data.catalogs?.sublineas || []).some(
+                (sl: any) =>
+                    sl.co_lin &&
+                    sl.co_lin.trim() === selectedLinea.trim() &&
+                    sl.co_subl &&
+                    sl.co_subl.trim() === selectedSublinea.trim(),
+            );
+            if (!valid) {
+                selectedSublinea = "";
+            }
+        }
+    });
+
+    // Auto-limpiar categoría si la sublínea o línea cambia y la categoría ya no pertenece a las opciones disponibles
+    $effect(() => {
+        if (selectedCategoria && (selectedSublinea || selectedLinea)) {
+            const valid = categoriasOptions.some(
+                (c) => c.value.trim() === selectedCategoria.trim(),
+            );
+            if (!valid) {
+                selectedCategoria = "";
+            }
+        }
+    });
+
     // Sincronizar cuando data cambie (navegación)
     $effect(() => {
         startDate = data.startDate;
@@ -498,7 +588,7 @@
 
         let csvContent = "\uFEFFsep=;\n";
         csvContent +=
-            "Codigo;Descripcion;Clase ABC/XYZ;SDR (Stock);ROP;SS;VPD;TR Promedio (Dias);Ventas Periodo;Pedir Recomendado;Inversion Est. (USD);Estado de Stock\n";
+            "Codigo;Descripcion;Linea;Sublinea;Categoria;Clase ABC/XYZ;SDR (Stock);ROP;SS;VPD;TR Promedio (Dias);Ventas Periodo;Pedir Recomendado;Inversion Est. (USD);Estado de Stock\n";
 
         for (const item of items) {
             const co_art = `="${String(item.co_art || "")
@@ -507,6 +597,9 @@
             const des_art = `"${String(item.des_art || "")
                 .trim()
                 .replace(/"/g, '""')}"`;
+            const des_lin = `"${String(item.des_lin || "").trim().replace(/"/g, '""')}"`;
+            const des_subl = `"${String(item.des_subl || "").trim().replace(/"/g, '""')}"`;
+            const des_cat = `"${String(item.des_cat || "").trim().replace(/"/g, '""')}"`;
             const clase = `"${String(item.clase_conjunta || "").trim()}"`;
 
             const sdr = (Number(item.sdr) || 0).toString();
@@ -528,7 +621,7 @@
             const alertInfo = getAlertBadge(item);
             const estado = alertInfo.label;
 
-            csvContent += `${co_art};${des_art};${clase};${sdr};${rop};${ss};${vpd};${tr};${ventas};${cantReponerStr};${costoInversion};${estado}\n`;
+            csvContent += `${co_art};${des_art};${des_lin};${des_subl};${des_cat};${clase};${sdr};${rop};${ss};${vpd};${tr};${ventas};${cantReponerStr};${costoInversion};${estado}\n`;
         }
 
         const blob = new Blob([csvContent], {
@@ -966,185 +1059,6 @@
         </div>
     </div>
 
-    <!-- FILTROS Y BÚSQUEDA -->
-    <div
-        class="bg-surface-base border border-border-subtle rounded-[32px] p-6 shadow-xl space-y-4"
-    >
-        <!-- Fila 1: Buscador (con escáner), Líneas, Sub-Líneas, Categorías -->
-        <div
-            class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 items-center"
-        >
-            <!-- 1. Buscador + Escáner -->
-            <div class="flex items-center gap-2 w-full">
-                <div class="relative flex-1 h-12">
-                    <input
-                        type="text"
-                        placeholder="Buscar por código o descripción..."
-                        bind:value={searchTerm}
-                        class="w-full h-full bg-surface-raised pl-10 pr-8 rounded-2xl border border-border-subtle focus:border-brand-500/30 outline-none text-text-base text-sm font-bold placeholder:font-normal placeholder:text-text-muted transition-all"
-                    />
-                    <Search
-                        size={18}
-                        class="absolute left-3.5 top-1/2 -translate-y-1/2 text-text-muted"
-                    />
-                    {#if searchTerm}
-                        <button
-                            onclick={() => (searchTerm = "")}
-                            class="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-base cursor-pointer"
-                        >
-                            <X size={14} />
-                        </button>
-                    {/if}
-                </div>
-                <BarcodeScanner onScan={(code) => (searchTerm = code)} />
-            </div>
-
-            <!-- 2. Líneas -->
-            <Combobox
-                options={(data.catalogs?.lineas || []).map((l: any) => ({
-                    value: l.co_lin,
-                    label: l.lin_des,
-                }))}
-                bind:value={selectedLinea}
-                placeholder="Líneas (Todas)"
-                allLabel="Líneas (Todas)"
-            />
-
-            <!-- 3. Sub-Líneas -->
-            <Combobox
-                options={(data.catalogs?.sublineas || []).map((s: any) => ({
-                    value: s.co_subl,
-                    label: s.subl_des,
-                }))}
-                bind:value={selectedSublinea}
-                placeholder="Sub-Líneas (Todas)"
-                allLabel="Sub-Líneas (Todas)"
-            />
-
-            <!-- 4. Categorías -->
-            <Combobox
-                options={(data.catalogs?.categorias || []).map((c: any) => ({
-                    value: c.co_cat,
-                    label: c.cat_des,
-                }))}
-                bind:value={selectedCategoria}
-                placeholder="Categorías (Todas)"
-                allLabel="Categorías (Todas)"
-            />
-        </div>
-
-        <!-- Fila 2: Matriz ABC / XYZ & Estado de Alerta de Stock -->
-        <div
-            class="grid grid-cols-1 md:grid-cols-3 gap-4 items-center pt-2 border-t border-border-subtle/50"
-        >
-            <Combobox
-                options={abcOptions}
-                bind:value={selectedABC}
-                placeholder="Clase de Ventas (Todas)"
-                allLabel="Clase ABC (Todas)"
-            />
-            <Combobox
-                options={xyzOptions}
-                bind:value={selectedXYZ}
-                placeholder="Predictibilidad Demanda (Todas)"
-                allLabel="Clase XYZ (Todas)"
-            />
-            <Combobox
-                options={alertOptions}
-                bind:value={selectedAlertStatus}
-                placeholder="Estado de Stock (Todos)"
-                allLabel="Estado de Stock (Todos)"
-            />
-        </div>
-
-        <!-- Fila 3: Sucursal, Fechas & Botón Calcular -->
-        <div
-            class="flex flex-col xl:flex-row gap-4 items-stretch xl:items-center justify-between pt-2 border-t border-border-subtle/50"
-        >
-            <!-- Select de Sucursal -->
-            <div class="w-full xl:w-80 shrink-0">
-                <Combobox
-                    options={(data.branches || []).map((b: any) => ({
-                        value: b.id,
-                        label: b.name,
-                    }))}
-                    bind:value={selectedBranch}
-                    placeholder="Sucursal por defecto"
-                    allLabel="Predeterminada"
-                    icon={Building}
-                    buttonClass="h-12"
-                />
-            </div>
-
-            <!-- Fechas, Atajos y Botón Calcular -->
-            <div
-                class="flex flex-wrap lg:flex-nowrap gap-3 items-center w-full xl:w-auto justify-end"
-            >
-                <div
-                    class="flex items-center gap-2 bg-surface-raised border border-border-subtle rounded-2xl px-3 h-12 w-full sm:w-auto min-w-[250px] flex-1 lg:flex-initial"
-                >
-                    <Calendar size={16} class="text-text-muted shrink-0" />
-                    <input
-                        type="date"
-                        bind:value={startDate}
-                        class="bg-transparent border-0 text-text-base focus:outline-none text-xs cursor-pointer font-bold w-full"
-                    />
-                    <span class="text-text-muted font-bold text-xs shrink-0"
-                        >a</span
-                    >
-                    <input
-                        type="date"
-                        bind:value={endDate}
-                        class="bg-transparent border-0 text-text-base focus:outline-none text-xs cursor-pointer font-bold w-full"
-                    />
-                </div>
-
-                <div
-                    class="flex items-center gap-1 bg-surface-raised border border-border-subtle rounded-2xl p-1 shrink-0 overflow-x-auto"
-                >
-                    <button
-                        type="button"
-                        onclick={() => setQuickDate(7)}
-                        class="px-3 py-1.5 text-xs font-bold rounded-xl hover:bg-surface-soft text-text-muted hover:text-text-base transition-colors cursor-pointer"
-                        >7d</button
-                    >
-                    <button
-                        type="button"
-                        onclick={() => setQuickDate(30)}
-                        class="px-3 py-1.5 text-xs font-bold rounded-xl hover:bg-surface-soft text-text-muted hover:text-text-base transition-colors cursor-pointer"
-                        >30d</button
-                    >
-                    <button
-                        type="button"
-                        onclick={() => setQuickDate(90)}
-                        class="px-3 py-1.5 text-xs font-bold rounded-xl hover:bg-surface-soft text-text-muted hover:text-text-base transition-colors cursor-pointer"
-                        >90d</button
-                    >
-                    <button
-                        type="button"
-                        onclick={() => setQuickDate(180)}
-                        class="px-3 py-1.5 text-xs font-bold rounded-xl hover:bg-surface-soft text-text-muted hover:text-text-base transition-colors cursor-pointer"
-                        >6m</button
-                    >
-                    <button
-                        type="button"
-                        onclick={() => setQuickDate(365)}
-                        class="px-3 py-1.5 text-xs font-bold rounded-xl hover:bg-surface-soft text-text-muted hover:text-text-base transition-colors cursor-pointer"
-                        >1a</button
-                    >
-                </div>
-
-                <button
-                    type="button"
-                    onclick={applyFilters}
-                    class="h-12 px-8 rounded-2xl bg-brand-500 text-white font-black hover:scale-105 transition-all shadow-[0_0_20px_rgba(var(--brand-500-rgb),0.3)] w-full sm:w-auto shrink-0 cursor-pointer"
-                >
-                    Calcular
-                </button>
-            </div>
-        </div>
-    </div>
-
     {#if data.error}
         <div
             class="bg-red-500/10 border border-red-500/30 text-red-500 p-6 rounded-2xl flex items-start gap-4"
@@ -1344,6 +1258,176 @@
                 <p class="text-[10px] text-text-muted mt-1.5 line-clamp-1">
                     Inventario óptimo que cubre demanda.
                 </p>
+            </div>
+        </div>
+
+        <!-- FILTROS Y BÚSQUEDA -->
+        <div
+            class="bg-surface-base border border-border-subtle rounded-[32px] p-6 shadow-xl space-y-4"
+        >
+            <!-- Fila 1: Buscador (con escáner), Líneas, Sub-Líneas, Categorías -->
+            <div
+                class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 items-center"
+            >
+                <!-- 1. Buscador + Escáner -->
+                <div class="flex items-center gap-2 w-full">
+                    <div class="relative flex-1 h-12">
+                        <input
+                            type="text"
+                            placeholder="Buscar por código o descripción..."
+                            bind:value={searchTerm}
+                            class="w-full h-full bg-surface-raised pl-10 pr-8 rounded-2xl border border-border-subtle focus:border-brand-500/30 outline-none text-text-base text-sm font-bold placeholder:font-normal placeholder:text-text-muted transition-all"
+                        />
+                        <Search
+                            size={18}
+                            class="absolute left-3.5 top-1/2 -translate-y-1/2 text-text-muted"
+                        />
+                        {#if searchTerm}
+                            <button
+                                onclick={() => (searchTerm = "")}
+                                class="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-base cursor-pointer"
+                            >
+                                <X size={14} />
+                            </button>
+                        {/if}
+                    </div>
+                    <BarcodeScanner onScan={(code) => (searchTerm = code)} />
+                </div>
+
+                <!-- 2. Líneas -->
+                <Combobox
+                    options={lineasOptions}
+                    bind:value={selectedLinea}
+                    placeholder="Líneas (Todas)"
+                    allLabel="Líneas (Todas)"
+                />
+
+                <!-- 3. Sub-Líneas -->
+                <Combobox
+                    options={sublineasOptions}
+                    bind:value={selectedSublinea}
+                    placeholder="Sub-Líneas (Todas)"
+                    allLabel="Sub-Líneas (Todas)"
+                />
+
+                <!-- 4. Categorías -->
+                <Combobox
+                    options={categoriasOptions}
+                    bind:value={selectedCategoria}
+                    placeholder="Categorías (Todas)"
+                    allLabel="Categorías (Todas)"
+                />
+            </div>
+
+            <!-- Fila 2: Matriz ABC / XYZ & Estado de Alerta de Stock -->
+            <div
+                class="grid grid-cols-1 md:grid-cols-3 gap-4 items-center pt-2 border-t border-border-subtle/50"
+            >
+                <Combobox
+                    options={abcOptions}
+                    bind:value={selectedABC}
+                    placeholder="Clase de Ventas (Todas)"
+                    allLabel="Clase ABC (Todas)"
+                />
+                <Combobox
+                    options={xyzOptions}
+                    bind:value={selectedXYZ}
+                    placeholder="Predictibilidad Demanda (Todas)"
+                    allLabel="Clase XYZ (Todas)"
+                />
+                <Combobox
+                    options={alertOptions}
+                    bind:value={selectedAlertStatus}
+                    placeholder="Estado de Stock (Todos)"
+                    allLabel="Estado de Stock (Todos)"
+                />
+            </div>
+
+            <!-- Fila 3: Sucursal, Fechas & Botón Calcular -->
+            <div
+                class="flex flex-col xl:flex-row gap-4 items-stretch xl:items-center justify-between pt-2 border-t border-border-subtle/50"
+            >
+                <!-- Select de Sucursal -->
+                <div class="w-full xl:w-80 shrink-0">
+                    <Combobox
+                        options={(data.branches || []).map((b: any) => ({
+                            value: b.id,
+                            label: b.name,
+                        }))}
+                        bind:value={selectedBranch}
+                        placeholder="Sucursal por defecto"
+                        allLabel="Predeterminada"
+                        icon={Building}
+                        buttonClass="h-12"
+                    />
+                </div>
+
+                <!-- Fechas, Atajos y Botón Calcular -->
+                <div
+                    class="flex flex-wrap lg:flex-nowrap gap-3 items-center w-full xl:w-auto justify-end"
+                >
+                    <div
+                        class="flex items-center gap-2 bg-surface-raised border border-border-subtle rounded-2xl px-3 h-12 w-full sm:w-auto min-w-[250px] flex-1 lg:flex-initial"
+                    >
+                        <Calendar size={16} class="text-text-muted shrink-0" />
+                        <input
+                            type="date"
+                            bind:value={startDate}
+                            class="bg-transparent border-0 text-text-base focus:outline-none text-xs cursor-pointer font-bold w-full"
+                        />
+                        <span class="text-text-muted font-bold text-xs shrink-0"
+                            >a</span
+                        >
+                        <input
+                            type="date"
+                            bind:value={endDate}
+                            class="bg-transparent border-0 text-text-base focus:outline-none text-xs cursor-pointer font-bold w-full"
+                        />
+                    </div>
+
+                    <div
+                        class="flex items-center gap-1 bg-surface-raised border border-border-subtle rounded-2xl p-1 shrink-0 overflow-x-auto"
+                    >
+                        <button
+                            type="button"
+                            onclick={() => setQuickDate(7)}
+                            class="px-3 py-1.5 text-xs font-bold rounded-xl hover:bg-surface-soft text-text-muted hover:text-text-base transition-colors cursor-pointer"
+                            >7d</button
+                        >
+                        <button
+                            type="button"
+                            onclick={() => setQuickDate(30)}
+                            class="px-3 py-1.5 text-xs font-bold rounded-xl hover:bg-surface-soft text-text-muted hover:text-text-base transition-colors cursor-pointer"
+                            >30d</button
+                        >
+                        <button
+                            type="button"
+                            onclick={() => setQuickDate(90)}
+                            class="px-3 py-1.5 text-xs font-bold rounded-xl hover:bg-surface-soft text-text-muted hover:text-text-base transition-colors cursor-pointer"
+                            >90d</button
+                        >
+                        <button
+                            type="button"
+                            onclick={() => setQuickDate(180)}
+                            class="px-3 py-1.5 text-xs font-bold rounded-xl hover:bg-surface-soft text-text-muted hover:text-text-base transition-colors cursor-pointer"
+                            >6m</button
+                        >
+                        <button
+                            type="button"
+                            onclick={() => setQuickDate(365)}
+                            class="px-3 py-1.5 text-xs font-bold rounded-xl hover:bg-surface-soft text-text-muted hover:text-text-base transition-colors cursor-pointer"
+                            >1a</button
+                        >
+                    </div>
+
+                    <button
+                        type="button"
+                        onclick={applyFilters}
+                        class="h-12 px-8 rounded-2xl bg-brand-500 text-white font-black hover:scale-105 transition-all shadow-[0_0_20px_rgba(var(--brand-500-rgb),0.3)] w-full sm:w-auto shrink-0 cursor-pointer"
+                    >
+                        Calcular
+                    </button>
+                </div>
             </div>
         </div>
 
@@ -1558,10 +1642,17 @@
                                             class="text-sm font-bold text-text-base group-hover:text-brand-500 transition-colors"
                                             >{item.des_art}</span
                                         >
-                                        <span
-                                            class="text-[10px] text-text-muted font-mono"
-                                            >{item.co_art}</span
-                                        >
+                                        <div class="flex items-center gap-2 text-[10px] text-text-muted flex-wrap">
+                                            <span class="font-mono">{item.co_art}</span>
+                                            {#if item.des_lin}
+                                                <span>•</span>
+                                                <span class="truncate max-w-[120px]">{item.des_lin}</span>
+                                            {/if}
+                                            {#if item.des_cat}
+                                                <span>•</span>
+                                                <span class="truncate max-w-[120px]">{item.des_cat}</span>
+                                            {/if}
+                                        </div>
                                     </div>
                                 </td>
                                 <td class="px-4 py-3.5 text-center">

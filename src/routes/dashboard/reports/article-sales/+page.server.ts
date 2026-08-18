@@ -35,14 +35,16 @@ export const load: PageServerLoad = protectLoad('reports_article_sales', async (
         }, profile, fetch);
 
         const search = url.searchParams.get('search') || '';
-        const co_lin = url.searchParams.get('linea') || 'all';
-        const co_cat = url.searchParams.get('categoria') || 'all';
+        const co_lin = url.searchParams.get('linea') || '';
+        const co_subl = url.searchParams.get('sublinea') || '';
+        const co_cat = url.searchParams.get('categoria') || '';
         const fecha_desde = url.searchParams.get('fecha_desde') || '';
         const fecha_hasta = url.searchParams.get('fecha_hasta') || '';
 
         const query = new URLSearchParams();
         if (search) query.set('search', search);
         if (co_lin && co_lin !== 'all') query.set('co_lin', co_lin);
+        if (co_subl && co_subl !== 'all') query.set('co_subl', co_subl);
         if (co_cat && co_cat !== 'all') query.set('co_cat', co_cat);
         if (fecha_desde) query.set('fecha_desde', fecha_desde);
         if (fecha_hasta) query.set('fecha_hasta', fecha_hasta);
@@ -51,21 +53,25 @@ export const load: PageServerLoad = protectLoad('reports_article_sales', async (
         console.log(`[ARTICLE SALES REPORT SERVER] Requesting from agent branch ${selectedBranch.name}...`);
         
         // Fetch catalogs for filters from the agent
-        const [linRes, catRes, reportRes] = await Promise.all([
+        const [linRes, sublRes, catRes, reportRes] = await Promise.all([
             agentClient.request<any>('/catalogos/lineas').catch(() => ({ data: [] })),
+            agentClient.request<any>('/catalogos/sublineas').catch(() => ({ data: [] })),
             agentClient.request<any>('/catalogos/categorias').catch(() => ({ data: [] })),
             agentClient.request<any>(`/reportes/articulos-ventas?${query.toString()}`)
         ]);
 
         const lineas = (linRes as any).data || (linRes as any).items || (Array.isArray(linRes) ? linRes : []);
+        const sublineas = (sublRes as any).data || (sublRes as any).items || (Array.isArray(sublRes) ? sublRes : []);
         const categorias = (catRes as any).data || (catRes as any).items || (Array.isArray(catRes) ? catRes : []);
 
         if (!reportRes || !reportRes.success) {
             return {
                 report: { data: [] },
                 branches: allowedBranches,
-                catalogs: { lineas, categorias },
+                catalogs: { lineas, sublineas, categorias },
                 selectedBranchId: selectedBranch.id,
+                startDate: fecha_desde,
+                endDate: fecha_hasta,
                 error: reportRes?.message || 'Error al obtener reporte del agente local.'
             };
         }
@@ -73,8 +79,10 @@ export const load: PageServerLoad = protectLoad('reports_article_sales', async (
         return {
             report: reportRes,
             branches: allowedBranches,
-            catalogs: { lineas, categorias },
-            selectedBranchId: selectedBranch.id
+            catalogs: { lineas, sublineas, categorias },
+            selectedBranchId: selectedBranch.id,
+            startDate: fecha_desde,
+            endDate: fecha_hasta
         };
 
     } catch (err: any) {
