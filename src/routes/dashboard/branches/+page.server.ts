@@ -350,112 +350,149 @@ export const actions: Actions = {
     const formData = await request.formData();
     const entity = (formData.get('entity') as string)?.trim() || 'suppliers'; // 'suppliers' | 'customers' | 'articles'
 
-    // Obtener las sucursales activas
+    // Obtener las sucursales activas con agent_url
     const { data: branches } = await supabaseAdmin
       .from('branches')
       .select('id, name, agent_url, agent_token, active')
       .eq('active', true);
 
-    const targetBranch = (branches || []).find(b => b.agent_url);
-    if (!targetBranch) {
-      return fail(400, { message: 'No hay ninguna sucursal activa con conexión al agente configurada.' });
+    const activeBranches = (branches || []).filter(b => b.agent_url);
+    if (activeBranches.length < 2) {
+      return fail(400, { message: 'Se requieren al menos 2 sucursales activas con conexión configurada para sincronizar.' });
+    }
+
+    let moduleName = 'PROVEEDORES';
+    let endpoint = 'proveedores';
+    let keyField = 'co_prov';
+
+    if (entity === 'customers') {
+      moduleName = 'CLIENTES';
+      endpoint = 'clientes';
+      keyField = 'co_cli';
+    } else if (entity === 'articles') {
+      moduleName = 'ARTICULOS';
+      endpoint = 'articulos';
+      keyField = 'co_art';
     }
 
     try {
-      const client = new AgentClient(
-        {
-          slug:          targetBranch.id,
-          agent_url:     targetBranch.agent_url!,
-          agent_api_key: targetBranch.agent_token
-        },
-        locals.profile || undefined,
-        fetch
+      // 1. Exportar datos de todas las sedes activas en paralelo
+      const branchExports = await Promise.all(
+        activeBranches.map(async (branch) => {
+          const client = new AgentClient(
+            {
+              slug:          branch.id,
+              agent_url:     branch.agent_url!,
+              agent_api_key: branch.agent_token
+            },
+            locals.profile || undefined,
+            fetch
+          );
+
+          try {
+            const res = await client.exportAll(endpoint);
+            const items = (res && res.success && Array.isArray(res.data)) ? res.data : [];
+            const keyMap = new Set(items.map((i: any) => String(i[keyField] || i.rif || '').trim().toUpperCase()).filter(Boolean));
+            return { branch, client, items, keyMap, error: null };
+          } catch (err: any) {
+            return { branch, client, items: [], keyMap: new Set<string>(), error: err.message };
+          }
+        })
       );
 
-      let result: any = null;
-      let moduleName = 'PROVEEDORES';
-
-      if (entity === 'customers') {
-        moduleName = 'CLIENTES';
-        result = await client.syncCustomers();
-      } else if (entity === 'articles') {
-        moduleName = 'ARTICULOS';
-        result = await client.syncArticles();
-      } else {
-        moduleName = 'PROVEEDORES';
-        result = await client.syncSuppliers();
+      // Filtrar sedes que respondieron exitosamente
+      const validBranches = branchExports.filter(b => !b.error);
+      if (validBranches.length < 2) {
+        const errorDetails = branchExports.filter(b => b.error).map(b => `${b.branch.name}: ${b.error}`).join(' | ');
+        return fail(500, { message: `No se pudo conectar con suficientes sedes activas. ${errorDetails}` });
       }
 
-      if (!result || !result.success) {
-        return fail(500, { message: result?.message || `Error al ejecutar sincronización de ${moduleName.toLowerCase()}.` });
+      // 2. Unificar todos los registros únicos
+      const allUniqueItems = new Map<string, any>();
+      for (const b of validBranches) {
+        for (const item of b.items) {
+          const key = String(item[keyField] || item.rif || '').trim().toUpperCase();
+          if (key && !allUniqueItems.has(key)) {
+            allUniqueItems.set(key, item);
+          }
+        }
       }
 
+      // 3. Para cada sede, detectar faltantes e importar el lote
+      let totalSynced = 0;
+      const summary: Array<{ sede_id: string; sede_nombre: string; migrated: number; errors: string[] }> = [];
+
+      await Promise.all(
+        validBranches.map(async (b) => {
+          const missingItems: any[] = [];
+          for (const [key, item] of allUniqueItems.entries()) {
+            if (!b.keyMap.has(key)) {
+              missingItems.push(item);
+            }
+          }
+
+          if (missingItems.length === 0) {
+            summary.push({
+              sede_id: b.branch.id,
+              sede_nombre: b.branch.name,
+              migrated: 0,
+              errors: []
+            });
+            return;
+          }
+
+          try {
+            const importRes = await b.client.importBatch(endpoint, missingItems);
+            const count = importRes?.migrated || 0;
+            totalSynced += count;
+            summary.push({
+              sede_id: b.branch.id,
+              sede_nombre: b.branch.name,
+              migrated: count,
+              errors: importRes?.errors || []
+            });
+          } catch (importErr: any) {
+            summary.push({
+              sede_id: b.branch.id,
+              sede_nombre: b.branch.name,
+              migrated: 0,
+              errors: [importErr.message]
+            });
+          }
+        })
+      );
+
+      // Agregar sedes con error de conexión al resumen si las hubiera
+      for (const b of branchExports) {
+        if (b.error) {
+          summary.push({
+            sede_id: b.branch.id,
+            sede_nombre: b.branch.name,
+            migrated: 0,
+            errors: [`Error de conexión: ${b.error}`]
+          });
+        }
+      }
+
+      // 4. Registrar en Auditoría Supabase
       await supabaseAdmin.rpc('log_action', {
         p_user_id:    locals.profile?.id ?? null,
         p_user_email: locals.profile?.email ?? 'system',
         p_action:     'SYNC',
         p_module:     moduleName,
         p_record_id:  'MULTI-SEDE',
-        p_branch_id:  targetBranch.id,
-        p_new_data:   JSON.stringify({ entity, total_synced: result.total_synced, summary: result.summary, timestamp: new Date().toISOString() })
+        p_branch_id:  validBranches[0]?.branch.id || null,
+        p_new_data:   JSON.stringify({ entity, total_synced: totalSynced, summary, timestamp: new Date().toISOString() })
       });
 
       return {
         success: true,
         entity,
-        message: result.message,
-        total_synced: result.total_synced,
-        summary: result.summary || []
-      };
-    } catch (e: any) {
-      return fail(500, { message: `Error en la sincronización: ${e.message}` });
-    }
-  }),
-
-  syncSuppliers: protectAction('sec_branches', async ({ locals, fetch }) => {
-    // Obtener las sucursales activas
-    const { data: branches } = await supabaseAdmin
-      .from('branches')
-      .select('id, name, agent_url, agent_token, active')
-      .eq('active', true);
-
-    const targetBranch = (branches || []).find(b => b.agent_url);
-    if (!targetBranch) {
-      return fail(400, { message: 'No hay ninguna sucursal activa con conexión al agente configurada.' });
-    }
-
-    try {
-      const client = new AgentClient(
-        {
-          slug:          targetBranch.id,
-          agent_url:     targetBranch.agent_url!,
-          agent_api_key: targetBranch.agent_token
-        },
-        locals.profile || undefined,
-        fetch
-      );
-
-      const result = await client.syncSuppliers();
-      if (!result || !result.success) {
-        return fail(500, { message: result?.message || 'Error al ejecutar sincronización de proveedores.' });
-      }
-
-      await supabaseAdmin.rpc('log_action', {
-        p_user_id:    locals.profile?.id ?? null,
-        p_user_email: locals.profile?.email ?? 'system',
-        p_action:     'SYNC',
-        p_module:     'PROVEEDORES',
-        p_record_id:  'MULTI-SEDE',
-        p_branch_id:  targetBranch.id,
-        p_new_data:   JSON.stringify(result)
-      });
-
-      return {
-        success: true,
-        entity: 'suppliers',
-        message: result.message,
-        total_synced: result.total_synced,
-        summary: result.summary || []
+        message: totalSynced > 0
+          ? `Sincronización completada. Se migraron ${totalSynced} registros en total.`
+          : 'Todas las sucursales ya se encuentran sincronizadas.',
+        total_synced: totalSynced,
+        summary
       };
     } catch (e: any) {
       return fail(500, { message: `Error en la sincronización: ${e.message}` });

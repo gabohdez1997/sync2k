@@ -300,4 +300,24 @@ export class AgentClient {
 			method: 'POST'
 		});
 	}
+
+	/**
+	 * Exporta todos los registros de una entidad desde la sede conectada
+	 */
+	async exportAll(endpoint: string) {
+		return this.request<any>(`/${endpoint}/export-all`, {
+			method: 'GET'
+		});
+	}
+
+	/**
+	 * Importa un lote de registros faltantes hacia la sede conectada
+	 */
+	async importBatch(endpoint: string, items: any[]) {
+		return this.request<any>(`/${endpoint}/import-batch`, {
+			method: 'POST',
+			body: JSON.stringify({ items })
+		});
+	}
 }
+
