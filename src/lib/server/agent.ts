@@ -265,4 +265,39 @@ export class AgentClient {
 		const query = sedeId ? `?sede_id=${encodeURIComponent(sedeId)}` : '';
 		return this.request<any>(`/catalogos/condiciones_pago${query}`);
 	}
+
+	/**
+	 * Obtiene estadísticas de conteo por sede (artículos, clientes, proveedores)
+	 */
+	async getBranchStats(sedeId?: string) {
+		const query = sedeId ? `?sede_id=${encodeURIComponent(sedeId)}` : '';
+		return this.request<any>(`/catalogos/stats${query}`);
+	}
+
+	/**
+	 * Sincroniza proveedores entre sucursales validando consistencia referencial
+	 */
+	async syncSuppliers() {
+		return this.request<any>('/proveedores/sync', {
+			method: 'POST'
+		});
+	}
+
+	/**
+	 * Sincroniza clientes entre sucursales validando consistencia referencial
+	 */
+	async syncCustomers() {
+		return this.request<any>('/clientes/sync', {
+			method: 'POST'
+		});
+	}
+
+	/**
+	 * Sincroniza artículos entre sucursales validando consistencia referencial
+	 */
+	async syncArticles() {
+		return this.request<any>('/articulos/sync', {
+			method: 'POST'
+		});
+	}
 }

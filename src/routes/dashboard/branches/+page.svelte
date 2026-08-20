@@ -23,6 +23,13 @@
     Map,
     Upload,
     Radio,
+    RefreshCw,
+    Users,
+    Package,
+    Building2,
+    CheckCircle2,
+    AlertTriangle,
+    ArrowRight,
   } from "lucide-svelte";
   import type { PageData, ActionData } from "./$types";
 
@@ -42,12 +49,56 @@
   let deletePassword = $state("");
   let isDeleting = $state(false);
 
+  // Estados para Sincronización
+  let showSyncModal = $state(false);
+  let syncingEntity = $state<string | null>(null);
+  let isSyncing = $derived(syncingEntity !== null);
+  let syncResult = $state<any>(null);
+
+  function getStatsForBranch(branch: any) {
+    const statsMap = data?.branchStats || {};
+    const direct =
+      statsMap[branch?.id] ||
+      (branch?.profit_server_id ? statsMap[branch.profit_server_id] : null) ||
+      (branch?.name ? statsMap[branch.name] : null);
+
+    if (direct) {
+      return {
+        articulos: Number(direct.articulos) || 0,
+        clientes: Number(direct.clientes) || 0,
+        proveedores: Number(direct.proveedores) || 0,
+        online: Boolean(direct.online ?? branch?.active)
+      };
+    }
+
+    const foundKey = Object.keys(statsMap).find(
+      (k) =>
+        k.toLowerCase() === (branch?.id || "").toLowerCase() ||
+        k.toLowerCase() === (branch?.name || "").toLowerCase() ||
+        (branch?.profit_branch_codes || []).some(
+          (c: any) => c?.code && c.code.toLowerCase() === k.toLowerCase(),
+        ),
+    );
+
+    if (foundKey && statsMap[foundKey]) {
+      const found = statsMap[foundKey];
+      return {
+        articulos: Number(found.articulos) || 0,
+        clientes: Number(found.clientes) || 0,
+        proveedores: Number(found.proveedores) || 0,
+        online: Boolean(found.online ?? branch?.active)
+      };
+    }
+
+    return { articulos: 0, clientes: 0, proveedores: 0, online: Boolean(branch?.active) };
+  }
+
   // Filtro reactivo
   let filteredBranches = $derived(
-    data.branches.filter((b: any) => {
-      const matchName = b.name.toLowerCase().includes(searchTerm.toLowerCase());
-      const matchCode = b.profit_branch_codes?.some((c: any) =>
-        c.code.toLowerCase().includes(searchTerm.toLowerCase()),
+    (data?.branches || []).filter((b: any) => {
+      const matchName = (b?.name || "").toLowerCase().includes((searchTerm || "").toLowerCase());
+      const matchCode = b?.profit_branch_codes?.some((c: any) =>
+        (c?.code || "").toLowerCase().includes((searchTerm || "").toLowerCase()),
       );
       return matchName || matchCode;
     }),
@@ -142,17 +193,27 @@
         Gestión de Sucursales
       </h1>
       <p class="text-text-muted mt-2 text-lg">
-        Configura las sucursales y conexiones de los agentes locales de Profit.
+        Configura las sucursales, monitorea métricas y sincroniza datos entre sedes.
       </p>
     </div>
 
-    <button
-      onclick={openNewModal}
-      class="flex items-center justify-center gap-2 bg-brand-600 hover:bg-brand-500 text-white px-6 py-3 rounded-2xl font-bold shadow-lg shadow-brand-500/20 transition-all active:scale-95"
-    >
-      <Plus size={20} />
-      Nueva Sucursal
-    </button>
+    <div class="flex items-center gap-3">
+      <button
+        onclick={() => (showSyncModal = true)}
+        class="flex items-center justify-center gap-2 bg-surface-raised hover:bg-white/10 text-brand-400 border border-border-subtle hover:border-brand-500/30 px-5 py-3 rounded-2xl font-bold transition-all active:scale-95 shadow-sm"
+      >
+        <RefreshCw size={18} class={isSyncing ? "animate-spin" : ""} />
+        <span>Sincronizar</span>
+      </button>
+
+      <button
+        onclick={openNewModal}
+        class="flex items-center justify-center gap-2 bg-brand-600 hover:bg-brand-500 text-white px-6 py-3 rounded-2xl font-bold shadow-lg shadow-brand-500/20 transition-all active:scale-95"
+      >
+        <Plus size={20} />
+        Nueva Sucursal
+      </button>
+    </div>
   </div>
 
   <!-- Buscador y Filtros -->
@@ -203,6 +264,7 @@
   {:else}
     <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
       {#each filteredBranches as branch}
+        {@const stats = getStatsForBranch(branch)}
         <div
           class="glass relative group rounded-3xl border border-white/5 overflow-hidden p-6 hover:border-brand-500/30 transition-all hover:shadow-2xl hover:shadow-brand-500/5"
         >
@@ -212,12 +274,11 @@
             >
               <Store size={24} />
             </div>
-            <div
-              class="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity"
-            >
+            <!-- Botones de Acción Siempre Visibles -->
+            <div class="flex gap-2">
               <button
                 onclick={() => openEditModal(branch)}
-                class="p-2 hover:bg-white/10 rounded-xl text-text-muted hover:text-brand-400 transition"
+                class="p-2 bg-white/5 hover:bg-white/10 rounded-xl text-text-muted hover:text-brand-400 transition"
                 title="Editar"
               >
                 <Edit size={18} />
@@ -227,7 +288,7 @@
                   branchToDelete = branch;
                   showDeleteModal = true;
                 }}
-                class="p-2 hover:bg-red-500/10 rounded-xl text-text-muted hover:text-red-400 transition"
+                class="p-2 bg-white/5 hover:bg-red-500/10 rounded-xl text-text-muted hover:text-red-400 transition"
                 title="Eliminar"
               >
                 <Trash2 size={18} />
@@ -236,6 +297,42 @@
           </div>
 
           <h3 class="text-xl font-bold truncate">{branch.name}</h3>
+
+          <!-- Métricas de Sede (Artículos, Clientes, Proveedores) -->
+          <div class="grid grid-cols-3 gap-2 my-4 p-3 bg-surface-base/60 rounded-2xl border border-white/5">
+            <!-- Artículos -->
+            <div class="flex flex-col items-center justify-center text-center p-2 rounded-xl bg-white/[0.02]">
+              <div class="flex items-center gap-1 text-[11px] font-bold text-text-muted mb-0.5">
+                <Package size={13} class="text-blue-400 shrink-0" />
+                <span>Artículos</span>
+              </div>
+              <span class="text-base font-black text-text-base tracking-tight">
+                {stats.articulos.toLocaleString("es-VE")}
+              </span>
+            </div>
+
+            <!-- Clientes -->
+            <div class="flex flex-col items-center justify-center text-center p-2 rounded-xl bg-white/[0.02]">
+              <div class="flex items-center gap-1 text-[11px] font-bold text-text-muted mb-0.5">
+                <Users size={13} class="text-emerald-400 shrink-0" />
+                <span>Clientes</span>
+              </div>
+              <span class="text-base font-black text-text-base tracking-tight">
+                {stats.clientes.toLocaleString("es-VE")}
+              </span>
+            </div>
+
+            <!-- Proveedores -->
+            <div class="flex flex-col items-center justify-center text-center p-2 rounded-xl bg-white/[0.02]">
+              <div class="flex items-center gap-1 text-[11px] font-bold text-text-muted mb-0.5">
+                <Building2 size={13} class="text-amber-400 shrink-0" />
+                <span>Proveed.</span>
+              </div>
+              <span class="text-base font-black text-text-base tracking-tight">
+                {stats.proveedores.toLocaleString("es-VE")}
+              </span>
+            </div>
+          </div>
 
           <div class="flex flex-col gap-2 mb-6 mt-4">
             <p
@@ -976,6 +1073,276 @@
             </button>
           </div>
         </form>
+      </div>
+    </div>
+  </div>
+{/if}
+
+<!-- Modal de Sincronización Multisede -->
+{#if showSyncModal}
+  <div class="fixed inset-0 z-50 flex items-center justify-center p-4 md:p-8">
+    <div
+      class="absolute inset-0 bg-black/80 backdrop-blur-xl"
+      onclick={() => { if (!isSyncing) { showSyncModal = false; syncResult = null; } }}
+      onkeydown={(e) => e.key === "Escape" && !isSyncing && (showSyncModal = false)}
+      role="button"
+      tabindex="-1"
+    ></div>
+
+    <div
+      class="glass w-full max-w-2xl rounded-[32px] border border-white/10 shadow-2xl relative z-10 overflow-hidden max-h-[90vh] flex flex-col"
+    >
+      <!-- Header -->
+      <div class="p-6 md:p-8 border-b border-white/5 flex items-center justify-between">
+        <div class="flex items-center gap-4">
+          <div class="h-12 w-12 rounded-2xl bg-brand-500/20 text-brand-400 flex items-center justify-center shadow-lg shadow-brand-500/10">
+            <RefreshCw size={24} class={syncingEntity ? "animate-spin" : ""} />
+          </div>
+          <div>
+            <h2 class="text-2xl font-black text-text-base">Sincronización Multisede</h2>
+            <p class="text-xs text-text-muted mt-0.5">Replica maestros e iguala registros entre sucursales de Profit Plus</p>
+          </div>
+        </div>
+        <button
+          onclick={() => { if (!syncingEntity) { showSyncModal = false; syncResult = null; } }}
+          disabled={syncingEntity !== null}
+          class="p-2 rounded-xl bg-white/5 hover:bg-white/10 text-text-muted hover:text-text-base transition disabled:opacity-30"
+        >
+          <X size={20} />
+        </button>
+      </div>
+
+      <!-- Content -->
+      <div class="p-6 md:p-8 overflow-y-auto space-y-6 custom-scrollbar">
+        <!-- Comparativa de Sucursales -->
+        <div>
+          <h4 class="text-xs font-black uppercase tracking-widest text-text-muted mb-3">Estado de Datos por Sucursal</h4>
+          <div class="space-y-2">
+            {#each (data?.branches || []) as branch}
+              {@const stats = getStatsForBranch(branch)}
+              <div class="flex items-center justify-between p-3.5 bg-surface-base/50 border border-white/5 rounded-2xl">
+                <div class="flex items-center gap-3">
+                  <div class="h-2 w-2 rounded-full {stats.online && branch.active ? 'bg-emerald-500 animate-pulse' : 'bg-zinc-500'}"></div>
+                  <div>
+                    <p class="text-sm font-bold text-text-base">{branch.name}</p>
+                    <p class="text-[10px] text-text-muted uppercase font-mono">{branch.id}</p>
+                  </div>
+                </div>
+                <div class="flex items-center gap-4 text-xs font-mono">
+                  <div class="flex items-center gap-1.5" title="Artículos">
+                    <Package size={14} class="text-blue-400" />
+                    <span class="font-bold">{(stats.articulos || 0).toLocaleString("es-VE")}</span>
+                  </div>
+                  <div class="flex items-center gap-1.5" title="Clientes">
+                    <Users size={14} class="text-emerald-400" />
+                    <span class="font-bold">{(stats.clientes || 0).toLocaleString("es-VE")}</span>
+                  </div>
+                  <div class="flex items-center gap-1.5" title="Proveedores">
+                    <Building2 size={14} class="text-amber-400" />
+                    <span class="font-bold">{(stats.proveedores || 0).toLocaleString("es-VE")}</span>
+                  </div>
+                </div>
+              </div>
+            {/each}
+          </div>
+        </div>
+
+        <!-- Selección de Entidad a Sincronizar -->
+        <div>
+          <h4 class="text-xs font-black uppercase tracking-widest text-text-muted mb-3">Sincronización Selectiva</h4>
+          <form
+            method="POST"
+            action="?/syncEntity"
+            use:enhance={({ formData }) => {
+              const entity = (formData.get("entity") as string) || "suppliers";
+              syncingEntity = entity;
+              syncResult = null;
+              return async ({ result, update }) => {
+                await update({ reset: false });
+                syncingEntity = null;
+                if (result.type === "success" && result.data) {
+                  syncResult = result.data;
+                  toast.success(result.data?.message || "Sincronización completada.");
+                } else if (result.type === "failure") {
+                  syncResult = {
+                    success: false,
+                    entity,
+                    message: result.data?.message || "Error al sincronizar.",
+                    total_synced: 0,
+                    summary: []
+                  };
+                  toast.error(result.data?.message || "Error al sincronizar");
+                } else {
+                  toast.error("Error inesperado en la sincronización.");
+                }
+              };
+            }}
+            class="grid grid-cols-1 md:grid-cols-3 gap-3"
+          >
+            <!-- 1. Proveedores -->
+            <div class="p-4 rounded-2xl bg-surface-base/50 border border-white/5 flex flex-col justify-between gap-3 hover:border-amber-500/30 transition-all">
+              <div class="flex items-start gap-3">
+                <div class="p-2.5 rounded-xl bg-amber-500/10 text-amber-400 shrink-0">
+                  <Building2 size={20} />
+                </div>
+                <div>
+                  <h5 class="text-sm font-black text-text-base">Proveedores</h5>
+                  <p class="text-[11px] text-text-muted mt-0.5 leading-snug">
+                    Cuentas de egreso, segmentos, ISLR y condiciones de pago.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="submit"
+                name="entity"
+                value="suppliers"
+                disabled={syncingEntity !== null}
+                class="w-full flex items-center justify-center gap-2 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 px-3 py-2.5 rounded-xl text-xs font-bold transition active:scale-95 disabled:opacity-40"
+              >
+                {#if syncingEntity === "suppliers"}
+                  <Loader2 size={14} class="animate-spin" />
+                  <span>Sincronizando...</span>
+                {:else}
+                  <RefreshCw size={14} />
+                  <span>Sincronizar Proveedores</span>
+                {/if}
+              </button>
+            </div>
+
+            <!-- 2. Clientes -->
+            <div class="p-4 rounded-2xl bg-surface-base/50 border border-white/5 flex flex-col justify-between gap-3 hover:border-emerald-500/30 transition-all">
+              <div class="flex items-start gap-3">
+                <div class="p-2.5 rounded-xl bg-emerald-500/10 text-emerald-400 shrink-0">
+                  <Users size={20} />
+                </div>
+                <div>
+                  <h5 class="text-sm font-black text-text-base">Clientes</h5>
+                  <p class="text-[11px] text-text-muted mt-0.5 leading-snug">
+                    Cuentas de ingreso, vendedores, tipos de cliente y zonas.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="submit"
+                name="entity"
+                value="customers"
+                disabled={syncingEntity !== null}
+                class="w-full flex items-center justify-center gap-2 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 px-3 py-2.5 rounded-xl text-xs font-bold transition active:scale-95 disabled:opacity-40"
+              >
+                {#if syncingEntity === "customers"}
+                  <Loader2 size={14} class="animate-spin" />
+                  <span>Sincronizando...</span>
+                {:else}
+                  <RefreshCw size={14} />
+                  <span>Sincronizar Clientes</span>
+                {/if}
+              </button>
+            </div>
+
+            <!-- 3. Artículos -->
+            <div class="p-4 rounded-2xl bg-surface-base/50 border border-white/5 flex flex-col justify-between gap-3 hover:border-blue-500/30 transition-all">
+              <div class="flex items-start gap-3">
+                <div class="p-2.5 rounded-xl bg-blue-500/10 text-blue-400 shrink-0">
+                  <Package size={20} />
+                </div>
+                <div>
+                  <h5 class="text-sm font-black text-text-base">Artículos</h5>
+                  <p class="text-[11px] text-text-muted mt-0.5 leading-snug">
+                    Líneas, sublíneas, categorías, unidades, colores e imágenes.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="submit"
+                name="entity"
+                value="articles"
+                disabled={syncingEntity !== null}
+                class="w-full flex items-center justify-center gap-2 bg-blue-500/20 hover:bg-blue-500/30 text-blue-300 px-3 py-2.5 rounded-xl text-xs font-bold transition active:scale-95 disabled:opacity-40"
+              >
+                {#if syncingEntity === "articles"}
+                  <Loader2 size={14} class="animate-spin" />
+                  <span>Sincronizando...</span>
+                {:else}
+                  <RefreshCw size={14} />
+                  <span>Sincronizar Artículos</span>
+                {/if}
+              </button>
+            </div>
+          </form>
+        </div>
+
+        <!-- Info / Advertencia de Integridad -->
+        <div class="p-4 rounded-2xl bg-brand-500/10 border border-brand-500/20 flex gap-3 text-xs text-text-muted">
+          <CheckCircle2 size={18} class="text-brand-400 shrink-0 mt-0.5" />
+          <div>
+            <span class="font-bold text-text-base">Garantía de Consistencia Referencial y Auditoría</span>
+            <p class="mt-1 leading-relaxed">
+              Cada sincronización analiza las bases de datos de todas las sedes activas. Si un registro no existe en alguna sede, se replica adaptando automáticamente todas sus claves foráneas a los catálogos de destino y se registra la acción en el log de auditoría.
+            </p>
+          </div>
+        </div>
+
+        <!-- Resultado de la Sincronización -->
+        {#if syncResult}
+          <div class="p-5 rounded-2xl border {syncResult.total_synced > 0 ? 'bg-emerald-500/10 border-emerald-500/20' : 'bg-white/5 border-white/10'} space-y-3 animate-in fade-in duration-300">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-2">
+                {#if syncResult.total_synced > 0}
+                  <CheckCircle2 size={20} class="text-emerald-400" />
+                  <span class="text-sm font-black text-emerald-400">
+                    Sincronización Exitosa
+                    {#if syncResult.entity === "suppliers"}(Proveedores){:else if syncResult.entity === "customers"}(Clientes){:else if syncResult.entity === "articles"}(Artículos){/if}
+                  </span>
+                {:else}
+                  <CheckCircle2 size={20} class="text-brand-400" />
+                  <span class="text-sm font-black text-text-base">
+                    Todo al día
+                    {#if syncResult.entity === "suppliers"}(Proveedores){:else if syncResult.entity === "customers"}(Clientes){:else if syncResult.entity === "articles"}(Artículos){/if}
+                  </span>
+                {/if}
+              </div>
+              <span class="text-xs font-mono font-bold px-2 py-0.5 rounded-md bg-white/10 text-text-muted">
+                Total: {syncResult.total_synced || 0}
+              </span>
+            </div>
+            <p class="text-xs text-text-muted">{syncResult.message}</p>
+
+            {#if syncResult.summary && syncResult.summary.length > 0}
+              <div class="pt-2 border-t border-white/5 space-y-2">
+                {#each syncResult.summary as item}
+                  <div class="flex items-center justify-between text-xs p-2 rounded-xl bg-black/20">
+                    <span class="font-bold text-text-base">{item.sede_nombre || item.sede_id}</span>
+                    {#if item.migrated > 0}
+                      <span class="px-2 py-0.5 rounded-lg bg-emerald-500/20 text-emerald-400 font-mono font-bold">
+                        +{item.migrated} migrados
+                      </span>
+                    {:else if item.errors && item.errors.length > 0}
+                      <span class="px-2 py-0.5 rounded-lg bg-red-500/20 text-red-400 font-mono font-bold">
+                        {item.errors.length} error(es)
+                      </span>
+                    {:else}
+                      <span class="px-2 py-0.5 rounded-lg bg-white/5 text-text-muted font-mono">
+                        Al día (0 faltantes)
+                      </span>
+                    {/if}
+                  </div>
+                {/each}
+              </div>
+            {/if}
+          </div>
+        {/if}
+      </div>
+
+      <!-- Footer Actions -->
+      <div class="p-6 md:p-8 border-t border-white/5 bg-surface-base/30 flex items-center justify-end">
+        <button
+          type="button"
+          disabled={syncingEntity !== null}
+          onclick={() => { showSyncModal = false; syncResult = null; }}
+          class="px-6 py-3 rounded-2xl font-bold bg-white/5 hover:bg-white/10 transition-all text-sm text-text-base disabled:opacity-50"
+        >
+          Cerrar
+        </button>
       </div>
     </div>
   </div>

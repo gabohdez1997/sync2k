@@ -9,60 +9,111 @@ import type { Actions, PageServerLoad } from './$types';
 
 // ─── Load ──────────────────────────────────────────────────────
 export const load: PageServerLoad = protectLoad('sec_branches', async ({ locals, fetch }) => {
-  // Intentamos obtener todos los campos, incluyendo 'default_warehouse' y 'allow_decimals_units'
-  let { data: branches, error } = await supabaseAdmin
-    .from('branches')
-    .select('id, name, business_name, agent_url, agent_token, profit_branch_codes, sql_config, profit_server_id, local_dns_alias, active, sort_order, updated_at, rif, address, latitude, longitude, logo_url, phone, default_warehouse, allow_decimals_units')
-    .order('sort_order')
-    .order('name');
-
-  // Si falla específicamente por la columna default_warehouse (migración no aplicada)
-  if (error && error.message.includes('default_warehouse')) {
-    console.warn('[BRANCHES] La columna default_warehouse no existe. Reintentando sin ella...');
-    const fallback = await supabaseAdmin
+  try {
+    // Intentamos obtener todos los campos, incluyendo 'default_warehouse' y 'allow_decimals_units'
+    let { data: branches, error } = await supabaseAdmin
       .from('branches')
-      .select('id, name, business_name, agent_url, agent_token, profit_branch_codes, sql_config, profit_server_id, local_dns_alias, active, sort_order, updated_at, rif, address, latitude, longitude, logo_url, phone, allow_decimals_units')
+      .select('id, name, business_name, agent_url, agent_token, profit_branch_codes, sql_config, profit_server_id, local_dns_alias, active, sort_order, updated_at, rif, address, latitude, longitude, logo_url, phone, default_warehouse, allow_decimals_units')
       .order('sort_order')
       .order('name');
-    
-    branches = fallback.data;
-    error = fallback.error;
-  }
 
-  if (error) {
-    console.error('[BRANCHES] Error cargando sucursales:', error.message);
-    return { branches: [], agentServers: [], loadError: error.message };
-  }
-
-  // Intentar conectar al agente de la primera sucursal activa (preview de servers SQL)
-  let agentServers: any[] = [];
-  let loadError: string | null = null;
-  const activeBranch = (branches ?? []).find(b => b.active && b.agent_url);
-
-  if (activeBranch) {
-    try {
-      const client = new AgentClient(
-        {
-          slug:          activeBranch.id,
-          agent_url:     activeBranch.agent_url!,
-          agent_api_key: activeBranch.agent_token
-        },
-        locals.profile || undefined,
-        fetch
-      );
-      const res = await client.getDatabaseConfig();
-      const resAny = res as any;
-      agentServers = resAny?.data?.servers || resAny?.servers || [];
-    } catch (e: any) {
-      loadError = `No se pudo conectar al agente: ${e.message}`;
+    // Si falla específicamente por la columna default_warehouse (migración no aplicada)
+    if (error && error.message.includes('default_warehouse')) {
+      console.warn('[BRANCHES] La columna default_warehouse no existe. Reintentando sin ella...');
+      const fallback = await supabaseAdmin
+        .from('branches')
+        .select('id, name, business_name, agent_url, agent_token, profit_branch_codes, sql_config, profit_server_id, local_dns_alias, active, sort_order, updated_at, rif, address, latitude, longitude, logo_url, phone, allow_decimals_units')
+        .order('sort_order')
+        .order('name');
+      
+      branches = fallback.data;
+      error = fallback.error;
     }
-  }
 
-  return {
-    branches:     branches ?? [],
-    agentServers,
-    loadError
-  };
+    if (error) {
+      console.error('[BRANCHES] Error cargando sucursales:', error.message);
+      return { branches: [], agentServers: [], branchStats: {}, loadError: error.message };
+    }
+
+    // Consultar servidores SQL y estadísticas de todas las sucursales activas en paralelo
+    let agentServers: any[] = [];
+    let branchStats: Record<string, { articulos: number; clientes: number; proveedores: number; online: boolean }> = {};
+    let loadError: string | null = null;
+    const activeBranches = (branches ?? []).filter(b => b.active && b.agent_url);
+
+    if (activeBranches.length > 0) {
+      await Promise.allSettled(
+        activeBranches.map(async (branch) => {
+          try {
+            const client = new AgentClient(
+              {
+                slug:          branch.id,
+                agent_url:     branch.agent_url!,
+                agent_api_key: branch.agent_token
+              },
+              locals.profile || undefined,
+              fetch
+            );
+
+            const [dbConfigRes, statsRes] = await Promise.all([
+              client.getDatabaseConfig().catch(() => null),
+              client.getBranchStats().catch(() => null)
+            ]);
+
+            if (dbConfigRes) {
+              const resAny = dbConfigRes as any;
+              const servers = resAny?.data?.servers || resAny?.servers || [];
+              if (Array.isArray(servers) && servers.length > 0) {
+                // Combinar servidores evitando duplicados por id
+                for (const s of servers) {
+                  if (!agentServers.some(exist => exist.id === s.id)) {
+                    agentServers.push(s);
+                  }
+                }
+              }
+            }
+
+            if (statsRes && statsRes.success) {
+              const statsArray = Array.isArray(statsRes.data) ? statsRes.data : [statsRes.data];
+              for (const s of statsArray) {
+                if (!s) continue;
+                const statObj = {
+                  articulos: Number(s.articulos) || 0,
+                  clientes: Number(s.clientes) || 0,
+                  proveedores: Number(s.proveedores) || 0,
+                  online: Boolean(s.online ?? true)
+                };
+
+                // Indexar por todas las posibles claves para máxima compatibilidad
+                if (s.sede_id) branchStats[s.sede_id] = statObj;
+                if (s.sede_nombre) branchStats[s.sede_nombre] = statObj;
+                branchStats[branch.id] = statObj;
+                if (branch.name) branchStats[branch.name] = statObj;
+                if (branch.profit_server_id) branchStats[branch.profit_server_id] = statObj;
+              }
+            }
+          } catch (e: any) {
+            console.warn(`[BRANCH STATS WARNING] Error en sucursal ${branch.name}:`, e.message);
+          }
+        })
+      );
+    }
+
+    return {
+      branches:     branches ?? [],
+      agentServers,
+      branchStats,
+      loadError
+    };
+  } catch (fatalErr: any) {
+    console.error('[BRANCHES FATAL LOAD ERROR]:', fatalErr);
+    return {
+      branches: [],
+      agentServers: [],
+      branchStats: {},
+      loadError: fatalErr.message || 'Error inesperado al cargar sucursales'
+    };
+  }
 });
 
 // ─── Actions ───────────────────────────────────────────────────
@@ -293,5 +344,121 @@ export const actions: Actions = {
     });
 
     return { success: true };
+  }),
+
+  syncEntity: protectAction('sec_branches', async ({ request, locals, fetch }) => {
+    const formData = await request.formData();
+    const entity = (formData.get('entity') as string)?.trim() || 'suppliers'; // 'suppliers' | 'customers' | 'articles'
+
+    // Obtener las sucursales activas
+    const { data: branches } = await supabaseAdmin
+      .from('branches')
+      .select('id, name, agent_url, agent_token, active')
+      .eq('active', true);
+
+    const targetBranch = (branches || []).find(b => b.agent_url);
+    if (!targetBranch) {
+      return fail(400, { message: 'No hay ninguna sucursal activa con conexión al agente configurada.' });
+    }
+
+    try {
+      const client = new AgentClient(
+        {
+          slug:          targetBranch.id,
+          agent_url:     targetBranch.agent_url!,
+          agent_api_key: targetBranch.agent_token
+        },
+        locals.profile || undefined,
+        fetch
+      );
+
+      let result: any = null;
+      let moduleName = 'PROVEEDORES';
+
+      if (entity === 'customers') {
+        moduleName = 'CLIENTES';
+        result = await client.syncCustomers();
+      } else if (entity === 'articles') {
+        moduleName = 'ARTICULOS';
+        result = await client.syncArticles();
+      } else {
+        moduleName = 'PROVEEDORES';
+        result = await client.syncSuppliers();
+      }
+
+      if (!result || !result.success) {
+        return fail(500, { message: result?.message || `Error al ejecutar sincronización de ${moduleName.toLowerCase()}.` });
+      }
+
+      await supabaseAdmin.rpc('log_action', {
+        p_user_id:    locals.profile?.id ?? null,
+        p_user_email: locals.profile?.email ?? 'system',
+        p_action:     'SYNC',
+        p_module:     moduleName,
+        p_record_id:  'MULTI-SEDE',
+        p_branch_id:  targetBranch.id,
+        p_new_data:   JSON.stringify({ entity, total_synced: result.total_synced, summary: result.summary, timestamp: new Date().toISOString() })
+      });
+
+      return {
+        success: true,
+        entity,
+        message: result.message,
+        total_synced: result.total_synced,
+        summary: result.summary || []
+      };
+    } catch (e: any) {
+      return fail(500, { message: `Error en la sincronización: ${e.message}` });
+    }
+  }),
+
+  syncSuppliers: protectAction('sec_branches', async ({ locals, fetch }) => {
+    // Obtener las sucursales activas
+    const { data: branches } = await supabaseAdmin
+      .from('branches')
+      .select('id, name, agent_url, agent_token, active')
+      .eq('active', true);
+
+    const targetBranch = (branches || []).find(b => b.agent_url);
+    if (!targetBranch) {
+      return fail(400, { message: 'No hay ninguna sucursal activa con conexión al agente configurada.' });
+    }
+
+    try {
+      const client = new AgentClient(
+        {
+          slug:          targetBranch.id,
+          agent_url:     targetBranch.agent_url!,
+          agent_api_key: targetBranch.agent_token
+        },
+        locals.profile || undefined,
+        fetch
+      );
+
+      const result = await client.syncSuppliers();
+      if (!result || !result.success) {
+        return fail(500, { message: result?.message || 'Error al ejecutar sincronización de proveedores.' });
+      }
+
+      await supabaseAdmin.rpc('log_action', {
+        p_user_id:    locals.profile?.id ?? null,
+        p_user_email: locals.profile?.email ?? 'system',
+        p_action:     'SYNC',
+        p_module:     'PROVEEDORES',
+        p_record_id:  'MULTI-SEDE',
+        p_branch_id:  targetBranch.id,
+        p_new_data:   JSON.stringify(result)
+      });
+
+      return {
+        success: true,
+        entity: 'suppliers',
+        message: result.message,
+        total_synced: result.total_synced,
+        summary: result.summary || []
+      };
+    } catch (e: any) {
+      return fail(500, { message: `Error en la sincronización: ${e.message}` });
+    }
   })
 };
