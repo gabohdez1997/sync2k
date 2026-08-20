@@ -29,7 +29,8 @@
     Layers,
     GitBranch,
     ChevronLeft,
-    ChevronRight
+    ChevronRight,
+    Users
   } from "lucide-svelte";
   import Combobox from "$lib/components/ui/Combobox.svelte";
   import type { PageData } from "./$types";
@@ -50,6 +51,10 @@
   const moduleInfo: Record<string, { label: string, icon: any, color: string }> = {
     'sec_branches':    { label: 'Sucursales', icon: Store, color: 'text-blue-400' },
     'sec_articles':    { label: 'Ubicaciones', icon: MapPin, color: 'text-purple-400' },
+    'pur_suppliers':   { label: 'Proveedores', icon: Building, color: 'text-amber-400' },
+    'PROVEEDORES':     { label: 'Proveedores', icon: Building, color: 'text-amber-400' },
+    'sales_customers': { label: 'Clientes', icon: Users, color: 'text-brand-400' },
+    'CLIENTES':        { label: 'Clientes', icon: Users, color: 'text-brand-400' },
     'pur_articles':    { label: 'Artículos', icon: Package, color: 'text-emerald-400' },
     'pur_lines':       { label: 'Líneas', icon: Layers, color: 'text-teal-400' },
     'pur_sublines':    { label: 'Sub-Líneas', icon: GitBranch, color: 'text-cyan-400' },

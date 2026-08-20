@@ -114,6 +114,7 @@
       label: 'Compras',
       icon: ShoppingCart,
       subItems: [
+        { id: 'pur_suppliers', label: 'Proveedores', href: '/dashboard/purchases/suppliers', icon: Building },
         { id: 'pur_articles', label: 'Artículos', href: '/dashboard/purchases/articles', icon: Package },
         { id: 'pur_lines', label: 'Líneas', href: '/dashboard/purchases/lines', icon: Layers },
         { id: 'pur_sublines', label: 'Sub-Líneas', href: '/dashboard/purchases/sublines', icon: GitBranch },

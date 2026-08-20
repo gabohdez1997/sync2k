@@ -205,4 +205,64 @@ export class AgentClient {
 	async getTiposCliente() {
 		return this.request<any>('/catalogos/tipos_cliente');
 	}
+
+	/**
+	 * Obtiene el listado de proveedores
+	 */
+	async getSuppliers(page = 1, limit = 50) {
+		return this.request<any[]>(`/proveedores?page=${page}&limit=${limit}`);
+	}
+
+	/**
+	 * Busca proveedores con filtros
+	 */
+	async searchSuppliers(filters: Record<string, string>, page = 1, limit = 50) {
+		const params = new URLSearchParams(filters);
+		return this.request<any[]>(`/proveedores/search?${params.toString()}&page=${page}&limit=${limit}`);
+	}
+
+	/**
+	 * Crea o actualiza un proveedor
+	 */
+	async saveSupplier(supplier: any, isNew: boolean = true, sedeId: string = '') {
+		const sedeParam = (isNew && sedeId) ? `?sede=${encodeURIComponent(sedeId)}` : '';
+		const endpoint = isNew
+			? `/proveedores${sedeParam}`
+			: `/proveedores/${encodeURIComponent(supplier.co_prov)}`;
+		return this.request<any>(endpoint, {
+			method: isNew ? 'POST' : 'PUT',
+			body: JSON.stringify(supplier)
+		});
+	}
+
+	/**
+	 * Elimina (inactiva) un proveedor
+	 */
+	async deleteSupplier(co_prov: string) {
+		return this.request<any>(`/proveedores/${encodeURIComponent(co_prov)}`, {
+			method: 'DELETE'
+		});
+	}
+
+	/**
+	 * Obtiene el detalle de un proveedor específico
+	 */
+	async getSupplier(co_prov: string) {
+		return this.request<any>(`/proveedores/${encodeURIComponent(co_prov)}`);
+	}
+
+	/**
+	 * Obtiene el catálogo de tipos de proveedor
+	 */
+	async getTiposProveedor() {
+		return this.request<any>('/catalogos/tipos_proveedor');
+	}
+
+	/**
+	 * Obtiene el catálogo de condiciones de pago
+	 */
+	async getCondicionesPago(sedeId?: string) {
+		const query = sedeId ? `?sede_id=${encodeURIComponent(sedeId)}` : '';
+		return this.request<any>(`/catalogos/condiciones_pago${query}`);
+	}
 }

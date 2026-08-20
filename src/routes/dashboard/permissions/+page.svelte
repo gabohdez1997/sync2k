@@ -96,6 +96,7 @@
       label: "Compras",
       icon: ShoppingCart,
       options: [
+        { id: "pur_suppliers", label: "Proveedores" },
         { id: "pur_articles", label: "Artículos" },
         { id: "pur_lines", label: "Líneas" },
         { id: "pur_sublines", label: "Sub-Líneas" },
