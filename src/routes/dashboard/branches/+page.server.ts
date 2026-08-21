@@ -441,24 +441,31 @@ export const actions: Actions = {
             return;
           }
 
-          try {
-            const importRes = await b.client.importBatch(endpoint, missingItems, b.branch.id);
-            const count = importRes?.migrated || 0;
-            totalSynced += count;
-            summary.push({
-              sede_id: b.branch.id,
-              sede_nombre: b.branch.name,
-              migrated: count,
-              errors: importRes?.errors || []
-            });
-          } catch (importErr: any) {
-            summary.push({
-              sede_id: b.branch.id,
-              sede_nombre: b.branch.name,
-              migrated: 0,
-              errors: [importErr.message]
-            });
+          const chunkSize = 250;
+          let branchMigrated = 0;
+          const branchErrors: string[] = [];
+
+          for (let i = 0; i < missingItems.length; i += chunkSize) {
+            const chunk = missingItems.slice(i, i + chunkSize);
+            try {
+              const importRes = await b.client.importBatch(endpoint, chunk, b.branch.id);
+              const count = importRes?.migrated || 0;
+              branchMigrated += count;
+              if (importRes?.errors && importRes.errors.length > 0) {
+                branchErrors.push(...importRes.errors);
+              }
+            } catch (chunkErr: any) {
+              branchErrors.push(`Lote ${Math.floor(i / chunkSize) + 1}: ${chunkErr.message}`);
+            }
           }
+
+          totalSynced += branchMigrated;
+          summary.push({
+            sede_id: b.branch.id,
+            sede_nombre: b.branch.name,
+            migrated: branchMigrated,
+            errors: branchErrors
+          });
         })
       );
 
