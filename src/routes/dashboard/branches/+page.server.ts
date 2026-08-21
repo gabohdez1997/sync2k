@@ -57,7 +57,7 @@ export const load: PageServerLoad = protectLoad('sec_branches', async ({ locals,
 
             const [dbConfigRes, statsRes] = await Promise.all([
               client.getDatabaseConfig().catch(() => null),
-              client.getBranchStats().catch(() => null)
+              client.getBranchStats(branch.id).catch(() => null)
             ]);
 
             if (dbConfigRes) {
@@ -390,7 +390,7 @@ export const actions: Actions = {
           );
 
           try {
-            const res = await client.exportAll(endpoint);
+            const res = await client.exportAll(endpoint, branch.id);
             const items = (res && res.success && Array.isArray(res.data)) ? res.data : [];
             const keyMap = new Set(items.map((i: any) => String(i[keyField] || i.rif || '').trim().toUpperCase()).filter(Boolean));
             return { branch, client, items, keyMap, error: null };
@@ -442,7 +442,7 @@ export const actions: Actions = {
           }
 
           try {
-            const importRes = await b.client.importBatch(endpoint, missingItems);
+            const importRes = await b.client.importBatch(endpoint, missingItems, b.branch.id);
             const count = importRes?.migrated || 0;
             totalSynced += count;
             summary.push({

@@ -23,7 +23,7 @@ export class AgentClient {
 	private baseUrl: string;
 	private apiKey: string;
 	private sqlAuth: string | null = null;
-	private profitUser: string | null = null;
+	private branchId: string | null = null;
 
 	constructor(
 		company: { slug: string; agent_url?: string; agent_api_key?: string; agent_token?: string }, 
@@ -31,6 +31,7 @@ export class AgentClient {
 		fetchFn?: typeof fetch
 	) {
 		this.customFetch = fetchFn || null;
+		this.branchId = company.slug || null;
 		// Priorizar la URL y API Key configuradas en la empresa, 
 		// con fallback al subdominio estándar y la clave privada de .env
 		let rawUrl = company.agent_url || `https://${company.slug}.sync2k.com`;
@@ -58,6 +59,9 @@ export class AgentClient {
 		}
 		headers.set('x-api-key', this.apiKey);
 
+		if (this.branchId) {
+			headers.set('x-branch-id', this.branchId);
+		}
 		if (this.sqlAuth) {
 			headers.set('x-sql-auth', this.sqlAuth);
 		}
@@ -304,8 +308,9 @@ export class AgentClient {
 	/**
 	 * Exporta todos los registros de una entidad desde la sede conectada
 	 */
-	async exportAll(endpoint: string) {
-		return this.request<any>(`/${endpoint}/export-all`, {
+	async exportAll(endpoint: string, sedeId?: string) {
+		const query = sedeId ? `?sede=${encodeURIComponent(sedeId)}` : '';
+		return this.request<any>(`/${endpoint}/export-all${query}`, {
 			method: 'GET'
 		});
 	}
@@ -313,8 +318,9 @@ export class AgentClient {
 	/**
 	 * Importa un lote de registros faltantes hacia la sede conectada
 	 */
-	async importBatch(endpoint: string, items: any[]) {
-		return this.request<any>(`/${endpoint}/import-batch`, {
+	async importBatch(endpoint: string, items: any[], sedeId?: string) {
+		const query = sedeId ? `?sede=${encodeURIComponent(sedeId)}` : '';
+		return this.request<any>(`/${endpoint}/import-batch${query}`, {
 			method: 'POST',
 			body: JSON.stringify({ items })
 		});
