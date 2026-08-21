@@ -7,6 +7,10 @@ import { AgentClient } from '$lib/server/agent';
 import { fail } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
 
+export const config = {
+  maxDuration: 300
+};
+
 // ─── Load ──────────────────────────────────────────────────────
 export const load: PageServerLoad = protectLoad('sec_branches', async ({ locals, fetch }) => {
   try {
