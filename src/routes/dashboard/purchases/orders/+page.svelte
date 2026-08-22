@@ -5,6 +5,7 @@
   import { goto } from "$app/navigation";
   import { onMount } from "svelte";
   import { fade, slide, scale } from "svelte/transition";
+  import * as XLSX from "xlsx";
   import {
     Package,
     Search,
@@ -43,6 +44,13 @@
     Briefcase,
     Building2,
     DollarSign,
+    FileSpreadsheet,
+    UploadCloud,
+    Upload,
+    Layers,
+    CheckCircle2,
+    AlertTriangle,
+    ArrowRight
   } from "lucide-svelte";
   import { toast } from "svelte-sonner";
   import Combobox from "$lib/components/ui/Combobox.svelte";
@@ -446,7 +454,7 @@
   });
 
   function getStep(art: any): number {
-    const uni = String(art.unidad || art.co_uni || "").trim().toUpperCase();
+    const uni = String(art?.unidad || art?.co_uni || "").trim().toUpperCase();
     if (uni === "M" || uni === "KG" || uni === "L" || uni === "METRO") return 0.5;
     return 1;
   }
@@ -672,6 +680,329 @@
   }
 
   let savingOrder = $state(false);
+  let showSaveConfirmationModal = $state(false);
+
+  // --- IMPORTACIÓN MASIVA DESDE EXCEL / CSV ---
+  let showImportModal = $state(false);
+  let importStage = $state<'upload' | 'mapping'>('upload');
+  let importFileName = $state('');
+  let importWorkbook = $state<any>(null);
+  let importSheets = $state<string[]>([]);
+  let selectedSheet = $state('');
+  let parsedRawRows = $state<any[]>([]);
+  let detectedColumns = $state<string[]>([]);
+  let selectedCodeCol = $state('');
+  let selectedQtyCol = $state('');
+  let isDragging = $state(false);
+  let isReadingFile = $state(false);
+  let isImportingToCart = $state(false);
+  let importErrorMsg = $state<string | null>(null);
+
+  function resetImportState() {
+    importStage = 'upload';
+    importFileName = '';
+    importWorkbook = null;
+    importSheets = [];
+    selectedSheet = '';
+    parsedRawRows = [];
+    detectedColumns = [];
+    selectedCodeCol = '';
+    selectedQtyCol = '';
+    isDragging = false;
+    isReadingFile = false;
+    isImportingToCart = false;
+    importErrorMsg = null;
+  }
+
+  function openImportModal() {
+    if (!selectedBranch) {
+      toast.error('Por favor seleccione una Sede antes de importar.');
+      return;
+    }
+    resetImportState();
+    showImportModal = true;
+  }
+
+  function closeImportModal() {
+    showImportModal = false;
+    resetImportState();
+  }
+
+  function normalizeHeader(str: string): string {
+    return String(str || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .trim();
+  }
+
+  function autoDetectColumns(cols: string[]) {
+    const codeCandidates = ['codigo', 'co_art', 'coart', 'cod', 'articulo', 'art_des', 'item', 'referencia', 'ref', 'sku', 'code', 'material', 'id'];
+    const qtyCandidates = ['cantidad', 'cant', 'qty', 'total_art', 'unidades', 'cant.', 'total', 'count', 'quantity', 'bultos', 'piezas', 'uds', 'und', 'cant_enviada'];
+
+    let foundCode = '';
+    for (const cand of codeCandidates) {
+      const match = cols.find(c => {
+        const norm = normalizeHeader(c);
+        return norm === cand || norm.startsWith(cand) || norm.includes(cand);
+      });
+      if (match) {
+        foundCode = match;
+        break;
+      }
+    }
+
+    let foundQty = '';
+    for (const cand of qtyCandidates) {
+      const match = cols.find(c => {
+        const norm = normalizeHeader(c);
+        return norm === cand || norm.startsWith(cand) || norm.includes(cand);
+      });
+      if (match && match !== foundCode) {
+        foundQty = match;
+        break;
+      }
+    }
+
+    selectedCodeCol = foundCode || cols[0] || '';
+    selectedQtyCol = foundQty || cols.find(c => c !== selectedCodeCol) || cols[1] || cols[0] || '';
+  }
+
+  function parseSheetData(sheetName: string) {
+    if (!importWorkbook) return;
+    const worksheet = importWorkbook.Sheets[sheetName];
+    if (!worksheet) return;
+
+    const json: any[] = XLSX.utils.sheet_to_json(worksheet, { defval: '', raw: false });
+    if (!json || json.length === 0) {
+      importErrorMsg = 'La hoja seleccionada está vacía o no contiene filas de datos.';
+      return;
+    }
+
+    parsedRawRows = json;
+    const colSet = new Set<string>();
+    json.forEach(row => {
+      Object.keys(row).forEach(k => {
+        const cleanK = String(k).trim();
+        if (cleanK && !cleanK.startsWith('__EMPTY')) {
+          colSet.add(cleanK);
+        }
+      });
+    });
+
+    const cols = Array.from(colSet);
+    if (cols.length === 0) {
+      importErrorMsg = 'No se detectaron columnas con encabezados válidos en el archivo.';
+      return;
+    }
+
+    detectedColumns = cols;
+    autoDetectColumns(cols);
+    importErrorMsg = null;
+    importStage = 'mapping';
+  }
+
+  function handleSheetChange(newSheet: string) {
+    selectedSheet = newSheet;
+    parseSheetData(newSheet);
+  }
+
+  async function handleFileUpload(file: File) {
+    if (!file) return;
+    importErrorMsg = null;
+    isReadingFile = true;
+    importFileName = file.name;
+
+    try {
+      const arrayBuffer = await file.arrayBuffer();
+      const wb = XLSX.read(arrayBuffer, { type: 'array' });
+
+      if (!wb || !wb.SheetNames || wb.SheetNames.length === 0) {
+        throw new Error('No se encontraron hojas de datos en el archivo cargado.');
+      }
+
+      importWorkbook = wb;
+      importSheets = wb.SheetNames;
+      selectedSheet = wb.SheetNames[0];
+      parseSheetData(selectedSheet);
+    } catch (err: any) {
+      console.error('Error reading Excel/CSV file:', err);
+      importErrorMsg = 'Error al leer el archivo: ' + (err?.message || 'Formato no soportado.');
+    } finally {
+      isReadingFile = false;
+    }
+  }
+
+  function handleFileDrop(e: DragEvent) {
+    e.preventDefault();
+    isDragging = false;
+    if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      handleFileUpload(e.dataTransfer.files[0]);
+    }
+  }
+
+  function handleFileInputChange(e: Event) {
+    const input = e.target as HTMLInputElement;
+    if (input && input.files && input.files.length > 0) {
+      handleFileUpload(input.files[0]);
+    }
+  }
+
+  const mappingPreview = $derived.by(() => {
+    if (!parsedRawRows || parsedRawRows.length === 0 || !selectedCodeCol) return [];
+    return parsedRawRows.slice(0, 5).map((row, idx) => {
+      const rawCode = String(row[selectedCodeCol] ?? '').trim();
+      const rawQty = selectedQtyCol ? String(row[selectedQtyCol] ?? '').trim() : '1';
+      const numQty = parseFloat(rawQty.replace(',', '.'));
+      return {
+        rowNumber: idx + 1,
+        rawCode,
+        rawQty,
+        isValidQty: !isNaN(numQty) && numQty > 0,
+        parsedQty: !isNaN(numQty) && numQty > 0 ? numQty : 1
+      };
+    });
+  });
+
+  const totalValidRowsInFile = $derived.by(() => {
+    if (!parsedRawRows || parsedRawRows.length === 0 || !selectedCodeCol) return 0;
+    return parsedRawRows.filter(row => {
+      const c = String(row[selectedCodeCol] ?? '').trim();
+      const q = selectedQtyCol ? parseFloat(String(row[selectedQtyCol] ?? '').replace(',', '.')) : 1;
+      return c.length > 0 && !isNaN(q) && q > 0;
+    }).length;
+  });
+
+  async function processAndImportItems() {
+    if (!selectedBranch) {
+      toast.error('Debe seleccionar la Sede antes de importar.');
+      return;
+    }
+    if (!selectedCodeCol) {
+      toast.error('Debe seleccionar la columna del código de artículo.');
+      return;
+    }
+
+    const itemsMap = new Map<string, number>();
+    let invalidCount = 0;
+
+    for (const row of parsedRawRows) {
+      const code = String(row[selectedCodeCol] ?? '').trim();
+      if (!code) {
+        invalidCount++;
+        continue;
+      }
+      const rawQty = selectedQtyCol ? String(row[selectedQtyCol] ?? '').trim() : '1';
+      const parsedQty = parseFloat(rawQty.replace(',', '.'));
+      if (isNaN(parsedQty) || parsedQty <= 0) {
+        invalidCount++;
+        continue;
+      }
+      const current = itemsMap.get(code) || 0;
+      itemsMap.set(code, Math.round((current + parsedQty) * 100) / 100);
+    }
+
+    if (itemsMap.size === 0) {
+      toast.error('No se encontraron artículos con código y cantidad válidos para importar.');
+      return;
+    }
+
+    isImportingToCart = true;
+    try {
+      const codesToQuery = Array.from(itemsMap.keys());
+      const res = await fetch('/api/agent/articles/bulk', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          branch_id: selectedBranch,
+          codes: codesToQuery
+        })
+      });
+
+      const json = await res.json();
+      if (!json.success && (!json.data || json.data.length === 0)) {
+        throw new Error(json.message || 'No fue posible consultar los artículos en el agente.');
+      }
+
+      const returnedArticles: any[] = json.data || [];
+      const foundCodesSet = new Set<string>();
+      let addedCount = 0;
+      let updatedCount = 0;
+
+      const defaultAlma = selectedWarehouse || data.context?.warehouses?.[0]?.co_alma || '01';
+
+      for (const art of returnedArticles) {
+        const artCode = String(art.co_art || art.codigo || '').trim();
+        if (!artCode) continue;
+        foundCodesSet.add(artCode.toUpperCase());
+        foundCodesSet.add(artCode);
+
+        const rawQtyToAdd = itemsMap.get(artCode) || itemsMap.get(artCode.toUpperCase()) || 1;
+        const qtyToAdd = Math.round(rawQtyToAdd * 100) / 100;
+        const warehouse = selectedItemWarehouse[artCode] || art.disponibilidad?.[0]?.co_alma || defaultAlma;
+        const tasa = Number(art.tasa_bcv || 1);
+
+        const enteredCost = Number(itemCosts[artCode] ?? getSuggestedUnitCost(art));
+        const costUSD = showUSD ? enteredCost : (tasa > 0 ? Number((enteredCost / tasa).toFixed(4)) : enteredCost);
+        const costVES = showUSD ? Number((enteredCost * tasa).toFixed(2)) : enteredCost;
+
+        const existingIndex = cart.findIndex(
+          (item) => (item.article?.co_art || item.co_art) === artCode && (item.warehouse || item.co_alma_selected) === warehouse
+        );
+
+        if (existingIndex >= 0) {
+          cart[existingIndex].qty = Math.round((cart[existingIndex].qty + qtyToAdd) * 100) / 100;
+          cart[existingIndex].precio_usd = costUSD;
+          cart[existingIndex].precio_ves = costVES;
+          cart[existingIndex].price_selected = {
+            precio: costUSD,
+            precio_ves: costVES,
+            id_precio: "01"
+          };
+          updatedCount++;
+        } else {
+          cart.push({
+            article: art,
+            co_art: artCode,
+            art_des: art.art_des || art.descripcion || artCode,
+            qty: qtyToAdd,
+            precio_usd: costUSD,
+            precio_ves: costVES,
+            price_selected: {
+              precio: costUSD,
+              precio_ves: costVES,
+              id_precio: "01"
+            },
+            co_alma_selected: warehouse,
+            co_uni: art.unidad || art.co_uni || "UND",
+            unidad: art.unidad || art.co_uni || "UND",
+            porc_imp: art.tipo_imp === "7" ? 0 : 16,
+            disponibilidad: art.disponibilidad || [],
+            precios: art.precios || []
+          });
+          addedCount++;
+        }
+      }
+
+      const notFoundCodes = codesToQuery.filter(c => !foundCodesSet.has(c) && !foundCodesSet.has(c.toUpperCase()));
+
+      closeImportModal();
+
+      if (addedCount > 0 || updatedCount > 0) {
+        toast.success(`Importación completada: ${addedCount} artículo(s) agregado(s)${updatedCount > 0 ? `, ${updatedCount} actualizado(s)` : ''}.`);
+      }
+
+      if (notFoundCodes.length > 0) {
+        toast.warning(`${notFoundCodes.length} código(s) no existen en el catálogo: ${notFoundCodes.slice(0, 5).join(', ')}${notFoundCodes.length > 5 ? '...' : ''}`);
+      }
+
+    } catch (err: any) {
+      console.error('Error al procesar la importación:', err);
+      toast.error('Error al importar artículos: ' + (err?.message || 'Error desconocido'));
+    } finally {
+      isImportingToCart = false;
+    }
+  }
 </script>
 
 <svelte:head>
@@ -717,13 +1048,26 @@
       {/if}
     </div>
 
-    <a
-      href="/dashboard/purchases/orders/history"
-      class="flex items-center justify-center gap-2 px-5 py-3 h-14 rounded-2xl bg-surface-soft hover:bg-surface-strong text-text-base border border-border-subtle transition-all font-bold active:scale-95 shadow-sm shrink-0 w-full md:w-auto"
-    >
-      <Clock size={18} class="text-brand-500" />
-      Ver Historial
-    </a>
+    <div class="flex flex-col sm:flex-row items-center gap-3 w-full md:w-auto">
+      {#if activeTab === 1}
+        <button
+          type="button"
+          onclick={openImportModal}
+          class="flex items-center justify-center gap-2 px-5 py-3 h-14 rounded-2xl bg-brand-500/10 hover:bg-brand-500/20 text-brand-400 border border-brand-500/30 transition-all font-bold active:scale-95 shadow-sm shrink-0 w-full sm:w-auto cursor-pointer"
+        >
+          <FileSpreadsheet size={18} />
+          Importar Artículos
+        </button>
+      {/if}
+
+      <a
+        href="/dashboard/purchases/orders/history"
+        class="flex items-center justify-center gap-2 px-5 py-3 h-14 rounded-2xl bg-surface-soft hover:bg-surface-strong text-text-base border border-border-subtle transition-all font-bold active:scale-95 shadow-sm shrink-0 w-full sm:w-auto"
+      >
+        <Clock size={18} class="text-brand-500" />
+        Ver Historial
+      </a>
+    </div>
   </div>
 
   <!-- Step Progress Indicator -->
@@ -2025,12 +2369,14 @@
 
               <div class="pt-6 space-y-4 relative z-10">
                 <form
+                  id="saveOrderForm"
                   method="POST"
                   action="?/saveOrder"
                   use:enhance={() => {
                     savingOrder = true;
                     return async ({ result }) => {
                       savingOrder = false;
+                      showSaveConfirmationModal = false;
                       if (result.type === "success") {
                         toast.success("¡Orden de compra procesada exitosamente!");
                         goto(`/dashboard/purchases/orders/history?branch_id=${selectedBranch}`);
@@ -2064,6 +2410,7 @@
                           (c.co_art || "").startsWith("0901");
                         const rate = isStrictlyExempt ? 0 : orderTaxRate;
                         const taxType = rate === 16 ? "1" : "5";
+                        const branchDefaultAlma = data.context?.warehouses?.[0]?.co_alma || selectedWarehouse || '01';
                         return {
                           reng_num: i + 1,
                           co_art: c.co_art || c.codigo,
@@ -2071,7 +2418,7 @@
                           cantidad: c.qty,
                           precio: showUSD ? Number(c.price_selected?.precio || c.precio_usd || 0) : Number(c.price_selected?.precio_ves || c.precio_ves || 0),
                           cost_unit: showUSD ? Number(c.price_selected?.precio || c.precio_usd || 0) : Number(c.price_selected?.precio_ves || c.precio_ves || 0),
-                          co_alma: c.co_alma_selected || selectedWarehouse || '01',
+                          co_alma: branchDefaultAlma,
                           co_uni: c.co_uni || c.unidad || 'UND',
                           tipo_imp: taxType,
                           porc_imp: rate,
@@ -2082,7 +2429,18 @@
                   />
 
                   <button
-                    type="submit"
+                    type="button"
+                    onclick={() => {
+                      if (!selectedSupplier) {
+                        toast.error("Por favor seleccione un proveedor.");
+                        return;
+                      }
+                      if (cart.length === 0) {
+                        toast.error("El carrito está vacío. Agregue artículos.");
+                        return;
+                      }
+                      showSaveConfirmationModal = true;
+                    }}
                     disabled={savingOrder || cart.length === 0 || !selectedSupplier}
                     class="w-full h-20 bg-brand-600 hover:bg-brand-500 text-white rounded-[24px] font-black text-xl uppercase tracking-[0.2em] shadow-[0_20px_40px_-10px_rgba(var(--brand-rgb),0.3)] active:scale-[0.97] transition-all flex items-center justify-center gap-4 disabled:opacity-50 disabled:grayscale group cursor-pointer"
                   >
@@ -2230,6 +2588,438 @@
       >
         BS
       </button>
+    </div>
+  </div>
+{/if}
+
+{#if showSaveConfirmationModal}
+  <div
+    class="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md"
+    in:fade={{ duration: 150 }}
+    out:fade={{ duration: 150 }}
+  >
+    <div
+      class="bg-surface-base w-full max-w-lg rounded-[36px] border border-border-subtle shadow-2xl overflow-hidden relative z-10 flex flex-col"
+      in:scale={{ duration: 200, start: 0.95 }}
+    >
+      <!-- Modal Header -->
+      <div class="p-6 md:p-8 border-b border-border-subtle bg-surface-soft/50 flex justify-between items-center">
+        <div class="flex items-center gap-3">
+          <div class="h-12 w-12 rounded-2xl bg-brand-500/10 text-brand-400 flex items-center justify-center border border-brand-500/20 shadow-lg shadow-brand-500/5">
+            <ShoppingCart size={24} />
+          </div>
+          <div>
+            <h2 class="text-xl md:text-2xl font-black tracking-tight text-text-base">
+              {data.preloadedOrder ? 'Confirmar Actualización' : 'Confirmar Orden de Compra'}
+            </h2>
+            <p class="text-text-muted text-xs md:text-sm">
+              Verifica los datos y la sede destino antes de procesar
+            </p>
+          </div>
+        </div>
+        <button
+          type="button"
+          onclick={() => !savingOrder && (showSaveConfirmationModal = false)}
+          class="p-2 hover:bg-surface-strong rounded-full transition-colors cursor-pointer text-text-muted hover:text-text-base"
+        >
+          <X size={20} />
+        </button>
+      </div>
+
+      <!-- Body / Summary Info -->
+      <div class="p-6 md:p-8 space-y-5">
+        <!-- Sede Destino Card (Destacada) -->
+        <div class="p-5 rounded-2xl bg-brand-500/10 border border-brand-500/30 flex items-center gap-4">
+          <div class="h-12 w-12 rounded-2xl bg-brand-500/20 text-brand-400 flex items-center justify-center shrink-0 border border-brand-500/30">
+            <Store size={26} />
+          </div>
+          <div class="flex-1 min-w-0">
+            <span class="text-[10px] font-black uppercase tracking-wider text-brand-400/80 block mb-0.5">
+              Sede Destino de la Orden
+            </span>
+            <h3 class="text-lg font-black text-text-base truncate">
+              {selectedBranchConfig?.name || selectedBranch}
+            </h3>
+            <p class="text-xs text-text-muted font-mono">
+              Código / ID: {selectedBranch}
+            </p>
+          </div>
+        </div>
+
+        <!-- Detalles Clave -->
+        <div class="p-5 rounded-2xl bg-surface-soft border border-border-subtle space-y-3">
+          <div class="flex justify-between items-center text-xs">
+            <span class="text-text-muted font-bold flex items-center gap-2">
+              <Building2 size={14} class="text-brand-400" />
+              Proveedor:
+            </span>
+            <span class="font-bold text-text-base truncate max-w-[240px] text-right">
+              {selectedSupplier?.descripcion || selectedSupplier?.prov_des || selectedSupplier?.co_prov}
+            </span>
+          </div>
+
+          <div class="flex justify-between items-center text-xs">
+            <span class="text-text-muted font-bold flex items-center gap-2">
+              <Tag size={14} class="text-brand-400" />
+              RIF / Código:
+            </span>
+            <span class="font-mono font-bold text-text-base">
+              {selectedSupplier?.rif || selectedSupplier?.co_prov}
+            </span>
+          </div>
+
+          <div class="flex justify-between items-center text-xs">
+            <span class="text-text-muted font-bold flex items-center gap-2">
+              <Package size={14} class="text-brand-400" />
+              Total Artículos:
+            </span>
+            <span class="font-black text-text-base">
+              {cart.length} renglón(es) ({cart.reduce((s, i) => s + (Number(i.qty) || 0), 0)} unidades)
+            </span>
+          </div>
+
+          <div class="flex justify-between items-center text-xs">
+            <span class="text-text-muted font-bold flex items-center gap-2">
+              <CreditCard size={14} class="text-brand-400" />
+              Condición de Pago:
+            </span>
+            <span class="font-bold text-text-base">
+              {data.context?.condicionesPago?.find((c: any) => c.co_cond === orderPaymentCondition)?.cond_des || orderPaymentCondition}
+            </span>
+          </div>
+
+          <div class="pt-3 border-t border-border-subtle flex justify-between items-center">
+            <span class="text-xs font-black uppercase tracking-wider text-text-muted">
+              Total a Pagar:
+            </span>
+            <span class="text-2xl font-black text-brand-400 font-mono">
+              {totals().symbol} {totals().total.toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Modal Footer Actions -->
+      <div class="p-6 md:p-8 border-t border-border-subtle bg-surface-soft/30 flex gap-3">
+        <button
+          type="button"
+          onclick={() => (showSaveConfirmationModal = false)}
+          disabled={savingOrder}
+          class="flex-1 h-14 rounded-2xl font-bold bg-surface-soft hover:bg-surface-strong transition-all text-text-muted border border-border-subtle disabled:opacity-50 cursor-pointer"
+        >
+          Cancelar
+        </button>
+
+        <button
+          type="button"
+          onclick={() => {
+            const formEl = document.getElementById('saveOrderForm') as HTMLFormElement;
+            if (formEl) formEl.requestSubmit();
+          }}
+          disabled={savingOrder}
+          class="flex-1 h-14 rounded-2xl font-black bg-brand-600 hover:bg-brand-500 text-white shadow-lg shadow-brand-500/25 transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-3 cursor-pointer"
+        >
+          {#if savingOrder}
+            <Loader2 size={20} class="animate-spin" />
+            <span>Guardando...</span>
+          {:else}
+            <Check size={20} />
+            <span>Confirmar y Guardar</span>
+          {/if}
+        </button>
+      </div>
+    </div>
+  </div>
+{/if}
+
+{#if showImportModal}
+  <div
+    class="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+    in:fade={{ duration: 200 }}
+    out:fade={{ duration: 200 }}
+  >
+    <div
+      class="w-full max-w-2xl bg-surface-base border border-border-subtle rounded-[32px] shadow-2xl overflow-hidden flex flex-col max-h-[90vh] relative z-10"
+      in:scale={{ duration: 200, start: 0.95 }}
+    >
+      <!-- Modal Header -->
+      <div class="p-6 md:p-8 border-b border-border-subtle flex justify-between items-center bg-surface-soft/50">
+        <div class="flex items-center gap-3">
+          <div class="h-12 w-12 rounded-2xl bg-brand-500/10 text-brand-400 flex items-center justify-center border border-brand-500/20">
+            <FileSpreadsheet size={24} />
+          </div>
+          <div>
+            <h2 class="text-xl md:text-2xl font-black tracking-tight text-text-base">
+              Importar Artículos
+            </h2>
+            <p class="text-text-muted text-xs md:text-sm">
+              Carga un archivo Excel (.xlsx, .xls) o CSV para añadir artículos a la orden de compra
+            </p>
+          </div>
+        </div>
+        <button
+          type="button"
+          onclick={closeImportModal}
+          class="p-2 hover:bg-surface-strong rounded-full transition-colors cursor-pointer text-text-muted hover:text-text-base"
+        >
+          <X size={22} />
+        </button>
+      </div>
+
+      <!-- Contenido Modal -->
+      <div class="flex-1 overflow-y-auto p-6 md:p-8 space-y-6 custom-scrollbar">
+
+        {#if importErrorMsg}
+          <div class="bg-red-500/10 border border-red-500/30 rounded-2xl p-4 flex items-center gap-3 text-red-400 font-bold text-xs md:text-sm" transition:slide>
+            <AlertCircle size={20} class="shrink-0" />
+            <span>{importErrorMsg}</span>
+          </div>
+        {/if}
+
+        <!-- ETAPA 1: SUBIDA / DROPZONE -->
+        {#if importStage === 'upload'}
+          <div class="space-y-6">
+            <!-- svelte-ignore a11y_no_static_element_interactions -->
+            <div
+              class="border-2 border-dashed rounded-[28px] p-8 md:p-12 flex flex-col items-center justify-center text-center transition-all cursor-pointer group {isDragging ? 'border-brand-500 bg-brand-500/10' : 'border-border-subtle hover:border-brand-500/50 bg-surface-soft/30 hover:bg-surface-soft/60'}"
+              ondragover={(e) => { e.preventDefault(); isDragging = true; }}
+              ondragleave={() => (isDragging = false)}
+              ondrop={handleFileDrop}
+              onclick={() => document.getElementById('excelFileInputOrder')?.click()}
+            >
+              <input
+                id="excelFileInputOrder"
+                type="file"
+                accept=".xlsx,.xls,.csv"
+                class="hidden"
+                onchange={handleFileInputChange}
+              />
+
+              <div class="h-20 w-20 rounded-3xl bg-brand-500/10 text-brand-400 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform duration-300 border border-brand-500/20 shadow-lg shadow-brand-500/5">
+                {#if isReadingFile}
+                  <Loader2 size={36} class="animate-spin text-brand-500" />
+                {:else}
+                  <UploadCloud size={40} />
+                {/if}
+              </div>
+
+              <h3 class="text-lg font-black text-text-base mb-1">
+                Arrastra tu archivo aquí o <span class="text-brand-400 underline decoration-brand-500/40">selecciónalo</span>
+              </h3>
+              <p class="text-xs text-text-muted font-medium max-w-sm">
+                Formatos compatibles: Microsoft Excel (.xlsx, .xls) y archivos delimitados (.csv).
+              </p>
+
+              <div class="mt-6 flex flex-wrap items-center justify-center gap-2">
+                <span class="px-3 py-1 rounded-xl bg-surface-base border border-border-subtle text-[11px] font-mono font-bold text-text-muted">
+                  .XLSX
+                </span>
+                <span class="px-3 py-1 rounded-xl bg-surface-base border border-border-subtle text-[11px] font-mono font-bold text-text-muted">
+                  .XLS
+                </span>
+                <span class="px-3 py-1 rounded-xl bg-surface-base border border-border-subtle text-[11px] font-mono font-bold text-text-muted">
+                  .CSV
+                </span>
+              </div>
+            </div>
+
+            <!-- Tips & Information Box -->
+            <div class="p-4 rounded-2xl bg-surface-soft/40 border border-border-subtle flex items-start gap-3">
+              <div class="p-2 rounded-xl bg-brand-500/10 text-brand-400 shrink-0">
+                <Tag size={16} />
+              </div>
+              <div class="text-xs space-y-1">
+                <p class="font-bold text-text-base">Mapeo flexible de columnas:</p>
+                <p class="text-text-muted leading-relaxed">
+                  Tu archivo solo necesita contener una columna con los <strong>códigos de artículo</strong> y otra con las <strong>cantidades</strong>. En el siguiente paso podrás elegir exactamente qué columnas usar.
+                </p>
+              </div>
+            </div>
+          </div>
+        {/if}
+
+        <!-- ETAPA 2: MAPEO DE COLUMNAS & PREVIEW -->
+        {#if importStage === 'mapping'}
+          <div class="space-y-6" transition:fade={{ duration: 150 }}>
+            
+            <!-- Info del archivo cargado -->
+            <div class="p-4 rounded-2xl bg-surface-soft border border-border-subtle flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+              <div class="flex items-center gap-3 min-w-0">
+                <div class="h-10 w-10 rounded-xl bg-brand-500/10 text-brand-400 flex items-center justify-center shrink-0 border border-brand-500/20">
+                  <FileText size={20} />
+                </div>
+                <div class="min-w-0">
+                  <p class="text-xs font-black text-text-base truncate">{importFileName}</p>
+                  <p class="text-[10px] text-text-muted font-bold">
+                    {parsedRawRows.length} fila(s) detectada(s) · {detectedColumns.length} columna(s)
+                  </p>
+                </div>
+              </div>
+
+              <div class="flex items-center gap-2 w-full sm:w-auto justify-end">
+                {#if importSheets.length > 1}
+                  <select
+                    value={selectedSheet}
+                    onchange={(e) => handleSheetChange(e.currentTarget.value)}
+                    class="h-9 px-3 rounded-xl bg-surface-base text-xs font-bold text-text-base border border-border-subtle outline-none cursor-pointer"
+                  >
+                    {#each importSheets as sheet}
+                      <option value={sheet}>Hoja: {sheet}</option>
+                    {/each}
+                  </select>
+                {/if}
+
+                <button
+                  type="button"
+                  onclick={() => (importStage = 'upload')}
+                  class="px-3 py-1.5 rounded-xl bg-surface-base hover:bg-surface-strong text-[11px] font-bold text-text-muted hover:text-text-base border border-border-subtle transition-all cursor-pointer"
+                >
+                  Cambiar archivo
+                </button>
+              </div>
+            </div>
+
+            <!-- SELECTORES DE COLUMNAS (INTERACTIVO) -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              
+              <!-- Selector Columna Código -->
+              <div class="glass p-5 rounded-2xl border border-border-subtle space-y-2 relative">
+                <div class="flex items-center justify-between">
+                  <label class="text-[10px] font-black uppercase tracking-wider text-brand-400 block" for="codeColSelect">
+                    Columna de Código *
+                  </label>
+                  <span class="text-[9px] font-bold text-text-muted uppercase">Requerido</span>
+                </div>
+                <div class="relative">
+                  <select
+                    id="codeColSelect"
+                    bind:value={selectedCodeCol}
+                    class="w-full h-12 bg-surface-base rounded-xl px-4 text-xs font-black text-text-base border border-border-subtle appearance-none cursor-pointer focus:border-brand-500/50 outline-none transition-all pr-10"
+                  >
+                    {#each detectedColumns as col}
+                      <option value={col}>{col}</option>
+                    {/each}
+                  </select>
+                  <ChevronDown size={16} class="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none" />
+                </div>
+                <p class="text-[10px] text-text-muted">Identifica el código o SKU del producto en Profit.</p>
+              </div>
+
+              <!-- Selector Columna Cantidad -->
+              <div class="glass p-5 rounded-2xl border border-border-subtle space-y-2 relative">
+                <div class="flex items-center justify-between">
+                  <label class="text-[10px] font-black uppercase tracking-wider text-brand-400 block" for="qtyColSelect">
+                    Columna de Cantidad *
+                  </label>
+                  <span class="text-[9px] font-bold text-text-muted uppercase">Requerido</span>
+                </div>
+                <div class="relative">
+                  <select
+                    id="qtyColSelect"
+                    bind:value={selectedQtyCol}
+                    class="w-full h-12 bg-surface-base rounded-xl px-4 text-xs font-black text-text-base border border-border-subtle appearance-none cursor-pointer focus:border-brand-500/50 outline-none transition-all pr-10"
+                  >
+                    {#each detectedColumns as col}
+                      <option value={col}>{col}</option>
+                    {/each}
+                  </select>
+                  <ChevronDown size={16} class="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none" />
+                </div>
+                <p class="text-[10px] text-text-muted">Unidades numéricas a comprar por artículo.</p>
+              </div>
+
+            </div>
+
+            <!-- PREVISUALIZACIÓN EN VIVO DE LAS PRIMERAS 5 FILAS -->
+            <div class="space-y-3">
+              <div class="flex items-center justify-between">
+                <h4 class="text-xs font-black uppercase tracking-wider text-text-muted flex items-center gap-2">
+                  <Layers size={14} />
+                  Previsualización (Primeras 5 filas)
+                </h4>
+                <span class="text-[11px] font-bold text-brand-400">
+                  {totalValidRowsInFile} fila(s) listas para procesar
+                </span>
+              </div>
+
+              <div class="border border-border-subtle rounded-2xl overflow-hidden bg-surface-base/50">
+                <table class="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr class="bg-surface-soft/80 border-b border-border-subtle text-[10px] font-black uppercase tracking-wider text-text-muted">
+                      <th class="p-3 w-12 text-center">Fila</th>
+                      <th class="p-3">Código ({selectedCodeCol || '---'})</th>
+                      <th class="p-3 text-right">Cantidad ({selectedQtyCol || '---'})</th>
+                      <th class="p-3 text-center w-28">Estado</th>
+                    </tr>
+                  </thead>
+                  <tbody class="divide-y divide-border-subtle">
+                    {#if mappingPreview.length === 0}
+                      <tr>
+                        <td colspan="4" class="p-4 text-center text-text-muted">
+                          No hay datos disponibles para previsualizar.
+                        </td>
+                      </tr>
+                    {:else}
+                      {#each mappingPreview as row}
+                        <tr class="hover:bg-surface-soft/40 transition-colors font-mono text-[11px]">
+                          <td class="p-3 text-center text-text-muted">{row.rowNumber}</td>
+                          <td class="p-3 font-bold text-text-base font-sans">
+                            {row.rawCode || '<vacío>'}
+                          </td>
+                          <td class="p-3 text-right font-black text-brand-400">
+                            {row.rawQty || '0'}
+                          </td>
+                          <td class="p-3 text-center">
+                            {#if row.rawCode && row.isValidQty}
+                              <span class="px-2 py-0.5 rounded-md bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[10px] font-bold">
+                                Válido
+                              </span>
+                            {:else}
+                              <span class="px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-400 border border-amber-500/20 text-[10px] font-bold">
+                                Omitir
+                              </span>
+                            {/if}
+                          </td>
+                        </tr>
+                      {/each}
+                    {/if}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+          </div>
+        {/if}
+
+      </div>
+
+      <!-- Modal Footer -->
+      <div class="p-6 md:p-8 border-t border-border-subtle bg-surface-soft/30 flex justify-between items-center gap-3">
+        <button
+          type="button"
+          onclick={closeImportModal}
+          class="px-6 py-3 rounded-2xl bg-surface-soft hover:bg-surface-strong text-text-muted hover:text-text-base font-bold text-xs border border-border-subtle transition-all cursor-pointer"
+        >
+          Cancelar
+        </button>
+
+        {#if importStage === 'mapping'}
+          <button
+            type="button"
+            onclick={processAndImportItems}
+            disabled={isImportingToCart || !selectedCodeCol || totalValidRowsInFile === 0}
+            class="flex items-center gap-2 px-8 py-3.5 rounded-2xl bg-brand-600 hover:bg-brand-500 text-white font-black text-xs uppercase tracking-wider shadow-lg shadow-brand-500/25 transition-all active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+          >
+            {#if isImportingToCart}
+              <Loader2 size={16} class="animate-spin" />
+              <span>Importando artículos...</span>
+            {:else}
+              <Upload size={16} />
+              <span>Importar {totalValidRowsInFile} Artículo(s)</span>
+            {/if}
+          </button>
+        {/if}
+      </div>
     </div>
   </div>
 {/if}

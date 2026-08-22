@@ -51,48 +51,70 @@
     const totalBS = rawNeto;
     const totalUSDRef = totalBS / tasaRef;
 
-    // --- LÓGICA DE PAGINACIÓN ---
-    const LIMIT_WITH_TOTALS = 36;
-    const LIMIT_WITHOUT_TOTALS = 44;
+    // --- LÓGICA DE PAGINACIÓN DINÁMICA CALIBRADA ---
+    const CAPACITY_WITH_TOTALS = 34; // Capacidad óptima en hoja con totales
+    const CAPACITY_WITHOUT_TOTALS = 42; // Capacidad óptima en hojas intermedias
+
+    function getItemWeight(item: any): number {
+        const desc = String(item?.art_des || '').trim();
+        // En la columna de descripción (32% de ancho a 8.5px):
+        // Caben hasta ~45 caracteres en una sola línea.
+        // Solo textos que superen ~45 caracteres pasan a 2 líneas.
+        if (desc.length > 90) return 3;
+        if (desc.length > 45) return 2;
+        return 1;
+    }
 
     function paginate(items: any[]) {
-        let pages = [];
+        let pages: any[] = [];
         let remaining = [...items];
 
         while (remaining.length > 0) {
-            if (remaining.length <= LIMIT_WITH_TOTALS) {
+            // Verificar si todos los ítems restantes caben en una página con totales
+            const remainingWeight = remaining.reduce((acc, it) => acc + getItemWeight(it), 0);
+            if (remainingWeight <= CAPACITY_WITH_TOTALS) {
                 pages.push({
                     items: remaining.splice(0, remaining.length),
                     showTotals: true,
-                    expectedRows: LIMIT_WITH_TOTALS,
+                    emptyRowsCount: Math.max(0, CAPACITY_WITH_TOTALS - remainingWeight)
                 });
-            } else {
-                pages.push({
-                    items: remaining.splice(0, LIMIT_WITHOUT_TOTALS),
-                    showTotals: false,
-                    expectedRows: LIMIT_WITHOUT_TOTALS,
-                });
+                break;
             }
+
+            // Llenar página intermedia sin totales según peso
+            let pageItems: any[] = [];
+            let currentWeight = 0;
+
+            while (remaining.length > 0) {
+                const nextWeight = getItemWeight(remaining[0]);
+                if (pageItems.length > 0 && currentWeight + nextWeight > CAPACITY_WITHOUT_TOTALS) {
+                    break;
+                }
+                currentWeight += nextWeight;
+                pageItems.push(remaining.shift());
+            }
+
+            pages.push({
+                items: pageItems,
+                showTotals: false,
+                emptyRowsCount: Math.max(0, CAPACITY_WITHOUT_TOTALS - currentWeight)
+            });
         }
 
+        // Si la última página quedó sin totales, verificar si requiere hoja final exclusiva
         if (pages.length > 0 && !pages[pages.length - 1].showTotals) {
-            if (pages[pages.length - 1].items.length > LIMIT_WITH_TOTALS) {
-                pages.push({
-                    items: [],
-                    showTotals: true,
-                    expectedRows: LIMIT_WITH_TOTALS,
-                });
-            } else {
-                pages[pages.length - 1].showTotals = true;
-                pages[pages.length - 1].expectedRows = LIMIT_WITH_TOTALS;
-            }
+            pages.push({
+                items: [],
+                showTotals: true,
+                emptyRowsCount: CAPACITY_WITH_TOTALS
+            });
         }
 
         if (pages.length === 0) {
             pages.push({
                 items: [],
                 showTotals: true,
-                expectedRows: LIMIT_WITH_TOTALS,
+                emptyRowsCount: CAPACITY_WITH_TOTALS
             });
         }
 
@@ -190,13 +212,13 @@
                                     )}</strong
                                 >
                             </p>
-                            <p>
+                            <!-- <p>
                                 Vence: <strong
                                     >{dayjs(displayFecVenc).format(
                                         "DD/MM/YYYY",
                                     )}</strong
                                 >
-                            </p>
+                            </p> -->
                             <p class="text-[9px] text-slate-400 mt-1 uppercase">
                                 Moneda: <strong
                                     >{isUSD
@@ -265,6 +287,7 @@
                             <tr>
                                 <th class="col-code">Codigo</th>
                                 <th class="col-desc">Descripcion</th>
+                                <th class="col-model">Modelo</th>
                                 <th class="col-qty">Cant.</th>
                                 <th class="col-uni">Uni.</th>
                                 <th class="col-price"
@@ -300,6 +323,9 @@
                                             <span class="block text-[7.5px] font-normal text-slate-500 italic lowercase">{item.comentario_reng}</span>
                                         {/if} -->
                                     </td>
+                                    <td class="font-mono text-center">
+                                        {item.modelo ? item.modelo.trim() : "-"}
+                                    </td>
                                     <td>{item.cantidad}</td>
                                     <td class="font-black"
                                         >{item.unidad ||
@@ -314,10 +340,10 @@
                                     </td>
                                 </tr>
                             {/each}
-                            {#if page.items.length < page.expectedRows}
-                                {#each Array(page.expectedRows - page.items.length) as _}
+                            {#if page.emptyRowsCount > 0}
+                                {#each Array(page.emptyRowsCount) as _}
                                     <tr class="empty-row"
-                                        ><td colspan="6">&nbsp;</td></tr
+                                        ><td colspan="7">&nbsp;</td></tr
                                     >
                                 {/each}
                             {/if}
@@ -457,13 +483,14 @@
         background: #fff;
         width: 21.59cm;
         height: 27.94cm;
-        padding: 0.6cm 0.8cm 1cm 0.8cm;
+        padding: 0.6cm 0.8cm 0.8cm 0.8cm;
         box-sizing: border-box;
         box-shadow: 0 15px 50px rgba(0, 0, 0, 0.3);
         display: flex;
         flex-direction: column;
         position: relative;
         flex-shrink: 0;
+        overflow: hidden;
     }
 
     .print-container {
@@ -630,6 +657,13 @@
     .font-mono {
         font-family: monospace;
     }
+    .col-code { width: 14%; }
+    .col-desc { width: 32%; }
+    .col-model { width: 14%; }
+    .col-qty { width: 7%; }
+    .col-uni { width: 7%; }
+    .col-price { width: 13%; }
+    .col-total { width: 13%; }
 
     .continue-msg {
         font-size: 7px;
