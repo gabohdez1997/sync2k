@@ -22,6 +22,13 @@
         ? order.fec_us_mo
         : order?.fec_venc || order?.fec_emis;
 
+    const cleanObs = String(order?.comentario || "")
+        .replace(/\s*\|\s*EDITADO V[IÍ]A API/gi, "")
+        .replace(/\s*\|\s*CREADO V[IÍ]A API/gi, "")
+        .replace(/\s*\|\s*EDITADO VIA API/gi, "")
+        .replace(/\s*\|\s*CREADO VIA API/gi, "")
+        .trim();
+
     function formatCurrency(val: number | string) {
         return Number(val || 0).toLocaleString("de-DE", {
             minimumFractionDigits: 2,
@@ -52,11 +59,11 @@
     const totalUSDRef = totalBS / tasaRef;
 
     // --- LÓGICA DE PAGINACIÓN DINÁMICA CALIBRADA ---
-    const CAPACITY_WITH_TOTALS = 34; // Capacidad óptima en hoja con totales
-    const CAPACITY_WITHOUT_TOTALS = 42; // Capacidad óptima en hojas intermedias
+    const CAPACITY_WITH_TOTALS = 22; // Capacidad óptima en hoja con totales y firmas
+    const CAPACITY_WITHOUT_TOTALS = 36; // Capacidad óptima en hojas intermedias
 
     function getItemWeight(item: any): number {
-        const desc = String(item?.art_des || '').trim();
+        const desc = String(item?.art_des || "").trim();
         // En la columna de descripción (32% de ancho a 8.5px):
         // Caben hasta ~45 caracteres en una sola línea.
         // Solo textos que superen ~45 caracteres pasan a 2 líneas.
@@ -71,12 +78,18 @@
 
         while (remaining.length > 0) {
             // Verificar si todos los ítems restantes caben en una página con totales
-            const remainingWeight = remaining.reduce((acc, it) => acc + getItemWeight(it), 0);
+            const remainingWeight = remaining.reduce(
+                (acc, it) => acc + getItemWeight(it),
+                0,
+            );
             if (remainingWeight <= CAPACITY_WITH_TOTALS) {
                 pages.push({
                     items: remaining.splice(0, remaining.length),
                     showTotals: true,
-                    emptyRowsCount: Math.max(0, CAPACITY_WITH_TOTALS - remainingWeight)
+                    emptyRowsCount: Math.max(
+                        0,
+                        CAPACITY_WITH_TOTALS - remainingWeight,
+                    ),
                 });
                 break;
             }
@@ -87,7 +100,10 @@
 
             while (remaining.length > 0) {
                 const nextWeight = getItemWeight(remaining[0]);
-                if (pageItems.length > 0 && currentWeight + nextWeight > CAPACITY_WITHOUT_TOTALS) {
+                if (
+                    pageItems.length > 0 &&
+                    currentWeight + nextWeight > CAPACITY_WITHOUT_TOTALS
+                ) {
                     break;
                 }
                 currentWeight += nextWeight;
@@ -97,7 +113,10 @@
             pages.push({
                 items: pageItems,
                 showTotals: false,
-                emptyRowsCount: Math.max(0, CAPACITY_WITHOUT_TOTALS - currentWeight)
+                emptyRowsCount: Math.max(
+                    0,
+                    CAPACITY_WITHOUT_TOTALS - currentWeight,
+                ),
             });
         }
 
@@ -106,7 +125,7 @@
             pages.push({
                 items: [],
                 showTotals: true,
-                emptyRowsCount: CAPACITY_WITH_TOTALS
+                emptyRowsCount: CAPACITY_WITH_TOTALS,
             });
         }
 
@@ -114,7 +133,7 @@
             pages.push({
                 items: [],
                 showTotals: true,
-                emptyRowsCount: CAPACITY_WITH_TOTALS
+                emptyRowsCount: CAPACITY_WITH_TOTALS,
             });
         }
 
@@ -212,14 +231,7 @@
                                     )}</strong
                                 >
                             </p>
-                            <!-- <p>
-                                Vence: <strong
-                                    >{dayjs(displayFecVenc).format(
-                                        "DD/MM/YYYY",
-                                    )}</strong
-                                >
-                            </p> -->
-                            <p class="text-[9px] text-slate-400 mt-1 uppercase">
+                            <p class="currency-line uppercase">
                                 Moneda: <strong
                                     >{isUSD
                                         ? "DOLARES (USD)"
@@ -320,9 +332,6 @@
                                     <td class="font-mono">{item.co_art}</td>
                                     <td class="font-bold uppercase text-left">
                                         {item.art_des}
-                                        <!-- {#if item.comentario_reng}
-                                            <span class="block text-[7.5px] font-normal text-slate-500 italic lowercase">{item.comentario_reng}</span>
-                                        {/if} -->
                                     </td>
                                     <td class="font-mono text-center">
                                         {item.modelo ? item.modelo.trim() : "-"}
@@ -360,12 +369,28 @@
                 {#if page.showTotals}
                     <!-- SUMMARY & FOOTER -->
                     <div class="footer-block mt-auto">
+                        <!-- SIGNATURES BLOCK (ABOVE OBSERVATIONS AND TOTALS) -->
+                        <div class="signatures-section">
+                            <div class="signature-box">
+                                <div class="signature-line"></div>
+                                <span class="signature-label"
+                                    >Elaborado por:</span
+                                >
+                            </div>
+                            <div class="signature-box">
+                                <div class="signature-line"></div>
+                                <span class="signature-label"
+                                    >Autorizado por:</span
+                                >
+                            </div>
+                        </div>
+
                         <div class="footer-grid">
                             <div class="remarks">
-                                {#if order?.comentario}
+                                {#if cleanObs}
                                     <h4 class="section-title">Observaciones</h4>
                                     <div class="remarks-content">
-                                        {order.comentario}
+                                        {cleanObs}
                                     </div>
                                 {/if}
                                 <div class="disclaimer mt-1">
@@ -484,6 +509,7 @@
         background: #fff;
         width: 21.59cm;
         height: 27.94cm;
+        max-height: 27.94cm;
         padding: 0.6cm 0.8cm 0.8cm 0.8cm;
         box-sizing: border-box;
         box-shadow: 0 15px 50px rgba(0, 0, 0, 0.3);
@@ -503,32 +529,47 @@
     .header-section {
         display: flex;
         justify-content: space-between;
+        align-items: flex-start;
         border-bottom: 2px solid #000;
-        padding-bottom: 6px;
-        margin-bottom: 10px;
+        padding-bottom: 0;
+        margin-bottom: 5px;
     }
 
     .brand-info {
         display: flex;
-        gap: 10px;
+        gap: 12px;
         max-width: 65%;
+        align-items: center;
     }
     .logo-img {
-        height: 50px;
+        /*height: 52px;*/
+        max-width: 100px;
         width: auto;
         object-fit: contain;
     }
-    .business-name {
-        font-size: 12px;
-        font-weight: 900;
-        margin: 0;
-        text-transform: uppercase;
+    .company-details {
+        display: flex;
+        flex-direction: column;
     }
-    .fiscal-id,
+    .business-name {
+        font-size: 15px;
+        font-weight: 900;
+        margin: 0 0 2px 0;
+        text-transform: uppercase;
+        color: #000;
+        line-height: 1.15;
+    }
+    .fiscal-id {
+        font-size: 12px;
+        font-weight: 700;
+        margin: 0;
+        color: #1e293b;
+    }
     .address {
-        font-size: 8px;
+        font-size: 12px;
         margin: 1px 0;
-        color: #333;
+        color: #334155;
+        line-height: 1.25;
     }
 
     .doc-info {
@@ -536,86 +577,116 @@
     }
     .doc-badge {
         border: 2px solid #000;
-        padding: 4px 8px;
+        padding: 4px 10px;
         border-radius: 6px;
         display: flex;
         flex-direction: column;
         align-items: center;
+        background: #fff;
     }
     .doc-badge .label {
-        font-size: 7px;
-        font-weight: bold;
+        font-size: 8.5px;
+        font-weight: 800;
         text-transform: uppercase;
-        color: #555;
+        color: #475569;
+        letter-spacing: 0.5px;
     }
     .doc-badge .number {
-        font-size: 16px;
+        font-size: 18px;
         font-weight: 900;
         color: #dc2626 !important;
+        letter-spacing: 0.5px;
+        line-height: 1.1;
     }
     .dates {
-        font-size: 8px;
-        color: #555;
-        line-height: 1.1;
+        font-size: 10px;
+        color: #334155;
+        line-height: 1.3;
+        margin-top: 4px;
+    }
+    .dates p {
+        margin: 1px 0;
+    }
+    .currency-line {
+        font-size: 10px;
+        color: #1e293b;
+        margin-top: 0px;
     }
 
     .info-grid {
         display: grid;
         grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
         gap: 10px;
-        margin-bottom: 10px;
+        margin-bottom: 5px;
         width: 100%;
         box-sizing: border-box;
     }
     .section-title {
-        font-size: 8px;
+        font-size: 10px;
         font-weight: 900;
         text-transform: uppercase;
-        border-bottom: 1px solid #ddd;
-        padding-bottom: 2px;
-        margin-bottom: 3px;
+        border-bottom: 1.5px solid #cbd5e1;
+        padding-bottom: 3px;
+        margin-bottom: 4px;
+        color: #0f172a;
+        letter-spacing: 0.3px;
     }
     .client-box,
     .logistic-box {
-        background: #f9fafb;
-        padding: 6px 8px;
-        border-radius: 4px;
-        border: 1px solid #eee;
+        background: #f8fafc;
+        padding: 7px 10px;
+        border-radius: 5px;
+        border: 1px solid #cbd5e1;
         min-width: 0;
         overflow: hidden;
         word-break: break-word;
     }
     .client-name {
-        font-size: 10px;
+        font-size: 11.5px;
         font-weight: 900;
-        margin: 0;
+        margin: 0 0 2px 0;
         text-transform: uppercase;
+        color: #000;
         word-break: break-word;
+        line-height: 1.2;
     }
     .client-rif,
     .client-address,
     .client-phone {
-        font-size: 8px;
-        margin: 1px 0;
-        line-height: 1.25;
+        font-size: 9.5px;
+        margin: 1.5px 0;
+        line-height: 1.3;
         word-break: break-word;
+    }
+    .client-rif {
+        font-weight: 700;
+        color: #1e293b;
+    }
+    .client-address {
+        color: #334155;
+    }
+    .client-phone {
+        font-weight: 800;
+        color: #0f172a;
     }
     .info-row {
         display: flex;
-        gap: 5px;
-        font-size: 8px;
-        margin-bottom: 2px;
+        gap: 6px;
+        font-size: 9.5px;
+        margin-bottom: 3px;
         align-items: flex-start;
+        line-height: 1.3;
     }
     .info-row .label {
-        font-weight: bold;
-        color: #666;
-        width: 65px;
+        font-weight: 700;
+        color: #475569;
+        width: 78px;
         flex-shrink: 0;
     }
     .info-row .val {
-        font-weight: 700;
+        font-weight: 800;
         text-transform: uppercase;
+        color: #000;
         flex: 1;
         min-width: 0;
         word-break: break-word;
@@ -623,7 +694,7 @@
 
     .table-container {
         flex: 1;
-        margin-bottom: 5px;
+        margin-bottom: 6px;
     }
     .items-table {
         width: 100%;
@@ -631,21 +702,24 @@
         font-size: 8.5px;
     }
     .items-table th {
-        background: #f3f4f6;
+        background: #f1f5f9;
         border: 1px solid #000;
-        padding: 3px;
+        padding: 3.5px 4px;
         text-transform: uppercase;
         font-weight: 900;
+        font-size: 9px;
+        color: #0f172a;
     }
     .items-table td {
-        border: 1px solid #ddd;
-        padding: 2px 5px;
+        border: 1px solid #cbd5e1;
+        padding: 2.5px 5px;
         text-align: center;
-        height: 14.5px;
+        height: 15px;
+        color: #000;
     }
     .items-table .empty-row td {
-        border-left: 1px solid #ddd;
-        border-right: 1px solid #ddd;
+        border-left: 1px solid #cbd5e1;
+        border-right: 1px solid #cbd5e1;
         border-bottom: none;
         border-top: none;
     }
@@ -658,40 +732,90 @@
     .font-mono {
         font-family: monospace;
     }
-    .col-code { width: 14%; }
-    .col-desc { width: 32%; }
-    .col-model { width: 14%; }
-    .col-qty { width: 7%; }
-    .col-uni { width: 7%; }
-    .col-price { width: 13%; }
-    .col-total { width: 13%; }
+    .col-code {
+        width: 14%;
+    }
+    .col-desc {
+        width: 32%;
+    }
+    .col-model {
+        width: 14%;
+    }
+    .col-qty {
+        width: 7%;
+    }
+    .col-uni {
+        width: 7%;
+    }
+    .col-price {
+        width: 13%;
+    }
+    .col-total {
+        width: 13%;
+    }
 
     .continue-msg {
-        font-size: 7px;
+        font-size: 8px;
         font-weight: bold;
         text-align: right;
-        color: #999;
-        margin-top: 2px;
+        color: #64748b;
+        margin-top: 3px;
         font-style: italic;
+    }
+
+    .signatures-section {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 60px;
+        margin-top: 2px;
+        margin-bottom: 4px;
+        padding: 0 40px;
+    }
+    .signature-box {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+    }
+    .signature-line {
+        width: 100%;
+        border-top: 1px solid #000;
+        margin-bottom: 2px;
+        height: 2px; /* space for stamp / seal / signature */
+    }
+    .signature-label {
+        font-size: 9.5px;
+        font-weight: 800;
+        text-transform: uppercase;
+        color: #0f172a;
+        letter-spacing: 0.3px;
     }
 
     .footer-grid {
         display: grid;
-        grid-template-columns: 1fr 200px;
-        gap: 12px;
+        grid-template-columns: 1fr 220px;
+        gap: 14px;
+        align-items: start;
     }
     .remarks-content {
-        font-size: 7.5px;
-        background: #f9fafb;
-        padding: 4px;
-        border: 1px solid #ddd;
-        min-height: 18px;
+        font-size: 10px;
+        font-weight: 600;
+        background: #f8fafc;
+        padding: 6px 8px;
+        border: 1px solid #cbd5e1;
+        border-radius: 4px;
+        min-height: 24px;
         text-transform: uppercase;
+        color: #0f172a;
+        line-height: 1.35;
     }
     .disclaimer {
-        font-size: 6.5px;
-        color: #666;
-        line-height: 1;
+        font-size: 9px;
+        color: #475569;
+        line-height: 1.4;
+        margin-top: 4px;
+    }
+    .disclaimer p {
+        margin: 1px 0;
     }
 
     .totals-box {
@@ -703,35 +827,40 @@
     .total-row {
         display: flex;
         justify-content: space-between;
-        padding: 2px 8px;
-        border-bottom: 1px solid #eee;
-        font-size: 9px;
-        font-weight: 600;
+        padding: 3px 8px;
+        border-bottom: 1px solid #e2e8f0;
+        font-size: 10px;
+        font-weight: 700;
+        color: #1e293b;
     }
     .grand-total-outline {
-        padding: 3px 8px;
+        padding: 4px 8px;
         text-align: right;
         border-top: 2px solid #000;
-        background: #fdfdfd;
+        background: #f8fafc;
     }
     .bs-total .label {
-        font-size: 8px;
+        font-size: 9px;
         font-weight: 900;
         text-transform: uppercase;
-        color: #555;
+        color: #475569;
+        letter-spacing: 0.5px;
     }
     .bs-total .val {
-        font-size: 16px;
+        font-size: 17px;
         font-weight: 900;
+        color: #000;
+        line-height: 1.1;
     }
     .usd-reference {
-        margin-top: 2px;
-        padding-top: 2px;
-        border-top: 1px dashed #ddd;
+        margin-top: 3px;
+        padding-top: 3px;
+        border-top: 1px dashed #cbd5e1;
         display: flex;
         justify-content: space-between;
-        font-size: 8.5px;
-        font-weight: bold;
+        font-size: 9.5px;
+        font-weight: 800;
+        color: #0f172a;
     }
 
     .page-footer {
@@ -740,9 +869,9 @@
         left: 0;
         right: 0;
         text-align: center;
-        font-size: 8px;
-        font-weight: bold;
-        color: #777;
+        font-size: 9px;
+        font-weight: 800;
+        color: #64748b;
         margin: 0 0.8cm;
     }
 
@@ -765,7 +894,7 @@
             display: none !important;
         }
         @page {
-            size: letter;
+            size: letter portrait;
             margin: 0;
         }
     }
