@@ -205,19 +205,10 @@ export const actions: Actions = {
 			porc_esp: parseFloat(formData.get('porc_esp') as string) || 0 
 		};
 
-		// Broadcast: crear proveedor en todas las sedes autorizadas
-		let targetBranches: any[] = [];
-		const profileAllowed = profile.allowed_branches || [];
-		const isAdmin = !profileAllowed || profileAllowed.length === 0;
-		if (isAdmin) {
-			const { data } = await supabaseAdmin.from('branches').select('*').eq('active', true);
-			targetBranches = data || [];
-		} else {
-			const allowedIds = profileAllowed.map((b: any) => (typeof b === 'object' ? b.id : b));
-			const { data } = await supabaseAdmin.from('branches').select('*').in('id', allowedIds).eq('active', true);
-			targetBranches = data || [];
-		}
-		if (targetBranches.length === 0) return fail(403, { message: 'No se encontraron sucursales activas autorizadas.' });
+		// Broadcast: crear proveedor en todas las sedes activas para paridad universal
+		const { data: branchesData } = await supabaseAdmin.from('branches').select('*').eq('active', true);
+		const targetBranches = branchesData || [];
+		if (targetBranches.length === 0) return fail(400, { message: 'No se encontraron sucursales activas.' });
 
 		let successCount = 0; let failedBranches: string[] = []; let createdSupplier = null;
 		console.log(`[PUR_ORDERS SAVE SUPPLIER BROADCAST] Creando proveedor en ${targetBranches.length} sedes...`);

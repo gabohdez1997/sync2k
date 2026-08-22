@@ -30,6 +30,7 @@
     CheckCircle2,
     AlertTriangle,
     ArrowRight,
+    CreditCard,
   } from "lucide-svelte";
   import type { PageData, ActionData } from "./$types";
 
@@ -1128,7 +1129,7 @@
                     <p class="text-[10px] text-text-muted uppercase font-mono">{branch.id}</p>
                   </div>
                 </div>
-                <div class="flex items-center gap-4 text-xs font-mono">
+                <div class="flex items-center gap-3.5 text-xs font-mono flex-wrap">
                   <div class="flex items-center gap-1.5" title="Artículos">
                     <Package size={14} class="text-blue-400" />
                     <span class="font-bold">{(stats.articulos || 0).toLocaleString("es-VE")}</span>
@@ -1140,6 +1141,10 @@
                   <div class="flex items-center gap-1.5" title="Proveedores">
                     <Building2 size={14} class="text-amber-400" />
                     <span class="font-bold">{(stats.proveedores || 0).toLocaleString("es-VE")}</span>
+                  </div>
+                  <div class="flex items-center gap-1.5" title="Condiciones de Pago">
+                    <CreditCard size={14} class="text-purple-400" />
+                    <span class="font-bold">{(stats.condiciones_pago || 0).toLocaleString("es-VE")}</span>
                   </div>
                 </div>
               </div>
@@ -1177,7 +1182,7 @@
                 }
               };
             }}
-            class="grid grid-cols-1 md:grid-cols-3 gap-3"
+            class="grid grid-cols-1 md:grid-cols-2 gap-4"
           >
             <!-- 1. Proveedores -->
             <div class="p-4 rounded-2xl bg-surface-base/50 border border-white/5 flex flex-col justify-between gap-3 hover:border-amber-500/30 transition-all">
@@ -1265,6 +1270,36 @@
                 {:else}
                   <RefreshCw size={14} />
                   <span>Sincronizar Artículos</span>
+                {/if}
+              </button>
+            </div>
+
+            <!-- 4. Condiciones de Pago -->
+            <div class="p-4 rounded-2xl bg-surface-base/50 border border-white/5 flex flex-col justify-between gap-3 hover:border-purple-500/30 transition-all">
+              <div class="flex items-start gap-3">
+                <div class="p-2.5 rounded-xl bg-purple-500/10 text-purple-400 shrink-0">
+                  <CreditCard size={20} />
+                </div>
+                <div>
+                  <h5 class="text-sm font-black text-text-base">Cond. de Pago</h5>
+                  <p class="text-[11px] text-text-muted mt-0.5 leading-snug">
+                    Días de crédito, descripciones y condiciones comerciales.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="submit"
+                name="entity"
+                value="payment_conditions"
+                disabled={syncingEntity !== null}
+                class="w-full flex items-center justify-center gap-2 bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 px-3 py-2.5 rounded-xl text-xs font-bold transition active:scale-95 disabled:opacity-40"
+              >
+                {#if syncingEntity === "payment_conditions"}
+                  <Loader2 size={14} class="animate-spin" />
+                  <span>Sincronizando...</span>
+                {:else}
+                  <RefreshCw size={14} />
+                  <span>Sincronizar Condiciones</span>
                 {/if}
               </button>
             </div>

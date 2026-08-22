@@ -85,6 +85,7 @@ export const load: PageServerLoad = protectLoad('sec_branches', async ({ locals,
                   articulos: Number(s.articulos) || 0,
                   clientes: Number(s.clientes) || 0,
                   proveedores: Number(s.proveedores) || 0,
+                  condiciones_pago: Number(s.condiciones_pago) || 0,
                   online: Boolean(s.online ?? true)
                 };
 
@@ -377,6 +378,10 @@ export const actions: Actions = {
       moduleName = 'ARTICULOS';
       endpoint = 'articulos';
       keyField = 'co_art';
+    } else if (entity === 'payment_conditions' || entity === 'payment-conditions') {
+      moduleName = 'CONDICIONES_PAGO';
+      endpoint = 'catalogos/condiciones-pago';
+      keyField = 'co_cond';
     }
 
     try {

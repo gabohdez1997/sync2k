@@ -135,19 +135,10 @@ export const actions: Actions = {
 		const formData = await request.formData();
 		const payload = { ...Object.fromEntries(formData), contribuyente: formData.has('contribuyente'), contribu_e: formData.has('contribu_e') || formData.has('contribuu_e'), porc_esp: parseFloat(formData.get('porc_esp') as string) || 0 };
 
-		// Broadcast: obtener TODAS las sucursales activas desde Supabase (igual que customers)
-		let targetBranches: any[] = [];
-		const profileAllowed = profile.allowed_branches || [];
-		const isAdmin = !profileAllowed || profileAllowed.length === 0;
-		if (isAdmin) {
-			const { data } = await supabaseAdmin.from('branches').select('*').eq('active', true);
-			targetBranches = data || [];
-		} else {
-			const allowedIds = profileAllowed.map((b: any) => (typeof b === 'object' ? b.id : b));
-			const { data } = await supabaseAdmin.from('branches').select('*').in('id', allowedIds).eq('active', true);
-			targetBranches = data || [];
-		}
-		if (targetBranches.length === 0) return fail(403, { message: 'No se encontraron sucursales activas autorizadas.' });
+		// Broadcast: obtener TODAS las sucursales activas desde Supabase para replicación universal
+		const { data: branchesData } = await supabaseAdmin.from('branches').select('*').eq('active', true);
+		const targetBranches = branchesData || [];
+		if (targetBranches.length === 0) return fail(400, { message: 'No se encontraron sucursales activas.' });
 
 		let successCount = 0; let failedBranches: string[] = []; let createdClient = null;
 		console.log(`[ORDERS SAVE BROADCAST] Creando cliente en ${targetBranches.length} sedes...`);

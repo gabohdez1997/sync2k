@@ -237,23 +237,12 @@ export const actions: Actions = {
         if (!isNew && !hasPermission(profile, 'sales_customers', 'update')) {
           return fail(403, { message: 'No tienes permiso para ACTUALIZAR clientes.' });
         }
-        // 1. Determinar sucursales para Broadcast
-        let targetBranches: any[] = [];
-        const profileAllowed = profile.allowed_branches || [];
-        const isAdmin = !profileAllowed || profileAllowed.length === 0;
-
-        if (isAdmin) {
-            const { data } = await supabaseAdmin.from('branches').select('*').eq('active', true);
-            targetBranches = data || [];
-        } else {
-            // Asegurarnos de tener los datos completos de las sucursales (url, token, etc)
-            const allowedIds = profileAllowed.map((b: any) => (typeof b === 'object' ? b.id : b));
-            const { data } = await supabaseAdmin.from('branches').select('*').in('id', allowedIds).eq('active', true);
-            targetBranches = data || [];
-        }
+        // 1. Determinar sucursales para Broadcast (todas las sucursales activas para consistencia de maestros)
+        const { data: branchesData } = await supabaseAdmin.from('branches').select('*').eq('active', true);
+        const targetBranches = branchesData || [];
 
         if (targetBranches.length === 0) {
-            return fail(400, { message: 'No se encontraron sucursales activas autorizadas.' });
+            return fail(400, { message: 'No se encontraron sucursales activas.' });
         }
 
         const customerData = Object.fromEntries(formData);

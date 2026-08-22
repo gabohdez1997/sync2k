@@ -143,13 +143,14 @@ export class AgentClient {
 	/**
 	 * Crea o actualiza un cliente
 	 */
+	/**
+	 * Crea o actualiza un cliente (por defecto broadcast a todas las sedes)
+	 */
 	async saveCustomer(customer: any, isNew: boolean = true, sedeId: string = '') {
-		// Al CREAR: enviar a la sede seleccionada.
-		// Al EDITAR: broadcast a TODAS las sedes enviando sede=null
-		const sedeParam = (isNew && sedeId) ? `?sede=${encodeURIComponent(sedeId)}` : '';
+		const sedeParam = sedeId ? `?sede=${encodeURIComponent(sedeId)}` : '';
 		const endpoint = isNew
 			? `/clientes${sedeParam}`
-			: `/clientes/${encodeURIComponent(customer.co_cli)}`;
+			: `/clientes/${encodeURIComponent(customer.co_cli)}${sedeParam}`;
 		return this.request<any>(endpoint, {
 			method: isNew ? 'POST' : 'PUT',
 			body: JSON.stringify(customer)
@@ -226,13 +227,13 @@ export class AgentClient {
 	}
 
 	/**
-	 * Crea o actualiza un proveedor
+	 * Crea o actualiza un proveedor (por defecto broadcast a todas las sedes)
 	 */
 	async saveSupplier(supplier: any, isNew: boolean = true, sedeId: string = '') {
-		const sedeParam = (isNew && sedeId) ? `?sede=${encodeURIComponent(sedeId)}` : '';
+		const sedeParam = sedeId ? `?sede=${encodeURIComponent(sedeId)}` : '';
 		const endpoint = isNew
 			? `/proveedores${sedeParam}`
-			: `/proveedores/${encodeURIComponent(supplier.co_prov)}`;
+			: `/proveedores/${encodeURIComponent(supplier.co_prov)}${sedeParam}`;
 		return this.request<any>(endpoint, {
 			method: isNew ? 'POST' : 'PUT',
 			body: JSON.stringify(supplier)
