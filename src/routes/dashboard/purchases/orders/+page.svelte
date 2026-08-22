@@ -1211,6 +1211,9 @@
                   const payload = (result as any).data;
                   if (payload.supplier) {
                     selectedSupplier = payload.supplier;
+                    if (selectedSupplier?.cond_pag || selectedSupplier?.co_cond) {
+                      orderPaymentCondition = String(selectedSupplier.cond_pag || selectedSupplier.co_cond).trim();
+                    }
                     showRegistrationForm = false;
                     toast.success(
                       "Proveedor encontrado: " +
@@ -1371,6 +1374,9 @@
                     searchingSupplier = false;
                     if (result.type === "success") {
                       selectedSupplier = (result as any).data.supplier;
+                      if (selectedSupplier?.cond_pag || selectedSupplier?.co_cond) {
+                        orderPaymentCondition = String(selectedSupplier.cond_pag || selectedSupplier.co_cond).trim();
+                      }
                       showRegistrationForm = false;
                       toast.success("Proveedor creado y seleccionado: " + (selectedSupplier.prov_des || selectedSupplier.descripcion));
                     } else if (result.type === "failure") {
@@ -2272,6 +2278,19 @@
                 </div>
 
                 <div class="space-y-2">
+                  <label class="text-[10px] font-black uppercase tracking-widest text-text-muted">Condición de Pago</label>
+                  <Combobox
+                    options={(data.context?.condicionesPago || []).map((cp: any) => ({
+                      value: cp.co_cond,
+                      label: `${cp.co_cond} - ${cp.cond_des}${cp.dias_cred ? ` (${cp.dias_cred} días)` : ''}`
+                    }))}
+                    bind:value={orderPaymentCondition}
+                    placeholder="Seleccione condición de pago..."
+                    icon={CreditCard}
+                  />
+                </div>
+
+                <div class="space-y-2">
                   <label for="n_control_doc" class="text-[10px] font-black uppercase tracking-widest text-text-muted">N° Control / Ref Proveedor</label>
                   <input
                     id="n_control_doc"
@@ -2500,6 +2519,9 @@
             class="w-full text-left p-4 rounded-2xl border border-border-subtle bg-surface-soft hover:bg-surface-strong hover:border-brand-500/50 transition-all flex flex-col gap-1 group relative overflow-hidden cursor-pointer"
             onclick={() => {
               selectedSupplier = supplier;
+              if (supplier?.cond_pag || supplier?.co_cond) {
+                orderPaymentCondition = String(supplier.cond_pag || supplier.co_cond).trim();
+              }
               rifInput = supplier.rif || supplier.co_prov;
               showRegistrationForm = false;
               showSupplierSelectionModal = false;

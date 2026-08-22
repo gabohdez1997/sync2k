@@ -260,7 +260,8 @@
                         <div class="info-row">
                             <span class="label">Cond. Pago:</span>
                             <span class="val"
-                                >{order?.cond_des ||
+                                >{order?.prov_cond_des ||
+                                    order?.cond_des ||
                                     order?.co_cond ||
                                     "CONTADO"}</span
                             >

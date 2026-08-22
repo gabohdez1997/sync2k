@@ -43,6 +43,13 @@ export const load: PageServerLoad = protectLoad('pur_orders', async ({ params, u
                     order.prov_dir = provData.direc1 || provData.direc2 || order.prov_dir;
                     order.contribu_e = provData.contribu_e;
                     order.porc_esp = provData.porc_esp;
+                    order.prov_cond_pag = provData.cond_pag || order.prov_cond_pag;
+                    order.prov_cond_des = provData.cond_des || provData.cond_pag_des || order.prov_cond_des;
+                    if (!order.cond_des || order.cond_des === 'CONTADO') {
+                        if (order.prov_cond_des) {
+                            order.cond_des = order.prov_cond_des;
+                        }
+                    }
                 }
             } catch (e) {
                 console.warn('[PRINT-ORDER] Warning fetching extra supplier data:', e);
