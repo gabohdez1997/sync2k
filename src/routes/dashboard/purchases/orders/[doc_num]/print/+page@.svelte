@@ -7,60 +7,53 @@
     dayjs.locale("es");
 
     let { data }: { data: PageData } = $props();
-    const { quote, branch, settings } = data;
+    const { order, branch, settings } = data;
 
-    const logoUrl = branch.logo_url || settings.app_logo_url;
-    const allItems = quote.renglones || [];
+    const logoUrl = branch?.logo_url || settings?.app_logo_url;
+    const allItems = order?.renglones || [];
 
-    const isUSD = (quote.co_mone || "").toUpperCase().includes("US");
+    const isUSD =
+        (order?.co_mone || "").toUpperCase().includes("US") ||
+        (order?.co_mone || "").includes("$");
 
     // Si el documento fue editado, tomamos la fecha de modificación (fec_us_mo) para emisión y vencimiento
-    const displayFecEmis = quote.fec_us_mo ? quote.fec_us_mo : quote.fec_emis;
-    const displayFecVenc = quote.fec_us_mo ? quote.fec_us_mo : quote.fec_venc;
+    const displayFecEmis = order?.fec_us_mo ? order.fec_us_mo : order?.fec_emis;
+    const displayFecVenc = order?.fec_us_mo
+        ? order.fec_us_mo
+        : order?.fec_venc || order?.fec_emis;
 
     function formatCurrency(val: number | string) {
-        return Number(val).toLocaleString("de-DE", {
+        return Number(val || 0).toLocaleString("de-DE", {
             minimumFractionDigits: 2,
             maximumFractionDigits: 2,
         });
     }
 
-    // --- CÁLCULO DE RETENCIÓN DE IVA ---
-    const porcEsp = Number(quote.porc_esp || 0);
-    const isContribEspecial = quote.contribu_e || porcEsp > 0;
+    const rawBruto = Number(order?.total_bruto || 0);
+    const rawImp = Number(order?.monto_imp || 0);
+    const rawNeto = Number(order?.total_neto || 0);
 
-    const rawBruto = Number(quote.total_bruto || 0);
-    const rawImp = Number(quote.monto_imp || 0);
-    const rawNeto = Number(quote.total_neto || 0);
+    const tasaDoc = Number(order?.tasa) > 0 ? Number(order.tasa) : 1;
+    const tasaRef = Number(
+        order?.tasa_actual && Number(order?.tasa) === 1
+            ? order.tasa_actual
+            : order?.tasa || 1,
+    );
 
     // USD Mode
-    const tasaDoc = Number(quote.tasa || 1);
     const subtotalUSD = rawBruto / tasaDoc;
     const ivaUSD = rawImp / tasaDoc;
-    const totalFacturaUSD = rawNeto / tasaDoc;
-    const hasRetention = isContribEspecial && porcEsp > 0 && rawImp > 0;
-    const retencionUSD = hasRetention ? (ivaUSD * porcEsp) / 100 : 0;
-    const totalAPagarUSD = totalFacturaUSD - retencionUSD;
+    const totalUSD = rawNeto / tasaDoc;
 
     // Bs Mode
     const subtotalBS = rawBruto;
     const ivaBS = rawImp;
-    const totalFacturaBS = rawNeto;
-    const retencionBS = hasRetention ? (ivaBS * porcEsp) / 100 : 0;
-    const totalAPagarBS = totalFacturaBS - retencionBS;
+    const totalBS = rawNeto;
+    const totalUSDRef = totalBS / tasaRef;
 
-    // Tasa referencia para Bs Mode
-    const tasaRef = Number(
-        quote.tasa_actual && Number(quote.tasa) === 1
-            ? quote.tasa_actual
-            : quote.tasa || 1,
-    );
-    const totalAPagarUSDRef = totalAPagarBS / tasaRef;
-
-    // --- LÓGICA DE PAGINACIÓN MAXIMIZADA ---
-    // Aumentamos los límites para aprovechar el espacio blanco que todavía se ve.
-    const LIMIT_WITH_TOTALS = 36; // Antes 27
-    const LIMIT_WITHOUT_TOTALS = 44; // Antes 32
+    // --- LÓGICA DE PAGINACIÓN ---
+    const LIMIT_WITH_TOTALS = 36;
+    const LIMIT_WITHOUT_TOTALS = 44;
 
     function paginate(items: any[]) {
         let pages = [];
@@ -95,6 +88,14 @@
             }
         }
 
+        if (pages.length === 0) {
+            pages.push({
+                items: [],
+                showTotals: true,
+                expectedRows: LIMIT_WITH_TOTALS,
+            });
+        }
+
         return pages;
     }
 
@@ -109,8 +110,9 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title
-        >Cotizacion {quote.doc_num} - {branch.business_name ||
-            branch.name}</title
+        >Orden de Compra {order?.doc_num} - {branch?.business_name ||
+            branch?.name ||
+            "Profit Cloud"}</title
     >
 </svelte:head>
 
@@ -142,7 +144,7 @@
                 d="M6 8V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v4"
             />
         </svg>
-        IMPRIMIR COTIZACION
+        IMPRIMIR ORDEN DE COMPRA
     </button>
     <button
         onclick={() => window.close()}
@@ -164,19 +166,20 @@
                         {/if}
                         <div class="company-details">
                             <h1 class="business-name">
-                                {branch.business_name || branch.name}
+                                {branch?.business_name ||
+                                    branch?.name ||
+                                    "EMPRESA"}
                             </h1>
-                            <p class="fiscal-id">RIF: {branch.rif || "---"}</p>
-                            <p class="address">{branch.address || ""}</p>
-                            <!-- {#if branch.phone}<p class="phone">Tel: {branch.phone}</p>{/if} -->
+                            <p class="fiscal-id">RIF: {branch?.rif || "---"}</p>
+                            <p class="address">{branch?.address || ""}</p>
                         </div>
                     </div>
 
                     <div class="doc-info">
                         <div class="doc-badge">
-                            <span class="label">Cotizacion N°</span>
+                            <span class="label">Orden de Compra N°</span>
                             <span class="number text-red-600"
-                                >{quote.doc_num}</span
+                                >{order?.doc_num}</span
                             >
                         </div>
                         <div class="dates mt-2">
@@ -205,53 +208,53 @@
                     </div>
                 </div>
 
-                <!-- CLIENT & LOGISTICS -->
+                <!-- PROVIDER & LOGISTICS -->
                 <div class="info-grid">
                     <div class="client-box">
-                        <h3 class="section-title">Datos del Cliente</h3>
-                        <p class="client-name">{quote.cli_des}</p>
+                        <h3 class="section-title">Datos del Proveedor</h3>
+                        <p class="client-name">
+                            {order?.prov_des ||
+                                order?.co_prov ||
+                                "SIN PROVEEDOR"}
+                        </p>
                         <p class="client-rif">
-                            RIF: {quote.cli_rif || quote.co_cli}
+                            RIF: {order?.rif || order?.co_prov}
                         </p>
                         <p class="client-address font-medium">
-                            DIRECCION: {quote.cli_dir ||
-                                "Direccion no registrada"}
+                            DIRECCION: {order?.prov_dir ||
+                                order?.direc1 ||
+                                "Dirección no registrada"}
                         </p>
-                        {#if quote.cli_tel}<p
+                        {#if order?.telefonos}
+                            <p
                                 class="client-phone font-bold mt-1 text-slate-700"
                             >
-                                TELEFONO: {quote.cli_tel}
-                            </p>{/if}
-                        <p class="client-rif mt-1 font-bold text-[8px]">
-                            ESTATUS FISCAL:
-                            <span
-                                class="text-blue-800 font-extrabold uppercase"
-                            >
-                                {#if isContribEspecial}
-                                    CONTRIBUYENTE ESPECIAL ({porcEsp}%)
-                                {:else if quote.contrib === false || quote.contrib === 0}
-                                    NO CONTRIBUYENTE
-                                {:else}
-                                    CONTRIBUYENTE ORDINARIO
-                                {/if}
-                            </span>
-                        </p>
+                                TELEFONO: {order.telefonos}
+                            </p>
+                        {/if}
                     </div>
                     <div class="logistic-box">
+                        <h3 class="section-title">Condiciones y Entrega</h3>
                         <div class="info-row">
-                            <span class="label">Vendedor:</span><span
-                                class="val"
-                                >{quote.ven_des || quote.co_ven}</span
-                            >
-                        </div>
-                        <div class="info-row">
-                            <span class="label">Cond. Pago:</span><span
-                                class="val"
-                                >{quote.cond_des ||
-                                    quote.co_cond ||
+                            <span class="label">Cond. Pago:</span>
+                            <span class="val"
+                                >{order?.cond_des ||
+                                    order?.co_cond ||
                                     "CONTADO"}</span
                             >
                         </div>
+                        {#if order?.n_control}
+                            <div class="info-row">
+                                <span class="label">N° Control / Ref:</span>
+                                <span class="val">{order.n_control}</span>
+                            </div>
+                        {/if}
+                        {#if order?.dir_ent}
+                            <div class="info-row">
+                                <span class="label">Entrega:</span>
+                                <span class="val">{order.dir_ent}</span>
+                            </div>
+                        {/if}
                     </div>
                 </div>
 
@@ -265,7 +268,7 @@
                                 <th class="col-qty">Cant.</th>
                                 <th class="col-uni">Uni.</th>
                                 <th class="col-price"
-                                    >Precio Unit. ({isUSD ? "$" : "Bs."})</th
+                                    >Costo Unit. ({isUSD ? "$" : "Bs."})</th
                                 >
                                 <th class="col-total"
                                     >Total ({isUSD ? "$" : "Bs."})</th
@@ -274,11 +277,29 @@
                         </thead>
                         <tbody>
                             {#each page.items as item}
+                                {@const unitPrice = isUSD
+                                    ? Number(item.cost_unit_om) > 0
+                                        ? Number(item.cost_unit_om)
+                                        : Number(
+                                              item.cost_unit ||
+                                                  item.precio ||
+                                                  0,
+                                          ) / tasaDoc
+                                    : Number(
+                                          item.cost_unit || item.precio || 0,
+                                      )}
+                                {@const totalLine = isUSD
+                                    ? Number(item.cantidad || 0) * unitPrice
+                                    : Number(item.total_renglon) ||
+                                      Number(item.cantidad || 0) * unitPrice}
                                 <tr>
                                     <td class="font-mono">{item.co_art}</td>
-                                    <td class="font-bold uppercase text-left"
-                                        >{item.art_des}</td
-                                    >
+                                    <td class="font-bold uppercase text-left">
+                                        {item.art_des}
+                                        <!-- {#if item.comentario_reng}
+                                            <span class="block text-[7.5px] font-normal text-slate-500 italic lowercase">{item.comentario_reng}</span>
+                                        {/if} -->
+                                    </td>
                                     <td>{item.cantidad}</td>
                                     <td class="font-black"
                                         >{item.unidad ||
@@ -286,31 +307,10 @@
                                             "UND"}</td
                                     >
                                     <td class="text-right">
-                                        {formatCurrency(
-                                            isUSD
-                                                ? Number(item.prec_vta_om) > 0
-                                                    ? item.prec_vta_om
-                                                    : Number(item.precio) /
-                                                      Number(quote.tasa)
-                                                : item.precio,
-                                        )}
+                                        {formatCurrency(unitPrice)}
                                     </td>
                                     <td class="text-right font-bold">
-                                        {formatCurrency(
-                                            isUSD
-                                                ? Number(item.cantidad) *
-                                                      (Number(
-                                                          item.prec_vta_om,
-                                                      ) > 0
-                                                          ? Number(
-                                                                item.prec_vta_om,
-                                                            )
-                                                          : Number(
-                                                                item.precio,
-                                                            ) /
-                                                            Number(quote.tasa))
-                                                : item.total_renglon,
-                                        )}
+                                        {formatCurrency(totalLine)}
                                     </td>
                                 </tr>
                             {/each}
@@ -335,22 +335,22 @@
                     <div class="footer-block mt-auto">
                         <div class="footer-grid">
                             <div class="remarks">
-                                {#if quote.comentario}
+                                {#if order?.comentario}
                                     <h4 class="section-title">Observaciones</h4>
                                     <div class="remarks-content">
-                                        {quote.comentario}
+                                        {order.comentario}
                                     </div>
                                 {/if}
                                 <div class="disclaimer mt-1">
                                     <p>
-                                        * Esta cotizacion es referencial. Sujeto
-                                        a cambios sin previo aviso segun tasa
-                                        del dia.
+                                        * Esta orden de compra autoriza la
+                                        adquisición y despacho de los renglones
+                                        detallados.
                                     </p>
                                     <p>
-                                        * Tasa referencial del dia: <strong
+                                        * Tasa referencial del documento: <strong
                                             >Bs. {formatCurrency(
-                                                quote.tasa_actual || quote.tasa,
+                                                tasaRef,
                                             )}</strong
                                         > por 1 USD.
                                     </p>
@@ -360,130 +360,62 @@
                             <div class="totals-box">
                                 {#if isUSD}
                                     <div class="total-row">
-                                        <span>Subtotal ($)</span><span
+                                        <span>Subtotal ($)</span>
+                                        <span
                                             >{formatCurrency(subtotalUSD)}</span
                                         >
                                     </div>
                                     {#if ivaUSD > 0}
                                         <div class="total-row">
-                                            <span>IVA (16%)</span><span
-                                                >{formatCurrency(ivaUSD)}</span
+                                            <span>IVA (16%)</span>
+                                            <span>{formatCurrency(ivaUSD)}</span
                                             >
                                         </div>
                                     {/if}
-                                    {#if hasRetention}
-                                        <div class="total-row">
-                                            <span>Total Factura ($)</span><span
-                                                >{formatCurrency(
-                                                    totalFacturaUSD,
+                                    <div class="grand-total-outline">
+                                        <div class="bs-total">
+                                            <span class="label"
+                                                >Total General</span
+                                            >
+                                            <span class="val"
+                                                >$ {formatCurrency(
+                                                    totalUSD,
                                                 )}</span
                                             >
                                         </div>
-                                        <div
-                                            class="total-row text-amber-600 font-bold"
-                                        >
-                                            <span>Retencion ({porcEsp}%)</span
-                                            ><span
-                                                >- {formatCurrency(
-                                                    retencionUSD,
-                                                )}</span
-                                            >
-                                        </div>
-                                        <div class="grand-total-outline">
-                                            <div class="bs-total">
-                                                <span class="label"
-                                                    >Total a Pagar</span
-                                                ><span class="val"
-                                                    >$ {formatCurrency(
-                                                        totalAPagarUSD,
-                                                    )}</span
-                                                >
-                                            </div>
-                                        </div>
-                                    {:else}
-                                        <div class="grand-total-outline">
-                                            <div class="bs-total">
-                                                <span class="label"
-                                                    >Total General</span
-                                                ><span class="val"
-                                                    >$ {formatCurrency(
-                                                        totalFacturaUSD,
-                                                    )}</span
-                                                >
-                                            </div>
-                                        </div>
-                                    {/if}
+                                    </div>
                                 {:else}
                                     <div class="total-row">
-                                        <span>Subtotal (Bs.)</span><span
-                                            >{formatCurrency(subtotalBS)}</span
+                                        <span>Subtotal (Bs.)</span>
+                                        <span>{formatCurrency(subtotalBS)}</span
                                         >
                                     </div>
                                     {#if ivaBS > 0}
                                         <div class="total-row">
-                                            <span>IVA (16%)</span><span
-                                                >{formatCurrency(ivaBS)}</span
-                                            >
+                                            <span>IVA (16%)</span>
+                                            <span>{formatCurrency(ivaBS)}</span>
                                         </div>
                                     {/if}
-                                    {#if hasRetention}
-                                        <div class="total-row">
-                                            <span>Total Factura (Bs.)</span
-                                            ><span
-                                                >{formatCurrency(
-                                                    totalFacturaBS,
+                                    <div class="grand-total-outline">
+                                        <div class="bs-total">
+                                            <span class="label"
+                                                >Total General</span
+                                            >
+                                            <span class="val"
+                                                >Bs. {formatCurrency(
+                                                    totalBS,
                                                 )}</span
                                             >
                                         </div>
-                                        <div
-                                            class="total-row text-amber-600 font-bold"
-                                        >
-                                            <span>Retencion ({porcEsp}%)</span
-                                            ><span
-                                                >- {formatCurrency(
-                                                    retencionBS,
-                                                )}</span
+                                        <div class="usd-reference">
+                                            <span>Referencia</span>
+                                            <strong
+                                                >$ {formatCurrency(
+                                                    totalUSDRef,
+                                                )}</strong
                                             >
                                         </div>
-                                        <div class="grand-total-outline">
-                                            <div class="bs-total">
-                                                <span class="label"
-                                                    >Total a Pagar</span
-                                                ><span class="val"
-                                                    >Bs. {formatCurrency(
-                                                        totalAPagarBS,
-                                                    )}</span
-                                                >
-                                            </div>
-                                            <div class="usd-reference">
-                                                <span>Referencia</span><strong
-                                                    >$ {formatCurrency(
-                                                        totalAPagarUSDRef,
-                                                    )}</strong
-                                                >
-                                            </div>
-                                        </div>
-                                    {:else}
-                                        <div class="grand-total-outline">
-                                            <div class="bs-total">
-                                                <span class="label"
-                                                    >Total General</span
-                                                ><span class="val"
-                                                    >Bs. {formatCurrency(
-                                                        totalFacturaBS,
-                                                    )}</span
-                                                >
-                                            </div>
-                                            <div class="usd-reference">
-                                                <span>Referencia</span><strong
-                                                    >$ {formatCurrency(
-                                                        totalFacturaBS /
-                                                            tasaRef,
-                                                    )}</strong
-                                                >
-                                            </div>
-                                        </div>
-                                    {/if}
+                                    </div>
                                 {/if}
                             </div>
                         </div>
@@ -525,7 +457,7 @@
         background: #fff;
         width: 21.59cm;
         height: 27.94cm;
-        padding: 0.6cm 0.8cm 1cm 0.8cm; /* Aumentado margen inferior para evitar solapamientos con pie de página */
+        padding: 0.6cm 0.8cm 1cm 0.8cm;
         box-sizing: border-box;
         box-shadow: 0 15px 50px rgba(0, 0, 0, 0.3);
         display: flex;
@@ -565,8 +497,7 @@
         text-transform: uppercase;
     }
     .fiscal-id,
-    .address,
-    .phone {
+    .address {
         font-size: 8px;
         margin: 1px 0;
         color: #333;
@@ -602,9 +533,11 @@
 
     .info-grid {
         display: grid;
-        grid-template-columns: 1fr 1fr;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
         gap: 10px;
         margin-bottom: 10px;
+        width: 100%;
+        box-sizing: border-box;
     }
     .section-title {
         font-size: 8px;
@@ -617,36 +550,47 @@
     .client-box,
     .logistic-box {
         background: #f9fafb;
-        padding: 5px;
+        padding: 6px 8px;
         border-radius: 4px;
         border: 1px solid #eee;
+        min-width: 0;
+        overflow: hidden;
+        word-break: break-word;
     }
     .client-name {
         font-size: 10px;
         font-weight: 900;
         margin: 0;
         text-transform: uppercase;
+        word-break: break-word;
     }
     .client-rif,
     .client-address,
     .client-phone {
         font-size: 8px;
         margin: 1px 0;
+        line-height: 1.25;
+        word-break: break-word;
     }
     .info-row {
         display: flex;
         gap: 5px;
         font-size: 8px;
-        margin-bottom: 1px;
+        margin-bottom: 2px;
+        align-items: flex-start;
     }
     .info-row .label {
         font-weight: bold;
         color: #666;
-        width: 60px;
+        width: 65px;
+        flex-shrink: 0;
     }
     .info-row .val {
         font-weight: 700;
         text-transform: uppercase;
+        flex: 1;
+        min-width: 0;
+        word-break: break-word;
     }
 
     .table-container {

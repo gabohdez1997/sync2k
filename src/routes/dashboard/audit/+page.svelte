@@ -63,6 +63,8 @@
     'sec_users':       { label: 'Usuarios', icon: UserCog, color: 'text-indigo-400' },
     'sec_roles':       { label: 'Permisos y Roles', icon: Key, color: 'text-orange-400' },
     'sec_audit':       { label: 'Auditoría', icon: ClipboardList, color: 'text-zinc-400' },
+    'pur_orders':      { label: 'Órdenes de Compra', icon: ShoppingCart, color: 'text-amber-400' },
+    'ORDENES_COMPRA':  { label: 'Órdenes de Compra', icon: ShoppingCart, color: 'text-amber-400' },
     'auth_login':      { label: 'Sesión', icon: Shield, color: 'text-brand-400' },
     'auth_logout':     { label: 'Sesión', icon: Shield, color: 'text-zinc-500' }
   };

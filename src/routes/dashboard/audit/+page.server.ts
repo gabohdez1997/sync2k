@@ -59,6 +59,10 @@ export const load: PageServerLoad = protectLoad('sec_audit', async ({ url }) => 
       orParts.push(`module.eq.pur_suppliers`);
       orParts.push(`module.eq.PROVEEDORES`);
     }
+    if (cleanSearch.includes('compra') || cleanSearch.includes('orden')) {
+      orParts.push(`module.eq.pur_orders`);
+      orParts.push(`module.eq.ORDENES_COMPRA`);
+    }
     if (cleanSearch.includes('cliente')) {
       orParts.push(`module.eq.sales_customers`);
       orParts.push(`module.eq.CLIENTES`);

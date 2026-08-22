@@ -325,5 +325,52 @@ export class AgentClient {
 			body: JSON.stringify({ items })
 		});
 	}
+
+	/**
+	 * Obtiene el listado de órdenes de compra
+	 */
+	async getPurchaseOrders(filters: Record<string, string> = {}, page = 1, limit = 12) {
+		const params = new URLSearchParams({ ...filters, page: String(page), limit: String(limit) });
+		return this.request<any>(`/ordenes-compras?${params.toString()}`);
+	}
+
+	/**
+	 * Obtiene el detalle de una orden de compra
+	 */
+	async getPurchaseOrder(doc_num: string, sedeId?: string) {
+		const query = sedeId ? `?sede=${encodeURIComponent(sedeId)}` : '';
+		return this.request<any>(`/ordenes-compras/${encodeURIComponent(doc_num)}${query}`);
+	}
+
+	/**
+	 * Guarda o actualiza una orden de compra en la sede destino
+	 */
+	async savePurchaseOrder(orderData: any, sedeId?: string) {
+		const query = sedeId ? `?sede=${encodeURIComponent(sedeId)}` : '';
+		return this.request<any>(`/ordenes-compras${query}`, {
+			method: 'POST',
+			body: JSON.stringify(orderData)
+		});
+	}
+
+	/**
+	 * Elimina una orden de compra
+	 */
+	async deletePurchaseOrder(doc_num: string, sedeId?: string) {
+		const query = sedeId ? `?sede=${encodeURIComponent(sedeId)}` : '';
+		return this.request<any>(`/ordenes-compras/${encodeURIComponent(doc_num)}${query}`, {
+			method: 'DELETE'
+		});
+	}
+
+	/**
+	 * Anula una orden de compra
+	 */
+	async anularPurchaseOrder(doc_num: string, sedeId?: string) {
+		const query = sedeId ? `?sede=${encodeURIComponent(sedeId)}` : '';
+		return this.request<any>(`/ordenes-compras/${encodeURIComponent(doc_num)}/anular${query}`, {
+			method: 'POST'
+		});
+	}
 }
 

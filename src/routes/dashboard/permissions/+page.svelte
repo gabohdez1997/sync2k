@@ -101,6 +101,7 @@
         { id: "pur_lines", label: "Líneas" },
         { id: "pur_sublines", label: "Sub-Líneas" },
         { id: "pur_categories", label: "Categorías" },
+        { id: "pur_orders", label: "Órdenes de Compra", hasVoid: true },
       ],
     },
     {
