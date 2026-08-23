@@ -42,7 +42,8 @@
     Award,
     Image,
     TrendingUp,
-    BarChart2
+    BarChart2,
+    Inbox
   } from 'lucide-svelte';
   import { slide, fade } from 'svelte/transition';
 
@@ -105,6 +106,7 @@
         { id: 'sec_articles', label: 'Ubicaciones', href: '/dashboard/warehouse/locations', icon: MapPin },
         { id: 'sec_article_images', label: 'Imágenes', href: '/dashboard/warehouse/article-images', icon: Image },
         { id: 'inv_transfers', label: 'Traslados', href: '/dashboard/warehouse/transfers', icon: ArrowRightLeft },
+        { id: 'inv_receipts', label: 'Notas de Recepción', href: '/dashboard/warehouse/receipts', icon: Inbox },
         { id: 'inv_shipping', label: 'Despacho', href: '/dashboard/inventory/shipping', icon: Truck },
         { id: 'inv_void', label: 'Anulación', href: '/dashboard/inventory/void', icon: XCircle },
       ]

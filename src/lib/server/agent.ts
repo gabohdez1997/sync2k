@@ -373,5 +373,70 @@ export class AgentClient {
 			method: 'POST'
 		});
 	}
+
+	/**
+	 * Obtiene el listado de notas de recepción
+	 */
+	async getReceivingNotes(filters: Record<string, string> = {}, page = 1, limit = 12) {
+		const params = new URLSearchParams({ ...filters, page: String(page), limit: String(limit) });
+		return this.request<any>(`/notas-recepcion?${params.toString()}`);
+	}
+
+	/**
+	 * Obtiene el detalle de una nota de recepción
+	 */
+	async getReceivingNote(doc_num: string, sedeId?: string) {
+		const query = sedeId ? `?sede=${encodeURIComponent(sedeId)}` : '';
+		return this.request<any>(`/notas-recepcion/${encodeURIComponent(doc_num)}${query}`);
+	}
+
+	/**
+	 * Consulta órdenes de compra pendientes para recepcionar
+	 */
+	async getPendingPurchaseOrders(filters: Record<string, string> = {}, sedeId?: string) {
+		const params = new URLSearchParams(filters);
+		if (sedeId) params.set('sede', sedeId);
+		return this.request<any>(`/notas-recepcion/ordenes-pendientes?${params.toString()}`);
+	}
+
+	/**
+	 * Consulta el detalle de renglones y pendientes de una orden de compra
+	 */
+	async getPendingPurchaseOrderDetail(doc_num: string, sedeId?: string) {
+		const query = sedeId ? `?sede=${encodeURIComponent(sedeId)}` : '';
+		return this.request<any>(`/notas-recepcion/ordenes-pendientes/${encodeURIComponent(doc_num)}${query}`);
+	}
+
+	/**
+	 * Guarda / procesa una nota de recepción
+	 */
+	async saveReceivingNote(payload: any, sedeId?: string) {
+		const query = sedeId ? `?sede=${encodeURIComponent(sedeId)}` : '';
+		return this.request<any>(`/notas-recepcion${query}`, {
+			method: 'POST',
+			body: JSON.stringify(payload)
+		});
+	}
+
+	/**
+	 * Anula una nota de recepción
+	 */
+	async voidReceivingNote(doc_num: string, reason?: string, sedeId?: string) {
+		const query = sedeId ? `?sede=${encodeURIComponent(sedeId)}` : '';
+		return this.request<any>(`/notas-recepcion/${encodeURIComponent(doc_num)}/anular${query}`, {
+			method: 'POST',
+			body: JSON.stringify({ motivo: reason })
+		});
+	}
+
+	/**
+	 * Elimina físicamente una nota de recepción
+	 */
+	async deleteReceivingNote(doc_num: string, sedeId?: string) {
+		const query = sedeId ? `?sede=${encodeURIComponent(sedeId)}` : '';
+		return this.request<any>(`/notas-recepcion/${encodeURIComponent(doc_num)}${query}`, {
+			method: 'DELETE'
+		});
+	}
 }
 

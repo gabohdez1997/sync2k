@@ -1,3 +1,4 @@
+<!-- src/lib/components/ui/ImportItemCard.svelte -->
 <script lang="ts">
   import { User } from 'lucide-svelte';
 
@@ -9,8 +10,9 @@
     clientName: string;
     clientRif?: string | null;
     dateEmis: string;
-    amountUsd: string | number;
-    amountBs: string | number;
+    amountUsd?: string | number | null;
+    amountBs?: string | number | null;
+    qtyLabel?: string | null;
     branchName?: string | null;
     cashierName?: string | null;
     onclick: () => void;
@@ -24,8 +26,9 @@
     clientName,
     clientRif = null,
     dateEmis,
-    amountUsd,
-    amountBs,
+    amountUsd = null,
+    amountBs = null,
+    qtyLabel = null,
     branchName = null,
     cashierName = null,
     onclick
@@ -56,7 +59,7 @@
       {/if}
     </div>
 
-    <!-- Nombre de Cliente -->
+    <!-- Nombre de Cliente / Proveedor -->
     <p class="font-black text-text-base text-sm uppercase leading-tight truncate max-w-[320px] sm:max-w-[400px]">
       {String(clientName || '').toUpperCase()}
     </p>
@@ -79,16 +82,28 @@
 
   <!-- Right Column -->
   <div class="flex flex-col items-end space-y-1 text-right">
-    <!-- Monto en USD -->
-    <div class="text-sm font-black text-text-base leading-none">
-      <span class="text-text-muted text-[10px] font-bold mr-0.5 uppercase">USD</span>
-      {typeof amountUsd === 'number' ? amountUsd.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : amountUsd}
-    </div>
+    {#if qtyLabel}
+      <!-- Etiqueta de Cantidades (para Almacén / Notas de Recepción) -->
+      <div class="text-sm font-black text-emerald-400 leading-none">
+        {qtyLabel}
+      </div>
+      <span class="text-[10px] text-text-muted font-bold leading-none">Pendientes</span>
+    {:else if amountUsd != null || amountBs != null}
+      <!-- Monto en USD -->
+      {#if amountUsd != null}
+        <div class="text-sm font-black text-text-base leading-none">
+          <span class="text-text-muted text-[10px] font-bold mr-0.5 uppercase">USD</span>
+          {typeof amountUsd === 'number' ? amountUsd.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : amountUsd}
+        </div>
+      {/if}
 
-    <!-- Monto en Bs. -->
-    <div class="text-[10px] text-text-muted font-bold leading-none">
-      Bs. {typeof amountBs === 'number' ? amountBs.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : amountBs}
-    </div>
+      <!-- Monto en Bs. -->
+      {#if amountBs != null}
+        <div class="text-[10px] text-text-muted font-bold leading-none">
+          Bs. {typeof amountBs === 'number' ? amountBs.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : amountBs}
+        </div>
+      {/if}
+    {/if}
 
     <!-- Sucursal (si aplica) -->
     {#if branchName}

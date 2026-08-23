@@ -30,7 +30,9 @@
     GitBranch,
     ChevronLeft,
     ChevronRight,
-    Users
+    Users,
+    ShoppingCart,
+    Inbox
   } from "lucide-svelte";
   import Combobox from "$lib/components/ui/Combobox.svelte";
   import type { PageData } from "./$types";
@@ -65,6 +67,8 @@
     'sec_audit':       { label: 'Auditoría', icon: ClipboardList, color: 'text-zinc-400' },
     'pur_orders':      { label: 'Órdenes de Compra', icon: ShoppingCart, color: 'text-amber-400' },
     'ORDENES_COMPRA':  { label: 'Órdenes de Compra', icon: ShoppingCart, color: 'text-amber-400' },
+    'inv_receipts':    { label: 'Notas de Recepción', icon: Inbox, color: 'text-cyan-400' },
+    'NOTAS_RECEPCION': { label: 'Notas de Recepción', icon: Inbox, color: 'text-cyan-400' },
     'auth_login':      { label: 'Sesión', icon: Shield, color: 'text-brand-400' },
     'auth_logout':     { label: 'Sesión', icon: Shield, color: 'text-zinc-500' }
   };

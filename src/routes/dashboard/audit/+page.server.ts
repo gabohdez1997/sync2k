@@ -92,6 +92,10 @@ export const load: PageServerLoad = protectLoad('sec_audit', async ({ url }) => 
     if (cleanSearch.includes('auditor')) {
       orParts.push(`module.eq.sec_audit`);
     }
+    if (cleanSearch.includes('recepcion') || cleanSearch.includes('recepciones') || cleanSearch.includes('nota de recepcion')) {
+      orParts.push(`module.eq.inv_receipts`);
+      orParts.push(`module.eq.NOTAS_RECEPCION`);
+    }
     if (cleanSearch.includes('sesion') || cleanSearch.includes('inicio') || cleanSearch.includes('cierre') || cleanSearch.includes('login') || cleanSearch.includes('logout')) {
       orParts.push(`module.eq.auth_login`);
       orParts.push(`module.eq.auth_logout`);
