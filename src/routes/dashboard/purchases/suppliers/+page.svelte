@@ -24,10 +24,13 @@
     Store,
     User,
     CreditCard,
+    FileSpreadsheet,
   } from "lucide-svelte";
   import { goto } from "$app/navigation";
   import { page } from "$app/stores";
   import { toast } from "svelte-sonner";
+  import * as XLSX from "xlsx";
+  import dayjs from "dayjs";
   import Combobox from "$lib/components/ui/Combobox.svelte";
   import SearchBar from "$lib/components/ui/SearchBar.svelte";
   import type { PageData, ActionData } from "./$types";
@@ -195,6 +198,88 @@
       selectedBranch || data.selectedBranchId || data.context?.branchId || "";
     showDeleteModal = true;
   }
+
+  // ── EXPORT TO EXCEL (TODOS LOS PROVEEDORES) ───────────────────────────────
+  let isExporting = $state(false);
+
+  async function exportToExcel() {
+    isExporting = true;
+    toast.info("Consultando la totalidad de proveedores para exportar...");
+
+    try {
+      const params = new URLSearchParams();
+      params.set("limit", "10000");
+      params.set("page", "1");
+      if (searchQuery) params.set("search", searchQuery);
+      if (selectedBranch) params.set("branch_id", selectedBranch);
+
+      const res = await fetch(`/api/agent/suppliers?${params.toString()}`);
+      const result = await res.json();
+
+      let itemsToExport: any[] = [];
+      if (result && result.success && Array.isArray(result.data) && result.data.length > 0) {
+        itemsToExport = result.data;
+      } else {
+        itemsToExport = localSuppliers;
+      }
+
+      if (!itemsToExport || itemsToExport.length === 0) {
+        toast.warning("No hay proveedores para exportar.");
+        return;
+      }
+
+      const rows = itemsToExport.map((item: any) => ({
+        "Código": item.co_prov ? String(item.co_prov).trim() : "",
+        "Razón Social": item.descripcion || item.prov_des || "",
+        "RIF / Documento": item.rif ? String(item.rif).trim() : "",
+        "Contacto / Responsable": item.respons || "",
+        "Teléfonos": item.telefonos || "",
+        "Correo Electrónico": item.email || "",
+        "Dirección": item.direc1 || item.direccion || "",
+        "Zona": item.zon_des || item.co_zon || "",
+        "Tipo de Proveedor": item.tip_pro_des || item.tip_pro || "",
+        "Condición de Pago": item.cond_des || item.cond_pag || "",
+        "Contribuyente Especial": item.contribu_e ? "SÍ" : "NO",
+        "% Retención":
+          item.porc_esp !== undefined && item.porc_esp !== null
+            ? `${item.porc_esp}%`
+            : "0%",
+        "Estatus": item.inactivo ? "Inactivo" : "Activo"
+      }));
+
+      const ws = XLSX.utils.json_to_sheet(rows);
+
+      // Auto ajustar anchos de columnas
+      ws["!cols"] = [
+        { wch: 14 }, // Código
+        { wch: 38 }, // Razón Social
+        { wch: 16 }, // RIF
+        { wch: 25 }, // Contacto
+        { wch: 20 }, // Teléfonos
+        { wch: 30 }, // Email
+        { wch: 40 }, // Dirección
+        { wch: 18 }, // Zona
+        { wch: 22 }, // Tipo Proveedor
+        { wch: 20 }, // Condición Pago
+        { wch: 16 }, // Contribuyente
+        { wch: 14 }, // % Retención
+        { wch: 12 }  // Estatus
+      ];
+
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Proveedores");
+
+      const fileName = `Proveedores_Profit_${dayjs().format("YYYY-MM-DD_HHmm")}.xlsx`;
+      XLSX.writeFile(wb, fileName);
+
+      toast.success(`Se exportaron exitosamente ${itemsToExport.length.toLocaleString()} proveedores.`);
+    } catch (e: any) {
+      console.error("Error al exportar proveedores:", e);
+      toast.error("Ocurrió un error al exportar: " + e.message);
+    } finally {
+      isExporting = false;
+    }
+  }
 </script>
 
 <div class="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
@@ -210,15 +295,38 @@
       </p>
     </div>
 
-    {#if canCreate}
+    <div class="flex items-center gap-3 shrink-0">
+      <!-- Botón Secundario Exportar Excel (Izquierda) -->
       <button
-        onclick={openCreateModal}
-        class="flex items-center justify-center gap-3 bg-brand-600 hover:bg-brand-500 text-white px-8 py-4 rounded-2xl font-black shadow-xl shadow-brand-500/20 transition-all active:scale-95"
+        type="button"
+        onclick={exportToExcel}
+        disabled={isExporting || localSuppliers.length === 0}
+        class="flex items-center justify-center gap-2.5 px-6 h-14 rounded-2xl bg-surface-strong hover:bg-surface-base text-text-base border border-border-subtle hover:border-brand-500/40 transition-all font-bold active:scale-95 shadow-sm shrink-0 cursor-pointer w-full sm:w-auto disabled:opacity-50"
+        title="Exportar listado de proveedores a Excel (.xlsx)"
       >
-        <Plus size={20} />
-        Nuevo Proveedor
+        {#if isExporting}
+          <Loader2 size={18} class="animate-spin text-brand-400" />
+          <span>Exportando...</span>
+        {:else}
+          <FileSpreadsheet
+            size={18}
+            class="text-brand-400"
+          />
+          <span>Exportar Excel</span>
+        {/if}
       </button>
-    {/if}
+
+      <!-- Botón Principal Nuevo Proveedor (Derecha) -->
+      {#if canCreate}
+        <button
+          onclick={openCreateModal}
+          class="flex items-center justify-center gap-2.5 px-8 h-14 rounded-2xl bg-brand-600 hover:bg-brand-500 text-white font-black shadow-xl shadow-brand-500/20 transition-all active:scale-95 cursor-pointer shrink-0 w-full sm:w-auto"
+        >
+          <Plus size={20} />
+          <span>Nuevo Proveedor</span>
+        </button>
+      {/if}
+    </div>
   </div>
 
   <!-- Search, Filters and Stats -->

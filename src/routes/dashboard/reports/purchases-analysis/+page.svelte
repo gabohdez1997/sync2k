@@ -38,6 +38,8 @@
     import { goto } from "$app/navigation";
     import { onMount } from "svelte";
     import dayjs from "dayjs";
+    import * as XLSX from "xlsx";
+    import { toast } from "svelte-sonner";
 
     ChartJS.register(
         Title,
@@ -584,59 +586,110 @@
     }
 
     function exportToExcel() {
-        if (!items || items.length === 0) return;
-
-        let csvContent = "\uFEFFsep=;\n";
-        csvContent +=
-            "Codigo;Descripcion;Linea;Sublinea;Categoria;Clase ABC/XYZ;SDR (Stock);ROP;SS;VPD;TR Promedio (Dias);Ventas Periodo;Pedir Recomendado;Inversion Est. (USD);Estado de Stock\n";
-
-        for (const item of items) {
-            const co_art = `="${String(item.co_art || "")
-                .trim()
-                .replace(/"/g, '""')}"`;
-            const des_art = `"${String(item.des_art || "")
-                .trim()
-                .replace(/"/g, '""')}"`;
-            const des_lin = `"${String(item.des_lin || "").trim().replace(/"/g, '""')}"`;
-            const des_subl = `"${String(item.des_subl || "").trim().replace(/"/g, '""')}"`;
-            const des_cat = `"${String(item.des_cat || "").trim().replace(/"/g, '""')}"`;
-            const clase = `"${String(item.clase_conjunta || "").trim()}"`;
-
-            const sdr = (Number(item.sdr) || 0).toString();
-            const rop = (Number(item.rop) || 0).toString();
-            const ss = (Number(item.ss) || 0).toString();
-            const vpd = (Number(item.vpd) || 0).toFixed(2).replace(".", ",");
-            const tr = (Number(item.tr) || 0).toFixed(1).replace(".", ",");
-            const ventas = (Number(item.ventas_netas) || 0).toString();
-
-            const cantReponer = getCantReponer(item);
-            const cantReponerStr = formatUnitQty(
-                cantReponer,
-                item.co_uni,
-            ).replace(".", ",");
-            const costoInversion = (cantReponer * (item.costo_actual || 0))
-                .toFixed(2)
-                .replace(".", ",");
-
-            const alertInfo = getAlertBadge(item);
-            const estado = alertInfo.label;
-
-            csvContent += `${co_art};${des_art};${des_lin};${des_subl};${des_cat};${clase};${sdr};${rop};${ss};${vpd};${tr};${ventas};${cantReponerStr};${costoInversion};${estado}\n`;
+        if (!items || items.length === 0) {
+            toast.warning("No hay datos para exportar.");
+            return;
         }
 
-        const blob = new Blob([csvContent], {
-            type: "text/csv;charset=utf-8;",
-        });
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement("a");
-        const filename = `analisis_compras_${startDate.replace(/-/g, "")}_a_${endDate.replace(/-/g, "")}.csv`;
+        try {
+            const headerRows = [
+                ["REPORTE DE ANÁLISIS DE COMPRAS E INVENTARIO (ABC / XYZ)"],
+                ["Período Analizado:", `${dayjs(startDate).format("DD/MM/YYYY")} al ${dayjs(endDate).format("DD/MM/YYYY")}`, "", "Días Hábiles:", data.businessDays || ""],
+                ["Sucursal / Sede:", data.selectedBranch?.name || data.branchId || "Todas", "", "Fecha de Generación:", dayjs().format("DD/MM/YYYY HH:mm:ss")],
+                ["Total Artículos:", items.length, "", "Artículos en Alerta:", data.kpis?.articulos_en_alerta || 0],
+                [],
+                [
+                    "Código",
+                    "Descripción",
+                    "Modelo",
+                    "Línea",
+                    "Sublínea",
+                    "Categoría",
+                    "Unidad",
+                    "Clase ABC/XYZ",
+                    "SDR (Stock Actual)",
+                    "ROP (Punto Reorden)",
+                    "SS (Stock Seguridad)",
+                    "VPD (Venta Prom. Diaria)",
+                    "TR Promedio (Días)",
+                    "Ventas Período",
+                    "Cant. Documentos Exitosos",
+                    "Cant. Máx en 1 Doc",
+                    "Cant. Mín en 1 Doc",
+                    "Pedir Recomendado",
+                    "Costo Actual (USD)",
+                    "Inversión Est. (USD)",
+                    "Estado de Stock"
+                ]
+            ];
 
-        link.setAttribute("href", url);
-        link.setAttribute("download", filename);
-        link.style.visibility = "hidden";
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
+            const rows = items.map((item: any) => {
+                const cantReponer = getCantReponer(item);
+                const costoInversion = Number((cantReponer * (item.costo_actual || 0)).toFixed(2));
+                const alertInfo = getAlertBadge(item);
+
+                return [
+                    item.co_art ? String(item.co_art).trim() : "",
+                    item.des_art || "",
+                    item.modelo || "",
+                    item.des_lin || "",
+                    item.des_subl || "",
+                    item.des_cat || "",
+                    item.des_uni || item.co_uni || "UND",
+                    item.clase_conjunta || "",
+                    Number(item.sdr) || 0,
+                    Number(item.rop) || 0,
+                    Number(item.ss) || 0,
+                    Number(Number(item.vpd || 0).toFixed(2)),
+                    Number(Number(item.tr || 0).toFixed(1)),
+                    Number(item.ventas_netas) || 0,
+                    Number(item.cant_docs_exitosos) || 0,
+                    Number(item.cant_max_doc) || 0,
+                    Number(item.cant_min_doc) || 0,
+                    Number(cantReponer),
+                    Number(Number(item.costo_actual || 0).toFixed(2)),
+                    costoInversion,
+                    alertInfo.label || ""
+                ];
+            });
+
+            const ws = XLSX.utils.aoa_to_sheet([...headerRows, ...rows]);
+
+            // Configurar anchos de columnas
+            ws["!cols"] = [
+                { wch: 16 }, // Código
+                { wch: 42 }, // Descripción
+                { wch: 18 }, // Modelo
+                { wch: 18 }, // Línea
+                { wch: 22 }, // Sublínea
+                { wch: 22 }, // Categoría
+                { wch: 10 }, // Unidad
+                { wch: 14 }, // Clase
+                { wch: 18 }, // SDR
+                { wch: 18 }, // ROP
+                { wch: 18 }, // SS
+                { wch: 22 }, // VPD
+                { wch: 18 }, // TR
+                { wch: 16 }, // Ventas
+                { wch: 24 }, // Cant. Docs Exitosos
+                { wch: 20 }, // Cant. Máx Doc
+                { wch: 20 }, // Cant. Mín Doc
+                { wch: 18 }, // Pedir Recomendado
+                { wch: 18 }, // Costo
+                { wch: 20 }, // Inversión
+                { wch: 22 }  // Estado
+            ];
+
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "Análisis de Compras");
+
+            const fileName = `Analisis_Compras_${dayjs(startDate).format("YYYYMMDD")}_al_${dayjs(endDate).format("YYYYMMDD")}.xlsx`;
+            XLSX.writeFile(wb, fileName);
+            toast.success(`Reporte Excel exportado exitosamente (${items.length.toLocaleString()} artículos).`);
+        } catch (e: any) {
+            console.error("Error al exportar a Excel:", e);
+            toast.error("Ocurrió un error al exportar: " + e.message);
+        }
     }
 
     function setQuickDate(days: number) {
@@ -1050,11 +1103,11 @@
             <button
                 onclick={exportToExcel}
                 disabled={!items || items.length === 0}
-                class="px-5 py-2.5 bg-brand-600 hover:bg-brand-500 text-white text-xs font-black rounded-xl shadow-lg shadow-brand-600/20 hover:shadow-brand-500/30 transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-                title="Exportar a Excel (CSV)"
+                class="flex items-center justify-center gap-2.5 px-8 h-14 rounded-2xl bg-brand-600 hover:bg-brand-500 text-white font-black shadow-xl shadow-brand-500/20 transition-all active:scale-95 cursor-pointer shrink-0 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+                title="Exportar reporte a Excel (.xlsx)"
             >
-                <FileSpreadsheet size={16} />
-                Exportar Excel
+                <FileSpreadsheet size={20} />
+                <span>Exportar Excel</span>
             </button>
         </div>
     </div>

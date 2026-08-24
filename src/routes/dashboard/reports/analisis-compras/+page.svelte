@@ -2130,8 +2130,8 @@
                                         El inventario actual es <b
                                             >0 {unitLabel}</b
                                         >
-                                        a pesar de registrar una venta diaria
-                                        promedio de
+                                        a pesar de registrar una venta diaria promedio
+                                        de
                                         <b
                                             >{selectedArticle.vpd.toFixed(2)}
                                             {unitLabel}/día</b
@@ -2164,8 +2164,8 @@
                                         >
                                         cubrirá los
                                         <b>{demandaTR} {unitLabel}</b>
-                                        de demanda proyectada durante el tiempo
-                                        de reposición del proveedor ({selectedArticle.tr.toFixed(
+                                        de demanda proyectada durante el tiempo de
+                                        reposición del proveedor ({selectedArticle.tr.toFixed(
                                             1,
                                         )} días) y garantizará mantener el colchón
                                         de seguridad de

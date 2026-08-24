@@ -179,38 +179,39 @@
     </div>
 
     <div class="flex items-center gap-3 shrink-0">
-      {#if canCreate}
-        <button
-          onclick={() => goto("/dashboard/purchases/articles/editor")}
-          class="h-14 px-8 bg-brand-600 hover:bg-brand-500 border-brand-500/50 shadow-lg shadow-brand-600/20 text-white rounded-2xl font-bold transition-all active:scale-95 flex items-center gap-3"
-        >
-          <Plus size={20} /> Crear Artículo
-        </button>
-      {/if}
-
+      <!-- Botón Secundario Imprimir Reporte (Izquierda) -->
       <button
         onclick={openReport}
-        class="h-14 px-8 {selectedCodes.size > 0
-          ? 'bg-brand-600 hover:bg-brand-500 border-brand-500/50 shadow-lg shadow-brand-600/20 text-white'
-          : 'bg-surface-raised hover:bg-white/5 border-white/5 hover:border-white/10 text-text-base'} border rounded-2xl font-bold transition-all active:scale-95 flex items-center gap-3 group"
+        class="flex items-center justify-center gap-2.5 px-6 h-14 rounded-2xl bg-surface-strong hover:bg-surface-base text-text-base border border-border-subtle hover:border-brand-500/40 transition-all font-bold active:scale-95 shadow-sm shrink-0 cursor-pointer w-full sm:w-auto {selectedCodes.size > 0
+          ? 'border-brand-500/50 text-brand-300'
+          : ''}"
         title={selectedCodes.size > 0
           ? `Imprimir ${selectedCodes.size} artículo(s) seleccionado(s)`
           : "Imprimir todos los artículos del filtro"}
       >
         <Printer
-          size={20}
-          class={selectedCodes.size > 0
-            ? "text-white"
-            : "text-brand-400 group-hover:text-brand-300"}
+          size={18}
+          class="text-brand-400"
         />
-        <span class="hidden sm:inline">Imprimir</span> Reporte
+        <span>Imprimir Reporte</span>
         {#if selectedCodes.size > 0}
           <span
-            class="bg-white/20 text-white text-xs font-black px-2 py-0.5 rounded-full"
+            class="bg-brand-500/20 text-brand-300 text-xs font-black px-2 py-0.5 rounded-full border border-brand-500/30"
             >{selectedCodes.size}</span
           >
         {/if}
       </button>
+
+      <!-- Botón Principal Crear Artículo (Derecha) -->
+      {#if canCreate}
+        <button
+          onclick={() => goto("/dashboard/purchases/articles/editor")}
+          class="flex items-center justify-center gap-2.5 px-8 h-14 rounded-2xl bg-brand-600 hover:bg-brand-500 text-white font-black shadow-xl shadow-brand-500/20 transition-all active:scale-95 cursor-pointer shrink-0 w-full sm:w-auto"
+        >
+          <Plus size={20} />
+          <span>Crear Artículo</span>
+        </button>
+      {/if}
     </div>
   </div>
 
