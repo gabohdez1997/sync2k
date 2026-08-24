@@ -17,7 +17,9 @@
         (receipt?.co_mone || "").toUpperCase().includes("US") ||
         (receipt?.co_mone || "").includes("$");
 
-    const displayFecEmis = receipt?.fec_us_mo ? receipt.fec_us_mo : receipt?.fec_emis;
+    const displayFecEmis = receipt?.fec_us_mo
+        ? receipt.fec_us_mo
+        : receipt?.fec_emis;
 
     const cleanObs = String(receipt?.comentario || "")
         .replace(/\s*\|\s*EDITADO V[IÍ]A API/gi, "")
@@ -36,24 +38,41 @@
 
     const originOrder = (() => {
         const rengs = receipt?.renglones || [];
-        const found = rengs.find((r: any) => r.num_doc && String(r.num_doc).trim() !== "");
-        return found ? String(found.num_doc).trim() : (receipt?.orden_compra || receipt?.n_control || "---");
+        const found = rengs.find(
+            (r: any) => r.num_doc && String(r.num_doc).trim() !== "",
+        );
+        return found
+            ? String(found.num_doc).trim()
+            : receipt?.orden_compra || receipt?.n_control || "---";
     })();
 
     const defaultWarehouse = (() => {
         const rengs = receipt?.renglones || [];
         const found = rengs.find((r: any) => r.almacen_des || r.co_alma);
         if (found) {
-            return found.almacen_des ? `${found.almacen_des} (${found.co_alma?.trim() || "01"})` : found.co_alma;
+            return found.almacen_des
+                ? `${found.almacen_des} (${found.co_alma?.trim() || "01"})`
+                : found.co_alma;
         }
         return receipt?.almacen_des || "ALMACEN PRINCIPAL (01)";
     })();
 
-    const totalPhysicalUnits = allItems.reduce((acc: number, r: any) => acc + Number(r.cantidad || r.total_art || 0), 0);
+    const receptionistDisplayName =
+        receipt?.recepcionista_name ||
+        receipt?.creator_name ||
+        receipt?.co_us_in ||
+        "";
+    const editorDisplayName = receipt?.editor_name || "";
+    const buyerDisplayName = receipt?.buyer_name || receipt?.oc_co_us_in || "";
+
+    const totalPhysicalUnits = allItems.reduce(
+        (acc: number, r: any) => acc + Number(r.cantidad || r.total_art || 0),
+        0,
+    );
 
     // --- LÓGICA DE PAGINACIÓN DINÁMICA CALIBRADA ---
-    const CAPACITY_WITH_TOTALS = 22; // Capacidad óptima en hoja con totales y firmas
-    const CAPACITY_WITHOUT_TOTALS = 36; // Capacidad óptima en hojas intermedias
+    const CAPACITY_WITH_TOTALS = 22;
+    const CAPACITY_WITHOUT_TOTALS = 36;
 
     function getItemWeight(item: any): number {
         const desc = String(item?.art_des || "").trim();
@@ -75,53 +94,34 @@
                 pages.push({
                     items: remaining.splice(0, remaining.length),
                     showTotals: true,
-                    emptyRowsCount: Math.max(
-                        0,
-                        CAPACITY_WITH_TOTALS - remainingWeight,
-                    ),
                 });
-                break;
-            }
-
-            let pageItems: any[] = [];
-            let currentWeight = 0;
-
-            while (remaining.length > 0) {
-                const nextWeight = getItemWeight(remaining[0]);
-                if (
-                    pageItems.length > 0 &&
-                    currentWeight + nextWeight > CAPACITY_WITHOUT_TOTALS
-                ) {
-                    break;
+            } else if (remainingWeight <= CAPACITY_WITHOUT_TOTALS) {
+                pages.push({
+                    items: remaining.splice(0, remaining.length),
+                    showTotals: false,
+                });
+            } else {
+                let currentBatch: any[] = [];
+                let currentWeight = 0;
+                while (remaining.length > 0) {
+                    const nextWeight = getItemWeight(remaining[0]);
+                    if (currentWeight + nextWeight > CAPACITY_WITHOUT_TOTALS) {
+                        break;
+                    }
+                    currentWeight += nextWeight;
+                    currentBatch.push(remaining.shift());
                 }
-                currentWeight += nextWeight;
-                pageItems.push(remaining.shift());
+                pages.push({
+                    items: currentBatch,
+                    showTotals: false,
+                });
             }
-
-            pages.push({
-                items: pageItems,
-                showTotals: false,
-                emptyRowsCount: Math.max(
-                    0,
-                    CAPACITY_WITHOUT_TOTALS - currentWeight,
-                ),
-            });
-        }
-
-        if (pages.length > 0 && !pages[pages.length - 1].showTotals) {
-            pages.push({
-                items: [],
-                showTotals: true,
-                emptyRowsCount: CAPACITY_WITH_TOTALS,
-            });
         }
 
         if (pages.length === 0) {
-            pages.push({
-                items: [],
-                showTotals: true,
-                emptyRowsCount: CAPACITY_WITH_TOTALS,
-            });
+            pages.push({ items: [], showTotals: true });
+        } else if (!pages[pages.length - 1].showTotals) {
+            pages.push({ items: [], showTotals: true });
         }
 
         return pages;
@@ -137,7 +137,11 @@
 <svelte:head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Nota de Recepción {receipt?.doc_num} - {branch?.business_name || branch?.name || "Profit Cloud"}</title>
+    <title
+        >Nota de Recepción {receipt?.doc_num} - {branch?.business_name ||
+            branch?.name ||
+            "Profit Cloud"}</title
+    >
 </svelte:head>
 
 <!-- FLOATING ACTIONS (NO PRINT) -->
@@ -151,23 +155,6 @@
         }}
         class="w-full md:w-auto justify-center bg-blue-600 text-white px-10 py-5 rounded-2xl font-black shadow-2xl shadow-blue-600/40 hover:bg-blue-500 transition-all active:scale-95 flex items-center gap-3 cursor-pointer"
     >
-        <svg
-            xmlns="http://www.w3.org/2000/svg"
-            width="24"
-            height="24"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="3"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-        >
-            <path
-                d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"
-            /><rect width="12" height="8" x="6" y="14" rx="1" /><path
-                d="M6 8V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v4"
-            />
-        </svg>
         IMPRIMIR NOTA DE RECEPCIÓN
     </button>
     <button
@@ -214,11 +201,37 @@
                                     )}</strong
                                 >
                             </p>
-                            {#if originOrder && originOrder !== '---'}
-                                <p class="currency-line font-mono font-bold">
-                                    OC Origen: <strong class="text-blue-700">{originOrder}</strong>
+                            <!-- {#if receptionistDisplayName}
+                                <p class="currency-line font-medium text-slate-700">
+                                    Recepcionista: <strong class="text-slate-900 font-bold"
+                                        >{receptionistDisplayName}</strong
+                                    >
                                 </p>
                             {/if}
+                            {#if editorDisplayName}
+                                <p class="currency-line font-medium text-amber-800">
+                                    Editado por: <strong class="font-bold"
+                                        >{editorDisplayName}</strong
+                                    >
+                                </p>
+                            {/if} -->
+                            {#if originOrder && originOrder !== "---"}
+                                <p class="currency-line font-mono font-bold">
+                                    OC Origen: <strong class="text-blue-700"
+                                        >{originOrder}</strong
+                                    >
+                                </p>
+                            {/if}
+                            <!-- {#if buyerDisplayName && buyerDisplayName !== receptionistDisplayName}
+                                <p
+                                    class="currency-line font-medium text-slate-600"
+                                >
+                                    Comprador OC: <strong
+                                        class="text-slate-800 font-semibold"
+                                        >{buyerDisplayName}</strong
+                                    >
+                                </p>
+                            {/if} -->
                         </div>
                     </div>
                 </div>
@@ -252,8 +265,34 @@
                         <h3 class="section-title">Condiciones y Almacén</h3>
                         <div class="info-row">
                             <span class="label">Almacén:</span>
-                            <span class="val text-emerald-700 font-black">{defaultWarehouse}</span>
+                            <span class="val text-emerald-700 font-black"
+                                >{defaultWarehouse}</span
+                            >
                         </div>
+                        {#if receptionistDisplayName}
+                            <div class="info-row">
+                                <span class="label">Recepcionista:</span>
+                                <span class="val text-blue-900 font-black"
+                                    >{receptionistDisplayName}</span
+                                >
+                            </div>
+                        {/if}
+                        {#if editorDisplayName}
+                            <div class="info-row">
+                                <span class="label">Editado por:</span>
+                                <span class="val text-amber-800 font-bold"
+                                    >{editorDisplayName}</span
+                                >
+                            </div>
+                        {/if}
+                        {#if buyerDisplayName && buyerDisplayName !== receptionistDisplayName}
+                            <div class="info-row">
+                                <span class="label">Comprador OC:</span>
+                                <span class="val text-slate-800 font-bold"
+                                    >{buyerDisplayName}</span
+                                >
+                            </div>
+                        {/if}
                         <div class="info-row">
                             <span class="label">Cond. Pago:</span>
                             <span class="val"
@@ -265,7 +304,10 @@
                         {#if receipt?.nro_fact || receipt?.n_control}
                             <div class="info-row">
                                 <span class="label">N° Control / Fact:</span>
-                                <span class="val">{receipt.nro_fact || receipt.n_control}</span>
+                                <span class="val"
+                                    >{receipt.nro_fact ||
+                                        receipt.n_control}</span
+                                >
                             </div>
                         {/if}
                     </div>
@@ -277,25 +319,36 @@
                         <thead>
                             <tr>
                                 <th class="col-code">Código</th>
-                                <th class="col-desc">Descripción de Artículo</th>
+                                <th class="col-desc">Descripción de Artículo</th
+                                >
                                 <th class="col-model">Modelo / Ref</th>
                                 <th class="col-wh">Almacén</th>
                                 <th class="col-uni">Uni.</th>
-                                <th class="col-qty text-right">Cant. Recibida</th>
+                                <th class="col-qty text-right"
+                                    >Cant. Recibida</th
+                                >
                             </tr>
                         </thead>
                         <tbody>
                             {#each page.items as item}
                                 <tr>
-                                    <td class="font-mono">{item.co_art?.trim()}</td>
+                                    <td class="font-mono"
+                                        >{item.co_art?.trim()}</td
+                                    >
                                     <td class="font-bold uppercase text-left">
                                         {item.art_des?.trim()}
                                     </td>
                                     <td class="font-mono text-center">
-                                        {item.modelo ? item.modelo.trim() : (item.referencia ? item.referencia.trim() : "-")}
+                                        {item.modelo
+                                            ? item.modelo.trim()
+                                            : item.referencia
+                                              ? item.referencia.trim()
+                                              : "-"}
                                     </td>
                                     <td class="text-center font-bold">
-                                        {item.almacen_des ? item.almacen_des.trim() : (item.co_alma?.trim() || "01")}
+                                        {item.almacen_des
+                                            ? item.almacen_des.trim()
+                                            : item.co_alma?.trim() || "01"}
                                     </td>
                                     <td class="font-black text-center"
                                         >{item.unidad?.trim() ||
@@ -303,17 +356,14 @@
                                             "UND"}</td
                                     >
                                     <td class="text-right font-black">
-                                        {formatQuantity(item.cantidad || item.total_art || 0)}
+                                        {formatQuantity(
+                                            item.cantidad ||
+                                                item.total_art ||
+                                                0,
+                                        )}
                                     </td>
                                 </tr>
                             {/each}
-                            {#if page.emptyRowsCount > 0}
-                                {#each Array(page.emptyRowsCount) as _}
-                                    <tr class="empty-row"
-                                        ><td colspan="6">&nbsp;</td></tr
-                                    >
-                                {/each}
-                            {/if}
                         </tbody>
                     </table>
                     {#if !page.showTotals}
@@ -331,13 +381,14 @@
                             <div class="signature-box">
                                 <div class="signature-line"></div>
                                 <span class="signature-label"
-                                    >Recibido / Almacén por:</span
+                                    >Recibido por: {receptionistDisplayName ||
+                                        ""}</span
                                 >
                             </div>
                             <div class="signature-box">
                                 <div class="signature-line"></div>
                                 <span class="signature-label"
-                                    >Verificado / Supervisado por:</span
+                                    >Verificado por:</span
                                 >
                             </div>
                         </div>
@@ -352,11 +403,16 @@
                                 {/if}
                                 <div class="disclaimer mt-1">
                                     <p>
-                                        * Comprobante oficial de verificación física e ingreso a existencias de inventario.
+                                        * Comprobante oficial de verificación
+                                        física e ingreso a existencias de
+                                        inventario.
                                     </p>
-                                    {#if originOrder && originOrder !== '---'}
+                                    {#if originOrder && originOrder !== "---"}
                                         <p>
-                                            * Documento vinculado a la Orden de Compra: <strong class="font-mono">{originOrder}</strong>.
+                                            * Documento vinculado a la Orden de
+                                            Compra: <strong class="font-mono"
+                                                >{originOrder}</strong
+                                            >.
                                         </p>
                                     {/if}
                                 </div>
@@ -365,15 +421,20 @@
                             <div class="totals-box">
                                 <div class="total-row">
                                     <span>Renglones Recibidos</span>
-                                    <span class="font-mono">{allItems.length}</span>
+                                    <span class="font-mono"
+                                        >{allItems.length}</span
+                                    >
                                 </div>
                                 <div class="grand-total-outline">
                                     <div class="bs-total">
                                         <span class="label"
                                             >Total Unidades Físicas</span
                                         >
-                                        <span class="val text-emerald-700 font-mono"
-                                            >{formatQuantity(totalPhysicalUnits)} un.</span
+                                        <span
+                                            class="val text-emerald-700 font-mono"
+                                            >{formatQuantity(
+                                                totalPhysicalUnits,
+                                            )} un.</span
                                         >
                                     </div>
                                 </div>

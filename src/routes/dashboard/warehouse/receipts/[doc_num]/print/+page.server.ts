@@ -50,7 +50,56 @@ export const load: PageServerLoad = protectLoad('inv_receipts', async ({ params,
             }
         }
 
-        // 4. Obtener branding global
+        // 4. Buscar nombres de Recepcionista (co_us_in), Editor (co_us_mo) y Comprador OC (oc_co_us_in) en Supabase profiles
+        let creatorName = '';
+        let editorName = '';
+        let buyerName = '';
+
+        const creatorUser = (receipt.co_us_in || '').trim();
+        const editorUser = (receipt.co_us_mo || '').trim();
+        const buyerUser = (receipt.oc_co_us_in || '').trim();
+
+        const usersToFetch = Array.from(new Set([creatorUser, editorUser, buyerUser].filter(Boolean)));
+
+        if (usersToFetch.length > 0) {
+            try {
+                const { data: profiles } = await supabaseAdmin
+                    .from('profiles')
+                    .select('full_name, profit_user');
+
+                const profileMap = new Map<string, string>();
+                (profiles || []).forEach((p: any) => {
+                    if (p.profit_user && p.full_name) {
+                        profileMap.set(p.profit_user.trim().toUpperCase(), p.full_name);
+                    }
+                });
+
+                if (creatorUser) {
+                    creatorName = profileMap.get(creatorUser.toUpperCase()) || creatorUser;
+                }
+                if (editorUser && editorUser.toUpperCase() !== creatorUser.toUpperCase()) {
+                    editorName = profileMap.get(editorUser.toUpperCase()) || editorUser;
+                }
+                if (buyerUser) {
+                    buyerName = profileMap.get(buyerUser.toUpperCase()) || buyerUser;
+                }
+            } catch (e) {
+                console.warn('[PRINT-RECEIPT] Warning looking up user profiles:', e);
+                creatorName = creatorUser;
+                if (editorUser && editorUser.toUpperCase() !== creatorUser.toUpperCase()) {
+                    editorName = editorUser;
+                }
+                buyerName = buyerUser;
+            }
+        }
+
+        receipt.creator_name = creatorName;
+        receipt.recepcionista_name = creatorName;
+        receipt.editor_name = editorName;
+        receipt.has_editor = !!editorName;
+        receipt.buyer_name = buyerName;
+
+        // 5. Obtener branding global
         const { data: settings } = await supabaseAdmin.from('system_settings').select('*').single();
 
         return {

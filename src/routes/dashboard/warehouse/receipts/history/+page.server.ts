@@ -3,6 +3,7 @@ import { protectLoad, protectAction } from '$lib/server/permissions';
 import { AgentClient } from '$lib/server/agent';
 import { hasPermission } from '$lib/server/auth';
 import { logAction } from '$lib/server/audit';
+import { supabaseAdmin } from '$lib/server/supabase';
 import { fail, type Actions } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
 
@@ -65,9 +66,9 @@ export const load: PageServerLoad = protectLoad('inv_receipts', async ({ url, lo
     }
 
     const canCreate = hasPermission(profile, 'inv_receipts', 'create');
-    const canUpdate = hasPermission(profile, 'inv_receipts', 'update') || hasPermission(profile, 'inv_receipts', 'create');
+    const canUpdate = hasPermission(profile, 'inv_receipts', 'update');
     const canDelete = hasPermission(profile, 'inv_receipts', 'delete');
-    const canVoid = hasPermission(profile, 'inv_receipts', 'void') || hasPermission(profile, 'inv_receipts', 'delete');
+    const canVoid = hasPermission(profile, 'inv_receipts', 'void');
 
     return {
         title: 'Historial de Notas de Recepción',
@@ -233,9 +234,50 @@ export const actions: Actions = {
 
         try {
             const res = await agentClient.getReceivingNote(docNum);
+            const receipt = res?.data || null;
+
+            if (receipt) {
+                const creatorUser = (receipt.co_us_in || '').trim();
+                const editorUser = (receipt.co_us_mo || '').trim();
+                const buyerUser = (receipt.oc_co_us_in || '').trim();
+
+                const usersToFetch = Array.from(new Set([creatorUser, editorUser, buyerUser].filter(Boolean)));
+
+                if (usersToFetch.length > 0) {
+                    try {
+                        const { data: profiles } = await supabaseAdmin
+                            .from('profiles')
+                            .select('full_name, profit_user');
+
+                        const profileMap = new Map<string, string>();
+                        (profiles || []).forEach((p: any) => {
+                            if (p.profit_user && p.full_name) {
+                                profileMap.set(p.profit_user.trim().toUpperCase(), p.full_name);
+                            }
+                        });
+
+                        receipt.recepcionista_name = profileMap.get(creatorUser.toUpperCase()) || creatorUser;
+                        receipt.creator_name = receipt.recepcionista_name;
+                        if (editorUser && editorUser.toUpperCase() !== creatorUser.toUpperCase()) {
+                            receipt.editor_name = profileMap.get(editorUser.toUpperCase()) || editorUser;
+                        }
+                        if (buyerUser) {
+                            receipt.buyer_name = profileMap.get(buyerUser.toUpperCase()) || buyerUser;
+                        }
+                    } catch (e) {
+                        console.warn('[RECEIPTS DETAIL] Warning looking up user profiles:', e);
+                        receipt.recepcionista_name = creatorUser;
+                        if (editorUser && editorUser.toUpperCase() !== creatorUser.toUpperCase()) {
+                            receipt.editor_name = editorUser;
+                        }
+                        receipt.buyer_name = buyerUser;
+                    }
+                }
+            }
+
             return {
                 success: true,
-                receipt: res?.data || null
+                receipt
             };
         } catch (err: any) {
             console.error('[RECEIPTS DETAIL ACTION] Error cargando detalle:', err);

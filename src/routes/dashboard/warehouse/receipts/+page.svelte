@@ -313,16 +313,21 @@
   }
 
   // --- MODIFICAR CANTIDADES DE FORMA SEGURA ---
-  function updateReceivedQty(index: number, val: number) {
+  function updateReceivedQty(index: number, val: number, inputEl?: HTMLInputElement | null) {
     const line = receiptLines[index];
     if (!line) return;
-    const maxAllowed = Number(line.cant_pendiente || line.cant_original || 999999);
-    let clamped = Math.max(0, val);
+    const maxAllowed = Number(line.cant_pendiente || line.cant_original || 0);
+    let clamped = Math.max(0, isNaN(val) ? 0 : val);
     if (maxAllowed > 0 && clamped > maxAllowed) {
       clamped = maxAllowed;
+      toast.warning(`La cantidad no puede superar el saldo pendiente (${maxAllowed} un.)`);
     }
     receiptLines[index].cant_recibida = clamped;
     receiptLines[index].checked = clamped > 0;
+
+    if (inputEl) {
+      inputEl.value = String(clamped);
+    }
   }
 
   // --- GUARDAR / PROCESAR NOTA DE RECEPCIÓN ---
@@ -337,6 +342,20 @@
     if (linesToProcess.length === 0) {
       toast.error("Debes seleccionar al menos un artículo con cantidad recibida mayor a cero.");
       return;
+    }
+
+    // Validación estricta de límites antes de procesar
+    for (const l of linesToProcess) {
+      const maxAllowed = Number(l.cant_pendiente || l.cant_original || 0);
+      const received = Number(l.cant_recibida || 0);
+      if (maxAllowed > 0 && received > maxAllowed) {
+        toast.error(`El artículo "${l.art_des || l.co_art}" excede la cantidad pendiente permitida (${maxAllowed} un.).`);
+        return;
+      }
+      if (received <= 0) {
+        toast.error(`El artículo "${l.art_des || l.co_art}" debe tener una cantidad mayor a cero.`);
+        return;
+      }
     }
 
     isSavingReceipt = true;
@@ -734,7 +753,21 @@
                             max={line.cant_pendiente || line.cant_original || 999999}
                             step="any"
                             value={receiptLines[originalIndex].cant_recibida}
-                            oninput={(e) => updateReceivedQty(originalIndex, parseFloat((e.target as HTMLInputElement).value) || 0)}
+                            oninput={(e) => {
+                              const target = e.currentTarget as HTMLInputElement;
+                              const parsed = parseFloat(target.value);
+                              updateReceivedQty(originalIndex, isNaN(parsed) ? 0 : parsed, target);
+                            }}
+                            onchange={(e) => {
+                              const target = e.currentTarget as HTMLInputElement;
+                              const parsed = parseFloat(target.value);
+                              updateReceivedQty(originalIndex, isNaN(parsed) ? 0 : parsed, target);
+                            }}
+                            onblur={(e) => {
+                              const target = e.currentTarget as HTMLInputElement;
+                              const parsed = parseFloat(target.value);
+                              updateReceivedQty(originalIndex, isNaN(parsed) ? 0 : parsed, target);
+                            }}
                             class="w-20 bg-transparent text-center font-mono font-black text-sm text-text-base focus:outline-none"
                           />
                           <button

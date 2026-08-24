@@ -178,15 +178,17 @@
       </p>
     </div>
 
-    <div class="flex items-center gap-3 shrink-0">
-      <button
-        onclick={() => goto(`/dashboard/warehouse/receipts?branch_id=${filterSede}`)}
-        class="flex items-center justify-center gap-3 bg-brand-600 hover:bg-brand-500 text-white h-14 px-8 rounded-2xl font-black shadow-xl shadow-brand-500/20 transition-all active:scale-95 shrink-0 w-full md:w-auto cursor-pointer"
-      >
-        <Plus size={20} />
-        Nueva Recepción
-      </button>
-    </div>
+    {#if data.canCreate}
+      <div class="flex items-center gap-3 shrink-0">
+        <button
+          onclick={() => goto(`/dashboard/warehouse/receipts?branch_id=${filterSede}`)}
+          class="flex items-center justify-center gap-3 bg-brand-600 hover:bg-brand-500 text-white h-14 px-8 rounded-2xl font-black shadow-xl shadow-brand-500/20 transition-all active:scale-95 shrink-0 w-full md:w-auto cursor-pointer"
+        >
+          <Plus size={20} />
+          Nueva Recepción
+        </button>
+      </div>
+    {/if}
   </div>
 
   <!-- SEARCH & FILTERS -->
@@ -324,7 +326,7 @@
                 <td class="px-6 py-5 text-center whitespace-nowrap">
                   <div class="flex items-center justify-center gap-2 whitespace-nowrap">
                     <!-- Editar -->
-                    {#if !receipt.anulado}
+                    {#if data.canUpdate && !receipt.anulado}
                       <button
                         type="button"
                         onclick={() => goto(`/dashboard/warehouse/receipts?doc_num=${receipt.doc_num}&branch_id=${receipt.sede_id || filterSede}`)}
@@ -336,7 +338,7 @@
                     {/if}
 
                     <!-- Anular -->
-                    {#if !receipt.anulado}
+                    {#if data.canVoid && !receipt.anulado}
                       <button
                         type="button"
                         onclick={() => openVoidModal(receipt)}
@@ -348,7 +350,7 @@
                     {/if}
 
                     <!-- Eliminar -->
-                    {#if canDeleteReceipt(receipt)}
+                    {#if data.canDelete && canDeleteReceipt(receipt)}
                       <button
                         type="button"
                         onclick={() => openDeleteModal(receipt)}
@@ -492,6 +494,24 @@
               <span class="text-text-muted text-[10px] uppercase font-bold tracking-wider">Fecha de Emisión</span>
               <p class="text-text-base font-bold text-sm">{dayjs(detailReceipt.fec_emis).format("DD/MM/YYYY")}</p>
             </div>
+            {#if detailReceipt.recepcionista_name || detailReceipt.co_us_in}
+              <div class="space-y-1">
+                <span class="text-text-muted text-[10px] uppercase font-bold tracking-wider">Recepcionista</span>
+                <p class="text-text-base font-bold text-sm text-brand-400 font-medium">{detailReceipt.recepcionista_name || detailReceipt.co_us_in}</p>
+              </div>
+            {/if}
+            {#if detailReceipt.editor_name}
+              <div class="space-y-1">
+                <span class="text-text-muted text-[10px] uppercase font-bold tracking-wider">Editado por</span>
+                <p class="text-text-base font-bold text-sm text-amber-400 font-medium">{detailReceipt.editor_name}</p>
+              </div>
+            {/if}
+            {#if detailReceipt.buyer_name || detailReceipt.oc_co_us_in}
+              <div class="space-y-1">
+                <span class="text-text-muted text-[10px] uppercase font-bold tracking-wider">Comprador (OC)</span>
+                <p class="text-text-base font-bold text-sm text-blue-400 font-medium">{detailReceipt.buyer_name || detailReceipt.oc_co_us_in}</p>
+              </div>
+            {/if}
             <div class="space-y-1">
               <span class="text-text-muted text-[10px] uppercase font-bold tracking-wider">Total Unidades Físicas</span>
               <p class="text-emerald-400 font-mono font-black text-lg">{formatQuantity(totalUnits)} un.</p>

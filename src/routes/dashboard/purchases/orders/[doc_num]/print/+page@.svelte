@@ -225,7 +225,7 @@
                         </div>
                         <div class="dates mt-2">
                             <p>
-                                Emision: <strong
+                                Emisión: <strong
                                     >{dayjs(displayFecEmis).format(
                                         "DD/MM/YYYY",
                                     )}</strong
@@ -234,10 +234,24 @@
                             <p class="currency-line uppercase">
                                 Moneda: <strong
                                     >{isUSD
-                                        ? "DOLARES (USD)"
-                                        : "BOLIVARES (BS.)"}</strong
+                                        ? "DÓLARES (USD)"
+                                        : "BOLÍVARES (BS.)"}</strong
                                 >
                             </p>
+                            <!-- {#if order?.buyer_name || order?.co_us_in}
+                                <p class="currency-line font-medium text-slate-700">
+                                    Comprador: <strong class="text-slate-900 font-bold"
+                                        >{order.buyer_name || order.co_us_in}</strong
+                                    >
+                                </p>
+                            {/if}
+                            {#if order?.editor_name}
+                                <p class="currency-line font-medium text-amber-800">
+                                    Editado por: <strong class="font-bold"
+                                        >{order.editor_name}</strong
+                                    >
+                                </p>
+                            {/if} -->
                         </div>
                     </div>
                 </div>
@@ -255,7 +269,7 @@
                             RIF: {order?.rif || order?.co_prov}
                         </p>
                         <p class="client-address font-medium">
-                            DIRECCION: {order?.prov_dir ||
+                            DIRECCIÓN: {order?.prov_dir ||
                                 order?.direc1 ||
                                 "Dirección no registrada"}
                         </p>
@@ -263,12 +277,28 @@
                             <p
                                 class="client-phone font-bold mt-1 text-slate-700"
                             >
-                                TELEFONO: {order.telefonos}
+                                TELÉFONO: {order.telefonos}
                             </p>
                         {/if}
                     </div>
                     <div class="logistic-box">
                         <h3 class="section-title">Condiciones y Entrega</h3>
+                        {#if order?.buyer_name || order?.co_us_in}
+                            <div class="info-row">
+                                <span class="label">Comprador:</span>
+                                <span class="val text-blue-900 font-black"
+                                    >{order.buyer_name || order.co_us_in}</span
+                                >
+                            </div>
+                        {/if}
+                        {#if order?.editor_name}
+                            <div class="info-row">
+                                <span class="label">Editado por:</span>
+                                <span class="val text-amber-800 font-bold"
+                                    >{order.editor_name}</span
+                                >
+                            </div>
+                        {/if}
                         <div class="info-row">
                             <span class="label">Cond. Pago:</span>
                             <span class="val"
@@ -374,7 +404,9 @@
                             <div class="signature-box">
                                 <div class="signature-line"></div>
                                 <span class="signature-label"
-                                    >Elaborado por:</span
+                                    >Elaborado por: {order?.buyer_name ||
+                                        order?.co_us_in ||
+                                        ""}</span
                                 >
                             </div>
                             <div class="signature-box">

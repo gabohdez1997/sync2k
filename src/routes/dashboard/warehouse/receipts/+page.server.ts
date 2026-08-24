@@ -74,8 +74,8 @@ export const load: PageServerLoad = protectLoad('inv_receipts', async ({ url, lo
     }
 
     const canCreate = hasPermission(profile, 'inv_receipts', 'create');
-    const canUpdate = hasPermission(profile, 'inv_receipts', 'update') || hasPermission(profile, 'inv_receipts', 'create');
-    const canVoid = hasPermission(profile, 'inv_receipts', 'void') || hasPermission(profile, 'inv_receipts', 'delete');
+    const canUpdate = hasPermission(profile, 'inv_receipts', 'update');
+    const canVoid = hasPermission(profile, 'inv_receipts', 'void');
 
     return {
         title: 'Nota de Recepción de Almacén',
@@ -169,7 +169,7 @@ export const actions: Actions = {
         }
 
         const isEditing = !!(payload.isEditing || payload.doc_num);
-        if (isEditing && !hasPermission(profile, 'inv_receipts', 'update') && !hasPermission(profile, 'inv_receipts', 'create')) {
+        if (isEditing && !hasPermission(profile, 'inv_receipts', 'update')) {
             return fail(403, { message: 'No tienes permiso para EDITAR notas de recepción.' });
         }
         if (!isEditing && !hasPermission(profile, 'inv_receipts', 'create')) {

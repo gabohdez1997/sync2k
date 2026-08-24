@@ -56,7 +56,46 @@ export const load: PageServerLoad = protectLoad('pur_orders', async ({ params, u
             }
         }
 
-        // 4. Obtener branding global
+        // 4. Buscar nombres de Creador (co_us_in) y Editor (co_us_mo) en Supabase profiles
+        let creatorName = '';
+        let editorName = '';
+        const creatorUser = (order.co_us_in || '').trim();
+        const editorUser = (order.co_us_mo || '').trim();
+
+        const usersToFetch = Array.from(new Set([creatorUser, editorUser].filter(Boolean)));
+
+        if (usersToFetch.length > 0) {
+            try {
+                const { data: profiles } = await supabaseAdmin
+                    .from('profiles')
+                    .select('full_name, profit_user');
+
+                const profileMap = new Map<string, string>();
+                (profiles || []).forEach((p: any) => {
+                    if (p.profit_user && p.full_name) {
+                        profileMap.set(p.profit_user.trim().toUpperCase(), p.full_name);
+                    }
+                });
+
+                creatorName = profileMap.get(creatorUser.toUpperCase()) || creatorUser;
+                if (editorUser && editorUser.toUpperCase() !== creatorUser.toUpperCase()) {
+                    editorName = profileMap.get(editorUser.toUpperCase()) || editorUser;
+                }
+            } catch (e) {
+                console.warn('[PRINT-ORDER] Warning looking up creator/editor profiles:', e);
+                creatorName = creatorUser;
+                if (editorUser && editorUser.toUpperCase() !== creatorUser.toUpperCase()) {
+                    editorName = editorUser;
+                }
+            }
+        }
+
+        order.creator_name = creatorName;
+        order.buyer_name = creatorName;
+        order.editor_name = editorName;
+        order.has_editor = !!editorName;
+
+        // 5. Obtener branding global
         const { data: settings } = await supabaseAdmin.from('system_settings').select('*').single();
 
         return {
