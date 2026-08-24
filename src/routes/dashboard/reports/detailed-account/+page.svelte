@@ -205,7 +205,7 @@
         <div class="flex flex-col gap-2">
             <h1 class="text-4xl font-black tracking-tight flex items-center gap-3">
                 <ClipboardList size={40} class="text-brand-500" />
-                Cuenta Detallada (Historial y Documentos)
+                Cuenta Detallada
             </h1>
             <p class="text-text-muted text-lg">
                 Visualización consolidada detallando créditos y débitos asociados por cliente.

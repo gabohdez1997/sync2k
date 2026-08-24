@@ -971,7 +971,7 @@
     <div>
       <h1 class="text-4xl font-black tracking-tight flex items-center gap-3">
         <Wallet size={40} class="text-brand-500" />
-        Registrar Cobros
+        Cobros
       </h1>
       <p class="text-text-muted mt-2 text-lg">
         Módulo de cobranza rápido. Importa y abona a facturas pendientes.

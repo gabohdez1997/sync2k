@@ -8,7 +8,7 @@
   <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
     <div>
       <h1 class="text-4xl font-black tracking-tight flex items-center gap-3">
-        <RotateCcw size={40} class="text-red-500" />
+        <RotateCcw size={40} class="text-brand-500" />
         {data.title}
       </h1>
       <p class="text-text-muted mt-2 text-lg">Gestión de devoluciones de mercancía y créditos.</p>

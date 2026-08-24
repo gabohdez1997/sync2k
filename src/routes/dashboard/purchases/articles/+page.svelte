@@ -164,7 +164,7 @@
     <div class="flex flex-col gap-2">
       <h1 class="text-4xl font-black tracking-tight flex items-center gap-3">
         <Package size={40} class="text-brand-500" />
-        Gestión de Artículos
+        Artículos
         {#if data.pagination?.total > 0}
           <span
             class="text-sm font-black bg-brand-500/10 text-brand-500 px-3 py-1 rounded-full border border-brand-500/20"

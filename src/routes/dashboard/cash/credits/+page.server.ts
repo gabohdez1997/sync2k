@@ -4,6 +4,6 @@ import type { PageServerLoad } from './$types';
 
 export const load: PageServerLoad = protectLoad('cash_credits', async () => {
     return {
-        title: 'Devoluciones / Notas de Crédito'
+        title: 'Devoluciones'
     };
 });

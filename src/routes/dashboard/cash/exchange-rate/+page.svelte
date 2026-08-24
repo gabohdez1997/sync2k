@@ -67,7 +67,7 @@
     <div class="flex flex-col gap-2">
       <h1 class="text-4xl font-black tracking-tight flex items-center gap-3">
         <RefreshCw size={40} class="text-brand-500" />
-        Sincronización de Tasa (BCV)
+        Tasa Cambiaria
       </h1>
       <p class="text-text-muted text-lg">
         Actualiza la tasa oficial del Banco Central de Venezuela en todas tus

@@ -148,7 +148,7 @@
     <div>
       <h1 class="text-4xl font-black tracking-tight flex items-center gap-3">
         <ClipboardList class="text-brand-500" size={40} />
-        Auditoría de Sistema
+        Auditoría
         {#if data.pagination?.total > 0}
           <span class="text-sm font-black bg-brand-500/10 text-brand-500 px-3 py-1 rounded-full border border-brand-500/20">
             {data.pagination.total}

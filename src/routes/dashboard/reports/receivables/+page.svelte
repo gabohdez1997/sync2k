@@ -191,7 +191,7 @@
         <div class="flex flex-col gap-2">
             <h1 class="text-4xl font-black tracking-tight flex items-center gap-3">
                 <Wallet size={40} class="text-brand-500" />
-                Cuentas por Cobrar (CxC)
+                Cuentas por Cobrar
             </h1>
             <p class="text-text-muted text-lg">
                 Visualización consolidada y análisis de cartera de clientes pendiente.

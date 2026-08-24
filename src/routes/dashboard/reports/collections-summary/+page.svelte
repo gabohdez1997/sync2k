@@ -208,8 +208,8 @@
     <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-6 print:flex-row print:justify-between">
         <div class="flex flex-col gap-2">
             <h1 class="text-4xl font-black tracking-tight flex items-center gap-3 print:text-2xl">
-                <Wallet size={40} class="text-brand-500 print:h-8 print:w-8" />
-                Resumen de Cobros por Cajero
+                <ClipboardList size={40} class="text-brand-500 print:h-8 print:w-8" />
+                Resumen de Cobros
             </h1>
             <p class="text-text-muted text-lg print:text-xs">
                 Montos cobrados por usuario. Tasa del día aplicada: <strong>{formatBS(tasaDia)}</strong>

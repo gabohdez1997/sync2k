@@ -75,7 +75,7 @@
     <div>
       <h1 class="text-4xl font-black tracking-tight flex items-center gap-3">
         <Layers size={40} class="text-brand-500" />
-        Líneas de Artículos
+        Líneas
       </h1>
       <p class="text-text-muted mt-2 text-lg">Gestiona las líneas de artículos en todas las sedes.</p>
     </div>

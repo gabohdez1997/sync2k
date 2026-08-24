@@ -4,6 +4,6 @@ import type { PageServerLoad } from './$types';
 
 export const load: PageServerLoad = protectLoad('inv_shipping', async () => {
     return {
-        title: 'Despacho de Mercancía'
+        title: 'Despacho'
     };
 });

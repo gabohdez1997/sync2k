@@ -27,6 +27,7 @@
         ArrowUpDown,
         FileSpreadsheet,
         AlertTriangle,
+        ShoppingBag,
     } from "lucide-svelte";
     import Combobox from "$lib/components/ui/Combobox.svelte";
     import BarcodeScanner from "$lib/components/ui/BarcodeScanner.svelte";
@@ -738,7 +739,7 @@
             <h1
                 class="text-3xl md:text-5xl font-black text-text-base tracking-tight flex items-center gap-3"
             >
-                <TrendingUp size={40} class="text-brand-500 shrink-0" />
+                <ShoppingBag size={40} class="text-brand-500 shrink-0" />
                 Análisis de Ventas
             </h1>
             <p class="text-text-muted text-sm max-w-2xl">

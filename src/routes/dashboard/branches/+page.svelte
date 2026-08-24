@@ -191,7 +191,7 @@
     <div>
       <h1 class="text-4xl font-black tracking-tight flex items-center gap-3">
         <Store size={40} class="text-brand-500" />
-        Gestión de Sucursales
+        Sucursales
       </h1>
       <p class="text-text-muted mt-2 text-lg">
         Configura las sucursales, monitorea métricas y sincroniza datos entre sedes.

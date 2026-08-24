@@ -91,7 +91,7 @@
     <div>
       <h1 class="text-4xl font-black tracking-tight flex items-center gap-3">
         <Building size={40} class="text-brand-500" />
-        Gestión de Empresas
+        Empresas
       </h1>
       <p class="text-text-muted mt-2 text-lg">Configura las empresas conectadas al sistema.</p>
     </div>

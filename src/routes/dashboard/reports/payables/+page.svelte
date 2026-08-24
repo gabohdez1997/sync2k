@@ -376,7 +376,7 @@
                 class="text-4xl font-black tracking-tight flex items-center gap-3"
             >
                 <Wallet size={40} class="text-brand-500" />
-                Cuentas por Pagar (CxP)
+                Cuentas por Pagar
             </h1>
             <p class="text-text-muted text-lg">
                 Visualización consolidada y análisis de cartera de proveedores

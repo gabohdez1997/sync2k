@@ -55,7 +55,7 @@ export const load: PageServerLoad = protectLoad('inv_transfers', async ({ url, l
 	}
 
 	return {
-		title: 'Traslado de Artículos entre Sedes',
+		title: 'Traslados entre Sedes',
 		branches,
 		selectedBranchId,
 		transfers: transfers || [],

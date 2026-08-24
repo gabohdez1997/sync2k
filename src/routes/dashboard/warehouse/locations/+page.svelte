@@ -415,7 +415,7 @@
     <div class="flex flex-col gap-2">
       <h1 class="text-4xl font-black tracking-tight flex items-center gap-3">
         <MapPin size={40} class="text-brand-500" />
-        Gestión de Ubicaciones
+        Ubicaciones y Etiquetas
       </h1>
       <p class="text-text-muted text-lg">
         Asigna y visualiza las ubicaciones físicas de los artículos en el

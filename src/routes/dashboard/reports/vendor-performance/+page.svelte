@@ -31,6 +31,7 @@
         FileSpreadsheet,
         Award,
         Search,
+        BarChart2,
     } from "lucide-svelte";
     import Combobox from "$lib/components/ui/Combobox.svelte";
     import { goto } from "$app/navigation";
@@ -1161,7 +1162,7 @@
             <h1
                 class="text-3xl md:text-5xl font-black text-text-base tracking-tight flex items-center gap-3"
             >
-                <TrendingUp size={40} class="text-brand-500 shrink-0" />
+                <BarChart2 size={40} class="text-brand-500 shrink-0" />
                 Rendimiento de Vendedores
             </h1>
             <p class="text-text-muted text-sm max-w-2xl">

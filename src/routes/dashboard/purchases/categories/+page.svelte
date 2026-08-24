@@ -127,7 +127,7 @@
     <div>
       <h1 class="text-4xl font-black tracking-tight flex items-center gap-3">
         <Tag size={40} class="text-brand-500" />
-        Categorías de Artículos
+        Categorías
       </h1>
       <p class="text-text-muted mt-2 text-lg">Gestiona las categorías de artículos en todas las sedes.</p>
     </div>

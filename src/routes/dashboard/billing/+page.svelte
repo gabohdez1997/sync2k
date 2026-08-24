@@ -611,7 +611,7 @@
     <div>
       <h1 class="text-4xl font-black tracking-tight flex items-center gap-3">
         <Receipt size={40} class="text-brand-500" />
-        Facturas / NE
+        Facturas
       </h1>
       <p class="text-text-muted mt-2 text-lg">
         Importación de pedidos y facturación.

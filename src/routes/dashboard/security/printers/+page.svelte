@@ -192,7 +192,7 @@
     <div>
       <h1 class="text-4xl font-black tracking-tight flex items-center gap-3">
         <Printer size={40} class="text-brand-500" />
-        Configuración de Impresoras
+        Impresoras
       </h1>
       <p class="text-text-muted mt-2 text-lg">Define y administra las impresoras de la red de cada sucursal.</p>
     </div>

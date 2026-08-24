@@ -129,7 +129,7 @@
     <div>
       <h1 class="text-4xl font-black tracking-tight flex items-center gap-3">
         <GitBranch size={40} class="text-brand-500" />
-        Sub-Líneas de Artículos
+        Sub-Líneas
       </h1>
       <p class="text-text-muted mt-2 text-lg">Gestiona las sub-líneas dentro de cada línea de artículos.</p>
     </div>

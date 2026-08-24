@@ -98,7 +98,7 @@
     <div>
       <h1 class="text-4xl font-black tracking-tight flex items-center gap-3 text-text-base">
         <Users class="text-brand-500" size={40} />
-        Gestión de Usuarios
+        Usuarios
       </h1>
       <p class="text-text-muted mt-2 text-lg">Administra los accesos y credenciales de Profit.</p>
     </div>
