@@ -25,6 +25,17 @@
         });
     }
 
+    function getItemUnitPrice(item: any) {
+        if (!isUSD) return Number(item.precio || 0);
+        const tasa = Number(order.tasa || 1);
+        const om = Number(item.prec_vta_om || 0);
+        const bs = Number(item.precio || 0);
+        if (om > 0 && Math.abs(om * tasa - bs) <= 2) {
+            return om;
+        }
+        return tasa > 0 ? bs / tasa : om;
+    }
+
     // --- CÁLCULO DE RETENCIÓN DE IVA ---
     const porcEsp = Number(order.porc_esp || 0);
     const isContribEspecial = order.contribu_e || porcEsp > 0;
@@ -283,29 +294,12 @@
                                             "UND"}</td
                                     >
                                     <td class="text-right">
-                                        {formatCurrency(
-                                            isUSD
-                                                ? Number(item.prec_vta_om) > 0
-                                                    ? item.prec_vta_om
-                                                    : Number(item.precio) /
-                                                      Number(order.tasa)
-                                                : item.precio,
-                                        )}
+                                        {formatCurrency(getItemUnitPrice(item))}
                                     </td>
                                     <td class="text-right font-bold">
                                         {formatCurrency(
                                             isUSD
-                                                ? Number(item.cantidad) *
-                                                      (Number(
-                                                          item.prec_vta_om,
-                                                      ) > 0
-                                                          ? Number(
-                                                                item.prec_vta_om,
-                                                            )
-                                                          : Number(
-                                                                item.precio,
-                                                            ) /
-                                                            Number(order.tasa))
+                                                ? Number(item.cantidad) * getItemUnitPrice(item)
                                                 : item.total_renglon,
                                         )}
                                     </td>

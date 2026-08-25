@@ -24,6 +24,17 @@
         });
     }
 
+    function getItemUnitPrice(item: any) {
+        if (!isUSD) return Number(item.precio || 0);
+        const tasa = Number(invoice.tasa || 1);
+        const om = Number(item.prec_vta_om || 0);
+        const bs = Number(item.precio || 0);
+        if (om > 0 && Math.abs(om * tasa - bs) <= 2) {
+            return om;
+        }
+        return tasa > 0 ? bs / tasa : om;
+    }
+
     const porcEsp = Number(invoice.porc_esp || 0);
     const isContribEspecial = invoice.contribu_e || porcEsp > 0;
     
@@ -219,10 +230,10 @@
                                     <td>{item.cantidad}</td>
                                     <td class="font-black">{item.unidad || item.co_uni || "UND"}</td>
                                     <td class="text-right">
-                                        {formatCurrency(isUSD ? (Number(item.prec_vta_om) > 0 ? item.prec_vta_om : (Number(item.precio) / Number(invoice.tasa))) : item.precio)}
+                                        {formatCurrency(getItemUnitPrice(item))}
                                     </td>
                                     <td class="text-right font-bold">
-                                        {formatCurrency(isUSD ? Number(item.cantidad) * (Number(item.prec_vta_om) > 0 ? Number(item.prec_vta_om) : (Number(item.precio) / Number(invoice.tasa))) : item.total_renglon)}
+                                        {formatCurrency(isUSD ? Number(item.cantidad) * getItemUnitPrice(item) : item.total_renglon)}
                                     </td>
                                 </tr>
                             {/each}
