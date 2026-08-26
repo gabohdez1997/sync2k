@@ -194,12 +194,14 @@ export const actions: Actions = {
                 return fail(400, { message: saveRes.message || 'Error al procesar el despacho en el servidor.' });
             }
 
-            const docNum = saveRes.data?.doc_num
+            const docNum = (
+                saveRes.data?.doc_num
                 || saveRes.doc_num
                 || saveRes.results?.[0]?.data?.doc_num
                 || saveRes.results?.[0]?.doc_num
                 || (Array.isArray(saveRes.results) ? saveRes.results.find((r: any) => r.success && r.data?.doc_num)?.data?.doc_num : null)
-                || (payload.doc_num || '').trim();
+                || (payload.doc_num || '')
+            ).toString().trim();
 
             // Registrar log de auditoría
             await logAction({
