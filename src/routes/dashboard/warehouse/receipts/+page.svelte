@@ -406,7 +406,7 @@
 
       if (result.type === "success" && (result.data as any)?.success) {
         const resData = result.data as any;
-        generatedDocNum = resData.doc_num || editingDocNum;
+        generatedDocNum = resData.doc_num || resData.data?.doc_num || resData.results?.[0]?.data?.doc_num || editingDocNum || "";
         savedBranchId = filterSede;
         saveSuccess = true;
         toast.success(isEditing ? `Nota de Recepción N° ${generatedDocNum} actualizada con éxito.` : `Nota de Recepción N° ${generatedDocNum} generada con éxito.`);

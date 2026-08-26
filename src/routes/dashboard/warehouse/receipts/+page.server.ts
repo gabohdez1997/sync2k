@@ -204,7 +204,12 @@ export const actions: Actions = {
                 return fail(400, { message: saveRes.message || 'Error al procesar la nota de recepción en el servidor.' });
             }
 
-            const docNum = saveRes.data?.doc_num || saveRes.doc_num;
+            const docNum = saveRes.data?.doc_num
+                || saveRes.doc_num
+                || saveRes.results?.[0]?.data?.doc_num
+                || saveRes.results?.[0]?.doc_num
+                || (Array.isArray(saveRes.results) ? saveRes.results.find((r: any) => r.success && r.data?.doc_num)?.data?.doc_num : null)
+                || (payload.doc_num || '').trim();
 
             // Registrar log de auditoría
             await logAction({
@@ -217,9 +222,9 @@ export const actions: Actions = {
                     doc_num: docNum,
                     co_prov: payload.co_prov,
                     doc_num_oc: payload.doc_num_oc,
-                    total_neto: saveRes.data?.total_neto,
-                    total_art: saveRes.data?.total_art,
-                    almacen_ingreso: saveRes.data?.almacen_ingreso
+                    total_neto: saveRes.data?.total_neto || saveRes.results?.[0]?.data?.total_neto,
+                    total_art: saveRes.data?.total_art || saveRes.results?.[0]?.data?.total_art,
+                    almacen_ingreso: saveRes.data?.almacen_ingreso || saveRes.results?.[0]?.data?.almacen_ingreso
                 }
             });
 
