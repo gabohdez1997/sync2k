@@ -122,7 +122,8 @@
       latitude: null,
       longitude: null,
       default_warehouse: "",
-      allow_decimals_units: "MTS, MTS2, KG"
+      allow_decimals_units: "MTS, MTS2, KG",
+      default_seller: "01"
     };
     showModal = true;
   }
@@ -636,6 +637,25 @@
               </div>
               <p class="text-[10px] text-text-muted/60 ml-2 mt-1 italic">
                 Separadas por coma. Ej: MTS, MTS2, KG. Estas unidades permitirán cantidades con fracción (ej: 1.5).
+              </p>
+            </div>
+
+            <div class="space-y-2 lg:col-span-2">
+              <label class="text-xs font-bold text-text-muted ml-1" for="default_seller">
+                Vendedor por Defecto para Clientes (saCliente)
+              </label>
+              <div class="relative">
+                <Users class="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted opacity-40" size={18} />
+                <input 
+                  type="text" 
+                  name="default_seller"
+                  bind:value={editingBranch.default_seller}
+                  placeholder="Ej: 01 o VEN01"
+                  class="w-full h-14 bg-white/5 border border-white/10 rounded-2xl pl-12 pr-5 focus:border-brand-500 outline-none transition-all font-mono uppercase"
+                />
+              </div>
+              <p class="text-[10px] text-text-muted/60 ml-2 mt-1 italic">
+                Código de vendedor general asignado automáticamente a los clientes nuevos o actualizados en esta sede (evita errores por vendedores inactivos).
               </p>
             </div>
 

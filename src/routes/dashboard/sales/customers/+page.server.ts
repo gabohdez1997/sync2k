@@ -274,13 +274,20 @@ export const actions: Actions = {
                     verifiedCoSucu = def ? def.code : branch.profit_branch_codes[0].code;
                 }
 
+                // Determinar el vendedor por defecto para esta sede (evita atar el cliente a un vendedor individual)
+                const branchSeller = (branch.default_seller || '01').trim();
+                const branchPayload = {
+                    ...payload,
+                    co_ven: branchSeller
+                };
+
                 const agent = new AgentClient({
                     slug: branch.id,
                     agent_url: branch.agent_url,
                     agent_api_key: branch.agent_token
                 }, profile, fetch);
 
-                const response = await agent.saveCustomer(payload, isNew, verifiedCoSucu || branch.id);
+                const response = await agent.saveCustomer(branchPayload, isNew, verifiedCoSucu || branch.id);
                 
                 if (response.success) {
                     successCount++;

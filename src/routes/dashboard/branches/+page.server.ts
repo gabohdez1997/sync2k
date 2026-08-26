@@ -14,16 +14,16 @@ export const config = {
 // ─── Load ──────────────────────────────────────────────────────
 export const load: PageServerLoad = protectLoad('sec_branches', async ({ locals, fetch }) => {
   try {
-    // Intentamos obtener todos los campos, incluyendo 'default_warehouse' y 'allow_decimals_units'
+    // Intentamos obtener todos los campos, incluyendo 'default_warehouse', 'allow_decimals_units' y 'default_seller'
     let { data: branches, error } = await supabaseAdmin
       .from('branches')
-      .select('id, name, business_name, agent_url, agent_token, profit_branch_codes, sql_config, profit_server_id, local_dns_alias, active, sort_order, updated_at, rif, address, latitude, longitude, logo_url, phone, default_warehouse, allow_decimals_units')
+      .select('id, name, business_name, agent_url, agent_token, profit_branch_codes, sql_config, profit_server_id, local_dns_alias, active, sort_order, updated_at, rif, address, latitude, longitude, logo_url, phone, default_warehouse, allow_decimals_units, default_seller')
       .order('sort_order')
       .order('name');
 
-    // Si falla específicamente por la columna default_warehouse (migración no aplicada)
-    if (error && error.message.includes('default_warehouse')) {
-      console.warn('[BRANCHES] La columna default_warehouse no existe. Reintentando sin ella...');
+    // Si falla específicamente por columnas añadidas en migraciones (default_warehouse, default_seller, etc.)
+    if (error && (error.message.includes('default_warehouse') || error.message.includes('default_seller'))) {
+      console.warn('[BRANCHES] Columnas extendidas no existen aún en Supabase. Reintentando con consulta básica...');
       const fallback = await supabaseAdmin
         .from('branches')
         .select('id, name, business_name, agent_url, agent_token, profit_branch_codes, sql_config, profit_server_id, local_dns_alias, active, sort_order, updated_at, rif, address, latitude, longitude, logo_url, phone, allow_decimals_units')
@@ -162,6 +162,7 @@ export const actions: Actions = {
     const longitude       = formData.get('longitude') ? parseFloat(formData.get('longitude') as string) : null;
     const defaultWarehouse = (formData.get('default_warehouse') as string)?.trim() || null;
     const allowDecimalsUnits = (formData.get('allow_decimals_units') as string)?.trim() || 'MTS, MTS2, KG';
+    const defaultSeller = (formData.get('default_seller') as string)?.trim() || '01';
 
     // ─── Proceso de Subida de Logo ─────────────────────────────
     if (logoFile && logoFile.size > 0 && logoFile.name) {
@@ -203,6 +204,7 @@ export const actions: Actions = {
       longitude,
       default_warehouse:   defaultWarehouse,
       allow_decimals_units: allowDecimalsUnits,
+      default_seller:      defaultSeller,
       updated_at:          new Date().toISOString()
     };
 
@@ -222,10 +224,10 @@ export const actions: Actions = {
         .update(payload)
         .eq('id', branchId);
 
-      // Reintento sin default_warehouse si falla por columna inexistente
-      if (error && error.message.includes('default_warehouse')) {
-        console.warn('[BRANCHES] Reintentando actualización sin default_warehouse...');
-        const { default_warehouse, ...safePayload } = payload;
+      // Reintento sin default_warehouse o default_seller si falla por columna inexistente
+      if (error && (error.message.includes('default_warehouse') || error.message.includes('default_seller'))) {
+        console.warn('[BRANCHES] Reintentando actualización sin columnas extendidas...');
+        const { default_warehouse, default_seller, ...safePayload } = payload;
         const retry = await supabaseAdmin
           .from('branches')
           .update(safePayload)
@@ -242,10 +244,10 @@ export const actions: Actions = {
         .select('id')
         .single();
 
-      // Reintento sin default_warehouse si falla por columna inexistente
-      if (error && error.message.includes('default_warehouse')) {
-        console.warn('[BRANCHES] Reintentando inserción sin default_warehouse...');
-        const { default_warehouse, ...safePayload } = payload;
+      // Reintento sin default_warehouse o default_seller si falla por columna inexistente
+      if (error && (error.message.includes('default_warehouse') || error.message.includes('default_seller'))) {
+        console.warn('[BRANCHES] Reintentando inserción sin columnas extendidas...');
+        const { default_warehouse, default_seller, ...safePayload } = payload;
         const retry = await supabaseAdmin
           .from('branches')
           .insert(safePayload)

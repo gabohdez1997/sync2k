@@ -14,6 +14,7 @@
     X,
     UploadCloud,
     Loader2,
+    RefreshCw,
   } from "lucide-svelte";
   import { toast } from "svelte-sonner";
   import Combobox from "$lib/components/ui/Combobox.svelte";
@@ -254,6 +255,55 @@
       uploadingArticleId = null;
     }
   }
+
+  let isSyncingBranches = $state(false);
+
+  async function handleSyncBranches() {
+    if (isSyncingBranches) return;
+    isSyncingBranches = true;
+    const toastId = toast.loading("Sincronizando imágenes entre todas las sedes...");
+
+    try {
+      const response = await fetch("?/syncBranchImages", {
+        method: "POST",
+        body: new FormData(),
+      });
+      const result = await response.json();
+
+      let resData = result;
+      if (result.data) {
+        resData = typeof result.data === "string" ? JSON.parse(result.data) : result.data;
+      }
+
+      if (result.type === "success" || resData?.success) {
+        toast.success(resData?.message || "Imágenes sincronizadas con éxito", { id: toastId });
+
+        // Refrescar estadísticas globales
+        try {
+          const res = await fetch("/api/dashboard/stats/images");
+          const json = await res.json();
+          if (json.success && json.data) {
+            const total = json.data.total;
+            const withImage = json.data.withImage;
+            const withoutImage = Math.max(0, total - withImage);
+            const percentage = total > 0 ? Math.round((withImage / total) * 100) : 0;
+            globalStats = { loading: false, total, withImage, withoutImage, percentage };
+          }
+        } catch (e) {}
+
+        import("$app/navigation").then((n) =>
+          n.invalidateAll().catch((e) => console.error("Invalidate error:", e)),
+        );
+      } else {
+        const errorMsg = resData?.error || "Error al sincronizar";
+        toast.error(errorMsg, { id: toastId });
+      }
+    } catch (err: any) {
+      toast.error(`Error en la sincronización: ${err.message}`, { id: toastId });
+    } finally {
+      isSyncingBranches = false;
+    }
+  }
 </script>
 
 <div
@@ -280,7 +330,18 @@
         </p>
       </div>
 
-      <div class="flex items-center gap-4">
+      <div class="flex items-center gap-4 flex-wrap">
+        <!-- Botón Sincronizar Sedes -->
+        <button
+          onclick={handleSyncBranches}
+          disabled={isSyncingBranches}
+          class="btn-secondary rounded-2xl px-4 py-3 flex items-center gap-2 border border-white/10 bg-surface-soft/80 hover:bg-surface-strong backdrop-blur-md text-text-main font-semibold shadow-sm transition-all disabled:opacity-50"
+          title="Sincronizar nombres de archivos de imagen entre todas las sedes activas"
+        >
+          <RefreshCw size={18} class={isSyncingBranches ? "animate-spin text-brand-400" : "text-brand-400"} />
+          <span>{isSyncingBranches ? "Sincronizando..." : "Sincronizar Sedes"}</span>
+        </button>
+
         <!-- Progress Widget -->
         <div class="bg-surface-soft/80 backdrop-blur-md border border-border-subtle rounded-2xl p-3 flex flex-col gap-2 min-w-[200px] shadow-sm relative overflow-hidden">
           {#if globalStats.loading}

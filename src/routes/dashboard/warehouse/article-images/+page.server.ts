@@ -343,11 +343,153 @@ export const actions: Actions = {
 				source:       'cloud'
 			});
 
-			return { success: true, co_art, imageUrl: fileName };
+			return { 
+				success: true, 
+				co_art, 
+				imageUrl: fileName,
+				warning: errors.length > 0 ? `Imagen guardada pero falló en: ${errors.join(', ')}` : null 
+			};
 
 		} catch (err: any) {
 			console.error('[ASSIGN LOCATIONS] Error:', err);
 			return fail(500, { error: `Error interno: ${err.message}` });
+		}
+	}),
+
+	syncBranchImages: protectAction('sec_article_images', async ({ locals, fetch }) => {
+		try {
+			// 1. Fetch active branches
+			const { data: dbBranches, error: branchErr } = await supabaseAdmin
+				.from('branches')
+				.select('id, name, agent_url, agent_token, profit_branch_codes, active')
+				.eq('active', true);
+
+			if (branchErr || !dbBranches || dbBranches.length === 0) {
+				return fail(400, { error: 'No se encontraron sucursales activas configuradas.' });
+			}
+
+			// 2. Fetch all files from Supabase storage 'articulos'
+			const { data: storageFiles } = await supabaseAdmin.storage
+				.from('articulos')
+				.list('', { limit: 2000 });
+
+			const storageSet = new Set((storageFiles || []).map(f => f.name));
+
+			// Helper to extract timestamp from filename
+			const extractImageTimestamp = (filename?: string | null): number => {
+				if (!filename || typeof filename !== 'string') return 0;
+				const match = filename.trim().match(/-(\d+)\.webp$/i);
+				return match ? Number(match[1]) : (filename.trim().length > 0 ? 1 : 0);
+			};
+
+			// 3. Query all branches for articles with campo7
+			const branchArticleMaps: Array<{ branch: any; map: Map<string, string>; client: AgentClient }> = [];
+
+			for (const dbBranch of dbBranches) {
+				if (!dbBranch.agent_url) continue;
+
+				const agentClient = new AgentClient({
+					slug: dbBranch.id,
+					agent_url: dbBranch.agent_url as string,
+					agent_api_key: dbBranch.agent_token
+				}, (locals as any).profile || undefined, fetch);
+
+				try {
+					const res = await agentClient.request<any>('/query', {
+						method: 'POST',
+						body: JSON.stringify({
+							query: "SELECT RTRIM(co_art) AS co_art, RTRIM(ISNULL(campo7, '')) AS campo7 FROM saArticulo WHERE anulado = 0"
+						})
+					});
+
+					const items = (res as any).data || (Array.isArray(res) ? res : []);
+					const map = new Map<string, string>();
+					for (const it of items) {
+						if (it.co_art) {
+							map.set((it.co_art as string).trim(), (it.campo7 || '').trim());
+						}
+					}
+					branchArticleMaps.push({ branch: dbBranch, map, client: agentClient });
+				} catch (e: any) {
+					console.warn(`[SYNC_IMAGES] Error consultando sede ${dbBranch.name}:`, e.message);
+				}
+			}
+
+			if (branchArticleMaps.length === 0) {
+				return fail(500, { error: 'No se pudo conectar con los agentes de las sucursales.' });
+			}
+
+			// 4. Build master map of best image per article (must exist in storage or be highest timestamp)
+			const masterMap = new Map<string, string>();
+			for (const { map } of branchArticleMaps) {
+				for (const [co_art, campo7] of map.entries()) {
+					if (!campo7) continue;
+					const currentBest = masterMap.get(co_art);
+					const currentTs = extractImageTimestamp(currentBest);
+					const itemTs = extractImageTimestamp(campo7);
+
+					const inStorage = storageSet.has(campo7);
+					const currentInStorage = currentBest ? storageSet.has(currentBest) : false;
+
+					if (!currentBest) {
+						masterMap.set(co_art, campo7);
+					} else if (inStorage && !currentInStorage) {
+						masterMap.set(co_art, campo7);
+					} else if (inStorage === currentInStorage && itemTs > currentTs) {
+						masterMap.set(co_art, campo7);
+					}
+				}
+			}
+
+			// 5. Update branches that are missing or have outdated campo7
+			let totalUpdated = 0;
+			const branchUpdateCounts: Record<string, number> = {};
+
+			for (const { branch, map, client } of branchArticleMaps) {
+				branchUpdateCounts[branch.name] = 0;
+				let verifiedCoSucu = '';
+				if (Array.isArray(branch.profit_branch_codes) && branch.profit_branch_codes.length > 0) {
+					const def = branch.profit_branch_codes.find((c: any) => c.is_default);
+					verifiedCoSucu = def ? def.code : branch.profit_branch_codes[0].code;
+				}
+
+				for (const [co_art, bestCampo7] of masterMap.entries()) {
+					const currentVal = map.get(co_art) || '';
+					if (currentVal !== bestCampo7) {
+						try {
+							const payload = {
+								sede: branch.id,
+								co_sucu: verifiedCoSucu,
+								imageUrl: bestCampo7,
+								usuario_id: locals.profile?.profit_user || 'ADMIN'
+							};
+							const res = await client.request(`/articulos/${co_art}/imagen`, {
+								method: 'PUT',
+								body: JSON.stringify(payload)
+							});
+
+							if ((res as any).success !== false) {
+								branchUpdateCounts[branch.name]++;
+								totalUpdated++;
+							}
+						} catch (err: any) {
+							console.error(`[SYNC_IMAGES] Error actualizando ${co_art} en ${branch.name}:`, err.message);
+						}
+					}
+				}
+			}
+
+			const summaryParts = Object.entries(branchUpdateCounts).map(([name, count]) => `${name}: ${count}`);
+			return {
+				success: true,
+				count: totalUpdated,
+				message: totalUpdated > 0 
+					? `Sincronización completada (${totalUpdated} cambios: ${summaryParts.join(', ')})`
+					: 'Todas las sucursales ya están sincronizadas al 100%.'
+			};
+		} catch (err: any) {
+			console.error('[SYNC_IMAGES_ACTION] Error:', err);
+			return fail(500, { error: `Error durante la sincronización: ${err.message}` });
 		}
 	})
 };

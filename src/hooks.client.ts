@@ -17,3 +17,6 @@ export const handleError: HandleError = ({ error }) => {
 		message: 'Ocurrió un error al cargar los componentes. La aplicación se recargará de forma automática.'
 	};
 };
+
+export const init = async () => {};
+

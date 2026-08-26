@@ -150,9 +150,11 @@ export const actions: Actions = {
 					const def = branch.profit_branch_codes.find((c: any) => c.is_default);
 					verifiedCoSucu = def ? def.code : branch.profit_branch_codes[0].code;
 				}
+				const branchSeller = (branch.default_seller || '01').trim();
+				const branchPayload = { ...payload, co_ven: branchSeller };
 				const agent = new AgentClient({ slug: branch.id, agent_url: branch.agent_url, agent_api_key: branch.agent_token }, profile, fetch);
-				const response = await agent.saveCustomer(payload, true, verifiedCoSucu || branch.id);
-				if (response.success) { successCount++; if (!createdClient) createdClient = response.data || payload; }
+				const response = await agent.saveCustomer(branchPayload, true, verifiedCoSucu || branch.id);
+				if (response.success) { successCount++; if (!createdClient) createdClient = response.data || branchPayload; }
 				else failedBranches.push(`${branch.name}: ${response.message}`);
 			} catch (err: any) { failedBranches.push(`${branch.name}: ${err.message}`); }
 		}
