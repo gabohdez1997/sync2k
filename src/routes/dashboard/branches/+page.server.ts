@@ -22,7 +22,19 @@ export const load: PageServerLoad = protectLoad('sec_branches', async ({ locals,
       .order('name');
 
     // Si falla específicamente por columnas añadidas en migraciones (default_warehouse, default_seller, etc.)
-    if (error && (error.message.includes('default_warehouse') || error.message.includes('default_seller'))) {
+    if (error && error.message.includes('default_seller')) {
+      console.warn('[BRANCHES] Columna default_seller no existe aún en Supabase. Reintentando con default_warehouse...');
+      const fallback = await supabaseAdmin
+        .from('branches')
+        .select('id, name, business_name, agent_url, agent_token, profit_branch_codes, sql_config, profit_server_id, local_dns_alias, active, sort_order, updated_at, rif, address, latitude, longitude, logo_url, phone, allow_decimals_units, default_warehouse')
+        .order('sort_order')
+        .order('name');
+      
+      branches = fallback.data;
+      error = fallback.error;
+    }
+
+    if (error && error.message.includes('default_warehouse')) {
       console.warn('[BRANCHES] Columnas extendidas no existen aún en Supabase. Reintentando con consulta básica...');
       const fallback = await supabaseAdmin
         .from('branches')
@@ -224,10 +236,22 @@ export const actions: Actions = {
         .update(payload)
         .eq('id', branchId);
 
-      // Reintento sin default_warehouse o default_seller si falla por columna inexistente
-      if (error && (error.message.includes('default_warehouse') || error.message.includes('default_seller'))) {
-        console.warn('[BRANCHES] Reintentando actualización sin columnas extendidas...');
-        const { default_warehouse, default_seller, ...safePayload } = payload;
+      // Reintento granular si falla por columna inexistente (default_seller o default_warehouse)
+      if (error && error.message.includes('default_seller')) {
+        console.warn('[BRANCHES] Reintentando actualización sin default_seller...');
+        const { default_seller, ...safePayload } = payload;
+        let retry = await supabaseAdmin
+          .from('branches')
+          .update(safePayload)
+          .eq('id', branchId);
+        if (retry.error && retry.error.message.includes('default_warehouse')) {
+          const { default_warehouse, ...saferPayload } = safePayload;
+          retry = await supabaseAdmin.from('branches').update(saferPayload).eq('id', branchId);
+        }
+        error = retry.error;
+      } else if (error && error.message.includes('default_warehouse')) {
+        console.warn('[BRANCHES] Reintentando actualización sin default_warehouse...');
+        const { default_warehouse, ...safePayload } = payload;
         const retry = await supabaseAdmin
           .from('branches')
           .update(safePayload)
@@ -244,10 +268,24 @@ export const actions: Actions = {
         .select('id')
         .single();
 
-      // Reintento sin default_warehouse o default_seller si falla por columna inexistente
-      if (error && (error.message.includes('default_warehouse') || error.message.includes('default_seller'))) {
-        console.warn('[BRANCHES] Reintentando inserción sin columnas extendidas...');
-        const { default_warehouse, default_seller, ...safePayload } = payload;
+      // Reintento granular si falla por columna inexistente
+      if (error && error.message.includes('default_seller')) {
+        console.warn('[BRANCHES] Reintentando inserción sin default_seller...');
+        const { default_seller, ...safePayload } = payload;
+        let retry = await supabaseAdmin
+          .from('branches')
+          .insert(safePayload)
+          .select('id')
+          .single();
+        if (retry.error && retry.error.message.includes('default_warehouse')) {
+          const { default_warehouse, ...saferPayload } = safePayload;
+          retry = await supabaseAdmin.from('branches').insert(saferPayload).select('id').single();
+        }
+        data = retry.data;
+        error = retry.error;
+      } else if (error && error.message.includes('default_warehouse')) {
+        console.warn('[BRANCHES] Reintentando inserción sin default_warehouse...');
+        const { default_warehouse, ...safePayload } = payload;
         const retry = await supabaseAdmin
           .from('branches')
           .insert(safePayload)

@@ -438,5 +438,74 @@ export class AgentClient {
 			method: 'DELETE'
 		});
 	}
+
+	// ==========================================
+	// DESPACHOS DE ALMACÉN (saNotaDespachoVenta)
+	// ==========================================
+
+	/**
+	 * Obtiene el historial paginado de notas de despacho
+	 */
+	async getDispatches(filters: Record<string, string> = {}, page = 1, limit = 12) {
+		const params = new URLSearchParams({ ...filters, page: String(page), limit: String(limit) });
+		return this.request<any>(`/notas-despacho?${params.toString()}`);
+	}
+
+	/**
+	 * Obtiene el detalle de una nota de despacho
+	 */
+	async getDispatch(doc_num: string, sedeId?: string) {
+		const query = sedeId ? `?sede=${encodeURIComponent(sedeId)}` : '';
+		return this.request<any>(`/notas-despacho/${encodeURIComponent(doc_num)}${query}`);
+	}
+
+	/**
+	 * Consulta facturas de venta pendientes para despacho
+	 */
+	async getPendingSalesInvoices(filters: Record<string, string> = {}, sedeId?: string) {
+		const params = new URLSearchParams(filters);
+		if (sedeId) params.set('sede', sedeId);
+		return this.request<any>(`/notas-despacho/facturas-pendientes?${params.toString()}`);
+	}
+
+	/**
+	 * Consulta el detalle de renglones y pendientes de una factura de venta
+	 */
+	async getPendingSalesInvoiceDetail(doc_num: string, sedeId?: string) {
+		const query = sedeId ? `?sede=${encodeURIComponent(sedeId)}` : '';
+		return this.request<any>(`/notas-despacho/facturas-pendientes/${encodeURIComponent(doc_num)}${query}`);
+	}
+
+	/**
+	 * Guarda / procesa una nota de despacho
+	 */
+	async saveDispatch(payload: any, sedeId?: string) {
+		const query = sedeId ? `?sede=${encodeURIComponent(sedeId)}` : '';
+		return this.request<any>(`/notas-despacho${query}`, {
+			method: 'POST',
+			body: JSON.stringify(payload)
+		});
+	}
+
+	/**
+	 * Anula una nota de despacho
+	 */
+	async voidDispatch(doc_num: string, reason?: string, sedeId?: string) {
+		const query = sedeId ? `?sede=${encodeURIComponent(sedeId)}` : '';
+		return this.request<any>(`/notas-despacho/${encodeURIComponent(doc_num)}/anular${query}`, {
+			method: 'POST',
+			body: JSON.stringify({ motivo: reason })
+		});
+	}
+
+	/**
+	 * Elimina físicamente una nota de despacho
+	 */
+	async deleteDispatch(doc_num: string, sedeId?: string) {
+		const query = sedeId ? `?sede=${encodeURIComponent(sedeId)}` : '';
+		return this.request<any>(`/notas-despacho/${encodeURIComponent(doc_num)}${query}`, {
+			method: 'DELETE'
+		});
+	}
 }
 

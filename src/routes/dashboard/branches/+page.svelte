@@ -133,6 +133,13 @@
     if (!editingBranch.profit_branch_codes) {
       editingBranch.profit_branch_codes = [];
     }
+    const starCode = (editingBranch.profit_branch_codes || []).find((c: any) => c.is_default)?.code?.trim();
+    if (!editingBranch.default_warehouse) {
+      editingBranch.default_warehouse = starCode || "";
+    }
+    if (!editingBranch.default_seller) {
+      editingBranch.default_seller = starCode || "01";
+    }
     if (!editingBranch.sql_config) {
       editingBranch.sql_config = {
         host: "",

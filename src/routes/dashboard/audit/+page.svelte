@@ -32,7 +32,8 @@
     ChevronRight,
     Users,
     ShoppingCart,
-    Inbox
+    Inbox,
+    Truck
   } from "lucide-svelte";
   import Combobox from "$lib/components/ui/Combobox.svelte";
   import type { PageData } from "./$types";
@@ -69,6 +70,8 @@
     'ORDENES_COMPRA':  { label: 'Órdenes de Compra', icon: ShoppingCart, color: 'text-amber-400' },
     'inv_receipts':    { label: 'Notas de Recepción', icon: Inbox, color: 'text-cyan-400' },
     'NOTAS_RECEPCION': { label: 'Notas de Recepción', icon: Inbox, color: 'text-cyan-400' },
+    'inv_dispatches':  { label: 'Despachos', icon: Truck, color: 'text-violet-400' },
+    'NOTAS_DESPACHO':  { label: 'Despachos', icon: Truck, color: 'text-violet-400' },
     'auth_login':      { label: 'Sesión', icon: Shield, color: 'text-brand-400' },
     'auth_logout':     { label: 'Sesión', icon: Shield, color: 'text-zinc-500' }
   };

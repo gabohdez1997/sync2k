@@ -1,4 +1,4 @@
-// src/routes/dashboard/warehouse/receipts/+page.server.ts
+// src/routes/dashboard/warehouse/dispatches/+page.server.ts
 import { protectLoad, protectAction } from '$lib/server/permissions';
 import { AgentClient } from '$lib/server/agent';
 import { hasPermission } from '$lib/server/auth';
@@ -6,7 +6,7 @@ import { logAction } from '$lib/server/audit';
 import { fail, type Actions } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
 
-export const load: PageServerLoad = protectLoad('inv_receipts', async ({ url, locals, fetch }) => {
+export const load: PageServerLoad = protectLoad('inv_dispatches', async ({ url, locals, fetch }) => {
     const profile = (locals as any).profile;
     if (!profile) throw new Error('Perfil no cargado.');
 
@@ -16,7 +16,6 @@ export const load: PageServerLoad = protectLoad('inv_receipts', async ({ url, lo
             branches: [],
             selectedBranchId: '',
             defaultWarehouse: '01',
-            tasa: 1,
             error: 'No tienes sucursales asignadas.'
         };
     }
@@ -29,7 +28,6 @@ export const load: PageServerLoad = protectLoad('inv_receipts', async ({ url, lo
             branches: allowedBranches,
             selectedBranchId: selectedBranch ? selectedBranch.id : '',
             defaultWarehouse: '01',
-            tasa: 1,
             error: 'Sucursal no configurada con URL de agente.'
         };
     }
@@ -40,17 +38,12 @@ export const load: PageServerLoad = protectLoad('inv_receipts', async ({ url, lo
         agent_api_key: selectedBranch.agent_token
     }, profile, fetch);
 
-    // Obtener almacenes y tasa de cambio
+    // Obtener almacenes de la sede
     let defaultWarehouse = (selectedBranch.default_warehouse || '').trim();
     let warehouses: any[] = [];
-    let currentTasa = 1;
 
     try {
-        const [almaRes, tasaRes] = await Promise.all([
-            agentClient.request<any>(`/catalogos/almacenes?sede=${selectedBranch.id}`).catch(() => ({ data: [] })),
-            agentClient.getExchangeRate().catch(() => ({ tasa: 1 }))
-        ]);
-
+        const almaRes = await agentClient.request<any>(`/catalogos/almacenes?sede=${selectedBranch.id}`).catch(() => ({ data: [] }));
         warehouses = (almaRes as any).data || (almaRes as any).items || (Array.isArray(almaRes) ? almaRes : []);
 
         const starCode = (selectedBranch.profit_branch_codes || []).find((c: any) => c.is_default)?.code?.trim();
@@ -66,36 +59,33 @@ export const load: PageServerLoad = protectLoad('inv_receipts', async ({ url, lo
         } else if (!defaultWarehouse) {
             defaultWarehouse = starCode || '01';
         }
-
-        currentTasa = Number((tasaRes as any)?.tasa || (tasaRes as any)?.data?.tasa || 1);
     } catch (e) {
-        console.warn('[RECEIPTS LOAD] Advertencia cargando catálogos:', e);
+        console.warn('[DISPATCHES LOAD] Advertencia cargando almacenes:', e);
     }
 
     const docNum = url.searchParams.get('doc_num');
-    let preloadedReceipt = null;
+    let preloadedDispatch = null;
     if (docNum) {
         try {
-            const res = await agentClient.getReceivingNote(docNum, selectedBranch.id);
-            preloadedReceipt = res?.data || null;
+            const res = await agentClient.getDispatch(docNum, selectedBranch.id);
+            preloadedDispatch = res?.data || null;
         } catch (e) {
-            console.error('[RECEIPTS LOAD] Error precargando nota de recepción:', e);
+            console.error('[DISPATCHES LOAD] Error precargando nota de despacho:', e);
         }
     }
 
-    const canCreate = hasPermission(profile, 'inv_receipts', 'create');
-    const canUpdate = hasPermission(profile, 'inv_receipts', 'update');
-    const canVoid = hasPermission(profile, 'inv_receipts', 'void');
+    const canCreate = hasPermission(profile, 'inv_dispatches', 'create');
+    const canUpdate = hasPermission(profile, 'inv_dispatches', 'update');
+    const canVoid   = hasPermission(profile, 'inv_dispatches', 'void');
 
     return {
-        title: 'Nota de Recepción de Almacén',
+        title: 'Despacho de Mercancía',
         branches: allowedBranches,
         selectedBranchId: selectedBranch.id,
         selectedBranch,
         warehouses,
         defaultWarehouse,
-        tasa: currentTasa,
-        preloadedReceipt,
+        preloadedDispatch,
         canCreate,
         canUpdate,
         canVoid
@@ -103,7 +93,7 @@ export const load: PageServerLoad = protectLoad('inv_receipts', async ({ url, lo
 });
 
 export const actions: Actions = {
-    searchPendingOrders: protectAction('inv_receipts', async ({ request, locals, fetch }) => {
+    searchPendingInvoices: protectAction('inv_dispatches', async ({ request, locals, fetch }) => {
         const profile = (locals as any).profile;
         const formData = await request.formData();
         const branchId = formData.get('branch_id') as string;
@@ -121,18 +111,18 @@ export const actions: Actions = {
         }, profile, fetch);
 
         try {
-            const res = await agentClient.getPendingPurchaseOrders({ search: searchQuery });
+            const res = await agentClient.getPendingSalesInvoices({ search: searchQuery });
             return {
                 success: true,
-                orders: res?.data || []
+                invoices: res?.data || []
             };
         } catch (err: any) {
-            console.error('[RECEIPTS ACTION] Error buscando órdenes pendientes:', err);
-            return fail(500, { message: err.message || 'Error al consultar órdenes de compra.' });
+            console.error('[DISPATCHES ACTION] Error buscando facturas pendientes:', err);
+            return fail(500, { message: err.message || 'Error al consultar facturas de venta.' });
         }
     }),
 
-    getOrderDetail: protectAction('inv_receipts', async ({ request, locals, fetch }) => {
+    getInvoiceDetail: protectAction('inv_dispatches', async ({ request, locals, fetch }) => {
         const profile = (locals as any).profile;
         const formData = await request.formData();
         const branchId = formData.get('branch_id') as string;
@@ -150,25 +140,25 @@ export const actions: Actions = {
         }, profile, fetch);
 
         try {
-            const res = await agentClient.getPendingPurchaseOrderDetail(docNum);
+            const res = await agentClient.getPendingSalesInvoiceDetail(docNum);
             return {
                 success: true,
-                order: res?.data || null
+                invoice: res?.data || null
             };
         } catch (err: any) {
-            console.error('[RECEIPTS ACTION] Error cargando detalle de orden:', err);
-            return fail(500, { message: err.message || 'Error al consultar detalle de orden de compra.' });
+            console.error('[DISPATCHES ACTION] Error cargando detalle de factura:', err);
+            return fail(500, { message: err.message || 'Error al consultar detalle de factura de venta.' });
         }
     }),
 
-    saveReceipt: protectAction('inv_receipts', async ({ request, locals, fetch }) => {
+    saveDispatch: protectAction('inv_dispatches', async ({ request, locals, fetch }) => {
         const profile = (locals as any).profile;
         const formData = await request.formData();
         const branchId = formData.get('branch_id') as string;
         const payloadJson = formData.get('payload') as string;
 
         if (!payloadJson) {
-            return fail(400, { message: 'No se enviaron datos de recepción.' });
+            return fail(400, { message: 'No se enviaron datos de despacho.' });
         }
 
         let payload: any;
@@ -179,11 +169,11 @@ export const actions: Actions = {
         }
 
         const isEditing = !!(payload.isEditing || payload.doc_num);
-        if (isEditing && !hasPermission(profile, 'inv_receipts', 'update')) {
-            return fail(403, { message: 'No tienes permiso para EDITAR notas de recepción.' });
+        if (isEditing && !hasPermission(profile, 'inv_dispatches', 'update')) {
+            return fail(403, { message: 'No tienes permiso para EDITAR notas de despacho.' });
         }
-        if (!isEditing && !hasPermission(profile, 'inv_receipts', 'create')) {
-            return fail(403, { message: 'No tienes permiso para CREAR notas de recepción.' });
+        if (!isEditing && !hasPermission(profile, 'inv_dispatches', 'create')) {
+            return fail(403, { message: 'No tienes permiso para CREAR notas de despacho.' });
         }
 
         const branch = (profile.allowed_branches || []).find((b: any) => b.id === branchId);
@@ -198,10 +188,10 @@ export const actions: Actions = {
         }, profile, fetch);
 
         try {
-            const saveRes = await agentClient.saveReceivingNote(payload);
+            const saveRes = await agentClient.saveDispatch(payload);
 
             if (!saveRes.success) {
-                return fail(400, { message: saveRes.message || 'Error al procesar la nota de recepción en el servidor.' });
+                return fail(400, { message: saveRes.message || 'Error al procesar el despacho en el servidor.' });
             }
 
             const docNum = saveRes.data?.doc_num || saveRes.doc_num;
@@ -209,17 +199,15 @@ export const actions: Actions = {
             // Registrar log de auditoría
             await logAction({
                 profile_id: profile.id,
-                module: 'inv_receipts',
+                module: 'inv_dispatches',
                 action: 'CREATE',
-                description: `Nota de Recepción N° ${docNum} creada para proveedor ${payload.co_prov} (OC: ${payload.doc_num_oc || '---'})`,
+                description: `Nota de Despacho N° ${docNum} procesada para cliente ${payload.co_cli} (Factura: ${payload.factura_origen || '---'})`,
                 branch_id: branch.id,
                 details: {
                     doc_num: docNum,
-                    co_prov: payload.co_prov,
-                    doc_num_oc: payload.doc_num_oc,
-                    total_neto: saveRes.data?.total_neto,
-                    total_art: saveRes.data?.total_art,
-                    almacen_ingreso: saveRes.data?.almacen_ingreso
+                    co_cli: payload.co_cli,
+                    factura_origen: payload.factura_origen,
+                    total_art: saveRes.data?.total_art
                 }
             });
 
@@ -227,11 +215,11 @@ export const actions: Actions = {
                 success: true,
                 doc_num: docNum,
                 branch_id: branch.id,
-                message: `Nota de Recepción ${docNum} procesada exitosamente.`
+                message: `Nota de Despacho ${docNum} procesada exitosamente.`
             };
         } catch (err: any) {
-            console.error('[RECEIPTS ACTION] Error guardando nota de recepción:', err);
-            return fail(500, { message: err.message || 'Error interno procesando nota de recepción.' });
+            console.error('[DISPATCHES ACTION] Error guardando nota de despacho:', err);
+            return fail(500, { message: err.message || 'Error interno procesando nota de despacho.' });
         }
     }, 'create')
 };

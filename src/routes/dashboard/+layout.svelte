@@ -173,9 +173,9 @@
           icon: Inbox,
         },
         {
-          id: "inv_shipping",
-          label: "Despacho",
-          href: "/dashboard/inventory/shipping",
+          id: "inv_dispatches",
+          label: "Despachos",
+          href: "/dashboard/warehouse/dispatches",
           icon: Truck,
         },
       ],

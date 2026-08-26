@@ -90,6 +90,7 @@
         { id: "sec_article_images", label: "Imágenes de Artículos" },
         { id: "inv_transfers", label: "Traslados entre Sedes", hasOthers: true },
         { id: "inv_receipts", label: "Notas de Recepción", hasVoid: true },
+        { id: "inv_dispatches", label: "Despachos", hasVoid: true },
       ],
     },
     {

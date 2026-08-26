@@ -384,7 +384,7 @@
           co_art: l.co_art,
           art_des: l.art_des,
           co_uni: l.co_uni || "UNI",
-          co_alma: data.defaultWarehouse || "01",
+          co_alma: l.co_alma || data.defaultWarehouse || data.warehouses?.[0]?.co_alma || "01",
           cantidad: Number(l.cant_recibida),
           cost_unit_om: Number(l.cost_unit_om || l.cost_unit || 0),
           cost_unit: Number(l.cost_unit || 0),

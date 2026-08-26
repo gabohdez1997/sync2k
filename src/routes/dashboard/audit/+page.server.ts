@@ -96,6 +96,10 @@ export const load: PageServerLoad = protectLoad('sec_audit', async ({ url }) => 
       orParts.push(`module.eq.inv_receipts`);
       orParts.push(`module.eq.NOTAS_RECEPCION`);
     }
+    if (cleanSearch.includes('despacho') || cleanSearch.includes('despachos') || cleanSearch.includes('nota de despacho')) {
+      orParts.push(`module.eq.inv_dispatches`);
+      orParts.push(`module.eq.NOTAS_DESPACHO`);
+    }
     if (cleanSearch.includes('sesion') || cleanSearch.includes('inicio') || cleanSearch.includes('cierre') || cleanSearch.includes('login') || cleanSearch.includes('logout')) {
       orParts.push(`module.eq.auth_login`);
       orParts.push(`module.eq.auth_logout`);
