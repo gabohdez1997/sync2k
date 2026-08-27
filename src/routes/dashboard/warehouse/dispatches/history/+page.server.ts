@@ -61,7 +61,11 @@ export const load: PageServerLoad = protectLoad('inv_dispatches', async ({ url, 
 
         if (res && res.success) {
             dispatches = res.data || [];
-            pagination = res.pagination || { page, limit, total: dispatches.length, totalPages: 1 };
+            const pag = res.pagination || {} as any;
+            const rawRes = res as any;
+            const total = pag.total || rawRes.total_items || dispatches.length;
+            const totalPages = pag.pages || pag.totalPages || rawRes.total_pages || Math.ceil(total / limit) || 1;
+            pagination = { page: pag.currentPage || rawRes.page || page, limit, total, totalPages };
         }
     } catch (e: any) {
         console.error('[DISPATCHES HISTORY LOAD] Error:', e.message);
@@ -79,6 +83,9 @@ export const load: PageServerLoad = protectLoad('inv_dispatches', async ({ url, 
         selectedBranch,
         dispatches,
         pagination,
+        total: pagination.total,
+        page: pagination.page,
+        totalPages: pagination.totalPages,
         filters: { search, fec_d, fec_h, status },
         canCreate,
         canUpdate,
@@ -91,18 +98,28 @@ export const actions: Actions = {
     deleteDispatch: protectAction('inv_dispatches', async ({ request, locals, fetch }) => {
         const profile = (locals as any).profile;
         if (!hasPermission(profile, 'inv_dispatches', 'delete')) {
-            return fail(403, { message: 'No tienes permiso para ELIMINAR notas de despacho.' });
+            return fail(403, { success: false, message: 'No tienes permiso para ELIMINAR notas de despacho.' });
         }
 
         const formData = await request.formData();
         const branchId = formData.get('branch_id') as string;
-        const docNum = formData.get('doc_num') as string;
+        const docNum = (formData.get('doc_num') as string || '').trim();
+        const password = String(formData.get('password') || '');
 
-        if (!docNum) return fail(400, { message: 'Número de despacho no proporcionado.' });
+        if (!docNum) return fail(400, { success: false, message: 'Número de despacho no proporcionado.' });
+        if (!branchId) return fail(400, { success: false, message: 'Sucursal no válida.' });
+        if (!password) return fail(400, { success: false, message: 'La contraseña es requerida para confirmar la eliminación.' });
+
+        const email = (locals as any).session?.user?.email;
+        if (!email) return fail(401, { success: false, message: 'Sesión no válida.' });
+
+        // Confirmación de seguridad con contraseña del usuario
+        const { error: authErr } = await (locals as any).supabase.auth.signInWithPassword({ email, password });
+        if (authErr) return fail(401, { success: false, message: 'Contraseña de confirmación incorrecta.' });
 
         const branch = (profile.allowed_branches || []).find((b: any) => b.id === branchId);
         if (!branch || !branch.agent_url) {
-            return fail(400, { message: 'Sucursal no válida.' });
+            return fail(400, { success: false, message: 'Sucursal no válida o sin agente configurado.' });
         }
 
         const agentClient = new AgentClient({
@@ -114,40 +131,50 @@ export const actions: Actions = {
         try {
             const res = await agentClient.deleteDispatch(docNum, branch.id);
             if (!res.success) {
-                return fail(400, { message: res.message || 'Error al eliminar despacho.' });
+                return fail(400, { success: false, message: res.message || 'Error al eliminar despacho.' });
             }
 
             await logAction({
                 profile_id: profile.id,
                 module: 'inv_dispatches',
                 action: 'DELETE',
-                description: `Nota de Despacho N° ${docNum} eliminada`,
+                description: `Nota de Despacho N° ${docNum} eliminada físicamente de la base de datos.`,
                 branch_id: branch.id,
                 details: { doc_num: docNum }
             });
 
-            return { success: true, message: `Despacho ${docNum} eliminado correctamente.` };
+            return { success: true, message: `Despacho N° ${docNum} eliminado correctamente y stock revertido.` };
         } catch (err: any) {
-            return fail(500, { message: err.message || 'Error interno al eliminar despacho.' });
+            return fail(500, { success: false, message: err.message || 'Error interno al eliminar despacho.' });
         }
     }, 'delete'),
 
     voidDispatch: protectAction('inv_dispatches', async ({ request, locals, fetch }) => {
         const profile = (locals as any).profile;
         if (!hasPermission(profile, 'inv_dispatches', 'void') && !hasPermission(profile, 'inv_dispatches', 'delete')) {
-            return fail(403, { message: 'No tienes permiso para ANULAR notas de despacho.' });
+            return fail(403, { success: false, message: 'No tienes permiso para ANULAR notas de despacho.' });
         }
 
         const formData = await request.formData();
         const branchId = formData.get('branch_id') as string;
-        const docNum = formData.get('doc_num') as string;
-        const reason = (formData.get('reason') as string || '').trim();
+        const docNum = (formData.get('doc_num') as string || '').trim();
+        const reason = (formData.get('reason') as string || 'Anulación desde interfaz web').trim();
+        const password = String(formData.get('password') || '');
 
-        if (!docNum) return fail(400, { message: 'Número de despacho no proporcionado.' });
+        if (!docNum) return fail(400, { success: false, message: 'Número de despacho no proporcionado.' });
+        if (!branchId) return fail(400, { success: false, message: 'Sucursal no válida.' });
+        if (!password) return fail(400, { success: false, message: 'La contraseña es requerida para confirmar la anulación.' });
+
+        const email = (locals as any).session?.user?.email;
+        if (!email) return fail(401, { success: false, message: 'Sesión no válida.' });
+
+        // Confirmación de seguridad con contraseña del usuario
+        const { error: authErr } = await (locals as any).supabase.auth.signInWithPassword({ email, password });
+        if (authErr) return fail(401, { success: false, message: 'Contraseña de confirmación incorrecta.' });
 
         const branch = (profile.allowed_branches || []).find((b: any) => b.id === branchId);
         if (!branch || !branch.agent_url) {
-            return fail(400, { message: 'Sucursal no válida.' });
+            return fail(400, { success: false, message: 'Sucursal no válida o sin agente configurado.' });
         }
 
         const agentClient = new AgentClient({
@@ -159,7 +186,7 @@ export const actions: Actions = {
         try {
             const res = await agentClient.voidDispatch(docNum, reason, branch.id);
             if (!res.success) {
-                return fail(400, { message: res.message || 'Error al anular despacho.' });
+                return fail(400, { success: false, message: res.message || 'Error al anular despacho.' });
             }
 
             await logAction({
@@ -171,9 +198,9 @@ export const actions: Actions = {
                 details: { doc_num: docNum, reason }
             });
 
-            return { success: true, message: `Despacho ${docNum} anulado correctamente.` };
+            return { success: true, message: `Despacho N° ${docNum} anulado correctamente y cantidades pendientes restauradas.` };
         } catch (err: any) {
-            return fail(500, { message: err.message || 'Error interno al anular despacho.' });
+            return fail(500, { success: false, message: err.message || 'Error interno al anular despacho.' });
         }
     }, 'void'),
 

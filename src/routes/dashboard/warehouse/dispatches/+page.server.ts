@@ -111,7 +111,7 @@ export const actions: Actions = {
         }, profile, fetch);
 
         try {
-            const res = await agentClient.getPendingSalesInvoices({ search: searchQuery });
+            const res = await agentClient.getPendingSalesInvoices({ search: searchQuery }, branch.id);
             return {
                 success: true,
                 invoices: res?.data || []
@@ -140,7 +140,7 @@ export const actions: Actions = {
         }, profile, fetch);
 
         try {
-            const res = await agentClient.getPendingSalesInvoiceDetail(docNum);
+            const res = await agentClient.getPendingSalesInvoiceDetail(docNum, branch.id);
             return {
                 success: true,
                 invoice: res?.data || null
@@ -188,7 +188,7 @@ export const actions: Actions = {
         }, profile, fetch);
 
         try {
-            const saveRes = await agentClient.saveDispatch(payload);
+            const saveRes = await agentClient.saveDispatch(payload, branch.id);
 
             if (!saveRes.success) {
                 return fail(400, { message: saveRes.message || 'Error al procesar el despacho en el servidor.' });

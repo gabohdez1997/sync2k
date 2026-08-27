@@ -136,6 +136,7 @@ export const actions: Actions = {
 			const agentRenglones = items.map((it: any) => ({
 				co_art: it.co_art,
 				art_des: it.art_des,
+				co_uni: it.co_uni || undefined,
 				co_alma: it.co_alma_source || '01',
 				total_art: Number(it.total_art),
 				cost_unit: Number(it.costo_unit || 0)

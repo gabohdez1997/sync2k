@@ -4,10 +4,8 @@
   import {
     Truck,
     Search,
-    Filter,
-    Plus,
+    ShoppingBag,
     FileText,
-    ArrowRight,
     Printer,
     Trash2,
     Building,
@@ -16,28 +14,22 @@
     CheckCircle2,
     AlertTriangle,
     X,
-    ShieldAlert,
     CheckSquare,
     Square,
     Store,
-    ChevronLeft,
     ChevronDown,
     Check,
     Loader2,
     Clock,
     Package,
     Warehouse,
-    ClipboardList,
-    Layers,
-    Tag,
-    History,
-    Edit2,
-    Send
+    Edit2
   } from "lucide-svelte";
   import { toast } from "svelte-sonner";
   import { goto } from "$app/navigation";
   import { page } from "$app/stores";
   import { deserialize } from "$app/forms";
+  import ImportItemCard from "$lib/components/ui/ImportItemCard.svelte";
   import dayjs from "dayjs";
   import "dayjs/locale/es";
 
@@ -51,11 +43,25 @@
   let dispatchLines = $state<any[]>([]);
   let observations = $state("");
   let isSavingDispatch = $state(false);
+  let linesSearchTerm = $state("");
+
+  // Post-save UI State
+  let saveSuccess = $state(false);
+  let generatedDocNum = $state("");
+  let savedBranchId = $state("");
 
   // Edit Mode State
   let isEditing = $state(false);
   let editingDocNum = $state("");
 
+  // Modal State for Importing Invoices
+  let showImportModal = $state(false);
+  let isSearchingInvoices = $state(false);
+  let importSearchQuery = $state("");
+  let foundInvoices = $state<any[]>([]);
+  let isLoadingInvoiceDetail = $state(false);
+
+  // Auto-preload if editing an existing dispatch
   $effect(() => {
     const p = data.preloadedDispatch;
     if (p && p.doc_num && p.doc_num !== editingDocNum) {
@@ -97,59 +103,109 @@
     }
   });
 
-  // Modal State for Selecting Invoices
-  let isModalOpen = $state(false);
-  let isSearchingInvoices = $state(false);
-  let invoiceSearchQuery = $state("");
-  let pendingInvoicesList = $state<any[]>([]);
-
-  // Computed Totals (Warehouse quantities only)
-  let totalLinesSelected = $derived(
-    dispatchLines.filter((l) => l.checked && Number(l.cant_despachada) > 0).length
-  );
-
-  let totalUnitsToDispatch = $derived(
+  // Filtered lines according to quick search input
+  let filteredDispatchLines = $derived(
     dispatchLines
-      .filter((l) => l.checked)
-      .reduce((acc, l) => acc + (Number(l.cant_despachada) || 0), 0)
+      .map((line, index) => ({ line, originalIndex: index }))
+      .filter(({ line }) => {
+        if (!linesSearchTerm.trim()) return true;
+        const q = linesSearchTerm.toLowerCase();
+        return (
+          (line.art_des || "").toLowerCase().includes(q) ||
+          (line.co_art || "").toLowerCase().includes(q) ||
+          (line.referencia || "").toLowerCase().includes(q) ||
+          (line.modelo || "").toLowerCase().includes(q)
+        );
+      })
   );
 
-  let totalUnitsInvoiced = $derived(
-    dispatchLines
-      .reduce((acc, l) => acc + (Number(l.cant_original) || 0), 0)
-  );
+  // Computed Totals
+  let totals = $derived.by(() => {
+    const linesToProcess = dispatchLines.filter(
+      (l) => l.checked && Number(l.cant_despachada || 0) > 0
+    );
+    const totalLinesCount = linesToProcess.length;
+    const totalUnitsCount = linesToProcess.reduce(
+      (acc, l) => acc + Number(l.cant_despachada || 0),
+      0
+    );
+    const totalPendingCount = dispatchLines.reduce(
+      (acc, l) => acc + Number(l.cant_pendiente || 0),
+      0
+    );
 
-  let totalUnitsPending = $derived(
-    dispatchLines
-      .reduce((acc, l) => acc + (Number(l.cant_pendiente) || 0), 0)
-  );
+    const isFullyDispatched =
+      totalLinesCount === dispatchLines.length &&
+      dispatchLines.every(
+        (l) => Number(l.cant_despachada || 0) === Number(l.cant_pendiente || 0)
+      );
 
-  // Handlers
-  function handleBranchChange(newBranchId: string) {
+    const isPartiallyDispatched =
+      totalUnitsCount > 0 && totalUnitsCount < totalPendingCount;
+
+    return {
+      linesToProcess,
+      totalLinesCount,
+      totalUnitsCount,
+      totalPendingCount,
+      isFullyDispatched,
+      isPartiallyDispatched
+    };
+  });
+
+  function formatQuantity(val: number) {
+    return Number(val || 0).toLocaleString("de-DE", {
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 2
+    });
+  }
+
+  // Branch switcher
+  function handleBranchChange(e: Event) {
+    const target = e.target as HTMLSelectElement;
+    const newBranchId = target.value;
     if (newBranchId !== filterSede) {
       if (dispatchLines.length > 0) {
-        if (!confirm("Cambiar de sucursal limpiará los artículos cargados del despacho. ¿Deseas continuar?")) {
+        if (!confirm("Cambiar de sucursal limpiará los artículos cargados del despacho actual. ¿Deseas continuar?")) {
+          target.value = filterSede;
           return;
         }
       }
       filterSede = newBranchId;
       goto(`?branch_id=${newBranchId}`, { replaceState: true, invalidateAll: true });
-      resetDispatch();
+      resetForm();
     }
   }
 
-  function resetDispatch() {
+  function resetForm() {
     selectedInvoice = null;
     dispatchLines = [];
     observations = "";
+    saveSuccess = false;
+    generatedDocNum = "";
+    linesSearchTerm = "";
     isEditing = false;
     editingDocNum = "";
+    if ($page.url.searchParams.has("doc_num")) {
+      const params = new URLSearchParams($page.url.searchParams);
+      params.delete("doc_num");
+      goto(`?${params.toString()}`);
+    }
   }
 
-  async function openSearchModal() {
-    isModalOpen = true;
-    invoiceSearchQuery = "";
+  // Open import modal and search
+  async function openImportModal() {
+    showImportModal = true;
+    importSearchQuery = "";
     await searchPendingInvoices();
+  }
+
+  let searchDebounceTimer: any = null;
+  function handleSearchInput() {
+    clearTimeout(searchDebounceTimer);
+    searchDebounceTimer = setTimeout(() => {
+      searchPendingInvoices();
+    }, 300);
   }
 
   async function searchPendingInvoices() {
@@ -157,53 +213,56 @@
     try {
       const formData = new FormData();
       formData.append("branch_id", filterSede);
-      formData.append("search", invoiceSearchQuery);
+      formData.append("search", importSearchQuery.trim());
 
-      const response = await fetch("?/searchPendingInvoices", {
+      const res = await fetch("?/searchPendingInvoices", {
         method: "POST",
         body: formData
       });
 
-      const result = deserialize(await response.text());
+      const result = deserialize(await res.text());
       if (result.type === "success" && (result.data as any)?.invoices) {
-        pendingInvoicesList = (result.data as any).invoices;
+        foundInvoices = (result.data as any).invoices || [];
       } else {
-        toast.error((result as any).data?.message || "Error al buscar facturas pendientes.");
-        pendingInvoicesList = [];
+        foundInvoices = [];
+        if ((result as any).data?.message) {
+          toast.error((result as any).data.message);
+        }
       }
     } catch (e: any) {
-      toast.error(e.message || "Error de conexión.");
-      pendingInvoicesList = [];
+      console.error(e);
+      toast.error("Error de conexión al consultar facturas pendientes.");
+      foundInvoices = [];
     } finally {
       isSearchingInvoices = false;
     }
   }
 
   async function selectInvoice(inv: any) {
-    isSearchingInvoices = true;
+    isLoadingInvoiceDetail = true;
     try {
       const formData = new FormData();
       formData.append("branch_id", filterSede);
       formData.append("doc_num", inv.doc_num);
 
-      const response = await fetch("?/getInvoiceDetail", {
+      const res = await fetch("?/getInvoiceDetail", {
         method: "POST",
         body: formData
       });
 
-      const result = deserialize(await response.text());
+      const result = deserialize(await res.text());
       if (result.type === "success" && (result.data as any)?.invoice) {
         const fullInv = (result.data as any).invoice;
         selectedInvoice = fullInv;
         observations = fullInv.comentario ? `Ref Factura: ${fullInv.comentario}` : "";
 
-        // Map line items
+        // Map invoice lines to dispatch lines
         dispatchLines = (fullInv.renglones || []).map((r: any) => {
           const cantPend = Number(r.cant_pendiente || 0);
           return {
             reng_num: r.reng_num,
             co_art: r.co_art,
-            des_art: r.art_des,
+            art_des: r.art_des,
             modelo: r.modelo,
             referencia: r.referencia,
             co_uni: r.co_uni,
@@ -211,7 +270,7 @@
             co_alma: r.co_alma_original || data.defaultWarehouse || "01",
             cant_original: Number(r.cant_original || 0),
             cant_pendiente: cantPend,
-            cant_despachada: cantPend, // Default to dispatching all pending
+            cant_despachada: cantPend, // By default dispatch all pending
             checked: cantPend > 0,
             prec_vta: r.prec_vta,
             tipo_imp: r.tipo_imp,
@@ -222,15 +281,16 @@
           };
         });
 
-        isModalOpen = false;
-        toast.success(`Factura ${fullInv.doc_num} cargada exitosamente.`);
+        showImportModal = false;
+        toast.success(`Factura N° ${fullInv.doc_num} importada con éxito.`);
       } else {
         toast.error((result as any).data?.message || "No se pudo cargar el detalle de la factura.");
       }
     } catch (e: any) {
-      toast.error(e.message || "Error al obtener factura.");
+      console.error(e);
+      toast.error("Error al obtener datos de la factura.");
     } finally {
-      isSearchingInvoices = false;
+      isLoadingInvoiceDetail = false;
     }
   }
 
@@ -242,78 +302,70 @@
     }));
   }
 
-  function handleLineCheck(index: number, checked: boolean) {
-    dispatchLines[index].checked = checked;
-    if (checked && Number(dispatchLines[index].cant_despachada) <= 0) {
-      dispatchLines[index].cant_despachada = dispatchLines[index].cant_pendiente;
-    }
+  function updateDispatchedQty(index: number, val: number) {
+    const max = Number(dispatchLines[index].cant_pendiente || dispatchLines[index].cant_original || 0);
+    let finalVal = Number(val);
+    if (isNaN(finalVal) || finalVal < 0) finalVal = 0;
+    if (max > 0 && finalVal > max) finalVal = max;
+
+    dispatchLines[index].cant_despachada = finalVal;
+    dispatchLines[index].checked = finalVal > 0;
   }
 
-  function handleQuantityChange(index: number, val: number) {
-    const max = Number(dispatchLines[index].cant_pendiente || 0);
-    let qty = Number(val);
-    if (isNaN(qty) || qty < 0) qty = 0;
-    if (qty > max) {
-      toast.warning(`La cantidad a despachar no puede exceder el pendiente (${max}).`);
-      qty = max;
-    }
-    dispatchLines[index].cant_despachada = qty;
-    dispatchLines[index].checked = qty > 0;
-  }
-
-  function setMaxQuantity(index: number) {
-    dispatchLines[index].cant_despachada = dispatchLines[index].cant_pendiente;
-    dispatchLines[index].checked = true;
-  }
-
-  async function handleSaveDispatch() {
+  async function submitDispatch() {
     if (!selectedInvoice) {
-      toast.error("Debes seleccionar una Factura de Venta para despachar.");
+      toast.error("Debes seleccionar una factura de venta.");
       return;
     }
 
-    const linesToDispatch = dispatchLines.filter((l) => l.checked && Number(l.cant_despachada) > 0);
-    if (linesToDispatch.length === 0) {
-      toast.error("Debes seleccionar al menos un artículo con cantidad mayor a cero para despachar.");
+    const linesToProcess = totals.linesToProcess;
+    if (linesToProcess.length === 0) {
+      toast.error("Debes seleccionar al menos un artículo para despachar.");
       return;
+    }
+
+    for (const l of linesToProcess) {
+      const max = Number(l.cant_pendiente || 0);
+      const desp = Number(l.cant_despachada || 0);
+      if (max > 0 && desp > max) {
+        toast.error(`El artículo "${l.art_des || l.co_art}" excede la cantidad pendiente permitida (${max} un.).`);
+        return;
+      }
+      if (desp <= 0) {
+        toast.error(`El artículo "${l.art_des || l.co_art}" debe tener una cantidad mayor a cero.`);
+        return;
+      }
     }
 
     isSavingDispatch = true;
 
     try {
       const payload = {
-        isEditing,
+        isEditing: isEditing,
         doc_num: isEditing ? editingDocNum : undefined,
-        factura_origen: selectedInvoice.doc_num,
         co_cli: selectedInvoice.co_cli,
-        cli_des: selectedInvoice.cli_des,
-        rif: selectedInvoice.rif,
-        cli_dir: selectedInvoice.cli_dir,
-        co_cond: selectedInvoice.co_cond || "01",
-        co_tran: selectedInvoice.co_tran || "01",
-        co_mone: selectedInvoice.co_mone || "BS",
-        co_ven: selectedInvoice.co_ven || "01",
-        tasa: selectedInvoice.tasa || 1,
-        comentario: observations.trim() || `Despacho de Factura ${selectedInvoice.doc_num}`,
-        defaultWarehouse: data.defaultWarehouse || "01",
-        renglones: linesToDispatch.map((l) => ({
-          reng_num: l.reng_num,
-          co_art: l.co_art,
-          des_art: l.des_art,
-          modelo: l.modelo,
-          referencia: l.referencia,
-          co_uni: l.co_uni,
-          co_alma: l.co_alma,
-          cant_original: l.cant_original,
-          cant_pendiente: l.cant_pendiente,
-          cant_despachada: Number(l.cant_despachada),
-          prec_vta: l.prec_vta,
-          tipo_imp: l.tipo_imp,
-          porc_imp: l.porc_imp,
-          monto_imp: l.monto_imp,
-          reng_neto: l.reng_neto,
+        factura_origen: selectedInvoice.doc_num,
+        descrip: `DESPACHO FACTURA ${selectedInvoice.doc_num}`,
+        co_cond: selectedInvoice.co_cond || "CONT",
+        n_control: selectedInvoice.doc_num,
+        comentario: observations.trim(),
+        co_alma_defecto: data.defaultWarehouse || "01",
+        renglones: linesToProcess.map((l, i) => ({
+          reng_num: i + 1,
+          reng_num_factura: l.reng_num,
           rowguid_doc: l.rowguid_doc,
-          doc_num_factura: selectedInvoice.doc_num
+          num_doc: selectedInvoice.doc_num,
+          co_art: l.co_art,
+          art_des: l.art_des,
+          co_uni: l.co_uni || "UNI",
+          co_alma: l.co_alma || data.defaultWarehouse || "01",
+          cantidad: Number(l.cant_despachada),
+          cant_despachada: Number(l.cant_despachada),
+          prec_vta: Number(l.prec_vta || 0),
+          tipo_imp: l.tipo_imp || "1",
+          porc_imp: Number(l.porc_imp || 0),
+          monto_imp: Number(l.monto_imp || 0),
+          reng_neto: Number(l.reng_neto || 0)
         }))
       };
 
@@ -321,478 +373,595 @@
       formData.append("branch_id", filterSede);
       formData.append("payload", JSON.stringify(payload));
 
-      const response = await fetch("?/saveDispatch", {
+      const res = await fetch("?/saveDispatch", {
         method: "POST",
         body: formData
       });
 
-      const result = deserialize(await response.text());
+      const result = deserialize(await res.text());
+
       if (result.type === "success" && (result.data as any)?.success) {
-        const docNumResult = (result.data as any).doc_num;
-        toast.success(`¡Despacho ${docNumResult} procesado exitosamente!`);
-        resetDispatch();
-        goto(`/dashboard/warehouse/dispatches/history?branch_id=${filterSede}`);
+        const resData = result.data as any;
+        generatedDocNum = resData.doc_num || resData.data?.doc_num || resData.results?.[0]?.data?.doc_num || editingDocNum || "";
+        savedBranchId = filterSede;
+        saveSuccess = true;
+        toast.success(isEditing ? `Nota de Despacho N° ${generatedDocNum} actualizada con éxito.` : `Nota de Despacho N° ${generatedDocNum} generada con éxito.`);
       } else {
-        toast.error((result as any).data?.message || "Error al procesar el despacho.");
+        toast.error((result.data as any)?.message || "Error al procesar el despacho.");
       }
     } catch (e: any) {
-      toast.error(e.message || "Error procesando la solicitud.");
+      console.error(e);
+      toast.error("Error de conexión al procesar la nota de despacho.");
     } finally {
       isSavingDispatch = false;
     }
   }
+
+  // Warehouse name helper
+  let defaultWarehouseName = $derived.by(() => {
+    const wh = (data.warehouses || []).find(
+      (w: any) => w.co_alma?.trim() === data.defaultWarehouse?.trim()
+    );
+    return wh ? `${wh.co_alma} - ${wh.des_alma}` : (data.defaultWarehouse || "Principal");
+  });
 </script>
 
 <svelte:head>
   <title>Despacho de Mercancía | Sync2K</title>
 </svelte:head>
 
-<div class="space-y-6">
-  <!-- Top Navigation & Header Bar -->
-  <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-zinc-900/60 backdrop-blur-md p-4 sm:p-5 rounded-2xl border border-zinc-800/80 shadow-xl shadow-black/20">
-    <div class="flex items-center gap-3.5">
-      <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-violet-500/20 to-purple-600/30 border border-violet-500/30 flex items-center justify-center text-violet-400 shadow-lg shadow-violet-950/40">
-        <Truck class="w-6 h-6" />
-      </div>
-      <div>
-        <div class="flex items-center gap-2.5">
-          <h1 class="text-xl font-bold text-white tracking-tight">Despacho de Mercancía</h1>
-          {#if isEditing}
-            <span class="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-500/10 text-amber-400 border border-amber-500/20 flex items-center gap-1">
-              <Edit2 class="w-3 h-3" /> Editando {editingDocNum}
-            </span>
-          {/if}
-        </div>
-        <p class="text-xs text-zinc-400 mt-0.5">Control y verificación de salida de artículos por Facturas de Venta</p>
+{#if saveSuccess}
+  <div
+    class="glass p-12 rounded-[40px] border border-green-500/20 max-w-xl mx-auto flex flex-col items-center justify-center text-center space-y-6 mt-12"
+    in:fade
+  >
+    <div
+      class="h-20 w-20 rounded-3xl bg-green-500/10 flex items-center justify-center text-green-400 shadow-lg shadow-green-500/10"
+    >
+      <Check size={48} />
+    </div>
+    <div class="space-y-2">
+      <h2 class="text-3xl font-black text-text-base">¡Despacho Registrado!</h2>
+      <p class="text-text-muted">
+        La nota de despacho y la salida de inventario han sido procesadas exitosamente en Profit Plus.
+      </p>
+    </div>
+    <div class="bg-white/5 px-6 py-4 rounded-2xl border border-white/5">
+      <span
+        class="text-xs text-text-muted/60 uppercase font-bold tracking-wider"
+        >Nota de Despacho Generada</span
+      >
+      <div class="text-2xl font-black text-brand-500 mt-1 font-mono">
+        {generatedDocNum}
       </div>
     </div>
-
-    <!-- Actions & Sede Selector -->
-    <div class="flex flex-wrap items-center gap-2.5">
-      <!-- Sede Selector -->
-      <div class="relative min-w-[170px]">
-        <select
-          aria-label="Seleccionar sucursal"
-          value={filterSede}
-          onchange={(e) => handleBranchChange(e.currentTarget.value)}
-          class="w-full pl-9 pr-8 py-2 bg-zinc-800/80 hover:bg-zinc-800 border border-zinc-700/70 hover:border-zinc-600 rounded-xl text-xs font-medium text-white appearance-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-violet-500/40 transition-all"
-        >
-          {#each data.branches as branch}
-            <option value={branch.id}>{branch.name}</option>
-          {/each}
-        </select>
-        <Store class="w-3.5 h-3.5 text-zinc-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-        <ChevronDown class="w-3.5 h-3.5 text-zinc-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-      </div>
-
-      <!-- History Button -->
+    <div class="flex gap-4 w-full">
       <a
-        href="/dashboard/warehouse/dispatches/history?branch_id={filterSede}"
-        class="flex items-center gap-2 px-3.5 py-2 bg-zinc-800 hover:bg-zinc-700/80 text-zinc-300 hover:text-white border border-zinc-700/80 rounded-xl text-xs font-medium transition-all shadow-sm"
+        href="/dashboard/warehouse/dispatches/{generatedDocNum}/print?branch_id={savedBranchId}"
+        target="_blank"
+        class="flex-1 text-center bg-white/5 hover:bg-white/10 text-text-base px-6 py-3.5 rounded-2xl font-bold transition-all text-sm flex items-center justify-center gap-2 border border-white/10"
       >
-        <History class="w-3.5 h-3.5 text-violet-400" />
-        <span>Historial</span>
+        <Printer size={16} class="text-brand-400" />
+        Imprimir
       </a>
-
-      <!-- Import Invoice Button -->
       <button
-        onclick={openSearchModal}
-        disabled={isSavingDispatch}
-        class="flex items-center gap-2 px-4 py-2 bg-violet-600 hover:bg-violet-500 text-white rounded-xl text-xs font-semibold shadow-lg shadow-violet-600/30 hover:shadow-violet-600/50 active:scale-95 transition-all disabled:opacity-50"
+        onclick={resetForm}
+        class="flex-1 bg-brand-600 hover:bg-brand-500 text-white px-6 py-3.5 rounded-2xl font-bold transition-all shadow-lg shadow-brand-500/20 text-sm cursor-pointer"
       >
-        <Search class="w-3.5 h-3.5" />
-        <span>Importar Factura</span>
+        Nuevo Despacho
       </button>
-
-      {#if selectedInvoice}
-        <button
-          onclick={resetDispatch}
-          disabled={isSavingDispatch}
-          class="p-2 bg-zinc-800/60 hover:bg-red-500/10 text-zinc-400 hover:text-red-400 border border-zinc-700/60 hover:border-red-500/20 rounded-xl transition-all"
-          title="Limpiar Formulario"
-        >
-          <Trash2 class="w-4 h-4" />
-        </button>
-      {/if}
     </div>
   </div>
-
-  <!-- Main Content Layout -->
-  {#if !selectedInvoice}
-    <!-- Empty State / Prompt to Import Invoice -->
-    <div class="flex flex-col items-center justify-center p-12 sm:p-16 bg-zinc-900/40 border border-zinc-800/80 rounded-2xl text-center shadow-lg backdrop-blur-sm">
-      <div class="w-20 h-20 rounded-2xl bg-zinc-800/80 border border-zinc-700/60 flex items-center justify-center text-zinc-500 mb-5 shadow-inner">
-        <Truck class="w-10 h-10 text-violet-400/80 stroke-[1.5]" />
+{:else}
+  <div class="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
+    <!-- TOP HEADER -->
+    <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div>
+        <h1 class="text-4xl font-black tracking-tight flex items-center gap-3">
+          <Truck size={40} class="text-brand-500" />
+          Despacho de Mercancía
+        </h1>
+        <p class="text-text-muted mt-2 text-lg">
+          Control y verificación de salida física de artículos desde Facturas de Venta.
+        </p>
       </div>
-      <h2 class="text-lg font-bold text-white mb-1.5">Ninguna Factura de Venta Seleccionada</h2>
-      <p class="text-xs text-zinc-400 max-w-md mb-6 leading-relaxed">
-        Para iniciar el despacho, haz clic en el botón inferior para buscar y seleccionar una Factura de Venta pendiente de entrega.
-      </p>
-      <button
-        onclick={openSearchModal}
-        class="flex items-center gap-2 px-5 py-2.5 bg-violet-600 hover:bg-violet-500 text-white rounded-xl text-xs font-semibold shadow-lg shadow-violet-600/30 hover:shadow-violet-600/50 active:scale-95 transition-all"
-      >
-        <Search class="w-4 h-4" />
-        <span>Buscar Facturas Pendientes</span>
-      </button>
-    </div>
-  {:else}
-    <!-- Active Dispatch Workspace -->
-    <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-      <!-- Left / Main Panel: Invoice Details & Items Table -->
-      <div class="lg:col-span-8 space-y-6">
-        <!-- Client & Invoice Info Card -->
-        <div class="bg-zinc-900/60 backdrop-blur-md rounded-2xl border border-zinc-800/80 p-5 shadow-xl">
-          <div class="flex flex-wrap items-center justify-between gap-3 border-b border-zinc-800/80 pb-4 mb-4">
-            <div class="flex items-center gap-3">
-              <div class="w-9 h-9 rounded-lg bg-violet-500/10 border border-violet-500/20 flex items-center justify-center text-violet-400 font-bold text-xs">
-                FACT
-              </div>
-              <div>
-                <div class="flex items-center gap-2">
-                  <span class="text-sm font-bold text-white">Factura N° {selectedInvoice.doc_num}</span>
-                  <span class="px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                    Pendiente Despacho
-                  </span>
-                </div>
-                <p class="text-xs text-zinc-400 mt-0.5">
-                  Emisión: {dayjs(selectedInvoice.fec_emis).format("DD/MM/YYYY")}
-                </p>
-              </div>
-            </div>
 
-            <button
-              onclick={openSearchModal}
-              class="px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white rounded-lg text-xs font-medium border border-zinc-700/60 transition-all flex items-center gap-1.5"
+      <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full md:w-auto">
+        <!-- Sede Selector -->
+        {#if data.branches && data.branches.length > 1}
+          <div class="w-full sm:w-56 relative group">
+            <Store
+              size={16}
+              class="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted group-focus-within:text-brand-500 transition-colors pointer-events-none"
+            />
+            <select
+              bind:value={filterSede}
+              onchange={handleBranchChange}
+              class="w-full h-14 pl-10 pr-10 bg-surface-soft border border-border-subtle rounded-2xl focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none transition-all font-medium text-sm appearance-none cursor-pointer text-text-base"
             >
-              <RefreshCw class="w-3 h-3 text-violet-400" />
-              <span>Cambiar Factura</span>
-            </button>
-          </div>
-
-          <!-- Client details grid -->
-          <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3.5 text-xs">
-            <div class="bg-zinc-800/40 p-3 rounded-xl border border-zinc-800/60">
-              <span class="text-[10px] uppercase font-semibold text-zinc-400 tracking-wider block mb-1">Cliente / Razón Social</span>
-              <p class="font-medium text-white truncate" title={selectedInvoice.cli_des}>{selectedInvoice.cli_des || "---"}</p>
-              <p class="text-[11px] text-zinc-400 mt-0.5">{selectedInvoice.co_cli} • {selectedInvoice.rif || "Sin RIF"}</p>
-            </div>
-
-            <div class="bg-zinc-800/40 p-3 rounded-xl border border-zinc-800/60">
-              <span class="text-[10px] uppercase font-semibold text-zinc-400 tracking-wider block mb-1">Dirección de Entrega</span>
-              <p class="font-medium text-zinc-300 truncate" title={selectedInvoice.cli_dir}>{selectedInvoice.cli_dir || "Dirección no especificada"}</p>
-              <p class="text-[11px] text-zinc-400 mt-0.5">Tel: {selectedInvoice.telefonos || "No registrado"}</p>
-            </div>
-
-            <div class="bg-zinc-800/40 p-3 rounded-xl border border-zinc-800/60 sm:col-span-2 md:col-span-1">
-              <span class="text-[10px] uppercase font-semibold text-zinc-400 tracking-wider block mb-1">Condición de Pago</span>
-              <p class="font-medium text-zinc-300 truncate">{selectedInvoice.cond_des || selectedInvoice.co_cond || "Contado"}</p>
-              <p class="text-[11px] text-zinc-400 mt-0.5">Moneda: {selectedInvoice.co_mone || "BS"}</p>
-            </div>
-          </div>
-        </div>
-
-        <!-- Line Items Table Card -->
-        <div class="bg-zinc-900/60 backdrop-blur-md rounded-2xl border border-zinc-800/80 overflow-hidden shadow-xl">
-          <div class="p-4 border-b border-zinc-800/80 flex flex-wrap items-center justify-between gap-3 bg-zinc-900/80">
-            <div class="flex items-center gap-2">
-              <Package class="w-4 h-4 text-violet-400" />
-              <h3 class="text-sm font-bold text-white">Artículos para Despacho</h3>
-              <span class="px-2 py-0.5 rounded-full text-xs font-semibold bg-violet-500/10 text-violet-400 border border-violet-500/20">
-                {dispatchLines.length} renglones
-              </span>
-            </div>
-
-            <div class="flex items-center gap-2">
-              <button
-                type="button"
-                onclick={() => toggleAllLines(true)}
-                class="px-2.5 py-1 bg-zinc-800 hover:bg-zinc-700 text-[11px] font-medium text-zinc-300 rounded-lg border border-zinc-700/60 transition-all"
-              >
-                Seleccionar Todo
-              </button>
-              <button
-                type="button"
-                onclick={() => toggleAllLines(false)}
-                class="px-2.5 py-1 bg-zinc-800 hover:bg-zinc-700 text-[11px] font-medium text-zinc-300 rounded-lg border border-zinc-700/60 transition-all"
-              >
-                Deseleccionar
-              </button>
-            </div>
-          </div>
-
-          <!-- Items Table -->
-          <div class="overflow-x-auto">
-            <table class="w-full text-left border-collapse text-xs">
-              <thead>
-                <tr class="border-b border-zinc-800 text-[11px] font-semibold text-zinc-400 bg-zinc-900/40 uppercase tracking-wider">
-                  <th class="py-3 px-3 w-10 text-center">Sel</th>
-                  <th class="py-3 px-3 min-w-[220px]">Artículo</th>
-                  <th class="py-3 px-3 min-w-[130px]">Almacén Salida</th>
-                  <th class="py-3 px-3 text-center w-24">Facturado</th>
-                  <th class="py-3 px-3 text-center w-24">Pendiente</th>
-                  <th class="py-3 px-3 text-center w-36">A Despachar</th>
-                </tr>
-              </thead>
-              <tbody class="divide-y divide-zinc-800/60">
-                {#each dispatchLines as line, index}
-                  <tr class="hover:bg-zinc-800/30 transition-colors {line.checked ? 'bg-violet-950/10' : 'opacity-60'}">
-                    <!-- Checkbox -->
-                    <td class="py-3 px-3 text-center">
-                      <input
-                        type="checkbox"
-                        aria-label={`Seleccionar artículo ${line.des_art || line.co_art}`}
-                        checked={line.checked}
-                        onchange={(e) => handleLineCheck(index, e.currentTarget.checked)}
-                        class="w-4 h-4 rounded bg-zinc-800 border-zinc-700 text-violet-600 focus:ring-violet-500/40 cursor-pointer"
-                      />
-                    </td>
-
-                    <!-- Article Info -->
-                    <td class="py-3 px-3">
-                      <div class="font-semibold text-white leading-snug">{line.des_art || line.co_art}</div>
-                      <div class="flex items-center gap-2 text-[11px] text-zinc-400 mt-0.5">
-                        <span class="font-mono text-violet-400/90">{line.co_art}</span>
-                        {#if line.referencia}
-                          <span>• Ref: {line.referencia}</span>
-                        {/if}
-                        {#if line.modelo}
-                          <span>• Mod: {line.modelo}</span>
-                        {/if}
-                        <span class="text-zinc-400">({line.unidad || line.co_uni})</span>
-                      </div>
-                    </td>
-
-                    <!-- Warehouse Selector -->
-                    <td class="py-3 px-3">
-                      <select
-                        aria-label="Almacén de salida para {line.des_art || line.co_art}"
-                        bind:value={line.co_alma}
-                        class="w-full px-2 py-1.5 bg-zinc-800 border border-zinc-700/80 rounded-lg text-xs text-white focus:outline-none focus:ring-1 focus:ring-violet-500/40"
-                      >
-                        {#each data.warehouses as wh}
-                          <option value={wh.co_alma}>{wh.des_alma || wh.co_alma}</option>
-                        {/each}
-                      </select>
-                    </td>
-
-                    <!-- Invoiced Qty -->
-                    <td class="py-3 px-3 text-center font-mono font-medium text-zinc-300">
-                      {line.cant_original}
-                    </td>
-
-                    <!-- Pending Qty -->
-                    <td class="py-3 px-3 text-center font-mono font-bold text-amber-400">
-                      {line.cant_pendiente}
-                    </td>
-
-                    <!-- Quantity to Dispatch Input -->
-                    <td class="py-3 px-3">
-                      <div class="flex items-center gap-1.5 justify-center">
-                        <input
-                          type="number"
-                          aria-label="Cantidad a despachar de {line.des_art || line.co_art}"
-                          min="0"
-                          max={line.cant_pendiente}
-                          step="any"
-                          value={line.cant_despachada}
-                          oninput={(e) => handleQuantityChange(index, Number(e.currentTarget.value))}
-                          class="w-20 px-2 py-1.5 bg-zinc-800 border border-zinc-700 focus:border-violet-500 rounded-lg text-center font-mono font-bold text-white text-xs focus:outline-none focus:ring-2 focus:ring-violet-500/40 transition-all"
-                        />
-                        <button
-                          type="button"
-                          onclick={() => setMaxQuantity(index)}
-                          class="px-2 py-1 bg-zinc-800 hover:bg-violet-600 hover:text-white text-[10px] font-bold text-zinc-400 rounded-md border border-zinc-700 transition-all"
-                          title="Despachar todo el pendiente"
-                        >
-                          MAX
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                {/each}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </div>
-
-      <!-- Right Panel: Summary, Observations & Action Button -->
-      <div class="lg:col-span-4 space-y-6">
-        <!-- Summary Card -->
-        <div class="bg-zinc-900/60 backdrop-blur-md rounded-2xl border border-zinc-800/80 p-5 shadow-xl space-y-5">
-          <div class="flex items-center gap-2.5 border-b border-zinc-800/80 pb-3.5">
-            <ClipboardList class="w-4 h-4 text-violet-400" />
-            <h3 class="text-sm font-bold text-white">Resumen de Despacho</h3>
-          </div>
-
-          <!-- Metrics -->
-          <div class="space-y-3 text-xs">
-            <div class="flex justify-between items-center py-1.5 border-b border-zinc-800/50">
-              <span class="text-zinc-400">Factura Origen:</span>
-              <span class="font-mono font-bold text-white">{selectedInvoice.doc_num}</span>
-            </div>
-            <div class="flex justify-between items-center py-1.5 border-b border-zinc-800/50">
-              <span class="text-zinc-400">Renglones a Despachar:</span>
-              <span class="font-mono font-bold text-violet-400">{totalLinesSelected} de {dispatchLines.length}</span>
-            </div>
-            <div class="flex justify-between items-center py-1.5 border-b border-zinc-800/50">
-              <span class="text-zinc-400">Total Unidades Facturadas:</span>
-              <span class="font-mono text-zinc-300">{totalUnitsInvoiced}</span>
-            </div>
-            <div class="flex justify-between items-center py-1.5 border-b border-zinc-800/50">
-              <span class="text-zinc-400">Total Unidades Pendientes:</span>
-              <span class="font-mono font-bold text-amber-400">{totalUnitsPending}</span>
-            </div>
-            <div class="flex justify-between items-center py-2 bg-violet-950/20 px-3 rounded-xl border border-violet-500/20 text-sm">
-              <span class="font-bold text-violet-300">Total Unidades a Despachar:</span>
-              <span class="font-mono font-extrabold text-white text-base">{totalUnitsToDispatch}</span>
-            </div>
-          </div>
-
-          <!-- Observations / Comments -->
-          <div class="space-y-1.5">
-            <label for="observations-field" class="text-xs font-semibold text-zinc-300 block">Observaciones / Comentario de Salida</label>
-            <textarea
-              id="observations-field"
-              bind:value={observations}
-              rows="3"
-              placeholder="Ej: Despachado por transporte X, conductor Y, precinto Z..."
-              class="w-full p-3 bg-zinc-800/80 border border-zinc-700/80 rounded-xl text-xs text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-violet-500/40 resize-none transition-all"
-            ></textarea>
-          </div>
-
-          <!-- Primary Save Action Button -->
-          <button
-            type="button"
-            onclick={handleSaveDispatch}
-            disabled={isSavingDispatch || totalLinesSelected === 0}
-            class="w-full py-3.5 bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-500 hover:to-purple-500 text-white font-bold rounded-xl text-sm shadow-lg shadow-violet-600/30 hover:shadow-violet-600/50 active:scale-[0.98] transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
-          >
-            {#if isSavingDispatch}
-              <Loader2 class="w-4 h-4 animate-spin" />
-              <span>Procesando Despacho...</span>
-            {:else}
-              <Send class="w-4 h-4" />
-              <span>Guardar y Procesar Despacho</span>
-            {/if}
-          </button>
-        </div>
-      </div>
-    </div>
-  {/if}
-</div>
-
-<!-- Modal: Search Pending Invoices -->
-{#if isModalOpen}
-  <div class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm" transition:fade={{ duration: 150 }}>
-    <div
-      class="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-3xl max-h-[85vh] flex flex-col shadow-2xl overflow-hidden"
-      transition:scale={{ duration: 150, start: 0.95 }}
-    >
-      <!-- Modal Header -->
-      <div class="p-5 border-b border-zinc-800 flex items-center justify-between bg-zinc-900/80">
-        <div class="flex items-center gap-3">
-          <div class="w-10 h-10 rounded-xl bg-violet-500/10 border border-violet-500/20 flex items-center justify-center text-violet-400">
-            <Search class="w-5 h-5" />
-          </div>
-          <div>
-            <h3 class="text-base font-bold text-white">Importar Factura de Venta Pendiente</h3>
-            <p class="text-xs text-zinc-400">Selecciona la factura para cargar los artículos a despachar</p>
-          </div>
-        </div>
-        <button
-          type="button"
-          onclick={() => isModalOpen = false}
-          class="p-2 text-zinc-400 hover:text-white rounded-xl hover:bg-zinc-800 transition-colors"
-        >
-          <X class="w-5 h-5" />
-        </button>
-      </div>
-
-      <!-- Search Input Bar -->
-      <div class="p-4 border-b border-zinc-800/80 bg-zinc-900/50">
-        <form onsubmit={(e) => { e.preventDefault(); searchPendingInvoices(); }} class="flex gap-2">
-          <div class="relative flex-1">
-            <Search class="w-4 h-4 text-zinc-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-            <input
-              type="text"
-              bind:value={invoiceSearchQuery}
-              placeholder="Buscar por N° factura, nombre de cliente o RIF..."
-              class="w-full pl-10 pr-4 py-2 bg-zinc-800/80 border border-zinc-700/80 rounded-xl text-xs text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-violet-500/40"
+              {#each data.branches as b}
+                <option value={b.id}>{b.name}</option>
+              {/each}
+            </select>
+            <ChevronDown
+              size={16}
+              class="absolute right-4 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none"
             />
           </div>
-          <button
-            type="submit"
-            disabled={isSearchingInvoices}
-            class="px-4 py-2 bg-violet-600 hover:bg-violet-500 text-white rounded-xl text-xs font-semibold transition-all flex items-center gap-1.5"
-          >
-            {#if isSearchingInvoices}
-              <Loader2 class="w-3.5 h-3.5 animate-spin" />
-            {:else}
-              <span>Buscar</span>
-            {/if}
-          </button>
-        </form>
-      </div>
-
-      <!-- Invoices List -->
-      <div class="flex-1 overflow-y-auto p-4 space-y-2.5 max-h-[50vh]">
-        {#if isSearchingInvoices}
-          <div class="flex flex-col items-center justify-center p-12 text-zinc-400 space-y-3">
-            <Loader2 class="w-8 h-8 animate-spin text-violet-400" />
-            <p class="text-xs">Consultando facturas pendientes en Profit Plus...</p>
-          </div>
-        {:else if pendingInvoicesList.length === 0}
-          <div class="flex flex-col items-center justify-center p-12 text-zinc-400 text-center">
-            <Package class="w-10 h-10 text-zinc-600 mb-2 stroke-[1.5]" />
-            <p class="text-sm font-semibold text-zinc-300">No se encontraron facturas con despacho pendiente</p>
-            <p class="text-xs text-zinc-400 mt-1 max-w-sm">Intenta con otro término de búsqueda o asegúrate de que la sede seleccionada tenga facturas activas.</p>
-          </div>
-        {:else}
-          {#each pendingInvoicesList as inv}
-            <button
-              type="button"
-              onclick={() => selectInvoice(inv)}
-              class="w-full text-left p-4 rounded-xl bg-zinc-800/40 hover:bg-zinc-800/80 border border-zinc-700/60 hover:border-violet-500/40 transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3 group"
-            >
-              <div class="space-y-1">
-                <div class="flex items-center gap-2.5">
-                  <span class="font-mono font-bold text-white text-sm group-hover:text-violet-300 transition-colors">
-                    N° {inv.doc_num}
-                  </span>
-                  <span class="text-xs text-zinc-400">
-                    {dayjs(inv.fec_emis).format("DD/MM/YYYY")}
-                  </span>
-                </div>
-                <div class="text-xs font-semibold text-zinc-200">{inv.cli_des}</div>
-                <div class="text-[11px] text-zinc-400">{inv.co_cli} • {inv.rif || "Sin RIF"}</div>
-              </div>
-
-              <div class="flex items-center gap-4 text-xs">
-                <div class="text-right">
-                  <div class="text-[11px] text-zinc-400">Pendiente:</div>
-                  <div class="font-mono font-bold text-amber-400 text-sm">{inv.cant_pendiente} arts</div>
-                </div>
-                <div class="w-8 h-8 rounded-lg bg-violet-600/10 group-hover:bg-violet-600 group-hover:text-white text-violet-400 flex items-center justify-center transition-all">
-                  <ArrowRight class="w-4 h-4" />
-                </div>
-              </div>
-            </button>
-          {/each}
         {/if}
-      </div>
 
-      <!-- Modal Footer -->
-      <div class="p-4 border-t border-zinc-800 bg-zinc-900/80 flex justify-end">
+        {#if !isEditing}
+          <button
+            onclick={openImportModal}
+            class="flex items-center justify-center gap-2 px-6 h-14 rounded-2xl bg-brand-500/10 hover:bg-brand-500/20 text-brand-400 border border-brand-500/30 transition-all font-bold active:scale-95 shadow-sm shrink-0 cursor-pointer w-full sm:w-auto"
+          >
+            <FileText size={18} />
+            Importar Factura
+          </button>
+        {/if}
+
         <button
-          type="button"
-          onclick={() => isModalOpen = false}
-          class="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white rounded-xl text-xs font-semibold transition-all"
+          onclick={() => {
+            const params = new URLSearchParams();
+            if (filterSede) params.set("branch_id", filterSede);
+            goto(`/dashboard/warehouse/dispatches/history?${params.toString()}`);
+          }}
+          class="flex items-center justify-center gap-2 px-6 h-14 rounded-2xl bg-surface-strong hover:bg-surface-base text-text-base border border-border-subtle transition-all font-bold active:scale-95 shadow-sm shrink-0 cursor-pointer w-full sm:w-auto"
         >
-          Cerrar
+          <Clock size={18} class="text-brand-400" />
+          Ver Historial
         </button>
       </div>
     </div>
+
+    {#if data.error}
+      <div class="glass border-red-500/20 p-6 rounded-3xl flex items-center gap-6 bg-red-500/5 shadow-xl shadow-red-500/10">
+        <div class="h-12 w-12 rounded-2xl bg-red-500/20 flex items-center justify-center text-red-500 shrink-0">
+          <AlertTriangle size={24} />
+        </div>
+        <div class="flex-1">
+          <h3 class="text-sm font-black text-red-500 uppercase tracking-widest mb-1">Restricción de Acceso</h3>
+          <p class="text-text-muted font-bold text-sm leading-relaxed">{data.error}</p>
+        </div>
+      </div>
+    {/if}
+
+    <div class="grid grid-cols-1 xl:grid-cols-3 gap-8">
+      <!-- LEFT/CENTER: CLIENT INFO & DISPATCH LINES -->
+      <div class="xl:col-span-2 space-y-6">
+        <!-- CLIENT & INVOICE INFO BOX -->
+        <div class="glass p-6 rounded-3xl border border-border-subtle shadow-xl space-y-4">
+          <h3 class="text-sm font-black uppercase tracking-widest text-text-muted flex items-center gap-2">
+            <Building size={16} />
+            Datos del Cliente y Factura
+          </h3>
+
+          {#if !selectedInvoice}
+            <div class="p-8 border border-dashed border-border-subtle rounded-2xl flex flex-col items-center justify-center text-center gap-2">
+              <User size={32} class="text-text-muted/30" />
+              <p class="text-xs text-text-muted font-bold">
+                No hay ninguna factura cargada. Haz clic en "Importar Factura" para iniciar el despacho.
+              </p>
+            </div>
+          {:else}
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4" in:slide>
+              <div class="md:col-span-2 space-y-1">
+                <span class="text-[9px] font-black uppercase tracking-widest text-text-muted">Cliente / Razón Social</span>
+                <p class="text-base font-black text-text-base truncate" title={selectedInvoice.cli_des}>
+                  {selectedInvoice.cli_des || selectedInvoice.co_cli}
+                </p>
+              </div>
+              <div class="space-y-1">
+                <span class="text-[9px] font-black uppercase tracking-widest text-text-muted">RIF / Código</span>
+                <p class="text-base font-bold font-mono text-text-base">
+                  {selectedInvoice.rif || selectedInvoice.co_cli}
+                </p>
+              </div>
+              <div class="md:col-span-2 space-y-1">
+                <span class="text-[9px] font-black uppercase tracking-widest text-text-muted">Dirección de Entrega</span>
+                <p class="text-xs text-text-muted font-bold leading-relaxed truncate" title={selectedInvoice.cli_dir}>
+                  {selectedInvoice.cli_dir || "Sin dirección registrada"}
+                </p>
+              </div>
+              <div class="space-y-1">
+                <span class="text-[9px] font-black uppercase tracking-widest text-text-muted">Teléfono</span>
+                <p class="text-xs text-text-muted font-bold font-mono">
+                  {selectedInvoice.telefonos || "---"}
+                </p>
+              </div>
+              <div class="md:col-span-3 grid grid-cols-1 md:grid-cols-3 gap-4 pt-2 border-t border-border-subtle/30">
+                <div class="space-y-1">
+                  <span class="text-[9px] font-black uppercase tracking-widest text-text-muted">Factura de Venta</span>
+                  <p class="text-xs font-bold font-mono text-brand-400">
+                    {selectedInvoice.doc_num}
+                  </p>
+                </div>
+                <div class="space-y-1">
+                  <span class="text-[9px] font-black uppercase tracking-widest text-text-muted">Almacén de Salida</span>
+                  <p class="text-xs font-bold text-emerald-400 flex items-center gap-1.5">
+                    <Warehouse size={13} />
+                    {defaultWarehouseName}
+                  </p>
+                </div>
+                <div class="space-y-1">
+                  <span class="text-[9px] font-black uppercase tracking-widest text-text-muted">Condición de Pago</span>
+                  <p class="text-xs font-bold text-text-base">
+                    {selectedInvoice.cond_des || selectedInvoice.co_cond || "CONTADO"}
+                  </p>
+                </div>
+              </div>
+            </div>
+          {/if}
+        </div>
+
+        <!-- ITEMS TABLE (PHYSICAL QUANTITIES ONLY) -->
+        <div class="glass border border-border-subtle rounded-3xl shadow-xl overflow-hidden">
+          <div class="p-4 md:p-6 border-b border-border-subtle bg-surface-soft/40 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4">
+            <!-- Search in lines -->
+            <div class="relative flex-1 max-w-xl">
+              <Search size={16} class="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none" />
+              <input
+                type="text"
+                bind:value={linesSearchTerm}
+                placeholder={dispatchLines.length > 0 ? `Buscar artículo en renglones (${dispatchLines.length})...` : "Buscar artículo en renglones..."}
+                disabled={dispatchLines.length === 0}
+                class="w-full h-12 pl-11 pr-10 rounded-2xl bg-surface-base border border-border-subtle focus:border-brand-500/50 outline-none text-xs font-bold text-text-base transition-all placeholder:text-text-muted disabled:opacity-40"
+              />
+              {#if linesSearchTerm}
+                <button
+                  type="button"
+                  onclick={() => (linesSearchTerm = "")}
+                  class="absolute right-3.5 top-1/2 -translate-y-1/2 text-text-muted hover:text-white transition-colors cursor-pointer"
+                  title="Limpiar búsqueda"
+                >
+                  <X size={14} />
+                </button>
+              {/if}
+            </div>
+
+            {#if selectedInvoice}
+              <div class="flex items-center gap-2 self-end sm:self-auto">
+                <button
+                  type="button"
+                  onclick={() => toggleAllLines(true)}
+                  class="px-3 py-2 rounded-xl bg-surface-strong hover:bg-surface-soft text-[11px] font-black text-text-muted hover:text-text-base transition-all border border-border-subtle cursor-pointer"
+                >
+                  Todos
+                </button>
+                <button
+                  type="button"
+                  onclick={() => toggleAllLines(false)}
+                  class="px-3 py-2 rounded-xl bg-surface-strong hover:bg-surface-soft text-[11px] font-black text-text-muted hover:text-text-base transition-all border border-border-subtle cursor-pointer"
+                >
+                  Ninguno
+                </button>
+              </div>
+            {/if}
+          </div>
+
+          {#if !selectedInvoice || dispatchLines.length === 0}
+            <div class="p-16 flex flex-col items-center justify-center text-center gap-3">
+              <Package size={48} class="text-text-muted/20" />
+              <p class="text-text-muted font-bold text-sm">
+                No hay artículos para mostrar. Importa una factura para comenzar.
+              </p>
+            </div>
+          {:else}
+            <div class="overflow-x-auto">
+              <table class="w-full text-left border-collapse text-xs">
+                <thead>
+                  <tr class="bg-surface-soft/60 border-b border-border-subtle text-text-muted font-black uppercase tracking-wider text-[10px]">
+                    <th class="py-4 px-4 w-12 text-center">Sel</th>
+                    <th class="py-4 px-4 min-w-[220px]">Artículo</th>
+                    <th class="py-4 px-4 min-w-[140px]">Almacén Salida</th>
+                    <th class="py-4 px-4 text-center w-24">Facturado</th>
+                    <th class="py-4 px-4 text-center w-24">Pendiente</th>
+                    <th class="py-4 px-4 text-center w-40">A Despachar</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-border-subtle/50 font-medium">
+                  {#each filteredDispatchLines as { line, originalIndex } (line.reng_num + line.co_art)}
+                    <tr class="hover:bg-surface-soft/30 transition-colors {line.checked ? '' : 'opacity-50'}">
+                      <!-- Checkbox -->
+                      <td class="py-3 px-4 text-center">
+                        <button
+                          type="button"
+                          onclick={() => {
+                            dispatchLines[originalIndex].checked = !dispatchLines[originalIndex].checked;
+                            if (dispatchLines[originalIndex].checked && Number(dispatchLines[originalIndex].cant_despachada) <= 0) {
+                              dispatchLines[originalIndex].cant_despachada = dispatchLines[originalIndex].cant_pendiente;
+                            }
+                          }}
+                          class="text-brand-500 hover:text-brand-400 transition-colors cursor-pointer"
+                        >
+                          {#if line.checked}
+                            <CheckSquare size={18} />
+                          {:else}
+                            <Square size={18} class="text-text-muted/40" />
+                          {/if}
+                        </button>
+                      </td>
+
+                      <!-- Article Info -->
+                      <td class="py-3 px-4">
+                        <div class="font-black text-text-base text-sm leading-snug">
+                          {line.art_des || line.co_art}
+                        </div>
+                        <div class="text-[11px] text-text-muted font-bold font-mono mt-0.5 flex items-center gap-2 flex-wrap">
+                          <span class="text-brand-400">{line.co_art}</span>
+                          {#if line.referencia}
+                            <span>• Ref: {line.referencia}</span>
+                          {/if}
+                          {#if line.modelo}
+                            <span>• Mod: {line.modelo}</span>
+                          {/if}
+                          <span class="text-text-muted/80">({line.unidad || line.co_uni || 'UNI'})</span>
+                        </div>
+                      </td>
+
+                      <!-- Warehouse -->
+                      <td class="py-3 px-4">
+                        <select
+                          bind:value={dispatchLines[originalIndex].co_alma}
+                          class="w-full bg-surface-soft border border-border-subtle px-2 py-1.5 rounded-xl text-xs font-bold text-text-base focus:border-brand-500/50 outline-none cursor-pointer"
+                        >
+                          {#each data.warehouses as wh}
+                            <option value={wh.co_alma}>{wh.co_alma} - {wh.des_alma || wh.co_alma}</option>
+                          {/each}
+                        </select>
+                      </td>
+
+                      <!-- Invoiced Qty -->
+                      <td class="py-3 px-4 text-center font-mono font-bold text-text-muted">
+                        {formatQuantity(line.cant_original)}
+                      </td>
+
+                      <!-- Pending Qty -->
+                      <td class="py-3 px-4 text-center font-mono font-black text-amber-400">
+                        {formatQuantity(line.cant_pendiente)}
+                      </td>
+
+                      <!-- Quantity to Dispatch Input -->
+                      <td class="py-3 px-4">
+                        <div class="flex items-center justify-center gap-1.5 bg-surface-soft p-1 rounded-2xl border border-border-subtle">
+                          <button
+                            type="button"
+                            onclick={() => updateDispatchedQty(originalIndex, Number(dispatchLines[originalIndex].cant_despachada || 0) - 1)}
+                            class="h-8 w-8 rounded-xl bg-surface-strong hover:bg-surface-soft text-text-base font-black flex items-center justify-center transition-all disabled:opacity-30 cursor-pointer"
+                            disabled={Number(dispatchLines[originalIndex].cant_despachada || 0) <= 0}
+                          >
+                            -
+                          </button>
+                          <input
+                            type="number"
+                            min="0"
+                            max={line.cant_pendiente || line.cant_original || 999999}
+                            step="any"
+                            value={dispatchLines[originalIndex].cant_despachada}
+                            oninput={(e) => updateDispatchedQty(originalIndex, parseFloat((e.currentTarget as HTMLInputElement).value) || 0)}
+                            class="w-16 bg-transparent text-center font-mono font-black text-sm text-text-base focus:outline-none"
+                          />
+                          <button
+                            type="button"
+                            onclick={() => updateDispatchedQty(originalIndex, Number(dispatchLines[originalIndex].cant_despachada || 0) + 1)}
+                            class="h-8 w-8 rounded-xl bg-surface-strong hover:bg-surface-soft text-text-base font-black flex items-center justify-center transition-all disabled:opacity-30 cursor-pointer"
+                            disabled={Number(dispatchLines[originalIndex].cant_despachada || 0) >= Number(line.cant_pendiente || line.cant_original || 999999)}
+                          >
+                            +
+                          </button>
+                          <button
+                            type="button"
+                            onclick={() => updateDispatchedQty(originalIndex, Number(line.cant_pendiente || 0))}
+                            class="px-2 py-1 bg-brand-500/10 hover:bg-brand-500/20 text-brand-400 rounded-lg text-[10px] font-black uppercase transition-all cursor-pointer"
+                            title="Despachar todo el saldo pendiente"
+                          >
+                            MAX
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  {/each}
+                </tbody>
+              </table>
+            </div>
+          {/if}
+        </div>
+      </div>
+
+      <!-- RIGHT COLUMN: PHYSICAL SUMMARY & SUBMIT -->
+      <div class="xl:col-span-1">
+        <div class="glass p-8 rounded-[32px] border border-border-subtle space-y-8 bg-brand-500/[0.03] backdrop-blur-3xl relative overflow-hidden flex flex-col sticky top-24 shadow-xl">
+          <div class="absolute -top-12 -right-12 w-48 h-48 bg-brand-500/10 rounded-full blur-[80px]"></div>
+
+          <div class="border-b border-border-subtle pb-6 relative z-10">
+            <h4 class="text-xs font-black uppercase tracking-[0.2em] text-text-muted flex items-center gap-2">
+              <Package size={16} class="text-brand-500" />
+              Resumen de Despacho
+            </h4>
+          </div>
+
+          <div class="space-y-6 relative z-10">
+            <!-- Renglones Seleccionados -->
+            <div class="flex justify-between items-center text-sm font-bold text-text-muted">
+              <span>Renglones a Despachar</span>
+              <span class="font-mono text-text-base font-black text-base">{totals.totalLinesCount} de {dispatchLines.length}</span>
+            </div>
+
+            <!-- Total Unidades Físicas (Destacado) -->
+            <div class="p-5 rounded-2xl bg-surface-soft/60 border border-border-subtle space-y-1">
+              <span class="text-[10px] font-black uppercase tracking-wider text-text-muted block">
+                Total Unidades Físicas
+              </span>
+              <div class="text-4xl font-black text-emerald-400 font-mono tracking-tight">
+                {formatQuantity(totals.totalUnitsCount)}
+              </div>
+            </div>
+
+            <!-- Observaciones -->
+            <div class="border-t border-border-subtle/50 pt-4 space-y-2">
+              <label for="observations" class="text-[10px] font-black uppercase tracking-wider text-text-muted block">
+                Observaciones / Comentario de Salida
+              </label>
+              <textarea
+                id="observations"
+                bind:value={observations}
+                rows="3"
+                placeholder="Ej: Despachado por transporte X, conductor Y, precinto Z..."
+                class="w-full bg-surface-soft border border-border-subtle px-4 py-3 rounded-2xl text-xs text-text-base placeholder-text-muted/50 focus:border-brand-500/50 focus:ring-0 focus:outline-hidden transition-all font-medium resize-none"
+              ></textarea>
+            </div>
+
+            <!-- Diagnóstico de Estado de Despacho -->
+            {#if totals.isFullyDispatched}
+              <div class="p-4 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 rounded-2xl text-xs flex gap-3 items-start" transition:slide>
+                <CheckCircle2 size={20} class="shrink-0 mt-0.5" />
+                <p class="font-bold text-xs leading-relaxed">
+                  Despacho Total: Todos los renglones se despachan al 100%. La factura quedará completamente entregada.
+                </p>
+              </div>
+            {:else if totals.isPartiallyDispatched}
+              <div class="p-4 bg-amber-500/10 border border-amber-500/20 text-amber-400 rounded-2xl text-xs flex gap-3 items-start" transition:slide>
+                <AlertTriangle size={20} class="shrink-0 mt-0.5" />
+                <p class="font-bold text-xs leading-relaxed">
+                  Despacho Parcial: Se entregan cantidades menores al saldo. La factura mantendrá ítems pendientes para futuros despachos.
+                </p>
+              </div>
+            {/if}
+          </div>
+
+          <!-- SAVE BUTTON -->
+          <button
+            onclick={submitDispatch}
+            disabled={dispatchLines.length === 0 || totals.totalUnitsCount === 0 || isSavingDispatch}
+            class="w-full h-20 bg-brand-600 hover:bg-brand-500 disabled:bg-surface-soft text-white disabled:text-text-muted/30 rounded-[24px] font-black text-lg uppercase tracking-[0.2em] transition-all active:scale-[0.97] disabled:opacity-50 disabled:pointer-events-none flex items-center justify-center gap-4 shadow-xl shadow-brand-500/10 hover:shadow-brand-500/30 group relative z-10 cursor-pointer"
+          >
+            {#if isSavingDispatch}
+              <RefreshCw size={24} class="animate-spin text-brand-400/40" />
+              <span class="animate-pulse">{isEditing ? "Actualizando..." : "Procesando..."}</span>
+            {:else}
+              <div class="bg-surface-strong/50 p-2.5 rounded-xl group-hover:scale-110 transition-transform">
+                <Check size={24} />
+              </div>
+              <span>{isEditing ? "Actualizar" : "Guardar"}</span>
+            {/if}
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+{/if}
+
+<!-- ========================================================================= -->
+<!-- MODAL: IMPORTAR FACTURA DE VENTA PENDIENTE -->
+<!-- ========================================================================= -->
+{#if showImportModal}
+  <div
+    class="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
+    in:fade
+  >
+    <!-- svelte-ignore a11y_click_events_have_key_events -->
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <div
+      class="fixed inset-0"
+      onclick={() => (showImportModal = false)}
+    ></div>
+
+    <div
+      class="w-full max-w-2xl bg-surface-base border border-border-subtle rounded-[32px] shadow-2xl overflow-hidden flex flex-col max-h-[80vh] relative z-10"
+      in:scale={{ duration: 200, start: 0.95 }}
+    >
+      <!-- Modal Header -->
+      <div class="p-8 border-b border-border-subtle flex justify-between items-center bg-surface-soft/50">
+        <div>
+          <h2 class="text-2xl font-black tracking-tight">Importar Factura de Venta</h2>
+          <p class="text-text-muted text-sm">
+            Selecciona una factura con saldo pendiente para despachar mercancía
+          </p>
+        </div>
+        <button
+          type="button"
+          onclick={() => (showImportModal = false)}
+          class="p-2 hover:bg-surface-strong rounded-full transition-colors cursor-pointer"
+        >
+          <X size={24} />
+        </button>
+      </div>
+
+      <!-- Modal Content -->
+      <div class="flex-1 overflow-y-auto p-6 space-y-6 no-scrollbar min-h-[300px] custom-scrollbar">
+        <!-- Search bar -->
+        <div class="relative">
+          <Search size={18} class="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted" />
+          <input
+            type="text"
+            placeholder="Buscar por nro. factura, RIF o nombre de cliente..."
+            bind:value={importSearchQuery}
+            oninput={handleSearchInput}
+            class="w-full bg-surface-soft border border-border-subtle pl-12 pr-4 py-3.5 rounded-2xl text-sm text-text-base placeholder-text-muted/50 focus:border-brand-500/50 focus:ring-0 focus:outline-hidden transition-all font-medium"
+          />
+          {#if isSearchingInvoices}
+            <RefreshCw size={16} class="animate-spin absolute right-4 top-1/2 -translate-y-1/2 text-brand-500" />
+          {/if}
+        </div>
+
+        <!-- Invoices List -->
+        <div class="space-y-3">
+          {#if isSearchingInvoices}
+            <div class="flex flex-col items-center justify-center py-20 gap-4">
+              <Loader2 size={40} class="animate-spin text-brand-500" />
+              <p class="text-text-muted font-bold animate-pulse">
+                Buscando facturas pendientes...
+              </p>
+            </div>
+          {:else if foundInvoices.length === 0}
+            <div class="flex flex-col items-center justify-center py-16 gap-3 text-text-muted opacity-60 bg-surface-base">
+              <FileText size={48} />
+              <p class="font-bold text-sm">No se encontraron facturas con despacho pendiente en esta sucursal</p>
+              <p class="text-xs text-text-muted/70 max-w-sm text-center">
+                Verifica haber seleccionado la sucursal correcta en el encabezado o que las facturas tengan saldo pendiente de entrega.
+              </p>
+            </div>
+          {:else}
+            {#each foundInvoices as inv (inv.doc_num + inv.sede_id)}
+              {@const isParcial = String(inv.status).trim() === '1'}
+              {@const pendingQty = Number(inv.cant_pendiente || 0)}
+
+              <ImportItemCard
+                docType="FACT"
+                docNum={inv.doc_num}
+                statusLabel={isParcial ? 'Parcial' : 'Sin Despachar'}
+                statusClass={isParcial ? 'bg-amber-500/10 text-amber-400 border-amber-500/20' : 'bg-brand-500/10 text-brand-400 border-brand-500/20'}
+                clientName={inv.cli_des || inv.co_cli}
+                clientRif={inv.rif || inv.co_cli}
+                dateEmis={dayjs(inv.fec_emis).format("DD/MM/YYYY")}
+                qtyLabel={`${formatQuantity(pendingQty)} un.`}
+                branchName={inv.sede_nombre || "N/A"}
+                onclick={() => selectInvoice(inv)}
+              />
+            {/each}
+          {/if}
+        </div>
+      </div>
+    </div>
+
+    {#if isLoadingInvoiceDetail}
+      <div
+        class="absolute inset-0 bg-surface-base/80 backdrop-blur-[2px] flex items-center justify-center z-[110]"
+        in:fade
+      >
+        <div class="flex flex-col items-center gap-4">
+          <div class="relative">
+            <Loader2 size={48} class="animate-spin text-brand-500" />
+            <Truck
+              size={20}
+              class="absolute top-1/2 left-1/2 -translate-y-1/2 -translate-x-1/2 text-brand-400"
+            />
+          </div>
+          <p class="font-black text-lg tracking-tight">
+            IMPORTANDO ARTÍCULOS DE FACTURA...
+          </p>
+        </div>
+      </div>
+    {/if}
   </div>
 {/if}
