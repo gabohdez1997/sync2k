@@ -53,6 +53,7 @@
   let selectedOrder = $state<any>(null);
   let receiptLines = $state<any[]>([]);
   let observations = $state("");
+  let nroFacturaProveedor = $state("");
   let isSavingReceipt = $state(false);
 
   // Edit Mode State
@@ -65,11 +66,12 @@
       isEditing = true;
       editingDocNum = p.doc_num;
 
-      const cleanComment = (p.comentario || "")
+      const cleanDescrip = (p.descrip || "")
         .replace(/\s*\|\s*EDITADO V[IÍ]A API/gi, "")
         .replace(/\s*\|\s*CREADO V[IÍ]A API/gi, "")
         .trim();
-      observations = cleanComment;
+      observations = cleanDescrip;
+      nroFacturaProveedor = p.nro_fact || "";
 
       selectedOrder = {
         doc_num: p.orden_compra || (p.renglones && p.renglones[0]?.num_doc) || p.n_control,
@@ -260,15 +262,7 @@
         const orderData = (result.data as any).order;
         selectedOrder = orderData;
         
-        // Limpiar comentarios de API
-        const cleanComment = (orderData.comentario || "")
-          .replace(/\s*\|\s*EDITADO V[IÍ]A API/gi, "")
-          .replace(/\s*\|\s*CREADO V[IÍ]A API/gi, "")
-          .trim();
-
-        observations = cleanComment
-          ? `OC ${orderData.doc_num} - ${cleanComment}`
-          : `Recepción de OC ${orderData.doc_num}`;
+        observations = "";
 
         // Inicializar renglones con cantidad recibida pre-llenada igual al saldo pendiente
         receiptLines = (orderData.renglones || [])
@@ -337,6 +331,11 @@
       return;
     }
 
+    if (!nroFacturaProveedor || !nroFacturaProveedor.trim()) {
+      toast.error("El N° de Factura / Guía del Proveedor (N° NDR) es obligatorio.");
+      return;
+    }
+
     const linesToProcess = receiptLines.filter((l) => l.checked && Number(l.cant_recibida) > 0);
 
     if (linesToProcess.length === 0) {
@@ -370,11 +369,11 @@
         tasa: activeTasa,
         showUSD: showUSD,
         doc_num_oc: selectedOrder.doc_num,
-        descrip: `RECEPCION OC ${selectedOrder.doc_num}`,
+        descrip: observations.trim() || `RECEPCION OC ${selectedOrder.doc_num}`,
         co_cond: selectedOrder.co_cond || "CONT",
-        n_control: selectedOrder.doc_num,
-        nro_fact: selectedOrder.nro_fact || selectedOrder.doc_num,
-        comentario: observations.trim(),
+        n_control: undefined,
+        nro_fact: nroFacturaProveedor.trim() || undefined,
+        comentario: `Recepción de OC ${selectedOrder.doc_num}`,
         co_alma_defecto: data.defaultWarehouse || "01",
         renglones: linesToProcess.map((l, i) => ({
           reng_num: i + 1,
@@ -425,6 +424,7 @@
     selectedOrder = null;
     receiptLines = [];
     observations = "";
+    nroFacturaProveedor = "";
     saveSuccess = false;
     generatedDocNum = "";
     linesSearchTerm = "";
@@ -818,6 +818,24 @@
               </div>
             </div>
 
+            <!-- N° Factura / Guía del Proveedor (N° NDR) -->
+            <div class="border-t border-border-subtle/50 pt-4 space-y-2">
+              <label for="nroFacturaProveedor" class="text-[10px] font-black uppercase tracking-wider text-text-muted flex items-center justify-between">
+                <span class="flex items-center gap-1.5 text-text-base">
+                  <FileText size={12} class="text-brand-500" />
+                  N° Factura / Guía Proveedor (N° NDR) <span class="text-red-500">*</span>
+                </span>
+                <span class="text-[9px] text-amber-600 dark:text-amber-400 font-bold uppercase tracking-wider">Obligatorio</span>
+              </label>
+              <input
+                id="nroFacturaProveedor"
+                type="text"
+                bind:value={nroFacturaProveedor}
+                placeholder="Ej. FACT-C-006240 o N° Guía..."
+                class="w-full bg-surface-soft border {(!nroFacturaProveedor || !nroFacturaProveedor.trim()) ? 'border-amber-500/40 focus:border-amber-500' : 'border-border-subtle focus:border-brand-500/50'} px-4 py-3 rounded-2xl text-xs text-text-base placeholder-text-muted/50 focus:ring-0 focus:outline-hidden transition-all font-mono font-bold"
+              />
+            </div>
+
             <!-- Observaciones -->
             <div class="border-t border-border-subtle/50 pt-4 space-y-2">
               <label for="observations" class="text-[10px] font-black uppercase tracking-wider text-text-muted block">
@@ -853,7 +871,7 @@
           <!-- SAVE BUTTON -->
           <button
             onclick={submitReceipt}
-            disabled={receiptLines.length === 0 || totals.totalUnitsCount === 0 || isSavingReceipt}
+            disabled={receiptLines.length === 0 || totals.totalUnitsCount === 0 || !nroFacturaProveedor || !nroFacturaProveedor.trim() || isSavingReceipt}
             class="w-full h-20 bg-brand-600 hover:bg-brand-500 disabled:bg-surface-soft text-white disabled:text-text-muted/30 rounded-[24px] font-black text-lg uppercase tracking-[0.2em] transition-all active:scale-[0.97] disabled:opacity-50 disabled:pointer-events-none flex items-center justify-center gap-4 shadow-xl shadow-brand-500/10 hover:shadow-brand-500/30 group relative z-10 cursor-pointer"
           >
             {#if isSavingReceipt}

@@ -21,7 +21,7 @@
         ? receipt.fec_us_mo
         : receipt?.fec_emis;
 
-    const cleanObs = String(receipt?.comentario || "")
+    const cleanObs = String(receipt?.descrip || receipt?.comentario || "")
         .replace(/\s*\|\s*EDITADO V[IÍ]A API/gi, "")
         .replace(/\s*\|\s*CREADO V[IÍ]A API/gi, "")
         .replace(/\s*\|\s*EDITADO VIA API/gi, "")
