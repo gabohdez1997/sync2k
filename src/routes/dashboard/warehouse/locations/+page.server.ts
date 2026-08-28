@@ -103,6 +103,7 @@ export const load: PageServerLoad = protectLoad('sec_articles', async ({ url, lo
 		const linea = (url.searchParams.get('linea') || '').trim();
 		const categoria = (url.searchParams.get('categoria') || '').trim();
 		const ubicacionId = (url.searchParams.get('co_ubicacion') || '').trim();
+		const co_alma = (url.searchParams.get('co_alma') || '').trim();
 
 		// ─── 3. LOAD CATALOGS IN PARALLEL ───────────────────────────────────────
 		let warehouseList: any[] = [];
@@ -145,6 +146,7 @@ export const load: PageServerLoad = protectLoad('sec_articles', async ({ url, lo
 		if (linea) params.set('linea', linea);
 		if (categoria) params.set('categoria', categoria);
 		if (ubicacionId) params.set('co_ubicacion', ubicacionId);
+		if (co_alma) params.set('co_alma', co_alma);
 
 		if (searchTerm) {
 			params.set('search', searchTerm);
@@ -175,6 +177,7 @@ export const load: PageServerLoad = protectLoad('sec_articles', async ({ url, lo
 			crud,
 			context: {
 				branchId,
+				selectedWarehouse: co_alma,
 				finalWarehouseIds,
 				lineas,
 				categorias,

@@ -152,17 +152,46 @@
 
   function getCardWarehouse(artCode: string, article: any): string {
     if (cardWarehouse[artCode] !== undefined) return cardWarehouse[artCode];
-    const firstLoc = article.ubicaciones?.[0] || article.existencia?.[0];
-    const defaultWh = firstLoc?.co_alma || firstLoc?.id || data.context?.warehouses?.[0]?.co_alma || data.context?.warehouses?.[0]?.id || "01";
+    if (selectedWarehouse) return selectedWarehouse;
+    const firstLoc = article.ubicaciones?.[0];
+    const defaultWh = firstLoc?.co_alma || data.context?.warehouses?.[0]?.co_alma || data.context?.warehouses?.[0]?.id || "01";
     return defaultWh;
   }
 
   function getCardLocations(artCode: string, article: any) {
     if (cardLocations[artCode]) return cardLocations[artCode];
+    const wh = getCardWarehouse(artCode, article);
+
+    if (article.ubicaciones_map && article.ubicaciones_map[wh]) {
+      const u = article.ubicaciones_map[wh];
+      return {
+        u1: u.co_ubicacion || "",
+        u2: u.co_ubicacion2 || "",
+        u3: u.co_ubicacion3 || "",
+      };
+    }
+
+    const found = (article.ubicaciones || []).find((u: any) => (u.co_alma || '').trim() === wh.trim());
+    if (found) {
+      return {
+        u1: found.co_ubicacion || "",
+        u2: found.co_ubicacion2 || "",
+        u3: found.co_ubicacion3 || "",
+      };
+    }
+
+    if (article.co_alma && article.co_alma.trim() === wh.trim()) {
+      return {
+        u1: article.co_ubicacion || "",
+        u2: article.co_ubicacion2 || "",
+        u3: article.co_ubicacion3 || "",
+      };
+    }
+
     return {
-      u1: article.co_ubicacion || "",
-      u2: article.co_ubicacion2 || "",
-      u3: article.co_ubicacion3 || "",
+      u1: "",
+      u2: "",
+      u3: "",
     };
   }
 
@@ -201,7 +230,33 @@
 
   async function onCardWarehouseChange(artCode: string, newAlma: string, article: any) {
     cardWarehouse = { ...cardWarehouse, [artCode]: newAlma };
-    if (!newAlma || !selectedBranch) return;
+    if (!newAlma) return;
+
+    if (article.ubicaciones_map && article.ubicaciones_map[newAlma] !== undefined) {
+      const u = article.ubicaciones_map[newAlma] || {};
+      const locObj = {
+        u1: u.co_ubicacion || "",
+        u2: u.co_ubicacion2 || "",
+        u3: u.co_ubicacion3 || "",
+      };
+      cardLocations = { ...cardLocations, [artCode]: locObj };
+      cardOriginalLocations = { ...cardOriginalLocations, [artCode]: { ...locObj, warehouse: newAlma } };
+      return;
+    }
+
+    const found = (article.ubicaciones || []).find((u: any) => (u.co_alma || '').trim() === newAlma.trim());
+    if (found) {
+      const locObj = {
+        u1: found.co_ubicacion || "",
+        u2: found.co_ubicacion2 || "",
+        u3: found.co_ubicacion3 || "",
+      };
+      cardLocations = { ...cardLocations, [artCode]: locObj };
+      cardOriginalLocations = { ...cardOriginalLocations, [artCode]: { ...locObj, warehouse: newAlma } };
+      return;
+    }
+
+    if (!selectedBranch) return;
 
     cardLoadingMap = { ...cardLoadingMap, [artCode]: true };
     try {
@@ -221,6 +276,13 @@
             u1: art.co_ubicacion || "",
             u2: art.co_ubicacion2 || "",
             u3: art.co_ubicacion3 || "",
+          };
+          if (!article.ubicaciones_map) article.ubicaciones_map = {};
+          article.ubicaciones_map[newAlma] = {
+            co_alma: newAlma,
+            co_ubicacion: locObj.u1,
+            co_ubicacion2: locObj.u2,
+            co_ubicacion3: locObj.u3,
           };
           cardLocations = {
             ...cardLocations,
@@ -286,9 +348,13 @@
 
       if (res.ok && result?.type !== 'failure') {
         toast.success(`Ubicaciones guardadas para ${artCode}`);
-        article.co_ubicacion = locs.u1;
-        article.co_ubicacion2 = locs.u2;
-        article.co_ubicacion3 = locs.u3;
+        if (!article.ubicaciones_map) article.ubicaciones_map = {};
+        article.ubicaciones_map[currentWh] = {
+          co_alma: currentWh,
+          co_ubicacion: locs.u1,
+          co_ubicacion2: locs.u2,
+          co_ubicacion3: locs.u3,
+        };
         cardOriginalLocations = {
           ...cardOriginalLocations,
           [artCode]: { ...locs, warehouse: currentWh },
@@ -306,12 +372,12 @@
   }
   let isSearching = $state(false);
 
+  let selectedWarehouse = $state($page.url.searchParams.get("co_alma") || "");
   let selectedLinea = $state($page.url.searchParams.get("linea") || "");
   let selectedCategoria = $state($page.url.searchParams.get("categoria") || "");
   let selectedUbicacion = $state(
     $page.url.searchParams.get("co_ubicacion") || "",
   );
-
 
   const filteredCategorias = $derived(
     !selectedLinea
@@ -324,6 +390,8 @@
   $effect(() => {
     selectedBranch =
       data.context?.branchId || $page.url.searchParams.get("branch_id") || "";
+    selectedWarehouse =
+      data.context?.selectedWarehouse || $page.url.searchParams.get("co_alma") || "";
     selectedLinea = $page.url.searchParams.get("linea") || "";
     selectedCategoria = $page.url.searchParams.get("categoria") || "";
     selectedUbicacion = $page.url.searchParams.get("co_ubicacion") || "";
@@ -331,8 +399,6 @@
 
   let showAll = $state($page.url.searchParams.get("show_all") === "true");
 
-  // Ya no necesitamos tasa en el estado global si viene en el artículo,
-  // pero mantendremos el toggle de USD/Bs.
   let showUSD = $state(true);
 
   function handleSearch(e?: Event) {
@@ -346,10 +412,15 @@
     }
 
     if (selectedBranch) {
-      // Usamos tanto branch_id como sede_id en los params de la vista por si acaso
       url.searchParams.set("branch_id", selectedBranch);
     } else {
       url.searchParams.delete("branch_id");
+    }
+
+    if (selectedWarehouse) {
+      url.searchParams.set("co_alma", selectedWarehouse);
+    } else {
+      url.searchParams.delete("co_alma");
     }
 
     if (selectedLinea) {
@@ -475,6 +546,21 @@
           placeholder="Sucursal..."
           allLabel="Todas las Sucursales"
           icon={Store}
+          class="w-full h-14"
+          onchange={() => handleSearch()}
+        />
+      </div>
+    {/if}
+
+    <!-- 2. Almacén (Depósito Profit) -->
+    {#if warehouseOptions.length > 0}
+      <div class="w-full">
+        <Combobox
+          options={warehouseOptions}
+          bind:value={selectedWarehouse}
+          placeholder="Almacén / Depósito..."
+          allLabel="Todos los Almacenes"
+          icon={Package}
           class="w-full h-14"
           onchange={() => handleSearch()}
         />
