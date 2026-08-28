@@ -8,9 +8,9 @@ export const load: PageServerLoad = protectLoad('rep_analisis_compras', async ({
     const profile = (locals as any).profile;
     if (!profile) throw new Error('Perfil no cargado.');
 
-    let startDate = url.searchParams.get('startDate');
-    let endDate = url.searchParams.get('endDate');
-    let branchId = url.searchParams.get('branch_id') || '';
+    let startDate = url.searchParams.get('startDate') || url.searchParams.get('desde') || url.searchParams.get('fec_emis_d') || url.searchParams.get('fec_d');
+    let endDate = url.searchParams.get('endDate') || url.searchParams.get('hasta') || url.searchParams.get('fec_emis_h') || url.searchParams.get('fec_h');
+    let branchId = url.searchParams.get('branch_id') || url.searchParams.get('sede_id') || url.searchParams.get('sede') || '';
 
     if (!startDate || !endDate) {
         const end = new Date();

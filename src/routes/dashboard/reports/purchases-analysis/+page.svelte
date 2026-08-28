@@ -67,6 +67,7 @@
     // Histórico por período
     let historyLoading = $state(false);
     let historyData = $state<any[]>([]);
+    let historyOrders = $state<any[]>([]);
     let historyTipoAgrupacion = $state<string>("mensual");
     let historyError = $state<string | null>(null);
     let historyChartCanvas = $state<HTMLCanvasElement | null>(null);
@@ -464,6 +465,7 @@
                 maxMonth: "",
                 totalDocs: 0,
                 totalRecep: 0,
+                totalOC: 0,
                 totalAent: 0,
                 totalAsal: 0,
                 latestStock: 0,
@@ -476,17 +478,20 @@
         let totalAsal = 0;
         let max = -Infinity;
         let min = Infinity;
+        let totalOC = 0;
         let maxMonth = "";
 
         historyData.forEach((h: any) => {
             const v = Number(h.cant_real_vendida) || 0;
             const d = Number(h.docs_exitosos) || 0;
             const r = Number(h.cant_recepcionada) || 0;
+            const oc = Number(h.cant_orden_compra) || 0;
             const aent = Number(h.cant_ajuste_entrada) || 0;
             const asal = Number(h.cant_ajuste_salida) || 0;
             total += v;
             totalDocs += d;
             totalRecep += r;
+            totalOC += oc;
             totalAent += aent;
             totalAsal += asal;
             if (v > max) {
@@ -507,6 +512,7 @@
             avg,
             totalDocs,
             totalRecep,
+            totalOC,
             totalAent,
             totalAsal,
             max: max === -Infinity ? 0 : max,
@@ -522,7 +528,7 @@
         if (endDate) params.set("endDate", endDate);
         if (selectedBranch && selectedBranch !== "default")
             params.set("branch_id", selectedBranch);
-        goto(`?${params.toString()}`);
+        goto(`?${params.toString()}`, { invalidateAll: true });
     }
 
     function getAlertBadge(item: any) {
@@ -591,10 +597,23 @@
             return;
         }
 
+        // Si el usuario modificó las fechas pero no ha recargado el reporte
+        if (startDate !== data.startDate || endDate !== data.endDate) {
+            toast.info("Actualizando datos para el rango de fechas seleccionado...");
+            applyFilters();
+            return;
+        }
+
         try {
+            const actualStart = data.startDate || startDate;
+            const actualEnd = data.endDate || endDate;
+            const diffDays = Math.max(1, dayjs(actualEnd).diff(dayjs(actualStart), "day") + 1);
+            // Cantidad de meses del rango especificado (días / 30.4375)
+            const numMeses = Math.max(0.01, diffDays / 30.4375);
+
             const headerRows = [
                 ["REPORTE DE ANÁLISIS DE COMPRAS E INVENTARIO (ABC / XYZ)"],
-                ["Período Analizado:", `${dayjs(startDate).format("DD/MM/YYYY")} al ${dayjs(endDate).format("DD/MM/YYYY")}`, "", "Días Hábiles:", data.businessDays || ""],
+                ["Período Analizado:", `${dayjs(actualStart).format("DD/MM/YYYY")} al ${dayjs(actualEnd).format("DD/MM/YYYY")}`, "", "Días Hábiles:", data.businessDays || ""],
                 ["Sucursal / Sede:", data.selectedBranch?.name || data.branchId || "Todas", "", "Fecha de Generación:", dayjs().format("DD/MM/YYYY HH:mm:ss")],
                 ["Total Artículos:", items.length, "", "Artículos en Alerta:", data.kpis?.articulos_en_alerta || 0],
                 [],
@@ -613,6 +632,7 @@
                     "VPD (Venta Prom. Diaria)",
                     "TR Promedio (Días)",
                     "Ventas Período",
+                    "Ventas por Mes",
                     "Cant. Documentos Exitosos",
                     "Cant. Máx en 1 Doc",
                     "Cant. Mín en 1 Doc",
@@ -627,6 +647,8 @@
                 const cantReponer = getCantReponer(item);
                 const costoInversion = Number((cantReponer * (item.costo_actual || 0)).toFixed(2));
                 const alertInfo = getAlertBadge(item);
+                const ventasPeriodo = Number(item.ventas_netas) || 0;
+                const ventasPorMes = Number((ventasPeriodo / numMeses).toFixed(2));
 
                 return [
                     item.co_art ? String(item.co_art).trim() : "",
@@ -642,7 +664,8 @@
                     Number(item.ss) || 0,
                     Number(Number(item.vpd || 0).toFixed(2)),
                     Number(Number(item.tr || 0).toFixed(1)),
-                    Number(item.ventas_netas) || 0,
+                    ventasPeriodo,
+                    ventasPorMes,
                     Number(item.cant_docs_exitosos) || 0,
                     Number(item.cant_max_doc) || 0,
                     Number(item.cant_min_doc) || 0,
@@ -670,7 +693,8 @@
                 { wch: 18 }, // SS
                 { wch: 22 }, // VPD
                 { wch: 18 }, // TR
-                { wch: 16 }, // Ventas
+                { wch: 16 }, // Ventas Período
+                { wch: 18 }, // Ventas por Mes
                 { wch: 24 }, // Cant. Docs Exitosos
                 { wch: 20 }, // Cant. Máx Doc
                 { wch: 20 }, // Cant. Mín Doc
@@ -683,7 +707,7 @@
             const wb = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(wb, ws, "Análisis de Compras");
 
-            const fileName = `Analisis_Compras_${dayjs(startDate).format("YYYYMMDD")}_al_${dayjs(endDate).format("YYYYMMDD")}.xlsx`;
+            const fileName = `Analisis_Compras_${dayjs(actualStart).format("YYYYMMDD")}_al_${dayjs(actualEnd).format("YYYYMMDD")}.xlsx`;
             XLSX.writeFile(wb, fileName);
             toast.success(`Reporte Excel exportado exitosamente (${items.length.toLocaleString()} artículos).`);
         } catch (e: any) {
@@ -756,6 +780,7 @@
         historyLoading = true;
         historyError = null;
         historyData = [];
+        historyOrders = [];
         try {
             const branchParam =
                 selectedBranch && selectedBranch !== "default"
@@ -768,6 +793,7 @@
             const json = await res.json();
             if (json.success && Array.isArray(json.history)) {
                 historyData = json.history;
+                historyOrders = json.ordenes_compra || [];
                 historyTipoAgrupacion = json.tipoAgrupacion || "mensual";
             } else {
                 historyError =
@@ -799,6 +825,7 @@
             historyChartInstance = null;
         }
         historyData = [];
+        historyOrders = [];
         historyError = null;
     }
 
@@ -915,6 +942,7 @@
         const realSoldData = historyData.map((h) => h.cant_real_vendida);
         const docsData = historyData.map((h) => h.docs_exitosos);
         const recepData = historyData.map((h) => h.cant_recepcionada);
+        const ocData = historyData.map((h) => h.cant_orden_compra || 0);
         const aentData = historyData.map((h) => h.cant_ajuste_entrada);
         const asalData = historyData.map((h) => h.cant_ajuste_salida);
 
@@ -979,6 +1007,22 @@
                         tension: 0.3,
                         fill: false,
                         pointBackgroundColor: "#a855f7",
+                        pointBorderColor: "#ffffff",
+                        pointBorderWidth: 2,
+                        pointRadius: 4.5,
+                        pointHoverRadius: 6.5,
+                    },
+                    {
+                        type: "line" as const,
+                        label: "Órdenes Compra Pendientes (OC)",
+                        data: ocData,
+                        borderColor: "#06b6d4",
+                        backgroundColor: "rgba(6, 182, 212, 0.08)",
+                        borderWidth: 2.2,
+                        borderDash: [4, 4],
+                        tension: 0.3,
+                        fill: false,
+                        pointBackgroundColor: "#06b6d4",
                         pointBorderColor: "#ffffff",
                         pointBorderWidth: 2,
                         pointRadius: 4.5,
@@ -1168,7 +1212,7 @@
                 <p
                     class="text-2xl sm:text-3xl font-black text-red-700 dark:text-red-400"
                 >
-                    {kpis.sin_stock.toLocaleString()}
+                    {(kpis.sin_stock || 0).toLocaleString()}
                 </p>
                 <p class="text-[10px] text-text-muted mt-1.5 line-clamp-1">
                     Inventario físico en cero.
@@ -1214,7 +1258,7 @@
                 <p
                     class="text-2xl sm:text-3xl font-black text-orange-700 dark:text-orange-400"
                 >
-                    {kpis.quebrado.toLocaleString()}
+                    {(kpis.quebrado || 0).toLocaleString()}
                 </p>
                 <p class="text-[10px] text-text-muted mt-1.5 line-clamp-1">
                     Stock bajo el Punto de Reorden.
@@ -1260,7 +1304,7 @@
                 <p
                     class="text-2xl sm:text-3xl font-black text-amber-800 dark:text-yellow-300"
                 >
-                    {kpis.ruptura.toLocaleString()}
+                    {(kpis.ruptura || 0).toLocaleString()}
                 </p>
                 <p class="text-[10px] text-text-muted mt-1.5 line-clamp-1">
                     Consumiendo colchón de seguridad.
@@ -1306,7 +1350,7 @@
                 <p
                     class="text-2xl sm:text-3xl font-black text-emerald-800 dark:text-emerald-300"
                 >
-                    {kpis.saludable.toLocaleString()}
+                    {(kpis.saludable || 0).toLocaleString()}
                 </p>
                 <p class="text-[10px] text-text-muted mt-1.5 line-clamp-1">
                     Inventario óptimo que cubre demanda.
@@ -1412,6 +1456,7 @@
                         allLabel="Predeterminada"
                         icon={Building}
                         buttonClass="h-12"
+                        onchange={applyFilters}
                     />
                 </div>
 
@@ -1426,6 +1471,7 @@
                         <input
                             type="date"
                             bind:value={startDate}
+                            onchange={applyFilters}
                             class="bg-transparent border-0 text-text-base focus:outline-none text-xs cursor-pointer font-bold w-full"
                         />
                         <span class="text-text-muted font-bold text-xs shrink-0"
@@ -1434,6 +1480,7 @@
                         <input
                             type="date"
                             bind:value={endDate}
+                            onchange={applyFilters}
                             class="bg-transparent border-0 text-text-base focus:outline-none text-xs cursor-pointer font-bold w-full"
                         />
                     </div>
@@ -1746,7 +1793,7 @@
                                 <td
                                     class="px-4 py-3.5 text-right font-mono text-xs font-bold text-text-base"
                                 >
-                                    {item.ventas_netas.toLocaleString()}
+                                    {(item.ventas_netas || 0).toLocaleString()}
                                 </td>
                                 <td class="px-4 py-3.5 text-right">
                                     {#if cantReponer > 0}
@@ -2122,251 +2169,320 @@
                             </div>
                         </div>
 
-                        <!-- CUADRO DE RECOMENDACIÓN DE COMPRA & INVERSIÓN SEGÚN ESCALA DE CALOR -->
-                        <div
-                            class="p-6 rounded-3xl border transition-all {isSinStock
-                                ? 'bg-red-500/10 dark:bg-red-500/15 border-red-500/30'
-                                : isQuebrado
-                                  ? 'bg-orange-500/10 dark:bg-orange-500/15 border-orange-500/30'
-                                  : isRuptura
-                                    ? 'bg-amber-500/15 dark:bg-yellow-500/15 border-amber-500/40 dark:border-yellow-500/30'
-                                    : 'bg-emerald-500/15 dark:bg-emerald-500/15 border-emerald-500/40 dark:border-emerald-500/30'}"
-                        >
+                        <!-- CUADRO DE RECOMENDACIÓN DE COMPRA (50%) & ÓRDENES DE COMPRA ACTIVAS / PENDIENTES (50%) -->
+                        <div class="grid grid-cols-1 lg:grid-cols-2 gap-5 items-stretch">
+                            <!-- 1. RECOMENDACIÓN DE COMPRA & INVERSIÓN (50%) -->
                             <div
-                                class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4"
-                            >
-                                <div
-                                    class="flex items-center gap-2.5 font-bold {isSinStock
-                                        ? 'text-red-700 dark:text-red-400'
-                                        : isQuebrado
-                                          ? 'text-orange-700 dark:text-orange-400'
-                                          : isRuptura
-                                            ? 'text-amber-800 dark:text-yellow-300'
-                                            : 'text-emerald-800 dark:text-emerald-300'}"
-                                >
-                                    {#if isSinStock}
-                                        <div
-                                            class="p-2 rounded-xl bg-red-500/15 text-red-700 dark:text-red-400 border border-red-500/20"
-                                        >
-                                            <AlertTriangle size={20} />
-                                        </div>
-                                        <div>
-                                            <h4
-                                                class="text-sm font-black uppercase tracking-wider"
-                                            >
-                                                Alerta Crítica: Sin Stock (SDR =
-                                                0)
-                                            </h4>
-                                            <p
-                                                class="text-xs text-text-muted font-normal"
-                                            >
-                                                Inventario en cero. Se requiere
-                                                reabastecimiento urgente para no
-                                                perder ventas.
-                                            </p>
-                                        </div>
-                                    {:else if isQuebrado}
-                                        <div
-                                            class="p-2 rounded-xl bg-orange-500/15 text-orange-700 dark:text-orange-400 border border-orange-500/20"
-                                        >
-                                            <AlertTriangle size={20} />
-                                        </div>
-                                        <div>
-                                            <h4
-                                                class="text-sm font-black uppercase tracking-wider"
-                                            >
-                                                Alerta: Stock Quebrado (SDR ≤
-                                                ROP)
-                                            </h4>
-                                            <p
-                                                class="text-xs text-text-muted font-normal"
-                                            >
-                                                El stock actual cayó por debajo
-                                                del Punto de Reorden. Emitir
-                                                orden de compra.
-                                            </p>
-                                        </div>
-                                    {:else if isRuptura}
-                                        <div
-                                            class="p-2 rounded-xl bg-amber-500/20 text-amber-800 dark:text-yellow-300 border border-amber-500/30"
-                                        >
-                                            <Activity size={20} />
-                                        </div>
-                                        <div>
-                                            <h4
-                                                class="text-sm font-black uppercase tracking-wider"
-                                            >
-                                                Alerta Preventiva: Ruptura
-                                                Inminente (SDR ≤ ROP+SS)
-                                            </h4>
-                                            <p
-                                                class="text-xs text-text-muted font-normal"
-                                            >
-                                                El inventario está consumiendo
-                                                el colchón de seguridad.
-                                            </p>
-                                        </div>
-                                    {:else}
-                                        <div
-                                            class="p-2 rounded-xl bg-emerald-500/20 text-emerald-800 dark:text-emerald-300 border border-emerald-500/30"
-                                        >
-                                            <ShieldCheck size={20} />
-                                        </div>
-                                        <div>
-                                            <h4
-                                                class="text-sm font-black uppercase tracking-wider"
-                                            >
-                                                Inventario Óptimo y Seguro
-                                            </h4>
-                                            <p
-                                                class="text-xs text-text-muted font-normal"
-                                            >
-                                                El stock actual cubre
-                                                holgadamente la demanda
-                                                esperada.
-                                            </p>
-                                        </div>
-                                    {/if}
-                                </div>
-                                <span
-                                    class="text-xs font-black px-3 py-1 rounded-xl uppercase tracking-wider self-start sm:self-auto {isSinStock
-                                        ? 'bg-red-500/15 text-red-800 dark:text-red-300 border border-red-500/30'
-                                        : isQuebrado
-                                          ? 'bg-orange-500/15 text-orange-800 dark:text-orange-300 border border-orange-500/30'
-                                          : isRuptura
-                                            ? 'bg-amber-500/20 text-amber-900 dark:text-yellow-300 border border-amber-500/40'
-                                            : 'bg-emerald-500/20 text-emerald-900 dark:text-emerald-300 border border-emerald-500/40'}"
-                                >
-                                    {isSinStock
-                                        ? "Reabastecimiento Urgente"
-                                        : isQuebrado
-                                          ? "Stock Quebrado"
-                                          : isRuptura
-                                            ? "Ruptura Inminente"
-                                            : "Stock Saludable"}
-                                </span>
-                            </div>
-
-                            <div
-                                class="grid grid-cols-1 sm:grid-cols-2 gap-4 my-4 p-4 rounded-2xl bg-surface-raised/80 border border-border-subtle/50"
+                                class="p-6 rounded-3xl border transition-all flex flex-col justify-between {isSinStock
+                                    ? 'bg-red-500/10 dark:bg-red-500/15 border-red-500/30'
+                                    : isQuebrado
+                                      ? 'bg-orange-500/10 dark:bg-orange-500/15 border-orange-500/30'
+                                      : isRuptura
+                                        ? 'bg-amber-500/15 dark:bg-yellow-500/15 border-amber-500/40 dark:border-yellow-500/30'
+                                        : 'bg-emerald-500/15 dark:bg-emerald-500/15 border-emerald-500/40 dark:border-emerald-500/30'}"
                             >
                                 <div>
-                                    <p
-                                        class="text-xs text-text-muted font-bold uppercase mb-1"
+                                    <div
+                                        class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4"
                                     >
-                                        Cantidad Sugerida a Pedir
-                                    </p>
-                                    <p
-                                        class="text-3xl font-black {cantReponer >
-                                        0
-                                            ? isSinStock
+                                        <div
+                                            class="flex items-center gap-2.5 font-bold {isSinStock
                                                 ? 'text-red-700 dark:text-red-400'
                                                 : isQuebrado
                                                   ? 'text-orange-700 dark:text-orange-400'
-                                                  : 'text-amber-800 dark:text-yellow-300'
-                                            : 'text-emerald-800 dark:text-emerald-400'}"
-                                    >
-                                        {formatUnitQty(
-                                            cantReponer,
-                                            selectedArticle.co_uni,
-                                        )}
-                                        <span
-                                            class="text-sm font-bold text-text-muted"
-                                            >{unitLabel}</span
+                                                  : isRuptura
+                                                    ? 'text-amber-800 dark:text-yellow-300'
+                                                    : 'text-emerald-800 dark:text-emerald-300'}"
                                         >
-                                    </p>
-                                </div>
-                                <div>
-                                    <p
-                                        class="text-xs text-text-muted font-bold uppercase mb-1"
+                                            {#if isSinStock}
+                                                <div
+                                                    class="p-2 rounded-xl bg-red-500/15 text-red-700 dark:text-red-400 border border-red-500/20"
+                                                >
+                                                    <AlertTriangle size={20} />
+                                                </div>
+                                                <div>
+                                                    <h4
+                                                        class="text-sm font-black uppercase tracking-wider"
+                                                    >
+                                                        Alerta Crítica: Sin Stock (SDR =
+                                                        0)
+                                                    </h4>
+                                                    <p
+                                                        class="text-xs text-text-muted font-normal"
+                                                    >
+                                                        Inventario en cero. Se requiere
+                                                        reabastecimiento urgente.
+                                                    </p>
+                                                </div>
+                                            {:else if isQuebrado}
+                                                <div
+                                                    class="p-2 rounded-xl bg-orange-500/15 text-orange-700 dark:text-orange-400 border border-orange-500/20"
+                                                >
+                                                    <AlertTriangle size={20} />
+                                                </div>
+                                                <div>
+                                                    <h4
+                                                        class="text-sm font-black uppercase tracking-wider"
+                                                    >
+                                                        Alerta: Stock Quebrado (SDR ≤
+                                                        ROP)
+                                                    </h4>
+                                                    <p
+                                                        class="text-xs text-text-muted font-normal"
+                                                    >
+                                                        Bajo el Punto de Reorden. Emitir orden.
+                                                    </p>
+                                                </div>
+                                            {:else if isRuptura}
+                                                <div
+                                                    class="p-2 rounded-xl bg-amber-500/20 text-amber-800 dark:text-yellow-300 border border-amber-500/30"
+                                                >
+                                                    <Activity size={20} />
+                                                </div>
+                                                <div>
+                                                    <h4
+                                                        class="text-sm font-black uppercase tracking-wider"
+                                                    >
+                                                        Alerta Preventiva: Ruptura Inminente
+                                                    </h4>
+                                                    <p
+                                                        class="text-xs text-text-muted font-normal"
+                                                    >
+                                                        Consumiendo el colchón de seguridad.
+                                                    </p>
+                                                </div>
+                                            {:else}
+                                                <div
+                                                    class="p-2 rounded-xl bg-emerald-500/20 text-emerald-800 dark:text-emerald-300 border border-emerald-500/30"
+                                                >
+                                                    <ShieldCheck size={20} />
+                                                </div>
+                                                <div>
+                                                    <h4
+                                                        class="text-sm font-black uppercase tracking-wider"
+                                                    >
+                                                        Inventario Óptimo y Seguro
+                                                    </h4>
+                                                    <p
+                                                        class="text-xs text-text-muted font-normal"
+                                                    >
+                                                        Cubre la demanda esperada.
+                                                    </p>
+                                                </div>
+                                            {/if}
+                                        </div>
+                                        <span
+                                            class="text-[11px] font-black px-2.5 py-1 rounded-xl uppercase tracking-wider self-start sm:self-auto {isSinStock
+                                                ? 'bg-red-500/15 text-red-800 dark:text-red-300 border border-red-500/30'
+                                                : isQuebrado
+                                                  ? 'bg-orange-500/15 text-orange-800 dark:text-orange-300 border border-orange-500/30'
+                                                  : isRuptura
+                                                    ? 'bg-amber-500/20 text-amber-900 dark:text-yellow-300 border border-amber-500/40'
+                                                    : 'bg-emerald-500/20 text-emerald-900 dark:text-emerald-300 border border-emerald-500/40'}"
+                                        >
+                                            {isSinStock
+                                                ? "Reabastecimiento Urgente"
+                                                : isQuebrado
+                                                  ? "Stock Quebrado"
+                                                  : isRuptura
+                                                    ? "Ruptura Inminente"
+                                                    : "Stock Saludable"}
+                                        </span>
+                                    </div>
+
+                                    <div
+                                        class="grid grid-cols-1 sm:grid-cols-2 gap-4 my-4 p-4 rounded-2xl bg-surface-raised/80 border border-border-subtle/50"
                                     >
-                                        Inversión Estimada Total
-                                    </p>
-                                    <p
-                                        class="text-3xl font-black text-text-base"
-                                    >
-                                        {formatCurrency(costoInversion)}
-                                    </p>
+                                        <div>
+                                            <p
+                                                class="text-[11px] text-text-muted font-bold uppercase mb-1"
+                                            >
+                                                Cantidad Sugerida a Pedir
+                                            </p>
+                                            <p
+                                                class="text-2xl sm:text-3xl font-black {cantReponer >
+                                                0
+                                                    ? isSinStock
+                                                        ? 'text-red-700 dark:text-red-400'
+                                                        : isQuebrado
+                                                          ? 'text-orange-700 dark:text-orange-400'
+                                                          : 'text-amber-800 dark:text-yellow-300'
+                                                    : 'text-emerald-800 dark:text-emerald-400'}"
+                                            >
+                                                {formatUnitQty(
+                                                    cantReponer,
+                                                    selectedArticle.co_uni,
+                                                )}
+                                                <span
+                                                    class="text-sm font-bold text-text-muted"
+                                                    >{unitLabel}</span
+                                                >
+                                            </p>
+                                        </div>
+                                        <div>
+                                            <p
+                                                class="text-[11px] text-text-muted font-bold uppercase mb-1"
+                                            >
+                                                Inversión Estimada Total
+                                            </p>
+                                            <p
+                                                class="text-2xl sm:text-3xl font-black text-text-base"
+                                            >
+                                                {formatCurrency(costoInversion)}
+                                            </p>
+                                        </div>
+                                    </div>
                                 </div>
+
+                                <p class="text-xs text-text-muted leading-relaxed mt-2">
+                                    {#if cantReponer > 0}
+                                        {#if isSinStock}
+                                            El inventario actual es <b
+                                                >0 {unitLabel}</b
+                                            >
+                                            a pesar de registrar una venta diaria
+                                            promedio de
+                                            <b
+                                                >{selectedArticle.vpd.toFixed(2)}
+                                                {unitLabel}/día</b
+                                            >. Pedir
+                                            <b
+                                                >{formatUnitQty(
+                                                    cantReponer,
+                                                    selectedArticle,
+                                                )}
+                                                {unitLabel}</b
+                                            >
+                                            cubrirá la demanda proyectada de
+                                            <b>{demandaTR} {unitLabel}</b>
+                                            durante los {selectedArticle.tr.toFixed(
+                                                1,
+                                            )} días de reposición.
+                                        {:else}
+                                            Pedir <b
+                                                >{formatUnitQty(
+                                                    cantReponer,
+                                                    selectedArticle,
+                                                )}
+                                                {unitLabel}</b
+                                            >
+                                            cubrirá los
+                                            <b>{demandaTR} {unitLabel}</b>
+                                            de demanda proyectada durante reposición ({selectedArticle.tr.toFixed(
+                                                1,
+                                            )} días) y mantendrá el colchón
+                                            de seguridad (<i>SS</i>: <b
+                                                >{formatUnitQty(
+                                                    selectedArticle.ss,
+                                                    selectedArticle,
+                                                )}
+                                                {unitLabel}</b
+                                            >).
+                                        {/if}
+                                    {:else}
+                                        El stock actual ({formatUnitQty(
+                                            selectedArticle.sdr,
+                                            selectedArticle,
+                                        )}
+                                        {unitLabel}) cubre holgadamente el Punto de
+                                        Reorden ({formatUnitQty(
+                                            selectedArticle.rop,
+                                            selectedArticle,
+                                        )}
+                                        {unitLabel}) y el colchón de seguridad. No se requiere pedido.
+                                    {/if}
+                                </p>
                             </div>
 
-                            <p class="text-xs text-text-muted leading-relaxed">
-                                {#if cantReponer > 0}
-                                    {#if isSinStock}
-                                        El inventario actual es <b
-                                            >0 {unitLabel}</b
-                                        >
-                                        a pesar de registrar una venta diaria
-                                        promedio de
-                                        <b
-                                            >{selectedArticle.vpd.toFixed(2)}
-                                            {unitLabel}/día</b
-                                        >. Pedir
-                                        <b
-                                            >{formatUnitQty(
-                                                cantReponer,
-                                                selectedArticle,
-                                            )}
-                                            {unitLabel}</b
-                                        >
-                                        ({isFrac
-                                            ? "fraccionable por unidad " +
-                                              unitLabel
-                                            : "mínimo indivisible por unidad " +
-                                              unitLabel}) cubrirá la demanda
-                                        proyectada de
-                                        <b>{demandaTR} {unitLabel}</b>
-                                        durante los {selectedArticle.tr.toFixed(
-                                            1,
-                                        )} días de reposición y evitará pérdidas
-                                        de ventas.
+                            <!-- 2. CARD DE ÓRDENES DE COMPRA PENDIENTES / EN TRÁNSITO (50%) -->
+                            <div class="p-6 rounded-3xl bg-surface-base border border-border-subtle flex flex-col justify-between shadow-sm">
+                                <div class="space-y-4">
+                                    <div class="flex items-center justify-between gap-3 pb-3 border-b border-border-subtle">
+                                        <div class="flex items-center gap-2.5">
+                                            <div class="p-2 rounded-xl bg-cyan-500/15 text-cyan-700 dark:text-cyan-400 border border-cyan-500/20">
+                                                <ShoppingCart size={18} />
+                                            </div>
+                                            <div>
+                                                <h4 class="text-sm font-black tracking-tight text-text-base">
+                                                    Órdenes de Compra Pendientes
+                                                </h4>
+                                                <p class="text-[11px] text-text-muted">
+                                                    Mercancía en tránsito activa por llegar
+                                                </p>
+                                            </div>
+                                        </div>
+                                        <span class="text-xs font-black px-2.5 py-1 rounded-xl bg-cyan-500/10 text-cyan-700 dark:text-cyan-400 border border-cyan-500/20">
+                                            {(historyOrders || []).reduce((acc, o) => acc + (Number(o?.cant_pendiente) || 0), 0).toLocaleString()} {unitLabel} por llegar
+                                        </span>
+                                    </div>
+
+                                    <!-- LISTADO DE ÓRDENES -->
+                                    {#if historyLoading}
+                                        <div class="py-10 flex flex-col items-center justify-center gap-2 text-text-muted">
+                                            <RefreshCw size={20} class="animate-spin text-brand-500" />
+                                            <p class="text-xs font-bold">Consultando órdenes activas...</p>
+                                        </div>
+                                    {:else if !historyOrders || historyOrders.length === 0}
+                                        <div class="py-10 flex flex-col items-center justify-center text-center gap-2 text-text-muted/60">
+                                            <Package size={32} class="stroke-1 text-text-muted/40" />
+                                            <p class="text-xs font-bold text-text-muted">No hay órdenes de compra activas con unidades pendientes.</p>
+                                        </div>
                                     {:else}
-                                        Pedir <b
-                                            >{formatUnitQty(
-                                                cantReponer,
-                                                selectedArticle,
-                                            )}
-                                            {unitLabel}</b
-                                        >
-                                        cubrirá los
-                                        <b>{demandaTR} {unitLabel}</b>
-                                        de demanda proyectada durante el tiempo
-                                        de reposición del proveedor ({selectedArticle.tr.toFixed(
-                                            1,
-                                        )} días) y garantizará mantener el colchón
-                                        de seguridad de
-                                        <b
-                                            >{formatUnitQty(
-                                                selectedArticle.ss,
-                                                selectedArticle,
-                                            )}
-                                            {unitLabel}</b
-                                        >
-                                        (<i>SS</i>).
+                                        <div class="overflow-y-auto max-h-[195px] custom-scrollbar pr-1 space-y-2.5">
+                                            {#each historyOrders as oc}
+                                                <div class="p-3 rounded-2xl bg-surface-raised border border-border-subtle flex items-center justify-between gap-3 hover:border-cyan-500/30 transition-all">
+                                                    <div class="min-w-0 flex-1">
+                                                        <div class="flex items-center gap-2 mb-0.5">
+                                                            <span class="font-black text-xs text-text-base font-mono">
+                                                                #{oc.doc_num}
+                                                            </span>
+                                                            <span class="text-[10px] font-bold px-2 py-0.5 rounded-full {oc.status === '0' ? 'bg-amber-500/15 text-amber-800 dark:text-yellow-300 border border-amber-500/30' : 'bg-blue-500/15 text-blue-800 dark:text-blue-300 border border-blue-500/30'}">
+                                                                {oc.status_des}
+                                                            </span>
+                                                        </div>
+                                                        <p class="text-xs text-text-muted truncate font-medium">
+                                                            {oc.prov_des}
+                                                        </p>
+                                                        <p class="text-[10px] text-text-muted/70 mt-0.5 flex items-center gap-1">
+                                                            <Calendar size={11} />
+                                                            {dayjs(oc.fec_emis).format("DD/MM/YYYY")}
+                                                            {#if oc.fec_venc}
+                                                                • Vence: {dayjs(oc.fec_venc).format("DD/MM/YYYY")}
+                                                            {/if}
+                                                        </p>
+                                                    </div>
+                                                    <div class="text-right shrink-0">
+                                                        <span class="text-[10px] font-bold uppercase text-text-muted block">
+                                                            Pendiente
+                                                        </span>
+                                                        <span class="text-base font-black text-cyan-700 dark:text-cyan-400">
+                                                            {formatUnitQty(oc.cant_pendiente, selectedArticle.co_uni)}
+                                                        </span>
+                                                        <span class="text-[11px] font-bold text-text-muted ml-0.5">
+                                                            {unitLabel}
+                                                        </span>
+                                                        {#if oc.cant_total > oc.cant_pendiente}
+                                                            <span class="text-[10px] text-text-muted block">
+                                                                (de {formatUnitQty(oc.cant_total, selectedArticle.co_uni)})
+                                                            </span>
+                                                        {/if}
+                                                    </div>
+                                                </div>
+                                            {/each}
+                                        </div>
                                     {/if}
-                                {:else}
-                                    El stock actual ({formatUnitQty(
-                                        selectedArticle.sdr,
-                                        selectedArticle,
-                                    )}
-                                    {unitLabel}) cubre holgadamente el Punto de
-                                    Reorden ({formatUnitQty(
-                                        selectedArticle.rop,
-                                        selectedArticle,
-                                    )}
-                                    {unitLabel}) y el colchón de seguridad ({formatUnitQty(
-                                        selectedArticle.ss,
-                                        selectedArticle,
-                                    )}
-                                    {unitLabel}). No se requiere emitir pedido
-                                    en este momento.
-                                {/if}
-                            </p>
+                                </div>
+
+                                <div class="mt-4 pt-3 border-t border-border-subtle flex items-center justify-between text-xs text-text-muted">
+                                    <span>Total Órdenes: <b class="text-text-base">{(historyOrders || []).length}</b></span>
+                                    <span>Total en Tránsito: <b class="text-cyan-700 dark:text-cyan-400">{formatUnitQty((historyOrders || []).reduce((acc, o) => acc + (Number(o?.cant_pendiente) || 0), 0), selectedArticle.co_uni)} {unitLabel}</b></span>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
 
-                <!-- SECCIÓN 2: HISTÓRICO DE VENTAS, RECEPCIONES, AJUSTES, STOCK INICIAL Y DOCUMENTOS -->
+                <!-- SECCIÓN 2: HISTÓRICO DE VENTAS, RECEPCIONES, ÓRDENES DE COMPRA, AJUSTES, STOCK INICIAL Y DOCUMENTOS -->
                 <div
                     class="bg-surface-base border border-border-subtle rounded-3xl p-6 sm:p-8 space-y-6 shadow-sm"
                 >
@@ -2380,13 +2496,14 @@
                                     class="text-lg font-black text-text-base tracking-tight"
                                 >
                                     Histórico de Ventas, Recepción de Compras,
-                                    Ajustes, Stock Inicial y Documentos ({historyTipoAgrupacion === 'diario' ? 'Diario' : historyTipoAgrupacion === 'semanal' ? 'Semanal' : 'Mensual'})
+                                    Órdenes de Compra, Ajustes, Stock Inicial y Documentos ({historyTipoAgrupacion === 'diario' ? 'Diario' : historyTipoAgrupacion === 'semanal' ? 'Semanal' : 'Mensual'})
                                 </h3>
                             </div>
                             <p class="text-xs text-text-muted">
                                 Evolución {historyTipoAgrupacion === 'diario' ? 'diaria' : historyTipoAgrupacion === 'semanal' ? 'semanal' : 'mensual'} de <b class="text-emerald-500"
                                     >Ventas</b
                                 >, <b class="text-purple-500">Recepciones</b>,
+                                <b class="text-cyan-500">Órdenes Pendientes</b>,
                                 <b class="text-orange-500">Ajustes Entrada</b>,
                                 <b class="text-red-500">Ajustes Salida</b>,
                                 <b class="text-blue-500">Stock Inicial</b>
@@ -2406,7 +2523,7 @@
                                 <span
                                     class="text-xs font-black text-emerald-500"
                                 >
-                                    {historySummary.total.toLocaleString()}
+                                    {(historySummary.total || 0).toLocaleString()}
                                 </span>
                             </div>
                             <div
@@ -2416,7 +2533,17 @@
                                     >Recep:</span
                                 >
                                 <span class="text-xs font-black">
-                                    {historySummary.totalRecep.toLocaleString()}
+                                    {(historySummary.totalRecep || 0).toLocaleString()}
+                                </span>
+                            </div>
+                            <div
+                                class="px-3 py-1 rounded-2xl bg-cyan-500/10 border border-cyan-500/20 flex items-center gap-1.5 text-cyan-700 dark:text-cyan-400"
+                            >
+                                <span class="text-[10px] font-bold uppercase"
+                                    >OC Pend:</span
+                                >
+                                <span class="text-xs font-black">
+                                    {(historySummary.totalOC || 0).toLocaleString()}
                                 </span>
                             </div>
                             <div
@@ -2426,7 +2553,7 @@
                                     >A.Ent:</span
                                 >
                                 <span class="text-xs font-black">
-                                    {historySummary.totalAent.toLocaleString()}
+                                    {(historySummary.totalAent || 0).toLocaleString()}
                                 </span>
                             </div>
                             <div
@@ -2436,7 +2563,7 @@
                                     >A.Sal:</span
                                 >
                                 <span class="text-xs font-black">
-                                    {historySummary.totalAsal.toLocaleString()}
+                                    {(historySummary.totalAsal || 0).toLocaleString()}
                                 </span>
                             </div>
                             <div
@@ -2447,7 +2574,7 @@
                                     >Docs:</span
                                 >
                                 <span class="text-xs font-black">
-                                    {historySummary.totalDocs.toLocaleString()}
+                                    {(historySummary.totalDocs || 0).toLocaleString()}
                                 </span>
                             </div>
                             {#if historySummary.maxMonth}
@@ -2460,7 +2587,7 @@
                                         >Pico:</span
                                     >
                                     <span class="text-xs font-black">
-                                        {historySummary.max.toLocaleString()} ({historySummary.maxMonth})
+                                        {(historySummary.max || 0).toLocaleString()} ({historySummary.maxMonth})
                                     </span>
                                 </div>
                             {/if}
@@ -2560,7 +2687,7 @@
                                                         >Stk :</span
                                                     >
                                                     <span
-                                                        >{m.stock_inicial.toLocaleString()}</span
+                                                        >{(m.stock_inicial || 0).toLocaleString()}</span
                                                     >
                                                 </div>
                                                 <div
@@ -2572,7 +2699,7 @@
                                                         >Vta :</span
                                                     >
                                                     <span
-                                                        >{m.cant_real_vendida.toLocaleString()}</span
+                                                        >{(m.cant_real_vendida || 0).toLocaleString()}</span
                                                     >
                                                 </div>
                                                 <div
@@ -2587,7 +2714,7 @@
                                                         >Docs :</span
                                                     >
                                                     <span
-                                                        >{m.docs_exitosos.toLocaleString()}</span
+                                                        >{(m.docs_exitosos || 0).toLocaleString()}</span
                                                     >
                                                 </div>
                                                 <div
@@ -2602,7 +2729,22 @@
                                                         >Rec :</span
                                                     >
                                                     <span
-                                                        >{m.cant_recepcionada.toLocaleString()}</span
+                                                        >{(m.cant_recepcionada || 0).toLocaleString()}</span
+                                                    >
+                                                </div>
+                                                <div
+                                                    class="flex items-center justify-between gap-1 {m.cant_orden_compra >
+                                                    0
+                                                        ? 'text-cyan-600 dark:text-cyan-400 font-bold'
+                                                        : 'text-text-muted/60'}"
+                                                    title="Órdenes de Compra Pendientes"
+                                                >
+                                                    <span
+                                                        class="text-text-muted font-semibold text-[9px]"
+                                                        >OC :</span
+                                                    >
+                                                    <span
+                                                        >{(m.cant_orden_compra || 0).toLocaleString()}</span
                                                     >
                                                 </div>
                                                 <div
@@ -2617,7 +2759,7 @@
                                                         >Aent :</span
                                                     >
                                                     <span
-                                                        >{m.cant_ajuste_entrada.toLocaleString()}</span
+                                                        >{(m.cant_ajuste_entrada || 0).toLocaleString()}</span
                                                     >
                                                 </div>
                                                 <div
@@ -2632,7 +2774,7 @@
                                                         >Asal :</span
                                                     >
                                                     <span
-                                                        >{m.cant_ajuste_salida.toLocaleString()}</span
+                                                        >{(m.cant_ajuste_salida || 0).toLocaleString()}</span
                                                     >
                                                 </div>
                                             </div>
