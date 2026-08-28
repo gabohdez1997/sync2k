@@ -70,8 +70,12 @@
         .replace(/\s*\|\s*EDITADO V[IÍ]A API/gi, "")
         .replace(/\s*\|\s*CREADO V[IÍ]A API/gi, "")
         .trim();
+      const cleanComment = (p.comentario || "")
+        .replace(/\s*\|\s*EDITADO V[IÍ]A API/gi, "")
+        .replace(/\s*\|\s*CREADO V[IÍ]A API/gi, "")
+        .trim();
       observations = cleanDescrip;
-      nroFacturaProveedor = p.nro_fact || "";
+      nroFacturaProveedor = p.nro_fact ? p.nro_fact.trim() : "";
 
       selectedOrder = {
         doc_num: p.orden_compra || (p.renglones && p.renglones[0]?.num_doc) || p.n_control,
@@ -84,7 +88,7 @@
         cond_des: p.cond_des,
         co_mone: p.co_mone,
         tasa: p.tasa,
-        nro_fact: p.nro_fact,
+        nro_fact: p.nro_fact ? p.nro_fact.trim() : "",
         comentario: cleanComment
       };
 
@@ -597,7 +601,15 @@
                   {selectedOrder.telefonos || "---"}
                 </p>
               </div>
-              <div class="md:col-span-3 grid grid-cols-1 md:grid-cols-3 gap-4 pt-2 border-t border-border-subtle/30">
+              <div class="md:col-span-3 grid grid-cols-2 md:grid-cols-4 gap-4 pt-3 border-t border-border-subtle/30">
+                {#if isEditing}
+                  <div class="space-y-1">
+                    <span class="text-[9px] font-black uppercase tracking-widest text-text-muted">Nota Recepción</span>
+                    <p class="text-xs font-black font-mono text-emerald-400">
+                      #{editingDocNum}
+                    </p>
+                  </div>
+                {/if}
                 <div class="space-y-1">
                   <span class="text-[9px] font-black uppercase tracking-widest text-text-muted">Orden de Compra</span>
                   <p class="text-xs font-bold font-mono text-brand-400">
@@ -605,14 +617,20 @@
                   </p>
                 </div>
                 <div class="space-y-1">
-                  <span class="text-[9px] font-black uppercase tracking-widest text-text-muted">Almacén de Ingreso</span>
+                  <span class="text-[9px] font-black uppercase tracking-widest text-text-muted">N° Factura / NDR</span>
+                  <p class="text-xs font-bold font-mono text-cyan-400">
+                    {nroFacturaProveedor || selectedOrder.nro_fact || "---"}
+                  </p>
+                </div>
+                <div class="space-y-1">
+                  <span class="text-[9px] font-black uppercase tracking-widest text-text-muted">Almacén Ingreso</span>
                   <p class="text-xs font-bold text-emerald-400 flex items-center gap-1.5">
                     <Warehouse size={13} />
                     {defaultWarehouseName}
                   </p>
                 </div>
                 <div class="space-y-1">
-                  <span class="text-[9px] font-black uppercase tracking-widest text-text-muted">Condición de Pago</span>
+                  <span class="text-[9px] font-black uppercase tracking-widest text-text-muted">Condición Pago</span>
                   <p class="text-xs font-bold text-text-base">
                     {selectedOrder.cond_des || selectedOrder.co_cond || "CONTADO"}
                   </p>
