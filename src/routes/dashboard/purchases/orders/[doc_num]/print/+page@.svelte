@@ -59,16 +59,15 @@
     const totalUSDRef = totalBS / tasaRef;
 
     // --- LÓGICA DE PAGINACIÓN DINÁMICA CALIBRADA ---
-    const CAPACITY_WITH_TOTALS = 22; // Capacidad óptima en hoja con totales y firmas
-    const CAPACITY_WITHOUT_TOTALS = 36; // Capacidad óptima en hojas intermedias
+    // Capacidad óptima calibrada para hoja Letter (27.94cm)
+    const CAPACITY_WITH_TOTALS = 28; // Capacidad holgada en hoja con totales y firmas (hasta 28 renglones)
+    const CAPACITY_WITHOUT_TOTALS = 40; // Capacidad en hojas intermedias sin totales
 
     function getItemWeight(item: any): number {
         const desc = String(item?.art_des || "").trim();
-        // En la columna de descripción (32% de ancho a 8.5px):
-        // Caben hasta ~45 caracteres en una sola línea.
-        // Solo textos que superen ~45 caracteres pasan a 2 líneas.
-        if (desc.length > 90) return 3;
-        if (desc.length > 45) return 2;
+        // A tamaño 8.5px caben más de 50 caracteres por línea en la columna de descripción
+        if (desc.length > 100) return 2.2;
+        if (desc.length > 52) return 1.5;
         return 1;
     }
 
@@ -76,36 +75,48 @@
         let pages: any[] = [];
         let remaining = [...items];
 
+        // Caso 1: Todo el documento cabe en una sola hoja con totales
+        const totalWeight = remaining.reduce((acc, it) => acc + getItemWeight(it), 0);
+        if (totalWeight <= CAPACITY_WITH_TOTALS) {
+            return [{
+                items: remaining,
+                showTotals: true,
+                emptyRowsCount: Math.max(0, Math.floor(CAPACITY_WITH_TOTALS - totalWeight))
+            }];
+        }
+
+        // Caso 2: Documento multi-página
         while (remaining.length > 0) {
-            // Verificar si todos los ítems restantes caben en una página con totales
-            const remainingWeight = remaining.reduce(
-                (acc, it) => acc + getItemWeight(it),
-                0,
-            );
+            const remainingWeight = remaining.reduce((acc, it) => acc + getItemWeight(it), 0);
+            
+            // Si lo que queda cabe en la hoja final con totales
             if (remainingWeight <= CAPACITY_WITH_TOTALS) {
                 pages.push({
                     items: remaining.splice(0, remaining.length),
                     showTotals: true,
-                    emptyRowsCount: Math.max(
-                        0,
-                        CAPACITY_WITH_TOTALS - remainingWeight,
-                    ),
+                    emptyRowsCount: Math.max(0, Math.floor(CAPACITY_WITH_TOTALS - remainingWeight))
                 });
                 break;
             }
 
-            // Llenar página intermedia sin totales según peso
+            // Llenar página intermedia
             let pageItems: any[] = [];
             let currentWeight = 0;
 
             while (remaining.length > 0) {
                 const nextWeight = getItemWeight(remaining[0]);
-                if (
-                    pageItems.length > 0 &&
-                    currentWeight + nextWeight > CAPACITY_WITHOUT_TOTALS
-                ) {
+                // Si meter este item deja el resto en un número que cabe con totales, o excede la capacidad sin totales
+                if (pageItems.length > 0 && (currentWeight + nextWeight > CAPACITY_WITHOUT_TOTALS)) {
                     break;
                 }
+                // Si el remanente después de este item ya cabe perfectamente en una hoja con totales, cortar aquí
+                const futureRemainingWeight = remaining.slice(1).reduce((acc, it) => acc + getItemWeight(it), 0);
+                if (futureRemainingWeight > 0 && futureRemainingWeight <= CAPACITY_WITH_TOTALS && currentWeight + nextWeight >= 15) {
+                    pageItems.push(remaining.shift());
+                    currentWeight += nextWeight;
+                    break;
+                }
+
                 currentWeight += nextWeight;
                 pageItems.push(remaining.shift());
             }
@@ -113,19 +124,16 @@
             pages.push({
                 items: pageItems,
                 showTotals: false,
-                emptyRowsCount: Math.max(
-                    0,
-                    CAPACITY_WITHOUT_TOTALS - currentWeight,
-                ),
+                emptyRowsCount: Math.max(0, Math.floor(CAPACITY_WITHOUT_TOTALS - currentWeight))
             });
         }
 
-        // Si la última página quedó sin totales, verificar si requiere hoja final exclusiva
+        // Asegurar que la última página siempre tenga totales
         if (pages.length > 0 && !pages[pages.length - 1].showTotals) {
             pages.push({
                 items: [],
                 showTotals: true,
-                emptyRowsCount: CAPACITY_WITH_TOTALS,
+                emptyRowsCount: CAPACITY_WITH_TOTALS
             });
         }
 
@@ -133,7 +141,7 @@
             pages.push({
                 items: [],
                 showTotals: true,
-                emptyRowsCount: CAPACITY_WITH_TOTALS,
+                emptyRowsCount: CAPACITY_WITH_TOTALS
             });
         }
 

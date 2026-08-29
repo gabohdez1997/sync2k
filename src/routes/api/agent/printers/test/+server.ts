@@ -17,7 +17,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 
     try {
         const body = await request.json();
-        const { branch_id, ip_address, port } = body;
+        const { branch_id, ip_address, port, printer_type, serial_port, model } = body;
 
         if (!branch_id || !ip_address) {
             return json({ success: false, message: 'Faltan parámetros obligatorios.' }, { status: 400 });
@@ -45,7 +45,10 @@ export const POST: RequestHandler = async ({ request, locals }) => {
             method: 'POST',
             body: JSON.stringify({
                 ip: ip_address,
-                port: parseInt(port || '9100')
+                port: parseInt(port || (printer_type === 'fiscal' ? '8088' : '9100')),
+                printer_type: printer_type || 'thermal',
+                serial_port: serial_port || 'COM4',
+                model: model || 'TALLY_DASCOM_1140'
             })
         });
 
