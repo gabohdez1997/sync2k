@@ -244,6 +244,9 @@
               >Renglones / Cant.</th
             >
             <th class="px-6 py-5 text-xs font-black uppercase tracking-[0.1em] text-text-muted text-center"
+              >Recepcionista</th
+            >
+            <th class="px-6 py-5 text-xs font-black uppercase tracking-[0.1em] text-text-muted text-center"
               >Estatus</th
             >
             <th class="px-6 py-5 text-xs font-black uppercase tracking-[0.1em] text-text-muted text-center"
@@ -307,6 +310,21 @@
                   <span class="text-xs font-black text-emerald-400 font-mono block mt-0.5">
                     {formatQuantity(receipt.total_unidades || 0)} un.
                   </span>
+                </td>
+
+                <!-- Recepcionista -->
+                <td class="px-6 py-5 text-center">
+                  <div class="relative group/tooltip inline-block">
+                    <span
+                      class="px-3 py-1 rounded-full bg-blue-500/10 text-blue-500 border border-blue-500/20 text-xs font-bold uppercase tracking-wider cursor-help"
+                    >
+                      {receipt.co_us_in || "---"}
+                    </span>
+                    <div class="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover/tooltip:block bg-surface-raised border border-border-subtle px-3 py-1.5 rounded-xl text-xs font-black uppercase tracking-wider text-text-base whitespace-nowrap shadow-2xl z-30 pointer-events-none transition-all">
+                      {String(receipt.recepcionista_name || receipt.co_us_in || "---").toUpperCase()}
+                      <div class="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-border-subtle"></div>
+                    </div>
+                  </div>
                 </td>
 
                 <!-- Estatus -->
@@ -386,7 +404,7 @@
             {/each}
           {:else}
             <tr>
-              <td colspan="7" class="py-20 text-center text-text-muted">
+              <td colspan="8" class="py-20 text-center text-text-muted">
                 <div class="flex flex-col items-center justify-center gap-3">
                   <Inbox size={48} class="text-text-muted/30 stroke-[1.5]" />
                   <p class="text-base font-bold">No se encontraron notas de recepción registradas</p>
@@ -402,27 +420,33 @@
     </div>
 
     <!-- PAGINATION -->
-    {#if data.totalPages && data.totalPages > 1}
-      <div class="px-6 py-4 border-t border-border-subtle flex items-center justify-between bg-surface-soft/30">
+    {#if data.receipts && data.receipts.length > 0}
+      {@const currentPage = data.pagination?.currentPage ?? data.page ?? 1}
+      {@const totalPages = data.pagination?.pages ?? data.totalPages ?? 1}
+      {@const totalItems = data.pagination?.total ?? data.total ?? 0}
+      <div
+        class="px-8 py-5 border-t border-border-subtle/50 flex flex-col sm:flex-row items-center justify-between gap-4 bg-surface-soft/20"
+      >
         <span class="text-xs text-text-muted">
-          Página <strong class="text-text-base">{data.page}</strong> de <strong class="text-text-base">{data.totalPages}</strong> ({data.total} documentos)
+          Mostrando página <strong class="text-text-base">{currentPage}</strong> de{" "}
+          <strong class="text-text-base">{totalPages}</strong> ({totalItems} recepciones)
         </span>
         <div class="flex items-center gap-2">
           <button
             type="button"
-            disabled={data.page <= 1}
-            onclick={() => changePage(data.page - 1)}
-            class="p-2 rounded-xl bg-surface-base border border-border-subtle text-text-muted hover:text-text-base hover:bg-surface-soft transition-all disabled:opacity-30 disabled:pointer-events-none cursor-pointer"
+            disabled={currentPage === 1}
+            onclick={() => changePage(currentPage - 1)}
+            class="h-10 w-10 flex items-center justify-center rounded-xl bg-white/5 hover:bg-white/10 disabled:opacity-30 transition-all border border-white/5 text-text-muted cursor-pointer"
           >
-            <ChevronLeft size={16} />
+            <ChevronLeft size={20} />
           </button>
           <button
             type="button"
-            disabled={data.page >= data.totalPages}
-            onclick={() => changePage(data.page + 1)}
-            class="p-2 rounded-xl bg-surface-base border border-border-subtle text-text-muted hover:text-text-base hover:bg-surface-soft transition-all disabled:opacity-30 disabled:pointer-events-none cursor-pointer"
+            disabled={currentPage === totalPages}
+            onclick={() => changePage(currentPage + 1)}
+            class="h-10 w-10 flex items-center justify-center rounded-xl bg-white/5 hover:bg-white/10 disabled:opacity-30 transition-all border border-white/5 text-text-muted cursor-pointer"
           >
-            <ChevronRight size={16} />
+            <ChevronRight size={20} />
           </button>
         </div>
       </div>

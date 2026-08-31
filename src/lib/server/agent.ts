@@ -499,12 +499,29 @@ export class AgentClient {
 	}
 
 	/**
-	 * Elimina físicamente una nota de despacho
+	 * Sincroniza usuarios y mapas de MasterProfitPro entre sedes
 	 */
-	async deleteDispatch(doc_num: string, sedeId?: string) {
+	async syncMasterUsers() {
+		return this.request<any>('/usuarios/sync', {
+			method: 'POST'
+		});
+	}
+
+	/**
+	 * Exporta usuarios, mapas y perfiles de MasterProfitPro de una sede
+	 */
+	async exportMasterUsers(sedeId?: string) {
 		const query = sedeId ? `?sede=${encodeURIComponent(sedeId)}` : '';
-		return this.request<any>(`/notas-despacho/${encodeURIComponent(doc_num)}${query}`, {
-			method: 'DELETE'
+		return this.request<any>(`/usuarios/sync/export-master${query}`);
+	}
+
+	/**
+	 * Importa lote de usuarios, mapas y perfiles en MasterProfitPro de una sede
+	 */
+	async importMasterUsers(data: any, sedeId?: string) {
+		return this.request<any>('/usuarios/sync/import-master', {
+			method: 'POST',
+			body: JSON.stringify({ sede: sedeId, data })
 		});
 	}
 }

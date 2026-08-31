@@ -409,6 +409,11 @@
     }
   }
 
+  // Modal de Previsualización y Envío a Matricial
+  let showPreviewModal = $state(false);
+  let isPrintingNote = $state(false);
+  let previewDocData = $state<any>(null);
+
   async function saveAndPrintSimulatedInvoice() {
     const activeLines = billingLines.filter((l) => l.checked);
     if (activeLines.length === 0) {
@@ -417,135 +422,85 @@
       );
       return;
     }
-
-    // --- CHECK SINGLE SERVICE FORCE BRANCH ---
-    let forceSucu: string | null = null;
-    const isSingleService = activeLines.length === 1 && (
-      activeLines[0].co_lin === '09' || 
-      String(activeLines[0].co_art || '').trim().startsWith('09')
-    );
-
-    if (isSingleService) {
-      const choice = await askServiceSucuConfirmation();
-      if (choice === null) {
-        // User cancelled the operation
-        return;
-      }
-      forceSucu = choice;
+    if (!selectedClient) {
+      toast.error("Debe seleccionar un cliente antes de continuar.");
+      return;
     }
 
-    isSavingInvoice = true;
+    const branchObj = data.branches?.find((b: any) => String(b.id) === String(filterSede));
+    const multiplier = showUSD ? 1 : Number(activeTasa || 1);
+    const totalBruto = activeLines.reduce((sum, l) => sum + (Number(l.cantidad) * (Number(l.precio) * multiplier)), 0);
+    const montoImp = activeLines.reduce((sum, l) => {
+      const isExento = l.tipo_imp === '0' || Number(l.porc_imp) === 0;
+      return sum + (isExento ? 0 : (Number(l.cantidad) * (Number(l.precio) * multiplier) * (Number(l.porc_imp) / 100)));
+    }, 0);
+    const totalNeto = totalBruto + montoImp;
 
-    const tasa = activeTasa;
-
-    // Construir la factura en USD según requerimiento
-    const invoiceData = {
-      co_cli: selectedClient.co_cli,
-      co_ven: activeCoVen,
-      co_cond: selectedClient.co_cond,
-      descrip: `FACTURA WEB - PEDIDO: ${originOrderNum}`,
-      comentario: `Importado de pedidos: ${originOrderNum}`,
-      tasa: tasa,
-      igtf_monto_divisa: enableIgtf ? Number(igtfMontoDivisa || 0) : 0,
-      force_sucu: forceSucu,
-      renglones: activeLines.map((line: any) => ({
-        co_art: line.co_art,
-        art_des: line.art_des,
-        cantidad: Number(line.cantidad),
-        co_uni: line.co_uni,
-        co_alma: line.co_alma,
-        co_precio: line.co_precio,
-        precio: Number(line.precio), // precio ya está en USD en el estado de Svelte
-        porc_imp: Number(line.porc_imp),
-        tipo_imp: line.tipo_imp || '1',
-        tipo_doc: 'PCLI',
-        num_doc: line.doc_num,
-        rowguid_doc: line.rowguid,
-        co_subl: line.co_subl,
-        co_lin: line.co_lin,
-      })),
+    previewDocData = {
+      doc_num: originOrderNum || "NE-" + dayjs().format("YYYYMMDDHHmmss").slice(-8),
+      pedido_num: originOrderNum || "0000015724",
+      fecha: dayjs().format("DD/MM/YYYY hh:mm A"),
+      fecha_emision: dayjs().format("DD/MM/YYYY"),
+      branch_id: filterSede,
+      branch_name: "Inversiones Galpe 2021 C.A.",
+      branch_rif: branchObj?.rif || "J-401750354",
+      branch_desc: branchObj?.name || "Boca de Rio",
+      branch_address: "CTRA NACIONAL LOS GUAYOS GUACARA CRUCE CON CLL LISBOA Y CALLE PAMPERO LOCAL GALPON NRO 13-01 SECTOR LOS GUAYOS LOS GUAYOS CARABOBO",
+      cli_des: selectedClient.cli_des,
+      rif: selectedClient.rif,
+      telefonos: selectedClient.telefonos,
+      direc1: selectedClient.direc1,
+      dir_entrega: selectedClient.dir_ent || selectedClient.direc1,
+      transporte: "INTERNO",
+      vendedor: activeVenDes || activeCoVen || "GABRIEL HERNANDEZ",
+      co_cond: selectedClient.co_cond || "CONTADO",
+      cond_des: selectedClient.cond_des || "CONTADO",
+      renglones: activeLines.map((l: any) => {
+        const itemPrice = Number(l.precio) * multiplier;
+        return {
+          co_art: l.co_art,
+          art_des: l.art_des,
+          cantidad: Number(l.cantidad),
+          co_uni: l.co_uni || "UND",
+          precio: itemPrice,
+          total: Number(l.cantidad) * itemPrice,
+          porc_imp: Number(l.porc_imp),
+          tipo_imp: l.tipo_imp
+        };
+      }),
+      total_bruto: totalBruto,
+      monto_imp: montoImp,
+      total_neto: totalNeto,
+      is_usd: showUSD,
+      tasa: activeTasa,
+      comentario: originOrderNum ? `ORIGEN: PEDIDO N° ${originOrderNum}` : ""
     };
 
+    showPreviewModal = true;
+  }
+
+  async function handlePrintFromModal() {
+    if (!previewDocData) return;
+    isPrintingNote = true;
     try {
-      // 1. Guardar factura real en la base de datos SQL
-      const saveResponse = await fetch(`/api/agent/facturas`, {
+      const res = await fetch("/api/agent/printers/print-note", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           branch_id: filterSede,
-          invoice: invoiceData,
-        }),
+          doc: previewDocData
+        })
       });
-      const saveResult = await saveResponse.json();
-
-      if (!saveResult.success) {
-        throw new Error(saveResult.message || "Error al guardar la factura en la base de datos.");
-      }
-
-      const realDocNum = saveResult.doc_num || saveResult.results?.[0]?.doc_num;
-      if (!realDocNum) {
-        throw new Error("No se recibió el número de documento correlativo generado.");
-      }
-
-      toast.success(`Factura Nro. ${realDocNum} guardada exitosamente en la base de datos.`);
-
-      // 2. Si existen impresoras activas, proceder a imprimir el ticket de predespacho para almacén
-      if (data.printers && data.printers.length > 0) {
-        toast.info("Enviando ticket de predespacho a almacén...");
-        try {
-          const printResponse = await fetch(`/api/agent/billing/print`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              branch_id: filterSede,
-              invoice: {
-                ...invoiceData,
-                invoice_num: realDocNum, // Usado para imprimir origen FACTURA Nro. XXX
-                doc_num: realDocNum,     // Usado para el código grande al pie del ticket
-                cli_des: selectedClient.cli_des,
-                rif: selectedClient.rif,
-                telefonos: selectedClient.telefonos,
-                direc1: selectedClient.direc1,
-                vendedor: activeVenDes || activeCoVen || "---",
-              },
-            }),
-          });
-          const printResult = await printResponse.json();
-          if (printResult.success) {
-            toast.success(printResult.message || "Ticket de predespacho enviado.");
-          } else {
-            toast.warning(`La factura se guardó pero falló la impresión: ${printResult.message}`);
-          }
-        } catch (printErr: any) {
-          console.error("Error al imprimir ticket:", printErr);
-          toast.warning(`La factura se guardó pero ocurrió un error al imprimir: ${printErr.message}`);
-        }
-      }
-
-
-      const clientCond = String(selectedClient?.co_cond || '').trim().toUpperCase();
-      const isContado = clientCond === '01' || clientCond === 'CONTADO';
-
-      if (isContado) {
-        // Reset billing form en caso de éxito
-        selectedClient = null;
-        billingLines = [];
-        activeTasa = 1;
-        importedOrdersInfo = {};
-        enableIgtf = false;
-        igtfMontoDivisa = null;
-
-        // Redirigir al creador de Cobros precargando la factura generada
-        goto(`/dashboard/cash/payments?branch_id=${filterSede}&import_invoice=${realDocNum}`);
+      const result = await res.json();
+      if (result.success) {
+        toast.success(result.message || "Nota de Entrega enviada a la impresora.");
       } else {
-        // Factura a Crédito: Mostrar pantalla de éxito
-        generatedDocNum = realDocNum;
-        saveSuccess = true;
+        toast.error(result.message || "Error al enviar a la impresora.");
       }
     } catch (err: any) {
-      toast.error(err.message || "Error al procesar la factura.");
+      toast.error("Error al imprimir: " + err.message);
     } finally {
-      isSavingInvoice = false;
+      isPrintingNote = false;
     }
   }
 
@@ -1276,6 +1231,200 @@
         >
           Cancelar
         </button>
+      </div>
+    </div>
+  </div>
+{/if}
+
+<!-- MODAL PREVISUALIZACION NOTA DE ENTREGA / FORMATO MEDIA PAGINA -->
+{#if showPreviewModal && previewDocData}
+  <div
+    class="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm overflow-y-auto"
+    in:fade
+  >
+    <!-- svelte-ignore a11y_click_events_have_key_events -->
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <div class="fixed inset-0" onclick={() => (showPreviewModal = false)}></div>
+
+    <div
+      class="w-full max-w-3xl bg-surface-base border border-border-subtle rounded-[32px] shadow-2xl overflow-hidden flex flex-col max-h-[85vh] relative z-10"
+      in:scale={{ duration: 200, start: 0.95 }}
+    >
+      <!-- MODAL HEADER -->
+      <div class="p-6 md:p-8 border-b border-border-subtle flex justify-between items-center bg-surface-soft/50">
+        <div class="flex items-center gap-3">
+          <div class="p-3 bg-brand-500/10 text-brand-400 rounded-2xl">
+            <FileText size={24} />
+          </div>
+          <div>
+            <h2 class="text-2xl font-black tracking-tight text-text-base">Previsualización de Documento</h2>
+            <p class="text-text-muted text-sm font-medium">Nota de Entrega Continua Media Página (5.5" ESC/P)</p>
+          </div>
+        </div>
+        <button
+          type="button"
+          onclick={() => (showPreviewModal = false)}
+          class="p-2.5 hover:bg-surface-strong text-text-muted hover:text-text-base rounded-full transition-colors cursor-pointer"
+        >
+          <X size={22} />
+        </button>
+      </div>
+
+      <!-- RECEIPT / CONTINUOUS FORM PREVIEW (ALWAYS WHITE PAPER SHEET) -->
+      <div class="flex-1 overflow-y-auto p-6 bg-surface-soft/30 flex justify-center items-start custom-scrollbar select-none">
+        
+        <!-- CONTINUOUS FORM CONTAINER WITH TRACTOR FEED PERFORATIONS -->
+        <div class="w-full max-w-2xl bg-white text-black p-6 rounded-md shadow-2xl font-mono text-[11px] leading-tight border border-slate-300 relative">
+          
+          <!-- TRACTOR FEED HOLES (LEFT & RIGHT) -->
+          <div class="absolute left-1.5 top-0 bottom-0 flex flex-col justify-between py-4 pointer-events-none opacity-25 text-[8px] text-slate-400">
+            {#each Array(14) as _}
+              <div class="w-2.5 h-2.5 rounded-full border border-slate-400 bg-slate-200"></div>
+            {/each}
+          </div>
+          <div class="absolute right-1.5 top-0 bottom-0 flex flex-col justify-between py-4 pointer-events-none opacity-25 text-[8px] text-slate-400">
+            {#each Array(14) as _}
+              <div class="w-2.5 h-2.5 rounded-full border border-slate-400 bg-slate-200"></div>
+            {/each}
+          </div>
+
+          <!-- PAPER INNER CONTENT -->
+          <div class="px-3 space-y-2">
+            
+            <!-- TOP ENCLOSED BOX (Header & Client/Doc block) -->
+            <div class="border border-black rounded-sm p-2.5 space-y-1.5">
+              
+              <!-- HEADER LINE 1 -->
+              <div class="flex justify-between items-baseline font-bold text-xs">
+                <span class="text-sm font-black tracking-tight">{previewDocData.branch_name || 'Inversiones Galpe 2021 C.A.'}</span>
+                <span class="text-[11px]">R.I.F.: {previewDocData.branch_rif || 'J-401750354'}</span>
+                <span class="text-[11px]">PEDIDO: {previewDocData.origin_doc || previewDocData.doc_num || '0000015724'}</span>
+              </div>
+
+              <!-- HEADER LINE 2: FISCAL ADDRESS -->
+              <div class="text-[8.5px] text-slate-700 leading-tight">
+                {previewDocData.branch_address || 'CTRA NACIONAL LOS GUAYOS GUACARA CRUCE CON CLL LISBOA Y CALLE PAMPERO LOCAL GALPON NRO 13-01 SECTOR LOS GUAYOS LOS GUAYOS CARABOBO'}
+              </div>
+
+              <!-- CLIENT INFO (LEFT) & DOCUMENT DATA (RIGHT) -->
+              <div class="grid grid-cols-12 gap-2 pt-1.5 border-t border-black">
+                <!-- CLIENT INFO (7 COLS) -->
+                <div class="col-span-7 space-y-1 text-[10px]">
+                  <div class="flex"><span class="w-20 font-bold shrink-0">Cliente :</span> <span class="font-bold uppercase truncate">{previewDocData.cli_des}</span></div>
+                  <div class="flex"><span class="w-20 font-bold shrink-0">R.I.F.:</span> <span class="uppercase">{previewDocData.rif}</span></div>
+                  <div class="flex"><span class="w-20 font-bold shrink-0">Teléfonos:</span> <span>{previewDocData.telefonos || '---'}</span></div>
+                  <div class="flex"><span class="w-20 font-bold shrink-0">Dirección:</span> <span class="line-clamp-2 uppercase text-[9.5px]">{previewDocData.direc1 || '---'}</span></div>
+                  <div class="flex"><span class="w-20 font-bold shrink-0">Dir. Ent.:</span> <span class="uppercase">{previewDocData.dir_entrega || 'CARABOBO'}</span></div>
+                  <div class="flex"><span class="w-20 font-bold shrink-0">Transporte:</span> <span class="uppercase">{previewDocData.transporte || 'INTERNO'}</span></div>
+                </div>
+
+                <!-- DOCUMENT DATA (5 COLS) -->
+                <div class="col-span-5 text-right space-y-0.5 text-[10px] pl-2 border-l border-slate-300">
+                  <div class="text-sm font-black tracking-wider text-black">NOTA DE ENTREGA</div>
+                  <div class="text-base font-black tracking-widest text-black">{previewDocData.doc_num}</div>
+                  <div class="font-bold uppercase text-[10.5px]">{previewDocData.cond_des || 'CONTADO'}</div>
+                  <div class="text-[9.5px] text-slate-800">Fecha Emisión: {previewDocData.fecha}</div>
+                  <div class="text-[9.5px] text-slate-800 truncate">Vendedor: {previewDocData.vendedor}</div>
+                  <div class="text-[9.5px] font-bold">Moneda: {previewDocData.is_usd ? 'DOLAR' : 'BOLIVARES'}</div>
+                </div>
+              </div>
+
+            </div>
+
+            <!-- ITEMS TABLE (WITH CLEAN BORDER AND COLUMNS) -->
+            <div class="border border-black rounded-sm overflow-hidden">
+              <table class="w-full text-left text-[10px] border-collapse">
+                <thead class="bg-slate-100 border-b border-black text-black font-bold">
+                  <tr>
+                    <th class="p-1.5 w-24 border-r border-slate-300">Código</th>
+                    <th class="p-1.5 border-r border-slate-300">Descripción</th>
+                    <th class="p-1.5 text-right w-16 border-r border-slate-300">Cantidad</th>
+                    <th class="p-1.5 text-right w-20 border-r border-slate-300">Precio</th>
+                    <th class="p-1.5 text-right w-20">Neto</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-200 text-black">
+                  {#each previewDocData.renglones as r}
+                    <tr class="hover:bg-slate-50">
+                      <td class="p-1.5 font-mono border-r border-slate-300">{r.co_art}</td>
+                      <td class="p-1.5 font-medium uppercase border-r border-slate-300">{r.art_des}</td>
+                      <td class="p-1.5 text-right font-bold border-r border-slate-300">{r.cantidad.toFixed(2).replace('.', ',')}</td>
+                      <td class="p-1.5 text-right border-r border-slate-300">
+                        {r.precio.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </td>
+                      <td class="p-1.5 text-right font-bold">
+                        {r.total.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </td>
+                    </tr>
+                  {/each}
+                </tbody>
+              </table>
+            </div>
+
+            <!-- FOOTER BOX -->
+            <div class="border border-black rounded-sm p-2 flex justify-between items-end text-[10px]">
+              <div class="space-y-1">
+                <div class="font-bold text-black uppercase">
+                  {String(previewDocData.cond_des || '').toUpperCase().includes('CREDITO') ? 'NOTA A CREDITO (Creado por API)' : 'NOTA A CONTADO'}
+                </div>
+                <div class="text-[9px] text-slate-600">Página 1 de 1</div>
+              </div>
+
+              <div class="text-right space-y-0.5">
+                <div class="flex justify-end gap-3 text-sm font-black text-black">
+                  <span>Neto:</span>
+                  <span class="w-24 text-right">
+                    {previewDocData.total_neto.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </span>
+                </div>
+                <div class="text-[9.5px] font-bold text-black uppercase tracking-tight">
+                  SIN DERECHO A CREDITO FISCAL
+                </div>
+                {#if !previewDocData.is_usd && previewDocData.tasa > 1}
+                  <div class="text-[9px] text-slate-700 font-bold">
+                    REF. USD: $ {(previewDocData.total_neto / previewDocData.tasa).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </div>
+                {:else if previewDocData.is_usd && previewDocData.tasa > 1}
+                  <div class="text-[9px] text-slate-700 font-bold">
+                    REF. BCV: Bs. {(previewDocData.total_neto * previewDocData.tasa).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </div>
+                {/if}
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </div>
+
+      <!-- MODAL FOOTER ACTIONS -->
+      <div class="p-6 border-t border-border-subtle bg-surface-soft/50 flex flex-col sm:flex-row items-center justify-between gap-4">
+        <div class="flex items-center gap-2 text-text-muted text-xs font-mono">
+          <Printer size={16} class="text-brand-500" />
+          <span>Salida: Impresora Matricial de Red (ESC/P)</span>
+        </div>
+        <div class="flex items-center gap-3 w-full sm:w-auto">
+          <button
+            type="button"
+            onclick={() => (showPreviewModal = false)}
+            class="px-6 py-3 rounded-2xl bg-surface-soft hover:bg-surface-strong text-text-base font-bold text-sm transition-all cursor-pointer border border-border-subtle"
+          >
+            Cerrar
+          </button>
+          <button
+            type="button"
+            onclick={handlePrintFromModal}
+            disabled={isPrintingNote}
+            class="px-8 py-3.5 rounded-2xl bg-brand-600 hover:bg-brand-500 disabled:opacity-50 text-white font-black text-sm flex items-center justify-center gap-2 shadow-lg shadow-brand-500/20 transition-all cursor-pointer border-none active:scale-[0.98]"
+          >
+            {#if isPrintingNote}
+              <RefreshCw size={18} class="animate-spin" />
+              <span>Imprimiendo...</span>
+            {:else}
+              <Printer size={18} />
+              <span>Imprimir en Matricial (Epson LX-350)</span>
+            {/if}
+          </button>
+        </div>
       </div>
     </div>
   </div>

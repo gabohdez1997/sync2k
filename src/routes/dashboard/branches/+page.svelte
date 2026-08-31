@@ -31,6 +31,7 @@
     AlertTriangle,
     ArrowRight,
     CreditCard,
+    ShieldCheck,
   } from "lucide-svelte";
   import type { PageData, ActionData } from "./$types";
 
@@ -68,6 +69,8 @@
         articulos: Number(direct.articulos) || 0,
         clientes: Number(direct.clientes) || 0,
         proveedores: Number(direct.proveedores) || 0,
+        condiciones_pago: Number(direct.condiciones_pago) || 0,
+        usuarios: Number(direct.usuarios) || 0,
         online: Boolean(direct.online ?? branch?.active)
       };
     }
@@ -87,11 +90,13 @@
         articulos: Number(found.articulos) || 0,
         clientes: Number(found.clientes) || 0,
         proveedores: Number(found.proveedores) || 0,
+        condiciones_pago: Number(found.condiciones_pago) || 0,
+        usuarios: Number(found.usuarios) || 0,
         online: Boolean(found.online ?? branch?.active)
       };
     }
 
-    return { articulos: 0, clientes: 0, proveedores: 0, online: Boolean(branch?.active) };
+    return { articulos: 0, clientes: 0, proveedores: 0, condiciones_pago: 0, usuarios: 0, online: Boolean(branch?.active) };
   }
 
   // Filtro reactivo
@@ -308,11 +313,11 @@
           <h3 class="text-xl font-bold truncate">{branch.name}</h3>
 
           <!-- Métricas de Sede (Artículos, Clientes, Proveedores) -->
-          <div class="grid grid-cols-3 gap-2 my-4 p-3 bg-surface-base/60 rounded-2xl border border-white/5">
+          <div class="grid grid-cols-3 gap-2 my-4 p-3 bg-surface-base/60 dark:bg-surface-base/60 rounded-2xl border border-border-subtle dark:border-white/5">
             <!-- Artículos -->
-            <div class="flex flex-col items-center justify-center text-center p-2 rounded-xl bg-white/[0.02]">
+            <div class="flex flex-col items-center justify-center text-center p-2 rounded-xl bg-white/40 dark:bg-white/[0.02] border border-border-subtle/50 dark:border-transparent">
               <div class="flex items-center gap-1 text-[11px] font-bold text-text-muted mb-0.5">
-                <Package size={13} class="text-blue-400 shrink-0" />
+                <Package size={13} class="text-blue-600 dark:text-blue-400 shrink-0" />
                 <span>Artículos</span>
               </div>
               <span class="text-base font-black text-text-base tracking-tight">
@@ -321,9 +326,9 @@
             </div>
 
             <!-- Clientes -->
-            <div class="flex flex-col items-center justify-center text-center p-2 rounded-xl bg-white/[0.02]">
+            <div class="flex flex-col items-center justify-center text-center p-2 rounded-xl bg-white/40 dark:bg-white/[0.02] border border-border-subtle/50 dark:border-transparent">
               <div class="flex items-center gap-1 text-[11px] font-bold text-text-muted mb-0.5">
-                <Users size={13} class="text-emerald-400 shrink-0" />
+                <Users size={13} class="text-emerald-600 dark:text-emerald-400 shrink-0" />
                 <span>Clientes</span>
               </div>
               <span class="text-base font-black text-text-base tracking-tight">
@@ -332,9 +337,9 @@
             </div>
 
             <!-- Proveedores -->
-            <div class="flex flex-col items-center justify-center text-center p-2 rounded-xl bg-white/[0.02]">
+            <div class="flex flex-col items-center justify-center text-center p-2 rounded-xl bg-white/40 dark:bg-white/[0.02] border border-border-subtle/50 dark:border-transparent">
               <div class="flex items-center gap-1 text-[11px] font-bold text-text-muted mb-0.5">
-                <Building2 size={13} class="text-amber-400 shrink-0" />
+                <Building2 size={13} class="text-amber-600 dark:text-amber-400 shrink-0" />
                 <span>Proveed.</span>
               </div>
               <span class="text-base font-black text-text-base tracking-tight">
@@ -1118,60 +1123,61 @@
     ></div>
 
     <div
-      class="glass w-full max-w-2xl rounded-[32px] border border-white/10 shadow-2xl relative z-10 overflow-hidden max-h-[90vh] flex flex-col"
+      class="sync-modal-box w-full max-w-2xl rounded-[32px] shadow-2xl relative z-10 overflow-hidden max-h-[90vh] flex flex-col"
     >
       <!-- Header -->
-      <div class="p-6 md:p-8 border-b border-white/5 flex items-center justify-between">
+      <div class="sync-modal-header p-6 md:p-8 flex items-center justify-between">
         <div class="flex items-center gap-4">
-          <div class="h-12 w-12 rounded-2xl bg-brand-500/20 text-brand-400 flex items-center justify-center shadow-lg shadow-brand-500/10">
+          <div class="h-12 w-12 rounded-2xl bg-brand-500/10 text-brand-500 flex items-center justify-center shadow-lg shadow-brand-500/5">
             <RefreshCw size={24} class={syncingEntity ? "animate-spin" : ""} />
           </div>
           <div>
-            <h2 class="text-2xl font-black text-text-base">Sincronización Multisede</h2>
-            <p class="text-xs text-text-muted mt-0.5">Replica maestros e iguala registros entre sucursales de Profit Plus</p>
+            <h2 class="text-2xl font-black sync-title">Sincronización Multisede</h2>
+            <p class="text-xs sync-subtitle mt-0.5">Replica maestros e iguala registros entre sucursales de Profit Plus</p>
           </div>
         </div>
         <button
+          type="button"
           onclick={() => { if (!syncingEntity) { showSyncModal = false; syncResult = null; } }}
           disabled={syncingEntity !== null}
-          class="p-2 rounded-xl bg-white/5 hover:bg-white/10 text-text-muted hover:text-text-base transition disabled:opacity-30"
+          class="sync-close-btn p-2.5 rounded-xl transition disabled:opacity-30"
         >
           <X size={20} />
         </button>
       </div>
 
       <!-- Content -->
-      <div class="p-6 md:p-8 overflow-y-auto space-y-6 custom-scrollbar">
+      <div class="sync-modal-body p-6 md:p-8 overflow-y-auto space-y-6 custom-scrollbar">
         <!-- Comparativa de Sucursales -->
         <div>
-          <h4 class="text-xs font-black uppercase tracking-widest text-text-muted mb-3">Estado de Datos por Sucursal</h4>
-          <div class="space-y-2">
+          <h4 class="text-xs font-black uppercase tracking-widest sync-subtitle mb-3">Estado de Datos por Sucursal</h4>
+          <div class="space-y-2.5">
             {#each (data?.branches || []) as branch}
               {@const stats = getStatsForBranch(branch)}
-              <div class="flex items-center justify-between p-3.5 bg-surface-base/50 border border-white/5 rounded-2xl">
+              <div class="sync-branch-row flex items-center justify-between p-3.5 rounded-2xl">
                 <div class="flex items-center gap-3">
-                  <div class="h-2 w-2 rounded-full {stats.online && branch.active ? 'bg-emerald-500 animate-pulse' : 'bg-zinc-500'}"></div>
+                  <div class="h-2.5 w-2.5 rounded-full {stats.online && branch.active ? 'bg-emerald-500 animate-pulse' : 'bg-zinc-400 dark:bg-zinc-500'}"></div>
                   <div>
-                    <p class="text-sm font-bold text-text-base">{branch.name}</p>
-                    <p class="text-[10px] text-text-muted uppercase font-mono">{branch.id}</p>
+                    <p class="text-sm font-bold sync-title">{branch.name}</p>
+                    <p class="text-[10px] sync-subtitle uppercase font-mono">{branch.id}</p>
                   </div>
                 </div>
                 <div class="flex items-center gap-3.5 text-xs font-mono flex-wrap">
                   <div class="flex items-center gap-1.5" title="Artículos">
-                    <Package size={14} class="text-blue-400" />
-                    <span class="font-bold">{(stats.articulos || 0).toLocaleString("es-VE")}</span>
+                    <Package size={14} class="text-blue-500 dark:text-blue-400" />
+                    <span class="font-bold sync-num">{(stats.articulos || 0).toLocaleString("es-VE")}</span>
                   </div>
                   <div class="flex items-center gap-1.5" title="Clientes">
-                    <Users size={14} class="text-emerald-400" />
-                    <span class="font-bold">{(stats.clientes || 0).toLocaleString("es-VE")}</span>
+                    <Users size={14} class="text-emerald-500 dark:text-emerald-400" />
+                    <span class="font-bold sync-num">{(stats.clientes || 0).toLocaleString("es-VE")}</span>
                   </div>
                   <div class="flex items-center gap-1.5" title="Proveedores">
-                    <Building2 size={14} class="text-amber-400" />
-                    <span class="font-bold">{(stats.proveedores || 0).toLocaleString("es-VE")}</span>
+                    <Building2 size={14} class="text-amber-500 dark:text-amber-400" />
+                    <span class="font-bold sync-num">{(stats.proveedores || 0).toLocaleString("es-VE")}</span>
                   </div>
-                  <div class="flex items-center gap-1.5" title="Condiciones de Pago">
-                    <CreditCard size={14} class="text-purple-400" />
-                    <span class="font-bold">{(stats.condiciones_pago || 0).toLocaleString("es-VE")}</span>
+                  <div class="flex items-center gap-1.5" title="Usuarios de Profit">
+                    <ShieldCheck size={14} class="text-cyan-500 dark:text-cyan-400" />
+                    <span class="font-bold sync-num-cyan">{(stats.usuarios || 0).toLocaleString("es-VE")}</span>
                   </div>
                 </div>
               </div>
@@ -1181,7 +1187,7 @@
 
         <!-- Selección de Entidad a Sincronizar -->
         <div>
-          <h4 class="text-xs font-black uppercase tracking-widest text-text-muted mb-3">Sincronización Selectiva</h4>
+          <h4 class="text-xs font-black uppercase tracking-widest sync-subtitle mb-3">Sincronización Selectiva</h4>
           <form
             method="POST"
             action="?/syncEntity"
@@ -1211,16 +1217,16 @@
             }}
             class="grid grid-cols-1 md:grid-cols-2 gap-4"
           >
-            <!-- 1. Proveedores -->
-            <div class="p-4 rounded-2xl bg-surface-base/50 border border-white/5 flex flex-col justify-between gap-3 hover:border-amber-500/30 transition-all">
+            <!-- 1. Proveedores y Condiciones de Pago -->
+            <div class="sync-entity-card p-4.5 rounded-2xl flex flex-col justify-between gap-3.5 transition-all">
               <div class="flex items-start gap-3">
-                <div class="p-2.5 rounded-xl bg-amber-500/10 text-amber-400 shrink-0">
+                <div class="p-2.5 rounded-xl bg-amber-500/10 text-amber-500 shrink-0">
                   <Building2 size={20} />
                 </div>
                 <div>
-                  <h5 class="text-sm font-black text-text-base">Proveedores</h5>
-                  <p class="text-[11px] text-text-muted mt-0.5 leading-snug">
-                    Cuentas de egreso, segmentos, ISLR y condiciones de pago.
+                  <h5 class="text-sm font-black sync-title">Proveedores y Cond. Pago</h5>
+                  <p class="text-[11px] sync-subtitle mt-0.5 leading-snug">
+                    Proveedores, cuentas de egreso, segmentos, ISLR y condiciones comerciales.
                   </p>
                 </div>
               </div>
@@ -1229,7 +1235,7 @@
                 name="entity"
                 value="suppliers"
                 disabled={syncingEntity !== null}
-                class="w-full flex items-center justify-center gap-2 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 px-3 py-2.5 rounded-xl text-xs font-bold transition active:scale-95 disabled:opacity-40"
+                class="btn-sync-amber w-full flex items-center justify-center gap-2 px-3.5 py-2.5 rounded-xl text-xs font-bold transition active:scale-95 disabled:opacity-40"
               >
                 {#if syncingEntity === "suppliers"}
                   <Loader2 size={14} class="animate-spin" />
@@ -1242,14 +1248,14 @@
             </div>
 
             <!-- 2. Clientes -->
-            <div class="p-4 rounded-2xl bg-surface-base/50 border border-white/5 flex flex-col justify-between gap-3 hover:border-emerald-500/30 transition-all">
+            <div class="sync-entity-card p-4.5 rounded-2xl flex flex-col justify-between gap-3.5 transition-all">
               <div class="flex items-start gap-3">
-                <div class="p-2.5 rounded-xl bg-emerald-500/10 text-emerald-400 shrink-0">
+                <div class="p-2.5 rounded-xl bg-emerald-500/10 text-emerald-500 shrink-0">
                   <Users size={20} />
                 </div>
                 <div>
-                  <h5 class="text-sm font-black text-text-base">Clientes</h5>
-                  <p class="text-[11px] text-text-muted mt-0.5 leading-snug">
+                  <h5 class="text-sm font-black sync-title">Clientes</h5>
+                  <p class="text-[11px] sync-subtitle mt-0.5 leading-snug">
                     Cuentas de ingreso, vendedores, tipos de cliente y zonas.
                   </p>
                 </div>
@@ -1259,7 +1265,7 @@
                 name="entity"
                 value="customers"
                 disabled={syncingEntity !== null}
-                class="w-full flex items-center justify-center gap-2 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 px-3 py-2.5 rounded-xl text-xs font-bold transition active:scale-95 disabled:opacity-40"
+                class="btn-sync-emerald w-full flex items-center justify-center gap-2 px-3.5 py-2.5 rounded-xl text-xs font-bold transition active:scale-95 disabled:opacity-40"
               >
                 {#if syncingEntity === "customers"}
                   <Loader2 size={14} class="animate-spin" />
@@ -1272,14 +1278,14 @@
             </div>
 
             <!-- 3. Artículos -->
-            <div class="p-4 rounded-2xl bg-surface-base/50 border border-white/5 flex flex-col justify-between gap-3 hover:border-blue-500/30 transition-all">
+            <div class="sync-entity-card p-4.5 rounded-2xl flex flex-col justify-between gap-3.5 transition-all">
               <div class="flex items-start gap-3">
-                <div class="p-2.5 rounded-xl bg-blue-500/10 text-blue-400 shrink-0">
+                <div class="p-2.5 rounded-xl bg-blue-500/10 text-blue-500 shrink-0">
                   <Package size={20} />
                 </div>
                 <div>
-                  <h5 class="text-sm font-black text-text-base">Artículos</h5>
-                  <p class="text-[11px] text-text-muted mt-0.5 leading-snug">
+                  <h5 class="text-sm font-black sync-title">Artículos</h5>
+                  <p class="text-[11px] sync-subtitle mt-0.5 leading-snug">
                     Líneas, sublíneas, categorías, unidades, colores e imágenes.
                   </p>
                 </div>
@@ -1289,7 +1295,7 @@
                 name="entity"
                 value="articles"
                 disabled={syncingEntity !== null}
-                class="w-full flex items-center justify-center gap-2 bg-blue-500/20 hover:bg-blue-500/30 text-blue-300 px-3 py-2.5 rounded-xl text-xs font-bold transition active:scale-95 disabled:opacity-40"
+                class="btn-sync-blue w-full flex items-center justify-center gap-2 px-3.5 py-2.5 rounded-xl text-xs font-bold transition active:scale-95 disabled:opacity-40"
               >
                 {#if syncingEntity === "articles"}
                   <Loader2 size={14} class="animate-spin" />
@@ -1301,32 +1307,32 @@
               </button>
             </div>
 
-            <!-- 4. Condiciones de Pago -->
-            <div class="p-4 rounded-2xl bg-surface-base/50 border border-white/5 flex flex-col justify-between gap-3 hover:border-purple-500/30 transition-all">
+            <!-- 4. Usuarios y Mapas Profit -->
+            <div class="sync-entity-card p-4.5 rounded-2xl flex flex-col justify-between gap-3.5 transition-all">
               <div class="flex items-start gap-3">
-                <div class="p-2.5 rounded-xl bg-purple-500/10 text-purple-400 shrink-0">
-                  <CreditCard size={20} />
+                <div class="p-2.5 rounded-xl bg-cyan-500/10 text-cyan-500 shrink-0">
+                  <ShieldCheck size={20} />
                 </div>
                 <div>
-                  <h5 class="text-sm font-black text-text-base">Cond. de Pago</h5>
-                  <p class="text-[11px] text-text-muted mt-0.5 leading-snug">
-                    Días de crédito, descripciones y condiciones comerciales.
+                  <h5 class="text-sm font-black sync-title">Usuarios y Mapas</h5>
+                  <p class="text-[11px] sync-subtitle mt-0.5 leading-snug">
+                    Usuarios (MpUsuario), contraseñas, mapas (MpMapa) y perfiles en MasterProfitPro.
                   </p>
                 </div>
               </div>
               <button
                 type="submit"
                 name="entity"
-                value="payment_conditions"
+                value="profit_users"
                 disabled={syncingEntity !== null}
-                class="w-full flex items-center justify-center gap-2 bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 px-3 py-2.5 rounded-xl text-xs font-bold transition active:scale-95 disabled:opacity-40"
+                class="btn-sync-cyan w-full flex items-center justify-center gap-2 px-3.5 py-2.5 rounded-xl text-xs font-bold transition active:scale-95 disabled:opacity-40"
               >
-                {#if syncingEntity === "payment_conditions"}
+                {#if syncingEntity === "profit_users"}
                   <Loader2 size={14} class="animate-spin" />
                   <span>Sincronizando...</span>
                 {:else}
                   <RefreshCw size={14} />
-                  <span>Sincronizar Condiciones</span>
+                  <span>Sincronizar Usuarios y Mapas</span>
                 {/if}
               </button>
             </div>
@@ -1334,11 +1340,11 @@
         </div>
 
         <!-- Info / Advertencia de Integridad -->
-        <div class="p-4 rounded-2xl bg-brand-500/10 border border-brand-500/20 flex gap-3 text-xs text-text-muted">
-          <CheckCircle2 size={18} class="text-brand-400 shrink-0 mt-0.5" />
+        <div class="sync-info-box p-4 rounded-2xl flex gap-3 text-xs">
+          <CheckCircle2 size={18} class="text-brand-500 shrink-0 mt-0.5" />
           <div>
-            <span class="font-bold text-text-base">Garantía de Consistencia Referencial y Auditoría</span>
-            <p class="mt-1 leading-relaxed">
+            <span class="font-bold sync-title">Garantía de Consistencia Referencial y Auditoría</span>
+            <p class="mt-1 leading-relaxed sync-subtitle">
               Cada sincronización analiza las bases de datos de todas las sedes activas. Si un registro no existe en alguna sede, se replica adaptando automáticamente todas sus claves foráneas a los catálogos de destino y se registra la acción en el log de auditoría.
             </p>
           </div>
@@ -1346,44 +1352,44 @@
 
         <!-- Resultado de la Sincronización -->
         {#if syncResult}
-          <div class="p-5 rounded-2xl border {syncResult.total_synced > 0 ? 'bg-emerald-500/10 border-emerald-500/20' : 'bg-white/5 border-white/10'} space-y-3 animate-in fade-in duration-300">
+          <div class="p-5 rounded-2xl border {syncResult.total_synced > 0 ? 'bg-emerald-500/10 border-emerald-500/20' : 'sync-result-box border-border-subtle'} space-y-3 animate-in fade-in duration-300">
             <div class="flex items-center justify-between">
               <div class="flex items-center gap-2">
                 {#if syncResult.total_synced > 0}
-                  <CheckCircle2 size={20} class="text-emerald-400" />
-                  <span class="text-sm font-black text-emerald-400">
+                  <CheckCircle2 size={20} class="text-emerald-500" />
+                  <span class="text-sm font-black text-emerald-600 dark:text-emerald-400">
                     Sincronización Exitosa
-                    {#if syncResult.entity === "suppliers"}(Proveedores){:else if syncResult.entity === "customers"}(Clientes){:else if syncResult.entity === "articles"}(Artículos){/if}
+                    {#if syncResult.entity === "suppliers"}(Proveedores y Cond. Pago){:else if syncResult.entity === "customers"}(Clientes){:else if syncResult.entity === "articles"}(Artículos){:else if syncResult.entity === "profit_users" || syncResult.entity === "users"}(Usuarios y Mapas Profit){/if}
                   </span>
                 {:else}
-                  <CheckCircle2 size={20} class="text-brand-400" />
-                  <span class="text-sm font-black text-text-base">
+                  <CheckCircle2 size={20} class="text-brand-500" />
+                  <span class="text-sm font-black sync-title">
                     Todo al día
-                    {#if syncResult.entity === "suppliers"}(Proveedores){:else if syncResult.entity === "customers"}(Clientes){:else if syncResult.entity === "articles"}(Artículos){/if}
+                    {#if syncResult.entity === "suppliers"}(Proveedores y Cond. Pago){:else if syncResult.entity === "customers"}(Clientes){:else if syncResult.entity === "articles"}(Artículos){:else if syncResult.entity === "profit_users" || syncResult.entity === "users"}(Usuarios y Mapas Profit){/if}
                   </span>
                 {/if}
               </div>
-              <span class="text-xs font-mono font-bold px-2 py-0.5 rounded-md bg-white/10 text-text-muted">
+              <span class="text-xs font-mono font-bold px-2 py-0.5 rounded-md sync-pill">
                 Total: {syncResult.total_synced || 0}
               </span>
             </div>
-            <p class="text-xs text-text-muted">{syncResult.message}</p>
+            <p class="text-xs sync-subtitle">{syncResult.message}</p>
 
             {#if syncResult.summary && syncResult.summary.length > 0}
-              <div class="pt-2 border-t border-white/5 space-y-2">
+              <div class="pt-2 border-t border-border-subtle space-y-2">
                 {#each syncResult.summary as item}
-                  <div class="flex items-center justify-between text-xs p-2 rounded-xl bg-black/20">
-                    <span class="font-bold text-text-base">{item.sede_nombre || item.sede_id}</span>
-                    {#if item.migrated > 0}
-                      <span class="px-2 py-0.5 rounded-lg bg-emerald-500/20 text-emerald-400 font-mono font-bold">
-                        +{item.migrated} migrados
+                  <div class="flex items-center justify-between text-xs p-2.5 rounded-xl sync-item-row">
+                    <span class="font-bold sync-title">{item.sede_nombre || item.sede_id}</span>
+                    {#if item.migrated > 0 || item.migrated_mapas > 0}
+                      <span class="px-2 py-0.5 rounded-lg bg-emerald-500/20 text-emerald-700 dark:text-emerald-400 font-mono font-bold">
+                        +{item.migrated} usuarios {item.migrated_mapas ? `(+${item.migrated_mapas} mapas)` : ''}
                       </span>
                     {:else if item.errors && item.errors.length > 0}
-                      <span class="px-2 py-0.5 rounded-lg bg-red-500/20 text-red-400 font-mono font-bold">
+                      <span class="px-2 py-0.5 rounded-lg bg-red-500/20 text-red-700 dark:text-red-400 font-mono font-bold">
                         {item.errors.length} error(es)
                       </span>
                     {:else}
-                      <span class="px-2 py-0.5 rounded-lg bg-white/5 text-text-muted font-mono">
+                      <span class="px-2 py-0.5 rounded-lg sync-pill font-mono">
                         Al día (0 faltantes)
                       </span>
                     {/if}
@@ -1396,12 +1402,12 @@
       </div>
 
       <!-- Footer Actions -->
-      <div class="p-6 md:p-8 border-t border-white/5 bg-surface-base/30 flex items-center justify-end">
+      <div class="sync-modal-footer p-5 md:p-6 flex items-center justify-end">
         <button
           type="button"
           disabled={syncingEntity !== null}
           onclick={() => { showSyncModal = false; syncResult = null; }}
-          class="px-6 py-3 rounded-2xl font-bold bg-white/5 hover:bg-white/10 transition-all text-sm text-text-base disabled:opacity-50"
+          class="sync-close-footer-btn px-6 py-2.5 rounded-xl font-bold transition-all text-sm disabled:opacity-50"
         >
           Cerrar
         </button>
@@ -1415,7 +1421,225 @@
     width: 6px;
   }
   .custom-scrollbar::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.1);
+    background: rgba(148, 163, 184, 0.2);
     border-radius: 10px;
+  }
+
+  /* Base Modal Theme Adaptability */
+  .sync-modal-box {
+    background-color: #0f0f11;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: #ffffff;
+  }
+  :global(.light) .sync-modal-box {
+    background-color: #ffffff;
+    border: 1px solid #e2e8f0;
+    color: #0f172a;
+  }
+
+  .sync-modal-header {
+    background-color: #0f0f11;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  }
+  :global(.light) .sync-modal-header {
+    background-color: #ffffff;
+    border-bottom: 1px solid #f1f5f9;
+  }
+
+  .sync-modal-body {
+    background-color: transparent;
+  }
+  :global(.light) .sync-modal-body {
+    background-color: #f8fafc;
+  }
+
+  .sync-modal-footer {
+    background-color: #0a0a0c;
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
+  }
+  :global(.light) .sync-modal-footer {
+    background-color: #ffffff;
+    border-top: 1px solid #f1f5f9;
+  }
+
+  .sync-title {
+    color: #ffffff;
+  }
+  :global(.light) .sync-title {
+    color: #0f172a;
+  }
+
+  .sync-subtitle {
+    color: #94a3b8;
+  }
+  :global(.light) .sync-subtitle {
+    color: #64748b;
+  }
+
+  .sync-num {
+    color: #f8fafc;
+  }
+  :global(.light) .sync-num {
+    color: #1e293b;
+  }
+
+  .sync-num-cyan {
+    color: #22d3ee;
+  }
+  :global(.light) .sync-num-cyan {
+    color: #0891b2;
+  }
+
+  /* Branch Row */
+  .sync-branch-row {
+    background-color: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+  }
+  :global(.light) .sync-branch-row {
+    background-color: #ffffff;
+    border: 1px solid #e2e8f0;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+  }
+
+  /* Entity Card (Proveedores, Clientes, Artículos, Usuarios) */
+  .sync-entity-card {
+    background-color: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+  }
+  :global(.light) .sync-entity-card {
+    background-color: #ffffff;
+    border: 1px solid #e2e8f0;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  }
+
+  .sync-info-box {
+    background-color: rgba(var(--brand-h), var(--brand-s), 50%, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+  }
+  :global(.light) .sync-info-box {
+    background-color: #f0fdf4;
+    border: 1px solid #bbf7d0;
+  }
+
+  .sync-pill {
+    background-color: rgba(255, 255, 255, 0.06);
+    color: #94a3b8;
+  }
+  :global(.light) .sync-pill {
+    background-color: #f1f5f9;
+    border: 1px solid #e2e8f0;
+    color: #475569;
+  }
+
+  .sync-item-row {
+    background-color: rgba(0, 0, 0, 0.2);
+  }
+  :global(.light) .sync-item-row {
+    background-color: #ffffff;
+    border: 1px solid #e2e8f0;
+  }
+
+  .sync-close-btn {
+    background-color: rgba(255, 255, 255, 0.05);
+    color: #94a3b8;
+  }
+  .sync-close-btn:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+    color: #ffffff;
+  }
+  :global(.light) .sync-close-btn {
+    background-color: #f1f5f9;
+    color: #64748b;
+  }
+  :global(.light) .sync-close-btn:hover {
+    background-color: #e2e8f0;
+    color: #0f172a;
+  }
+
+  .sync-close-footer-btn {
+    background-color: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: #ffffff;
+  }
+  .sync-close-footer-btn:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+  }
+  :global(.light) .sync-close-footer-btn {
+    background-color: #f8fafc;
+    border: 1px solid #cbd5e1;
+    color: #0f172a;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  }
+  :global(.light) .sync-close-footer-btn:hover {
+    background-color: #f1f5f9;
+  }
+
+  /* High-Contrast Sync Buttons */
+  .btn-sync-amber {
+    background-color: rgba(245, 158, 11, 0.15);
+    border: 1px solid rgba(245, 158, 11, 0.3);
+    color: #fcd34d;
+  }
+  .btn-sync-amber:hover {
+    background-color: rgba(245, 158, 11, 0.25);
+  }
+  :global(.light) .btn-sync-amber {
+    background-color: #fef3c7;
+    border: 1px solid #f59e0b;
+    color: #92400e;
+  }
+  :global(.light) .btn-sync-amber:hover {
+    background-color: #fde68a;
+  }
+
+  .btn-sync-emerald {
+    background-color: rgba(16, 185, 129, 0.15);
+    border: 1px solid rgba(16, 185, 129, 0.3);
+    color: #6ee7b7;
+  }
+  .btn-sync-emerald:hover {
+    background-color: rgba(16, 185, 129, 0.25);
+  }
+  :global(.light) .btn-sync-emerald {
+    background-color: #d1fae5;
+    border: 1px solid #10b981;
+    color: #065f46;
+  }
+  :global(.light) .btn-sync-emerald:hover {
+    background-color: #a7f3d0;
+  }
+
+  .btn-sync-blue {
+    background-color: rgba(59, 130, 246, 0.15);
+    border: 1px solid rgba(59, 130, 246, 0.3);
+    color: #93c5fd;
+  }
+  .btn-sync-blue:hover {
+    background-color: rgba(59, 130, 246, 0.25);
+  }
+  :global(.light) .btn-sync-blue {
+    background-color: #dbeafe;
+    border: 1px solid #3b82f6;
+    color: #1e40af;
+  }
+  :global(.light) .btn-sync-blue:hover {
+    background-color: #bfdbfe;
+  }
+
+  .btn-sync-cyan {
+    background-color: rgba(6, 182, 212, 0.15);
+    border: 1px solid rgba(6, 182, 212, 0.3);
+    color: #67e8f9;
+  }
+  .btn-sync-cyan:hover {
+    background-color: rgba(6, 182, 212, 0.25);
+  }
+  :global(.light) .btn-sync-cyan {
+    background-color: #cffafe;
+    border: 1px solid #06b6d4;
+    color: #155e75;
+  }
+  :global(.light) .btn-sync-cyan:hover {
+    background-color: #a5f3fc;
   }
 </style>

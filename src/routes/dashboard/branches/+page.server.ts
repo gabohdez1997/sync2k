@@ -53,7 +53,7 @@ export const load: PageServerLoad = protectLoad('sec_branches', async ({ locals,
 
     // Consultar servidores SQL y estadísticas de todas las sucursales activas en paralelo
     let agentServers: any[] = [];
-    let branchStats: Record<string, { articulos: number; clientes: number; proveedores: number; online: boolean }> = {};
+    let branchStats: Record<string, { articulos: number; clientes: number; proveedores: number; condiciones_pago?: number; usuarios?: number; online: boolean }> = {};
     let loadError: string | null = null;
     const activeBranches = (branches ?? []).filter(b => b.active && b.agent_url);
 
@@ -98,6 +98,7 @@ export const load: PageServerLoad = protectLoad('sec_branches', async ({ locals,
                   clientes: Number(s.clientes) || 0,
                   proveedores: Number(s.proveedores) || 0,
                   condiciones_pago: Number(s.condiciones_pago) || 0,
+                  usuarios: Number(s.usuarios) || 0,
                   online: Boolean(s.online ?? true)
                 };
 
@@ -406,6 +407,46 @@ export const actions: Actions = {
       return fail(400, { message: 'Se requieren al menos 2 sucursales activas con conexión configurada para sincronizar.' });
     }
 
+    if (entity === 'profit_users' || entity === 'users') {
+      try {
+        const client = new AgentClient(
+          {
+            slug: activeBranches[0].id,
+            agent_url: activeBranches[0].agent_url!,
+            agent_api_key: activeBranches[0].agent_token
+          },
+          locals.profile || undefined,
+          fetch
+        );
+
+        const res = await client.syncMasterUsers();
+        if (!res || !res.success) {
+          return fail(500, { message: res?.message || 'Error al sincronizar usuarios y mapas de Profit Plus.' });
+        }
+
+        await supabaseAdmin.rpc('log_action', {
+          p_user_id: locals.profile?.id ?? null,
+          p_user_email: locals.profile?.email ?? 'system',
+          p_action: 'SYNC_PROFIT_USERS',
+          p_module: 'sec_branches',
+          p_record_id: 'MASTER_PROFIT_PRO',
+          p_branch_id: activeBranches[0].id,
+          p_new_data: JSON.stringify({ total_synced: res.total_synced, summary: res.summary })
+        });
+
+        return {
+          success: true,
+          entity: 'profit_users',
+          total_synced: res.total_synced || 0,
+          message: res.message || 'Sincronización de usuarios y mapas de Profit Plus completada con éxito.',
+          summary: res.summary || []
+        };
+      } catch (err: any) {
+        console.error('[SYNC PROFIT USERS FATAL ERROR]:', err);
+        return fail(500, { message: `Error al sincronizar usuarios de Profit Plus: ${err.message}` });
+      }
+    }
+
     let moduleName = 'PROVEEDORES';
     let endpoint = 'proveedores';
     let keyField = 'co_prov';
@@ -425,6 +466,55 @@ export const actions: Actions = {
     }
 
     try {
+      // Si la entidad es proveedores, primero sincronizar condiciones de pago para consistencia referencial
+      if (entity === 'suppliers') {
+        try {
+          const condExports = await Promise.all(
+            activeBranches.map(async (branch) => {
+              const client = new AgentClient(
+                {
+                  slug: branch.id,
+                  agent_url: branch.agent_url!,
+                  agent_api_key: branch.agent_token
+                },
+                locals.profile || undefined,
+                fetch
+              );
+              try {
+                const res = await client.exportAll('catalogos/condiciones-pago', branch.id);
+                const items = (res && res.success && Array.isArray(res.data)) ? res.data : [];
+                const keyMap = new Set(items.map((i: any) => String(i.co_cond || '').trim().toUpperCase()).filter(Boolean));
+                return { branch, client, items, keyMap, error: null };
+              } catch (err: any) {
+                return { branch, client, items: [], keyMap: new Set<string>(), error: err.message };
+              }
+            })
+          );
+          const validCondBranches = condExports.filter(b => !b.error);
+          if (validCondBranches.length >= 2) {
+            const allUniqueConds = new Map<string, any>();
+            for (const b of validCondBranches) {
+              for (const item of b.items) {
+                const key = String(item.co_cond || '').trim().toUpperCase();
+                if (key && !allUniqueConds.has(key)) allUniqueConds.set(key, item);
+              }
+            }
+            await Promise.all(
+              validCondBranches.map(async (b) => {
+                const missingConds: any[] = [];
+                for (const [key, item] of allUniqueConds.entries()) {
+                  if (!b.keyMap.has(key)) missingConds.push(item);
+                }
+                if (missingConds.length > 0) {
+                  await b.client.importBatch('catalogos/condiciones-pago', missingConds, b.branch.id).catch(() => null);
+                }
+              })
+            );
+          }
+        } catch (condErr) {
+          console.warn('[SYNC SUPPLIERS] Advertencia al sincronizar condiciones de pago previas:', condErr);
+        }
+      }
       // 1. Exportar datos de todas las sedes activas en paralelo
       const branchExports = await Promise.all(
         activeBranches.map(async (branch) => {

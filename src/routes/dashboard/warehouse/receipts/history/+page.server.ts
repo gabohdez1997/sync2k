@@ -58,8 +58,29 @@ export const load: PageServerLoad = protectLoad('inv_receipts', async ({ url, lo
         try {
             const res = await agentClient.getReceivingNotes(filters, page, limit);
             receipts = res?.data || res?.items || [];
-            total = res?.total || receipts.length;
-            totalPages = res?.totalPages || Math.ceil(total / limit) || 1;
+            total = Number(res?.total_items ?? res?.total ?? receipts.length);
+            totalPages = Number(res?.total_pages ?? res?.totalPages ?? Math.ceil(total / limit) ?? 1);
+
+            const { data: profilesData } = await supabaseAdmin
+                .from('profiles')
+                .select('profit_user, full_name');
+
+            const usersMap: Record<string, string> = {};
+            if (profilesData) {
+                profilesData.forEach((p: any) => {
+                    if (p.profit_user) {
+                        usersMap[p.profit_user.trim().toLowerCase()] = p.full_name;
+                    }
+                });
+            }
+
+            receipts = receipts.map((rec: any) => {
+                const code = (rec.co_us_in || '').trim().toLowerCase();
+                return {
+                    ...rec,
+                    recepcionista_name: usersMap[code] || rec.co_us_in
+                };
+            });
         } catch (err: any) {
             console.error('[RECEIPTS HISTORY LOAD] Error cargando historial:', err);
         }
@@ -73,6 +94,12 @@ export const load: PageServerLoad = protectLoad('inv_receipts', async ({ url, lo
     return {
         title: 'Historial de Notas de Recepción',
         receipts,
+        pagination: {
+            total,
+            pages: totalPages,
+            currentPage: page,
+            limit
+        },
         total,
         page,
         totalPages,
