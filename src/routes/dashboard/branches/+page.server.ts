@@ -423,8 +423,19 @@ export const actions: Actions = {
             );
 
             try {
-              const res = await client.exportMasterUsers(branch.id);
-              const data = res?.data || {};
+              const res = await client.exportMasterUsers();
+              if (!res || !res.success) {
+                return {
+                  branch,
+                  client,
+                  mapas: [],
+                  usuarios: [],
+                  perfiles: [],
+                  reportes_mapa: [],
+                  error: res?.message || 'Error al exportar datos de MasterProfitPro'
+                };
+              }
+              const data = res.data || {};
               return {
                 branch,
                 client,
@@ -508,8 +519,10 @@ export const actions: Actions = {
             let branchMigratedMapas = missingMapas.length;
 
             try {
-              const importRes = await b.client.importMasterUsers(payload, b.branch.id);
-              if (importRes) {
+              const importRes = await b.client.importMasterUsers(payload);
+              if (!importRes || !importRes.success) {
+                branchErrors.push(importRes?.message || 'Error al importar datos a MasterProfitPro');
+              } else {
                 if (typeof importRes.migrated_usuarios === 'number') {
                   branchMigratedUsers = importRes.migrated_usuarios;
                 }
