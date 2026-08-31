@@ -409,20 +409,128 @@ export const actions: Actions = {
 
     if (entity === 'profit_users' || entity === 'users') {
       try {
-        const client = new AgentClient(
-          {
-            slug: activeBranches[0].id,
-            agent_url: activeBranches[0].agent_url!,
-            agent_api_key: activeBranches[0].agent_token
-          },
-          locals.profile || undefined,
-          fetch
+        // 1. Exportar datos de MasterProfitPro de todas las sedes activas
+        const branchExports = await Promise.all(
+          activeBranches.map(async (branch) => {
+            const client = new AgentClient(
+              {
+                slug:          branch.id,
+                agent_url:     branch.agent_url!,
+                agent_api_key: branch.agent_token
+              },
+              locals.profile || undefined,
+              fetch
+            );
+
+            try {
+              const res = await client.exportMasterUsers(branch.id);
+              const data = res?.data || {};
+              return {
+                branch,
+                client,
+                mapas: Array.isArray(data.mapas) ? data.mapas : [],
+                usuarios: Array.isArray(data.usuarios) ? data.usuarios : [],
+                perfiles: Array.isArray(data.perfiles) ? data.perfiles : [],
+                reportes_mapa: Array.isArray(data.reportes_mapa) ? data.reportes_mapa : [],
+                error: null
+              };
+            } catch (err: any) {
+              return {
+                branch,
+                client,
+                mapas: [],
+                usuarios: [],
+                perfiles: [],
+                reportes_mapa: [],
+                error: err.message
+              };
+            }
+          })
         );
 
-        const res = await client.syncMasterUsers();
-        if (!res || !res.success) {
-          return fail(500, { message: res?.message || 'Error al sincronizar usuarios y mapas de Profit Plus.' });
+        const validBranches = branchExports.filter(b => !b.error);
+        if (validBranches.length < 2) {
+          const errorDetails = branchExports.filter(b => b.error).map(b => `${b.branch.name}: ${b.error}`).join(' | ');
+          return fail(500, { message: `No se pudo conectar a MasterProfitPro en suficientes sedes activas. ${errorDetails}` });
         }
+
+        // 2. Unificar catálogos maestros
+        const masterMapas = new Map<string, any>();
+        const masterUsers = new Map<string, any>();
+        const masterPerfiles = new Map<string, any>();
+        const masterReportesMapa = new Map<string, any>();
+
+        for (const exp of validBranches) {
+          for (const m of exp.mapas) {
+            const key = `${String(m.co_mapa || '').trim().toUpperCase()}__${String(m.producto || 'ADMI').trim().toUpperCase()}`;
+            if (key && !masterMapas.has(key)) masterMapas.set(key, m);
+          }
+          for (const u of exp.usuarios) {
+            const key = String(u.Cod_Usuario || '').trim().toUpperCase();
+            if (key && !masterUsers.has(key)) masterUsers.set(key, u);
+          }
+          for (const p of exp.perfiles) {
+            const key = `${String(p.cod_usuario || '').trim().toUpperCase()}__${String(p.cod_empresa || '').trim().toUpperCase()}`;
+            if (key && !masterPerfiles.has(key)) masterPerfiles.set(key, p);
+          }
+          for (const rm of exp.reportes_mapa) {
+            const key = `${String(rm.co_mapa || '').trim().toUpperCase()}__${String(rm.co_reporte || '').trim().toUpperCase()}__${String(rm.producto || 'ADMI').trim().toUpperCase()}`;
+            if (key && !masterReportesMapa.has(key)) masterReportesMapa.set(key, rm);
+          }
+        }
+
+        const unifiedMapas = Array.from(masterMapas.values());
+        const unifiedUsers = Array.from(masterUsers.values());
+        const unifiedPerfiles = Array.from(masterPerfiles.values());
+        const unifiedReportesMapa = Array.from(masterReportesMapa.values());
+
+        // 3. Importar a todas las sedes activas
+        let totalUsersSynced = 0;
+        const summary: Array<{ sede_id: string; sede_nombre: string; migrated: number; migrated_mapas: number; errors: string[] }> = [];
+
+        await Promise.all(
+          validBranches.map(async (b) => {
+            const userKeySet = new Set(b.usuarios.map(u => String(u.Cod_Usuario || '').trim().toUpperCase()));
+            const mapaKeySet = new Set(b.mapas.map(m => `${String(m.co_mapa || '').trim().toUpperCase()}__${String(m.producto || 'ADMI').trim().toUpperCase()}`));
+
+            const missingUsers = unifiedUsers.filter(u => !userKeySet.has(String(u.Cod_Usuario || '').trim().toUpperCase()));
+            const missingMapas = unifiedMapas.filter(m => !mapaKeySet.has(`${String(m.co_mapa || '').trim().toUpperCase()}__${String(m.producto || 'ADMI').trim().toUpperCase()}`));
+
+            const payload = {
+              mapas: unifiedMapas,
+              usuarios: unifiedUsers,
+              perfiles: unifiedPerfiles,
+              reportes_mapa: unifiedReportesMapa
+            };
+
+            const branchErrors: string[] = [];
+            let branchMigratedUsers = missingUsers.length;
+            let branchMigratedMapas = missingMapas.length;
+
+            try {
+              const importRes = await b.client.importMasterUsers(payload, b.branch.id);
+              if (importRes) {
+                if (typeof importRes.migrated_usuarios === 'number') {
+                  branchMigratedUsers = importRes.migrated_usuarios;
+                }
+                if (typeof importRes.migrated_mapas === 'number') {
+                  branchMigratedMapas = importRes.migrated_mapas;
+                }
+              }
+            } catch (impErr: any) {
+              branchErrors.push(impErr.message);
+            }
+
+            totalUsersSynced += branchMigratedUsers;
+            summary.push({
+              sede_id: b.branch.id,
+              sede_nombre: b.branch.name,
+              migrated: branchMigratedUsers,
+              migrated_mapas: branchMigratedMapas,
+              errors: branchErrors
+            });
+          })
+        );
 
         await supabaseAdmin.rpc('log_action', {
           p_user_id: locals.profile?.id ?? null,
@@ -431,15 +539,15 @@ export const actions: Actions = {
           p_module: 'sec_branches',
           p_record_id: 'MASTER_PROFIT_PRO',
           p_branch_id: activeBranches[0].id,
-          p_new_data: JSON.stringify({ total_synced: res.total_synced, summary: res.summary })
+          p_new_data: JSON.stringify({ total_synced: totalUsersSynced, summary })
         });
 
         return {
           success: true,
           entity: 'profit_users',
-          total_synced: res.total_synced || 0,
-          message: res.message || 'Sincronización de usuarios y mapas de Profit Plus completada con éxito.',
-          summary: res.summary || []
+          total_synced: totalUsersSynced,
+          message: 'Sincronización de usuarios y mapas de MasterProfitPro completada con éxito.',
+          summary
         };
       } catch (err: any) {
         console.error('[SYNC PROFIT USERS FATAL ERROR]:', err);
