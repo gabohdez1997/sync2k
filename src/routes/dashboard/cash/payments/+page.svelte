@@ -913,9 +913,14 @@
     const collectionCurrency = firstSelectedDoc ? firstSelectedDoc.co_mone?.trim()?.toUpperCase() : (selectedClient.co_mone?.trim()?.toUpperCase() || "USD");
     const safeCollectionCurrency = collectionCurrency === "US$" ? "USD" : collectionCurrency;
 
+    // Obtener el vendedor del primer documento seleccionado (factura), o el del cliente como fallback
+    const effectiveCoVen = (firstSelectedDoc?.co_ven && firstSelectedDoc.co_ven.trim() !== '' && firstSelectedDoc.co_ven.trim() !== '01')
+      ? firstSelectedDoc.co_ven.trim()
+      : (selectedClient.co_ven && selectedClient.co_ven.trim() !== '' ? selectedClient.co_ven.trim() : "01");
+
     const payload = {
       co_cli: selectedClient.co_cli,
-      co_ven: selectedClient.co_ven,
+      co_ven: effectiveCoVen,
       co_mone: safeCollectionCurrency,
       tasa: tasaCobro,
       monto: totalDocBs,
