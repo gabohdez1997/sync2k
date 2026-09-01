@@ -414,12 +414,10 @@
   let isPrintingNote = $state(false);
   let previewDocData = $state<any>(null);
 
-  async function saveAndPrintSimulatedInvoice() {
+  function openPreviewModal() {
     const activeLines = billingLines.filter((l) => l.checked);
     if (activeLines.length === 0) {
-      toast.error(
-        "Debes tener al menos un artículo seleccionado para facturar.",
-      );
+      toast.error("Debes tener al menos un artículo seleccionado para previsualizar.");
       return;
     }
     if (!selectedClient) {
@@ -477,6 +475,149 @@
     };
 
     showPreviewModal = true;
+  }
+
+  async function saveAndPrintSimulatedInvoice() {
+    const activeLines = billingLines.filter((l) => l.checked);
+    if (activeLines.length === 0) {
+      toast.error(
+        "Debes tener al menos un artículo seleccionado para facturar.",
+      );
+      return;
+    }
+    if (!selectedClient) {
+      toast.error("Debe seleccionar un cliente antes de continuar.");
+      return;
+    }
+
+    // --- CHECK SINGLE SERVICE FORCE BRANCH ---
+    let forceSucu: string | null = null;
+    const isSingleService = activeLines.length === 1 && (
+      activeLines[0].co_lin === '09' || 
+      String(activeLines[0].co_art || '').trim().startsWith('09')
+    );
+
+    if (isSingleService) {
+      const choice = await askServiceSucuConfirmation();
+      if (choice === null) {
+        // User cancelled the operation
+        return;
+      }
+      forceSucu = choice;
+    }
+
+    isSavingInvoice = true;
+
+    const tasa = activeTasa;
+
+    // Construir la factura en USD según requerimiento
+    const invoiceData = {
+      co_cli: selectedClient.co_cli,
+      co_ven: activeCoVen,
+      co_cond: selectedClient.co_cond,
+      descrip: `FACTURA WEB - PEDIDO: ${originOrderNum}`,
+      comentario: `Importado de pedidos: ${originOrderNum}`,
+      tasa: tasa,
+      igtf_monto_divisa: enableIgtf ? Number(igtfMontoDivisa || 0) : 0,
+      force_sucu: forceSucu,
+      renglones: activeLines.map((line: any) => ({
+        co_art: line.co_art,
+        art_des: line.art_des,
+        cantidad: Number(line.cantidad),
+        co_uni: line.co_uni,
+        co_alma: line.co_alma,
+        co_precio: line.co_precio,
+        precio: Number(line.precio), // precio ya está en USD en el estado de Svelte
+        porc_imp: Number(line.porc_imp),
+        tipo_imp: line.tipo_imp || '1',
+        tipo_doc: 'PCLI',
+        num_doc: line.doc_num,
+        rowguid_doc: line.rowguid,
+        co_subl: line.co_subl,
+        co_lin: line.co_lin,
+      })),
+    };
+
+    try {
+      // 1. Guardar factura real en la base de datos SQL
+      const saveResponse = await fetch(`/api/agent/facturas`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          branch_id: filterSede,
+          invoice: invoiceData,
+        }),
+      });
+      const saveResult = await saveResponse.json();
+
+      if (!saveResult.success) {
+        throw new Error(saveResult.message || "Error al guardar la factura en la base de datos.");
+      }
+
+      const realDocNum = saveResult.doc_num || saveResult.results?.[0]?.doc_num;
+      if (!realDocNum) {
+        throw new Error("No se recibió el número de documento correlativo generado.");
+      }
+
+      toast.success(`Factura Nro. ${realDocNum} guardada exitosamente en la base de datos.`);
+
+      // 2. Si existen impresoras activas, proceder a imprimir el ticket de predespacho para almacén
+      if (data.printers && data.printers.length > 0) {
+        toast.info("Enviando ticket de predespacho a almacén...");
+        try {
+          const printResponse = await fetch(`/api/agent/billing/print`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              branch_id: filterSede,
+              invoice: {
+                ...invoiceData,
+                invoice_num: realDocNum, // Usado para imprimir origen FACTURA Nro. XXX
+                doc_num: realDocNum,     // Usado para el código grande al pie del ticket
+                cli_des: selectedClient.cli_des,
+                rif: selectedClient.rif,
+                telefonos: selectedClient.telefonos,
+                direc1: selectedClient.direc1,
+                vendedor: activeVenDes || activeCoVen || "---",
+              },
+            }),
+          });
+          const printResult = await printResponse.json();
+          if (printResult.success) {
+            toast.success(printResult.message || "Ticket de predespacho enviado.");
+          } else {
+            toast.warning(`La factura se guardó pero falló la impresión: ${printResult.message}`);
+          }
+        } catch (printErr: any) {
+          console.error("Error al imprimir ticket:", printErr);
+          toast.warning(`La factura se guardó pero ocurrió un error al imprimir: ${printErr.message}`);
+        }
+      }
+
+      const clientCond = String(selectedClient?.co_cond || '').trim().toUpperCase();
+      const isContado = clientCond === '01' || clientCond === 'CONTADO';
+
+      if (isContado) {
+        // Reset billing form en caso de éxito
+        selectedClient = null;
+        billingLines = [];
+        activeTasa = 1;
+        importedOrdersInfo = {};
+        enableIgtf = false;
+        igtfMontoDivisa = null;
+
+        // Redirigir al creador de Cobros precargando la factura generada
+        goto(`/dashboard/cash/payments?branch_id=${filterSede}&import_invoice=${realDocNum}`);
+      } else {
+        // Factura a Crédito: Mostrar pantalla de éxito
+        generatedDocNum = realDocNum;
+        saveSuccess = true;
+      }
+    } catch (err: any) {
+      toast.error(err.message || "Error al procesar la factura.");
+    } finally {
+      isSavingInvoice = false;
+    }
   }
 
   async function handlePrintFromModal() {
@@ -1022,24 +1163,38 @@
           </div>
         {/if}
 
-        <!-- SAVE BUTTON -->
-        <button
-          onclick={saveAndPrintSimulatedInvoice}
-          disabled={billingLines.length === 0 ||
-            isSavingInvoice ||
-            hasMultipleOrigins}
-          class="w-full h-20 bg-brand-600 hover:bg-brand-500 disabled:bg-surface-soft text-white disabled:text-text-muted/30 rounded-[24px] font-black text-lg uppercase tracking-[0.2em] transition-all active:scale-[0.97] disabled:opacity-50 disabled:pointer-events-none flex items-center justify-center gap-4 shadow-xl shadow-brand-500/10 hover:shadow-brand-500/30 group relative z-10"
-        >
-          {#if isSavingInvoice}
-            <RefreshCw size={24} class="animate-spin text-brand-400/40" />
-            <span class="animate-pulse">Procesando...</span>
-          {:else}
-            <div class="bg-surface-strong/50 p-2.5 rounded-xl group-hover:scale-110 transition-transform">
-              <Printer size={24} />
-            </div>
-            <span>Guardar</span>
-          {/if}
-        </button>
+        <!-- ACTION BUTTONS: PREVIEW & SAVE -->
+        <div class="flex flex-col gap-3 relative z-10">
+          <button
+            type="button"
+            onclick={openPreviewModal}
+            disabled={billingLines.length === 0 || isSavingInvoice}
+            class="w-full h-12 bg-surface-soft hover:bg-surface-strong border border-border-subtle text-text-base rounded-2xl font-bold text-xs uppercase tracking-wider transition-all active:scale-[0.98] disabled:opacity-40 disabled:pointer-events-none flex items-center justify-center gap-2.5 cursor-pointer shadow-sm"
+          >
+            <FileText size={18} class="text-brand-400" />
+            <span>Previsualizar Nota (Matricial)</span>
+          </button>
+
+          <!-- SAVE BUTTON -->
+          <button
+            type="button"
+            onclick={saveAndPrintSimulatedInvoice}
+            disabled={billingLines.length === 0 ||
+              isSavingInvoice ||
+              hasMultipleOrigins}
+            class="w-full h-18 bg-brand-600 hover:bg-brand-500 disabled:bg-surface-soft text-white disabled:text-text-muted/30 rounded-[22px] font-black text-base uppercase tracking-[0.2em] transition-all active:scale-[0.97] disabled:opacity-50 disabled:pointer-events-none flex items-center justify-center gap-3 shadow-xl shadow-brand-500/10 hover:shadow-brand-500/30 group cursor-pointer border-none"
+          >
+            {#if isSavingInvoice}
+              <RefreshCw size={22} class="animate-spin text-brand-400/40" />
+              <span class="animate-pulse">Guardando Factura...</span>
+            {:else}
+              <div class="bg-surface-strong/50 p-2 rounded-xl group-hover:scale-110 transition-transform">
+                <Printer size={22} />
+              </div>
+              <span>Guardar Factura</span>
+            {/if}
+          </button>
+        </div>
       </div>
     </div>
   </div>
