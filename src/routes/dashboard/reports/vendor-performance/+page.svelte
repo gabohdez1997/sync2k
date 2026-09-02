@@ -387,6 +387,7 @@
                 cortes: number;
                 cobros_usd: number;
                 cobros_bs: number;
+                cobros_bs_monto: number;
                 pct_dev: number;
             }
         >();
@@ -406,6 +407,7 @@
                 cortes: 0,
                 cobros_usd: 0,
                 cobros_bs: 0,
+                cobros_bs_monto: 0,
                 pct_dev: 0,
             });
         });
@@ -423,6 +425,7 @@
                 item.cortes += Number(row.cortes) || 0;
                 item.cobros_usd += Number(row.cobros_usd) || 0;
                 item.cobros_bs += Number(row.cobros_bs) || 0;
+                item.cobros_bs_monto += Number(row.cobros_bs_monto) || 0;
             }
         }
 
@@ -493,12 +496,21 @@
                   0,
               ),
     );
+    const totalCobrosBsUsdGlobal = $derived(
+        data.totalCobrosBsUsdGlobal !== undefined
+            ? data.totalCobrosBsUsdGlobal
+            : rankingCobrosBs.reduce(
+                  (acc: number, r: any) =>
+                      acc + (Number(r.total_bs_usd ?? r.cobros_bs) || 0),
+                  0,
+              ),
+    );
     const totalCobrosBsGlobal = $derived(
         data.totalCobrosBsGlobal !== undefined
             ? data.totalCobrosBsGlobal
             : rankingCobrosBs.reduce(
                   (acc: number, r: any) =>
-                      acc + (Number(r.total_bs ?? r.cobros_bs) || 0),
+                      acc + (Number(r.total_bs ?? r.cobros_bs_monto) || 0),
                   0,
               ),
     );
@@ -668,7 +680,7 @@
                                     return ` ${label}: $${rawVal.toLocaleString("es-VE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD`;
                                 }
                                 if (metric === "cobros_bs") {
-                                    return ` ${label}: ${rawVal.toLocaleString("es-VE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Bs.`;
+                                    return ` ${label}: $${rawVal.toLocaleString("es-VE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD (Eqv.)`;
                                 }
                                 const val = rawVal.toLocaleString("es-VE");
                                 const unit =
@@ -692,11 +704,11 @@
                             font: { size: 10 },
                             callback: function (value) {
                                 const num = Number(value) || 0;
-                                if (metric === "cobros_usd") {
+                                if (
+                                    metric === "cobros_usd" ||
+                                    metric === "cobros_bs"
+                                ) {
                                     return "$" + num.toLocaleString();
-                                }
-                                if (metric === "cobros_bs") {
-                                    return num.toLocaleString() + " Bs.";
                                 }
                                 return num.toLocaleString();
                             },
@@ -1077,7 +1089,7 @@
         },
         {
             id: "cobros_usd" as const,
-            label: "Cobros USD ($)",
+            label: "Cobros USD",
             icon: DollarSign,
             activeBg: "bg-emerald-500/10 dark:bg-emerald-500/15",
             activeBorder:
@@ -1087,7 +1099,7 @@
         },
         {
             id: "cobros_bs" as const,
-            label: "Cobros BS (Bs.)",
+            label: "Cobros BS (Eqv. $)",
             icon: Coins,
             activeBg: "bg-amber-500/10 dark:bg-amber-500/15",
             activeBorder:
@@ -1359,7 +1371,7 @@
                 compChartCanvas,
                 compLabels,
                 "cobros_bs",
-                "Cobros BS (Bs.)",
+                "Cobros BS (Eqv. $)",
                 visibleVendorsCobrosBs,
             );
         } else if (activeCompTab === "devoluciones") {
@@ -6578,13 +6590,15 @@
                                         <h3
                                             class="text-base sm:text-lg font-black text-text-base flex items-center gap-2"
                                         >
-                                            Cobros en Bolívares (Bs.) por
+                                            Cobros en Bolívares (Eqv. USD) por
                                             Vendedor
                                         </h3>
                                         <p class="text-xs text-text-muted">
                                             Cobranza en bolívares (Punto de
                                             Venta / Caja Bs. y Cuentas Bancarias
-                                            Nacionales) por asesor comercial.
+                                            Nacionales) expresada en su
+                                            equivalente en USD según la tasa
+                                            histórica del día de cada cobro.
                                         </p>
                                     </div>
                                 </div>
@@ -6594,9 +6608,18 @@
                                     <span
                                         class="text-xs font-black px-3 py-1.5 rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 font-mono"
                                     >
-                                        Total: {formatCurrencyBS(
-                                            totalCobrosBsGlobal,
+                                        Total: {formatCurrencyUSD(
+                                            totalCobrosBsUsdGlobal,
                                         )}
+                                        {#if totalCobrosBsGlobal > 0}
+                                            <span
+                                                class="text-[10px] font-normal opacity-80 ml-1"
+                                            >
+                                                ({formatCurrencyBS(
+                                                    totalCobrosBsGlobal,
+                                                )})
+                                            </span>
+                                        {/if}
                                     </span>
                                     <button
                                         type="button"
@@ -6701,7 +6724,8 @@
                                             ? "Diario"
                                             : tipoAgrupacion === "semanal"
                                               ? "Semanal"
-                                              : "Mensual"} por Vendedor (Cobros BS)
+                                              : "Mensual"} por Vendedor (Cobros BS
+                                        Eqv. USD)
                                     </span>
                                     <span
                                         class="text-[10px] text-text-muted font-medium lg:hidden"
@@ -6737,7 +6761,7 @@
                                                         <span
                                                             class="text-[11px] font-mono font-black text-amber-600 dark:text-amber-400 shrink-0"
                                                         >
-                                                            {formatCurrencyBS(
+                                                            {formatCurrencyUSD(
                                                                 p.total,
                                                             )}
                                                         </span>
@@ -6751,7 +6775,7 @@
                                                             <p
                                                                 class="text-[10px] text-text-muted/50 italic text-center py-2"
                                                             >
-                                                                0,00 Bs.
+                                                                $0,00 USD
                                                             </p>
                                                         {:else}
                                                             {#each p.vendors as ven}
@@ -6775,7 +6799,7 @@
                                                                     <span
                                                                         class="font-mono font-black text-text-base shrink-0"
                                                                     >
-                                                                        {formatCurrencyBS(
+                                                                        {formatCurrencyUSD(
                                                                             ven.qty,
                                                                         )}
                                                                     </span>
@@ -6808,13 +6832,13 @@
                                                 class="text-base sm:text-lg font-black text-text-base flex items-center gap-2"
                                             >
                                                 Ranking de Cobros en Bolívares
-                                                (Bs.) por Asesor
+                                                (Eqv. USD) por Asesor
                                             </h3>
                                             <p class="text-xs text-text-muted">
                                                 Total acumulado en bolívares
-                                                cobrados (Punto de Venta /
-                                                Bancos Nacionales) en el rango
-                                                seleccionado.
+                                                cobrados recalculados a su
+                                                equivalente en USD a la tasa
+                                                histórica de cada cobro.
                                             </p>
                                         </div>
                                     </div>
@@ -6847,10 +6871,13 @@
                                                     >Asesor Comercial</th
                                                 >
                                                 <th class="py-3 px-4 text-right"
-                                                    >Cobros BS (Bs.) (Rango)</th
+                                                    >Cobros BS (Eqv. USD)</th
                                                 >
                                                 <th class="py-3 px-4 text-right"
-                                                    >% del Total BS</th
+                                                    >Monto Original (Bs.)</th
+                                                >
+                                                <th class="py-3 px-4 text-right"
+                                                    >% del Total</th
                                                 >
                                                 <th
                                                     class="py-3 px-4 text-center"
@@ -6866,16 +6893,21 @@
                                                         .includes(vendorFilterSearchCobrosBs.toLowerCase()) || t.co_ven
                                                         .toLowerCase()
                                                         .includes(vendorFilterSearchCobrosBs.toLowerCase())) as item, idx}
+                                                {@const valUsd =
+                                                    Number(
+                                                        item.total_bs_usd ??
+                                                            item.cobros_bs,
+                                                    ) || 0}
                                                 {@const valBs =
                                                     Number(
                                                         item.total_bs ??
-                                                            item.cobros_bs,
+                                                            item.cobros_bs_monto,
                                                     ) || 0}
                                                 {@const pct =
-                                                    totalCobrosBsGlobal > 0
+                                                    totalCobrosBsUsdGlobal > 0
                                                         ? (
-                                                              (valBs /
-                                                                  totalCobrosBsGlobal) *
+                                                              (valUsd /
+                                                                  totalCobrosBsUsdGlobal) *
                                                               100
                                                           ).toFixed(2)
                                                         : "0.00"}
@@ -6923,6 +6955,13 @@
                                                     <td
                                                         class="py-3 px-4 text-right font-black font-mono text-amber-600 dark:text-amber-400"
                                                     >
+                                                        {formatCurrencyUSD(
+                                                            valUsd,
+                                                        )}
+                                                    </td>
+                                                    <td
+                                                        class="py-3 px-4 text-right font-mono text-text-muted text-[11px]"
+                                                    >
                                                         {formatCurrencyBS(
                                                             valBs,
                                                         )}
@@ -6955,7 +6994,7 @@
                                             {#if rankingCobrosBs.length === 0}
                                                 <tr>
                                                     <td
-                                                        colspan="6"
+                                                        colspan="7"
                                                         class="py-8 text-center text-text-muted font-bold"
                                                     >
                                                         No se encontraron datos

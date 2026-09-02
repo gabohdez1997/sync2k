@@ -89,6 +89,7 @@ export const load: PageServerLoad = protectLoad('reports_vendor_performance', as
                 totalArtPedidosGlobal: response.totalArtPedidosGlobal || 0,
                 totalArtCotizadosGlobal: response.totalArtCotizadosGlobal || 0,
                 totalCobrosUsdGlobal: response.totalCobrosUsdGlobal || 0,
+                totalCobrosBsUsdGlobal: response.totalCobrosBsUsdGlobal || 0,
                 totalCobrosBsGlobal: response.totalCobrosBsGlobal || 0
             };
         } else {
