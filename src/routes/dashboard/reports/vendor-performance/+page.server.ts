@@ -82,10 +82,14 @@ export const load: PageServerLoad = protectLoad('reports_vendor_performance', as
                 rankingVendedores: response.rankingVendedores || [],
                 rankingArtPedidos: response.rankingArtPedidos || [],
                 rankingArtCotizados: response.rankingArtCotizados || [],
+                rankingCobrosUsd: response.rankingCobrosUsd || [],
+                rankingCobrosBs: response.rankingCobrosBs || [],
                 totalArticulosActivos: response.totalArticulosActivos || 0,
                 totalArticulosDistintosGlobal: response.totalArticulosDistintosGlobal || 0,
                 totalArtPedidosGlobal: response.totalArtPedidosGlobal || 0,
-                totalArtCotizadosGlobal: response.totalArtCotizadosGlobal || 0
+                totalArtCotizadosGlobal: response.totalArtCotizadosGlobal || 0,
+                totalCobrosUsdGlobal: response.totalCobrosUsdGlobal || 0,
+                totalCobrosBsGlobal: response.totalCobrosBsGlobal || 0
             };
         } else {
             return {
