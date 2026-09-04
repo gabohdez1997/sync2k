@@ -40,7 +40,6 @@
   let stock_min = $state(data.article?.stock_min || 0);
   let stock_max = $state(data.article?.stock_max || 0);
   let garantia = $state(data.article?.garantia || "0");
-  let comentario = $state(data.article?.comentario || "");
 
   // ── Precios / Márgenes Dinámicos ──
   let costo_act = $state(data.article?.costo_act || 0);
@@ -343,10 +342,6 @@
               <div class="space-y-2">
                 <label class="text-xs uppercase font-black tracking-widest text-text-muted">Garantía (Días)</label>
                 <input type="number" step="1" name="garantia" bind:value={garantia} class="w-full bg-surface-base h-12 px-4 rounded-xl border border-border-subtle focus:border-brand-500 outline-none text-sm font-mono text-right" placeholder="0" />
-              </div>
-              <div class="space-y-2">
-                <label class="text-xs uppercase font-black tracking-widest text-text-muted">Comentario del Artículo</label>
-                <textarea name="comentario" bind:value={comentario} class="w-full bg-surface-base h-12 px-4 py-3 rounded-xl border border-border-subtle focus:border-brand-500 outline-none text-sm transition-all resize-none"></textarea>
               </div>
             </div>
 

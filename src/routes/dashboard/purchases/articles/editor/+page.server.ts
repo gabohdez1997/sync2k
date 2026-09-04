@@ -138,8 +138,8 @@ export const actions: Actions = {
             stock_max: Number(formData.get('stock_max')) || 0,
             garantia: formData.get('garantia')?.toString() || '0',
             
-            // Comentarios
-            comentario: formData.get('comentario')?.toString() || null,
+            // Comentarios (saArticulo.comentario no debe guardarse para evitar que se imprima en facturas fiscales)
+            comentario: null,
             
             // Imagen base64 (Para enviar a BD Local en el futuro, o al agente si soporta)
             image_base64: formData.get('imageBase64')?.toString() || null,
