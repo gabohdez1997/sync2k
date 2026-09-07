@@ -92,6 +92,7 @@
     let visibleVendorsArtCot = $state<Set<string>>(new Set());
     let visibleVendorsCobrosUsd = $state<Set<string>>(new Set());
     let visibleVendorsCobrosBs = $state<Set<string>>(new Set());
+    let visibleVendorsFacturadoUsd = $state<Set<string>>(new Set());
     let lastData: any = null;
 
     $effect(() => {
@@ -114,6 +115,7 @@
             visibleVendorsArtCot = new Set(activeKeys);
             visibleVendorsCobrosUsd = new Set(activeKeys);
             visibleVendorsCobrosBs = new Set(activeKeys);
+            visibleVendorsFacturadoUsd = new Set(activeKeys);
         }
     });
 
@@ -306,11 +308,27 @@
         visibleVendorsCobrosBs = new Set();
     }
 
+    function toggleVendorFacturadoUsd(coVen: string) {
+        const next = new Set(visibleVendorsFacturadoUsd);
+        if (next.has(coVen)) next.delete(coVen);
+        else next.add(coVen);
+        visibleVendorsFacturadoUsd = next;
+    }
+    function selectAllFacturadoUsd() {
+        visibleVendorsFacturadoUsd = new Set(
+            (data.vendedores || []).map((v: any) => v.co_ven),
+        );
+    }
+    function deselectAllFacturadoUsd() {
+        visibleVendorsFacturadoUsd = new Set();
+    }
+
     // Filtros interactivos
     let startDate = $state(data.startDate);
     let endDate = $state(data.endDate);
     let selectedBranch = $state(data.branchId);
     let selectedVendedor = $state(data.selectedCoVen || "");
+    let selectedCoSucu = $state(data.selectedCoSucu || "");
 
     // Buscadores individuales por cada tabla de ranking
     let vendorFilterSearchDocs = $state("");
@@ -325,6 +343,7 @@
     let vendorFilterSearchCotArt = $state("");
     let vendorFilterSearchCobrosUsd = $state("");
     let vendorFilterSearchCobrosBs = $state("");
+    let vendorFilterSearchFacturadoUsd = $state("");
 
     // Sincronizar filtros cuando data cambie
     $effect(() => {
@@ -332,6 +351,7 @@
         endDate = data.endDate;
         selectedBranch = data.branchId;
         selectedVendedor = data.selectedCoVen || "";
+        selectedCoSucu = data.selectedCoSucu || "";
     });
 
     // Opciones de vendedores cruzados
@@ -388,6 +408,7 @@
                 cobros_usd: number;
                 cobros_bs: number;
                 cobros_bs_monto: number;
+                facturado_usd: number;
                 pct_dev: number;
             }
         >();
@@ -408,6 +429,7 @@
                 cobros_usd: 0,
                 cobros_bs: 0,
                 cobros_bs_monto: 0,
+                facturado_usd: 0,
                 pct_dev: 0,
             });
         });
@@ -426,6 +448,7 @@
                 item.cobros_usd += Number(row.cobros_usd) || 0;
                 item.cobros_bs += Number(row.cobros_bs) || 0;
                 item.cobros_bs_monto += Number(row.cobros_bs_monto) || 0;
+                item.facturado_usd += Number(row.facturado_usd) || 0;
             }
         }
 
@@ -515,6 +538,23 @@
               ),
     );
 
+    const rankingFacturadoUsd = $derived(
+        data.rankingFacturadoUsd && data.rankingFacturadoUsd.length > 0
+            ? data.rankingFacturadoUsd
+            : [...vendorRankingSummary].sort(
+                  (a, b) => b.facturado_usd - a.facturado_usd,
+              ),
+    );
+    const totalFacturadoUsdGlobal = $derived(
+        data.totalFacturadoUsdGlobal !== undefined
+            ? data.totalFacturadoUsdGlobal
+            : rankingFacturadoUsd.reduce(
+                  (acc: number, r: any) =>
+                      acc + (Number(r.total_usd ?? r.facturado_usd) || 0),
+                  0,
+              ),
+    );
+
     function formatCurrencyUSD(val: number) {
         return (
             "$" +
@@ -549,7 +589,11 @@
         return val.toLocaleString("es-VE");
     }
 
-    async function applyFilters(overrideVen?: string) {
+    async function applyFilters(
+        overrideVen?: string,
+        overrideSucu?: string,
+        overrideTab?: string,
+    ) {
         const params = new URLSearchParams();
         if (startDate) params.set("startDate", startDate);
         if (endDate) params.set("endDate", endDate);
@@ -560,12 +604,26 @@
             overrideVen !== undefined ? overrideVen : selectedVendedor;
         if (venToApply) params.set("co_ven", venToApply);
 
+        const sucuToApply =
+            overrideSucu !== undefined ? overrideSucu : selectedCoSucu;
+        if (sucuToApply) params.set("co_sucu", sucuToApply);
+
+        const tabToApply =
+            overrideTab !== undefined ? overrideTab : activeCompTab;
+        if (tabToApply && tabToApply !== "docs_exitosos")
+            params.set("tab", tabToApply);
+
         goto(`?${params.toString()}`);
     }
 
     function handleVendedorChange(newVen: string) {
         selectedVendedor = newVen;
         applyFilters(newVen);
+    }
+
+    function handleSucursalChange(newSucu: string) {
+        selectedCoSucu = newSucu;
+        applyFilters(undefined, newSucu, activeCompTab);
     }
 
     function setQuickDate(days: number) {
@@ -600,7 +658,8 @@
             | "art_pedidos"
             | "art_cotizados"
             | "cobros_usd"
-            | "cobros_bs",
+            | "cobros_bs"
+            | "facturado_usd",
         metricLabel: string,
         visibleSet: Set<string>,
     ) {
@@ -676,7 +735,7 @@
                             label: function (context) {
                                 const label = context.dataset.label || "";
                                 const rawVal = Number(context.parsed.y) || 0;
-                                if (metric === "cobros_usd") {
+                                if (metric === "cobros_usd" || metric === "facturado_usd") {
                                     return ` ${label}: $${rawVal.toLocaleString("es-VE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD`;
                                 }
                                 if (metric === "cobros_bs") {
@@ -706,7 +765,8 @@
                                 const num = Number(value) || 0;
                                 if (
                                     metric === "cobros_usd" ||
-                                    metric === "cobros_bs"
+                                    metric === "cobros_bs" ||
+                                    metric === "facturado_usd"
                                 ) {
                                     return "$" + num.toLocaleString();
                                 }
@@ -731,7 +791,8 @@
             | "art_pedidos"
             | "art_cotizados"
             | "cobros_usd"
-            | "cobros_bs",
+            | "cobros_bs"
+            | "facturado_usd",
     ) {
         const vList = data.vendedores || [];
         const vTimeline = data.vendedoresTimeline || [];
@@ -1060,9 +1121,13 @@
     const breakdownArtCot = $derived(getPeriodBreakdown("art_cotizados"));
     const breakdownCobrosUsd = $derived(getPeriodBreakdown("cobros_usd"));
     const breakdownCobrosBs = $derived(getPeriodBreakdown("cobros_bs"));
+    const breakdownFacturadoUsd = $derived(getPeriodBreakdown("facturado_usd"));
 
     let activeCompTab = $state<
         | "docs_exitosos"
+        | "facturado_usd"
+        | "cobros_usd"
+        | "cobros_bs"
         | "devoluciones"
         | "pct_dev"
         | "pedidos"
@@ -1072,9 +1137,7 @@
         | "art_distintos"
         | "art_pedidos"
         | "art_cotizados"
-        | "cobros_usd"
-        | "cobros_bs"
-    >("docs_exitosos");
+    >((data.activeTab as any) || "docs_exitosos");
 
     const compTabs = $derived([
         {
@@ -1086,6 +1149,16 @@
                 "border-emerald-500/50 text-emerald-600 dark:text-emerald-400 shadow-sm",
             activeText: "text-emerald-600 dark:text-emerald-400",
             iconColor: "text-emerald-500",
+        },
+        {
+            id: "facturado_usd" as const,
+            label: "Monto Facturado USD",
+            icon: CircleDollarSign,
+            activeBg: "bg-blue-500/10 dark:bg-blue-500/15",
+            activeBorder:
+                "border-blue-500/50 text-blue-600 dark:text-blue-400 shadow-sm",
+            activeText: "text-blue-600 dark:text-blue-400",
+            iconColor: "text-blue-500",
         },
         {
             id: "cobros_usd" as const,
@@ -1357,6 +1430,14 @@
                 "docs_exitosos",
                 "Docs. Exitosos",
                 visibleVendorsDocs,
+            );
+        } else if (activeCompTab === "facturado_usd") {
+            compChartInstance = createVendorChart(
+                compChartCanvas,
+                compLabels,
+                "facturado_usd",
+                "Monto Facturado USD ($)",
+                visibleVendorsFacturadoUsd,
             );
         } else if (activeCompTab === "cobros_usd") {
             compChartInstance = createVendorChart(
@@ -6194,8 +6275,38 @@
                                     </div>
                                 </div>
                                 <div
-                                    class="flex items-center gap-2 self-end sm:self-auto shrink-0"
+                                    class="flex flex-wrap items-center gap-2 self-end sm:self-auto shrink-0"
                                 >
+                                    <!-- Selector de Sucursal -->
+                                    <div
+                                        class="flex items-center gap-1.5 bg-surface-base border border-border-subtle rounded-xl px-2.5 py-1 text-xs"
+                                    >
+                                        <Building
+                                            size={14}
+                                            class="text-text-muted shrink-0"
+                                        />
+                                        <select
+                                            value={selectedCoSucu}
+                                            onchange={(e) => {
+                                                const val = (
+                                                    e.target as HTMLSelectElement
+                                                ).value;
+                                                handleSucursalChange(val);
+                                            }}
+                                            class="bg-transparent border-0 text-text-base text-xs font-bold focus:outline-none cursor-pointer pr-1"
+                                        >
+                                            <option value=""
+                                                >Todas las sucursales</option
+                                            >
+                                            {#each data.sucursales || [] as sucu}
+                                                <option value={sucu.co_sucu}>
+                                                    {sucu.sucur_des ||
+                                                        sucu.co_sucu} ({sucu.co_sucu})
+                                                </option>
+                                            {/each}
+                                        </select>
+                                    </div>
+
                                     <span
                                         class="text-xs font-black px-3 py-1.5 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 font-mono"
                                     >
@@ -6603,8 +6714,38 @@
                                     </div>
                                 </div>
                                 <div
-                                    class="flex items-center gap-2 self-end sm:self-auto shrink-0"
+                                    class="flex flex-wrap items-center gap-2 self-end sm:self-auto shrink-0"
                                 >
+                                    <!-- Selector de Sucursal -->
+                                    <div
+                                        class="flex items-center gap-1.5 bg-surface-base border border-border-subtle rounded-xl px-2.5 py-1 text-xs"
+                                    >
+                                        <Building
+                                            size={14}
+                                            class="text-text-muted shrink-0"
+                                        />
+                                        <select
+                                            value={selectedCoSucu}
+                                            onchange={(e) => {
+                                                const val = (
+                                                    e.target as HTMLSelectElement
+                                                ).value;
+                                                handleSucursalChange(val);
+                                            }}
+                                            class="bg-transparent border-0 text-text-base text-xs font-bold focus:outline-none cursor-pointer pr-1"
+                                        >
+                                            <option value=""
+                                                >Todas las sucursales</option
+                                            >
+                                            {#each data.sucursales || [] as sucu}
+                                                <option value={sucu.co_sucu}>
+                                                    {sucu.sucur_des ||
+                                                        sucu.co_sucu} ({sucu.co_sucu})
+                                                </option>
+                                            {/each}
+                                        </select>
+                                    </div>
+
                                     <span
                                         class="text-xs font-black px-3 py-1.5 rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 font-mono"
                                     >
@@ -6995,6 +7136,427 @@
                                                 <tr>
                                                     <td
                                                         colspan="7"
+                                                        class="py-8 text-center text-text-muted font-bold"
+                                                    >
+                                                        No se encontraron datos
+                                                        para mostrar.
+                                                    </td>
+                                                </tr>
+                                            {/if}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    {:else if activeCompTab === "facturado_usd"}
+                        <!-- 13. Facturación en USD ($) (100% Ancho) -->
+                        <div
+                            class="bg-surface-raised border border-border-subtle hover:border-blue-500/40 transition-all rounded-3xl p-6 sm:p-7 shadow-xl space-y-6"
+                        >
+                            <div
+                                class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border-subtle/60 pb-4"
+                            >
+                                <div class="flex items-center gap-3">
+                                    <div
+                                        class="p-2.5 rounded-2xl bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20"
+                                    >
+                                        <CircleDollarSign size={22} />
+                                    </div>
+                                    <div>
+                                        <h3
+                                            class="text-base sm:text-lg font-black text-text-base flex items-center gap-2"
+                                        >
+                                            Monto Facturado USD por Vendedor
+                                        </h3>
+                                        <p class="text-xs text-text-muted">
+                                            Monto total facturado en dólares (solo facturas exitosas sin devolución). Facturas en Bolívares o con tasa 1.0 son convertidas según la tasa oficial de la fecha de emisión.
+                                        </p>
+                                    </div>
+                                </div>
+                                <div
+                                    class="flex flex-wrap items-center gap-2 self-end sm:self-auto shrink-0"
+                                >
+                                    <!-- Selector de Sucursal -->
+                                    <div
+                                        class="flex items-center gap-1.5 bg-surface-base border border-border-subtle rounded-xl px-2.5 py-1 text-xs"
+                                    >
+                                        <Building
+                                            size={14}
+                                            class="text-text-muted shrink-0"
+                                        />
+                                        <select
+                                            value={selectedCoSucu}
+                                            onchange={(e) => {
+                                                const val = (
+                                                    e.target as HTMLSelectElement
+                                                ).value;
+                                                handleSucursalChange(val);
+                                            }}
+                                            class="bg-transparent border-0 text-text-base text-xs font-bold focus:outline-none cursor-pointer pr-1"
+                                        >
+                                            <option value=""
+                                                >Todas las sucursales</option
+                                            >
+                                            {#each data.sucursales || [] as sucu}
+                                                <option value={sucu.co_sucu}>
+                                                    {sucu.sucur_des ||
+                                                        sucu.co_sucu} ({sucu.co_sucu})
+                                                </option>
+                                            {/each}
+                                        </select>
+                                    </div>
+
+                                    <span
+                                        class="text-xs font-black px-3 py-1.5 rounded-xl bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20 font-mono"
+                                    >
+                                        Total: {formatCurrencyUSD(
+                                            totalFacturadoUsdGlobal,
+                                        )}
+                                    </span>
+                                    <button
+                                        type="button"
+                                        onclick={selectAllFacturadoUsd}
+                                        class="text-[11px] font-bold px-2.5 py-1 rounded-lg border border-border-subtle bg-surface-base hover:bg-surface-soft text-text-muted hover:text-text-base transition-colors cursor-pointer"
+                                    >
+                                        Todos
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onclick={deselectAllFacturadoUsd}
+                                        class="text-[11px] font-bold px-2.5 py-1 rounded-lg border border-border-subtle bg-surface-base hover:bg-surface-soft text-text-muted hover:text-text-base transition-colors cursor-pointer"
+                                    >
+                                        Ninguno
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- FILTRO DE VENDEDORES (PILLS) -->
+                            <div class="space-y-1.5">
+                                <span
+                                    class="text-[10px] font-bold uppercase tracking-wider text-text-muted"
+                                >
+                                    Filtrar asesores en gráfica:
+                                </span>
+                                <div class="flex flex-wrap gap-1.5">
+                                    {#each data.vendedores || [] as ven}
+                                        {@const color =
+                                            vendorColorMap.get(ven.co_ven) ||
+                                            "#3b82f6"}
+                                        {@const isVis =
+                                            visibleVendorsFacturadoUsd.has(
+                                                ven.co_ven,
+                                            )}
+                                        <button
+                                            type="button"
+                                            onclick={() =>
+                                                toggleVendorFacturadoUsd(
+                                                    ven.co_ven,
+                                                )}
+                                            class="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold transition-all border cursor-pointer {isVis
+                                                ? 'bg-surface-soft/80 text-text-base border-border-subtle shadow-sm ring-1 ring-border-subtle'
+                                                : 'bg-surface-base/40 text-text-muted/50 border-border-subtle/30 opacity-60'}"
+                                        >
+                                            <span
+                                                class="w-2 h-2 rounded-full shrink-0 transition-transform {isVis
+                                                    ? 'scale-100'
+                                                    : 'scale-75 opacity-40'}"
+                                                style="background-color: {color}"
+                                            ></span>
+                                            <span
+                                                class="truncate max-w-[130px] font-mono text-[11px]"
+                                            >
+                                                {ven.ven_des || ven.co_ven}
+                                            </span>
+                                            {#if ven.inactivo}
+                                                <span
+                                                    class="text-[8px] font-bold text-rose-500 bg-rose-500/10 px-1 rounded"
+                                                    >I</span
+                                                >
+                                            {/if}
+                                        </button>
+                                    {/each}
+                                </div>
+                            </div>
+
+                            <div class="relative w-full" style="height: 380px;">
+                                {#if visibleVendorsFacturadoUsd.size > 0}
+                                    <canvas bind:this={compChartCanvas}
+                                    ></canvas>
+                                {:else}
+                                    <div
+                                        class="h-full flex flex-col items-center justify-center text-center p-8 bg-surface-raised/50 rounded-2xl border border-dashed border-border-subtle"
+                                    >
+                                        <EyeOff
+                                            size={36}
+                                            class="text-text-muted mb-2"
+                                        />
+                                        <p
+                                            class="text-sm font-bold text-text-base"
+                                        >
+                                            Ningún vendedor seleccionado
+                                        </p>
+                                        <p class="text-xs text-text-muted mt-1">
+                                            Haz clic en los botones superiores
+                                            para activar vendedores en la
+                                            gráfica.
+                                        </p>
+                                    </div>
+                                {/if}
+                            </div>
+
+                            <!-- CARDS DE LEYENDA AGRUPADAS POR TEMPORALIDAD CON VENDEDORES -->
+                            <div
+                                class="pt-5 border-t border-border-subtle/60 space-y-3"
+                            >
+                                <div class="flex items-center justify-between">
+                                    <span
+                                        class="text-xs font-black uppercase tracking-wider text-text-muted flex items-center gap-2"
+                                    >
+                                        Detalle {tipoAgrupacion === "diario"
+                                            ? "Diario"
+                                            : tipoAgrupacion === "semanal"
+                                              ? "Semanal"
+                                              : "Mensual"} por Vendedor (Facturado USD)
+                                    </span>
+                                    <span
+                                        class="text-[10px] text-text-muted font-medium lg:hidden"
+                                    >
+                                        ← Desliza para ver todos los períodos →
+                                    </span>
+                                </div>
+
+                                <div
+                                    class="w-full overflow-x-auto custom-scrollbar pb-2"
+                                >
+                                    <div class="flex gap-2.5 min-w-full">
+                                        {#each breakdownFacturadoUsd.periods as p}
+                                            {@const isMax =
+                                                p.total ===
+                                                    breakdownFacturadoUsd.maxPeriodTotal &&
+                                                breakdownFacturadoUsd.maxPeriodTotal >
+                                                    0}
+                                            <div
+                                                class="flex-1 min-w-[170px] sm:min-w-[200px] p-3 rounded-2xl border transition-all flex flex-col justify-between {isMax
+                                                    ? 'bg-blue-500/10 border-blue-500/50 ring-1 ring-blue-500/20'
+                                                    : 'bg-surface-base/80 border-border-subtle/70 hover:border-border-subtle'}"
+                                            >
+                                                <div>
+                                                    <div
+                                                        class="flex items-center justify-between gap-1 mb-2 pb-1.5 border-b border-border-subtle/50"
+                                                    >
+                                                        <span
+                                                            class="text-[11px] font-black text-text-base block truncate uppercase tracking-wider"
+                                                        >
+                                                            {p.periodo}
+                                                        </span>
+                                                        <span
+                                                            class="text-[11px] font-mono font-black text-blue-600 dark:text-blue-400 shrink-0"
+                                                        >
+                                                            {formatCurrencyUSD(
+                                                                p.total,
+                                                            )}
+                                                        </span>
+                                                    </div>
+
+                                                    <!-- Listado de vendedores en el período -->
+                                                    <div
+                                                        class="space-y-1.5 text-xs flex-1"
+                                                    >
+                                                        {#if p.vendors.length === 0}
+                                                            <p
+                                                                class="text-[10px] text-text-muted/50 italic text-center py-2"
+                                                            >
+                                                                $0,00 USD
+                                                            </p>
+                                                        {:else}
+                                                            {#each p.vendors as ven}
+                                                                <div
+                                                                    class="flex items-center justify-between gap-1.5 text-[10px]"
+                                                                >
+                                                                    <div
+                                                                        class="flex items-center gap-1.5 min-w-0"
+                                                                    >
+                                                                        <span
+                                                                            class="w-2 h-2 rounded-full shrink-0 shadow-sm"
+                                                                            style="background-color: {ven.color}"
+                                                                        ></span>
+                                                                        <span
+                                                                            class="font-bold text-text-base truncate"
+                                                                            title="{ven.ven_des} ({ven.co_ven})"
+                                                                        >
+                                                                            {ven.ven_des}
+                                                                        </span>
+                                                                    </div>
+                                                                    <span
+                                                                        class="font-mono font-black text-text-base shrink-0"
+                                                                    >
+                                                                        {formatCurrencyUSD(
+                                                                            ven.qty,
+                                                                        )}
+                                                                    </span>
+                                                                </div>
+                                                            {/each}
+                                                        {/if}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        {/each}
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- TABLA / RANKING DE FACTURADO USD POR ASESOR -->
+                            <div
+                                class="mt-8 pt-6 border-t border-border-subtle/80 space-y-6"
+                            >
+                                <div
+                                    class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-border-subtle/60"
+                                >
+                                    <div class="flex items-center gap-3">
+                                        <div
+                                            class="p-2.5 rounded-2xl bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20"
+                                        >
+                                            <Award size={22} />
+                                        </div>
+                                        <div>
+                                            <h3
+                                                class="text-base sm:text-lg font-black text-text-base flex items-center gap-2"
+                                            >
+                                                Ranking de Facturación en USD ($) por Asesor
+                                            </h3>
+                                            <p class="text-xs text-text-muted">
+                                                Total acumulado facturado en dólares (facturas exitosas) en el rango seleccionado.
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <div class="relative w-full sm:w-64">
+                                        <Search
+                                            size={16}
+                                            class="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted"
+                                        />
+                                        <input
+                                            type="text"
+                                            bind:value={
+                                                vendorFilterSearchFacturadoUsd
+                                            }
+                                            placeholder="Buscar vendedor..."
+                                            class="w-full bg-surface-base border border-border-subtle rounded-xl pl-9 pr-3 py-2 text-xs text-text-base focus:outline-none focus:border-brand-500"
+                                        />
+                                    </div>
+                                </div>
+
+                                <div class="overflow-x-auto custom-scrollbar">
+                                    <table class="w-full text-left text-xs">
+                                        <thead>
+                                            <tr
+                                                class="border-b border-border-subtle text-text-muted font-black uppercase text-[10px]"
+                                            >
+                                                <th class="py-3 px-4">#</th>
+                                                <th class="py-3 px-4">Código</th>
+                                                <th class="py-3 px-4">Asesor Comercial</th>
+                                                <th class="py-3 px-4 text-right">Facturado USD ($) (Rango)</th>
+                                                <th class="py-3 px-4 text-right">% del Total USD</th>
+                                                <th class="py-3 px-4 text-center">Estado en Gráfica</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody
+                                            class="divide-y divide-border-subtle/40 font-medium"
+                                        >
+                                            {#each rankingFacturadoUsd.filter((t: any) => !vendorFilterSearchFacturadoUsd || (t.ven_des || "")
+                                                        .toLowerCase()
+                                                        .includes(vendorFilterSearchFacturadoUsd.toLowerCase()) || t.co_ven
+                                                        .toLowerCase()
+                                                        .includes(vendorFilterSearchFacturadoUsd.toLowerCase())) as item, idx}
+                                                {@const valUsd =
+                                                    Number(
+                                                        item.total_usd ??
+                                                            item.facturado_usd,
+                                                    ) || 0}
+                                                {@const pct =
+                                                    totalFacturadoUsdGlobal > 0
+                                                        ? (
+                                                              (valUsd /
+                                                                  totalFacturadoUsdGlobal) *
+                                                              100
+                                                          ).toFixed(2)
+                                                        : "0.00"}
+                                                {@const color =
+                                                    vendorColorMap.get(
+                                                        item.co_ven,
+                                                    ) || "#3b82f6"}
+                                                {@const isVis =
+                                                    visibleVendorsFacturadoUsd.has(
+                                                        item.co_ven,
+                                                    )}
+                                                <tr
+                                                    class="hover:bg-surface-soft/60 transition-colors"
+                                                >
+                                                    <td
+                                                        class="py-3 px-4 font-mono font-bold text-text-muted"
+                                                    >
+                                                        {idx + 1}
+                                                    </td>
+                                                    <td
+                                                        class="py-3 px-4 font-mono text-text-muted"
+                                                    >
+                                                        {item.co_ven}
+                                                    </td>
+                                                    <td
+                                                        class="py-3 px-4 font-bold text-text-base flex items-center gap-2"
+                                                    >
+                                                        <span
+                                                            class="w-2.5 h-2.5 rounded-full shrink-0"
+                                                            style="background-color: {color}"
+                                                        ></span>
+                                                        {(
+                                                            item.ven_des ||
+                                                            item.co_ven
+                                                        )
+                                                            .trim()
+                                                            .toUpperCase()}
+                                                        {#if item.inactivo}
+                                                            <span
+                                                                class="text-[9px] font-bold text-rose-500 bg-rose-500/10 px-1.5 py-0.5 rounded"
+                                                                >Inactivo</span
+                                                            >
+                                                        {/if}
+                                                    </td>
+                                                    <td
+                                                        class="py-3 px-4 text-right font-black font-mono text-blue-600 dark:text-blue-400"
+                                                    >
+                                                        {formatCurrencyUSD(
+                                                            valUsd,
+                                                        )}
+                                                    </td>
+                                                    <td
+                                                        class="py-3 px-4 text-right font-mono text-text-base font-bold"
+                                                    >
+                                                        {pct}%
+                                                    </td>
+                                                    <td
+                                                        class="py-3 px-4 text-center"
+                                                    >
+                                                        <button
+                                                            type="button"
+                                                            onclick={() =>
+                                                                toggleVendorFacturadoUsd(
+                                                                    item.co_ven,
+                                                                )}
+                                                            class="px-2.5 py-1 rounded-lg text-[10px] font-bold border transition-all cursor-pointer {isVis
+                                                                ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/30'
+                                                                : 'bg-surface-raised text-text-muted border-border-subtle'}"
+                                                        >
+                                                            {isVis
+                                                                ? "Visible"
+                                                                : "Oculto"}
+                                                        </button>
+                                                    </td>
+                                                </tr>
+                                            {/each}
+                                            {#if rankingFacturadoUsd.length === 0}
+                                                <tr>
+                                                    <td
+                                                        colspan="6"
                                                         class="py-8 text-center text-text-muted font-bold"
                                                     >
                                                         No se encontraron datos

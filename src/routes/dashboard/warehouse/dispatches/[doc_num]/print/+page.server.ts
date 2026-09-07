@@ -94,15 +94,15 @@ export const load: PageServerLoad = protectLoad('inv_dispatches', async ({ param
 
         // 5. Ajustes de la app
         const { data: settings } = await supabaseAdmin
-            .from('app_settings')
+            .from('system_settings')
             .select('*')
             .single();
 
         return {
-            title: `Despacho ${doc_num}`,
+            title: `Nota de Despacho ${doc_num}`,
             dispatch,
             branch,
-            settings
+            settings: settings || {}
         };
     } catch (err: any) {
         console.error('[PRINT DISPATCH LOAD] Error:', err);

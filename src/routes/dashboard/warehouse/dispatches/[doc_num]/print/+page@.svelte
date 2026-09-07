@@ -1,360 +1,799 @@
 <!-- src/routes/dashboard/warehouse/dispatches/[doc_num]/print/+page@.svelte -->
 <script lang="ts">
-  import dayjs from "dayjs";
-  import "dayjs/locale/es";
-  import { onMount } from "svelte";
-  import type { PageData } from "./$types";
+    import dayjs from "dayjs";
+    import "dayjs/locale/es";
+    import { onMount } from "svelte";
+    import type { PageData } from "./$types";
 
-  dayjs.locale("es");
+    dayjs.locale("es");
 
-  let { data }: { data: PageData } = $props();
-  const { dispatch, branch, settings } = data;
+    let { data }: { data: PageData } = $props();
+    const { dispatch, branch, settings } = data;
 
-  const logoUrl = branch?.logo_url || settings?.app_logo_url;
-  const allItems = dispatch?.renglones || [];
-
-  const displayFecEmis = dispatch?.fe_us_mo
-    ? dispatch.fe_us_mo
-    : dispatch?.fec_emis;
-
-  const cleanObs = String(dispatch?.comentario || "")
-    .replace(/\s*\|\s*EDITADO V[IÍ]A API/gi, "")
-    .replace(/\s*\|\s*CREADO V[IÍ]A API/gi, "")
-    .replace(/\s*\|\s*EDITADO VIA API/gi, "")
-    .replace(/\s*\|\s*CREADO VIA API/gi, "")
-    .trim();
-
-  function formatQuantity(val: number | string) {
-    const num = Number(val || 0);
-    return num.toLocaleString("de-DE", {
-      minimumFractionDigits: Number.isInteger(num) ? 0 : 2,
-      maximumFractionDigits: 2,
-    });
-  }
-
-  const originInvoice = (() => {
-    const rengs = dispatch?.renglones || [];
-    const found = rengs.find(
-      (r: any) => r.doc_num_factura && String(r.doc_num_factura).trim() !== ""
+    const logoUrl = branch?.logo_url || settings?.app_logo_url;
+    
+    // Filtrar solo los renglones que fueron físicamente despachados en este documento
+    const allItems = (dispatch?.renglones || []).filter(
+        (r: any) => Number(r.cant_despachada || r.cantidad || r.total_art || 0) > 0
     );
-    return found
-      ? String(found.doc_num_factura).trim()
-      : dispatch?.factura_origen || dispatch?.n_control || "---";
-  })();
 
-  const defaultWarehouse = (() => {
-    const rengs = dispatch?.renglones || [];
-    const found = rengs.find((r: any) => r.des_alma || r.co_alma);
-    if (found) {
-      return found.des_alma
-        ? `${found.des_alma} (${found.co_alma?.trim() || "01"})`
-        : found.co_alma;
+    const isUSD =
+        (dispatch?.co_mone || "").toUpperCase().includes("US") ||
+        (dispatch?.co_mone || "").includes("$");
+
+    const displayFecEmis = dispatch?.fe_us_mo
+        ? dispatch.fe_us_mo
+        : dispatch?.fec_emis;
+
+    const cleanObs = String(dispatch?.descrip || dispatch?.comentario || "")
+        .replace(/\s*\|\s*EDITADO V[IÍ]A API/gi, "")
+        .replace(/\s*\|\s*CREADO V[IÍ]A API/gi, "")
+        .replace(/\s*\|\s*EDITADO VIA API/gi, "")
+        .replace(/\s*\|\s*CREADO VIA API/gi, "")
+        .trim();
+
+    function formatQuantity(val: number | string) {
+        const num = Number(val || 0);
+        return num.toLocaleString("de-DE", {
+            minimumFractionDigits: Number.isInteger(num) ? 0 : 2,
+            maximumFractionDigits: 2,
+        });
     }
-    return dispatch?.des_alma || "ALMACEN PRINCIPAL (01)";
-  })();
 
-  const despachadorDisplayName =
-    dispatch?.despachador_name ||
-    dispatch?.creator_name ||
-    dispatch?.co_us_in ||
-    "";
-  const editorDisplayName = dispatch?.editor_name || "";
+    const originInvoice = (() => {
+        const rengs = dispatch?.renglones || [];
+        const found = rengs.find(
+            (r: any) => r.doc_num_factura && String(r.doc_num_factura).trim() !== ""
+        );
+        return found
+            ? String(found.doc_num_factura).trim()
+            : dispatch?.factura_origen || dispatch?.n_control || "---";
+    })();
 
-  const totalPhysicalUnits = allItems.reduce(
-    (acc: number, r: any) => acc + Number(r.cant_despachada || r.total_art || 0),
-    0
-  );
-
-  // --- LÓGICA DE PAGINACIÓN DINÁMICA ---
-  const CAPACITY_WITH_TOTALS = 22;
-  const CAPACITY_WITHOUT_TOTALS = 36;
-
-  function getItemWeight(item: any): number {
-    const desc = String(item?.art_des || "").trim();
-    if (desc.length > 90) return 3;
-    if (desc.length > 45) return 2;
-    return 1;
-  }
-
-  function paginate(items: any[]) {
-    let pages: any[] = [];
-    let remaining = [...items];
-
-    while (remaining.length > 0) {
-      const remainingWeight = remaining.reduce(
-        (acc, it) => acc + getItemWeight(it),
-        0
-      );
-      if (remainingWeight <= CAPACITY_WITH_TOTALS) {
-        pages.push({
-          items: remaining.splice(0, remaining.length),
-          showTotals: true,
-        });
-      } else if (remainingWeight <= CAPACITY_WITHOUT_TOTALS) {
-        pages.push({
-          items: remaining.splice(0, remaining.length),
-          showTotals: false,
-        });
-      } else {
-        let currentCapacity = 0;
-        let chunk: any[] = [];
-        while (remaining.length > 0) {
-          const w = getItemWeight(remaining[0]);
-          if (currentCapacity + w > CAPACITY_WITHOUT_TOTALS && chunk.length > 0) {
-            break;
-          }
-          currentCapacity += w;
-          chunk.push(remaining.shift());
+    const defaultWarehouse = (() => {
+        const rengs = dispatch?.renglones || [];
+        const found = rengs.find((r: any) => r.des_alma || r.co_alma);
+        if (found) {
+            return found.des_alma
+                ? `${found.des_alma} (${found.co_alma?.trim() || "01"})`
+                : found.co_alma;
         }
-        pages.push({
-          items: chunk,
-          showTotals: false,
-        });
-      }
+        return dispatch?.des_alma || "ALMACEN PRINCIPAL (01)";
+    })();
+
+    const despachadorDisplayName =
+        dispatch?.despachador_name ||
+        dispatch?.creator_name ||
+        dispatch?.co_us_in ||
+        "";
+    const editorDisplayName = dispatch?.editor_name || "";
+
+    const totalPhysicalUnits = allItems.reduce(
+        (acc: number, r: any) => acc + Number(r.cant_despachada || r.cantidad || r.total_art || 0),
+        0,
+    );
+
+    // --- LÓGICA DE PAGINACIÓN DINÁMICA CALIBRADA ---
+    const CAPACITY_WITH_TOTALS = 22;
+    const CAPACITY_WITHOUT_TOTALS = 36;
+
+    function getItemWeight(item: any): number {
+        const desc = String(item?.art_des || item?.des_art || "").trim();
+        if (desc.length > 90) return 3;
+        if (desc.length > 45) return 2;
+        return 1;
     }
 
-    if (pages.length === 0) {
-      pages.push({ items: [], showTotals: true });
-    } else if (!pages[pages.length - 1].showTotals) {
-      pages.push({ items: [], showTotals: true });
+    function paginate(items: any[]) {
+        let pages: any[] = [];
+        let remaining = [...items];
+
+        while (remaining.length > 0) {
+            const remainingWeight = remaining.reduce(
+                (acc, it) => acc + getItemWeight(it),
+                0,
+            );
+            if (remainingWeight <= CAPACITY_WITH_TOTALS) {
+                pages.push({
+                    items: remaining.splice(0, remaining.length),
+                    showTotals: true,
+                });
+            } else if (remainingWeight <= CAPACITY_WITHOUT_TOTALS) {
+                pages.push({
+                    items: remaining.splice(0, remaining.length),
+                    showTotals: false,
+                });
+            } else {
+                let currentBatch: any[] = [];
+                let currentWeight = 0;
+                while (remaining.length > 0) {
+                    const nextWeight = getItemWeight(remaining[0]);
+                    if (currentWeight + nextWeight > CAPACITY_WITHOUT_TOTALS) {
+                        break;
+                    }
+                    currentWeight += nextWeight;
+                    currentBatch.push(remaining.shift());
+                }
+                pages.push({
+                    items: currentBatch,
+                    showTotals: false,
+                });
+            }
+        }
+
+        if (pages.length === 0) {
+            pages.push({ items: [], showTotals: true });
+        } else if (!pages[pages.length - 1].showTotals) {
+            pages.push({ items: [], showTotals: true });
+        }
+
+        return pages;
     }
 
-    return pages;
-  }
+    const pages = paginate(allItems);
 
-  const paginatedPages = paginate(allItems);
-
-  onMount(() => {
-    // Auto print when requested via query param
-    const urlParams = new URLSearchParams(window.location.search);
-    if (urlParams.get("autoprint") === "true") {
-      setTimeout(() => {
-        window.print();
-      }, 500);
-    }
-  });
+    onMount(() => {
+        window.scrollTo(0, 0);
+        const urlParams = new URLSearchParams(window.location.search);
+        if (urlParams.get("autoprint") === "true") {
+            setTimeout(() => {
+                window.print();
+            }, 500);
+        }
+    });
 </script>
 
 <svelte:head>
-  <title>Despacho {dispatch?.doc_num} | Impresión</title>
-  <style>
-    @page {
-      size: letter portrait;
-      margin: 0;
-    }
-    @media print {
-      html, body {
-        width: 216mm;
-        height: auto;
-        margin: 0 !important;
-        padding: 0 !important;
-        background: #ffffff !important;
-        color: #000000 !important;
-        font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif !important;
-        -webkit-print-color-adjust: exact !important;
-        print-color-adjust: exact !important;
-      }
-      .no-print {
-        display: none !important;
-      }
-      .page-sheet {
-        box-shadow: none !important;
-        margin: 0 !important;
-        width: 216mm !important;
-        height: 279mm !important;
-        max-height: 279mm !important;
-        page-break-after: always !important;
-        break-after: page !important;
-      }
-    }
-  </style>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>
+        Nota de Despacho {dispatch?.doc_num} - {branch?.business_name || branch?.name || "Profit Cloud"}
+    </title>
 </svelte:head>
 
-<!-- Floating Action Bar (Invisible on print) -->
-<div class="no-print fixed top-4 right-4 z-50 flex items-center gap-2 bg-zinc-900/90 backdrop-blur-md p-2 rounded-2xl border border-zinc-800 shadow-2xl">
-  <button
-    type="button"
-    onclick={() => window.print()}
-    class="flex items-center gap-2 px-4 py-2 bg-violet-600 hover:bg-violet-500 text-white text-xs font-bold rounded-xl shadow-lg transition-all active:scale-95"
-  >
-    <span>Imprimir Documento</span>
-  </button>
-  <button
-    type="button"
-    onclick={() => window.close()}
-    class="px-3 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-semibold rounded-xl transition-all"
-  >
-    Cerrar
-  </button>
+<!-- FLOATING ACTIONS (NO PRINT) -->
+<div
+    class="no-print fixed bottom-6 left-4 right-4 md:left-auto md:right-8 flex flex-col md:flex-row gap-3 pointer-events-auto z-[99999] select-none touch-manipulation"
+>
+    <button
+        onclick={() => {
+            window.focus();
+            window.print();
+        }}
+        class="w-full md:w-auto justify-center bg-blue-600 text-white px-10 py-5 rounded-2xl font-black shadow-2xl shadow-blue-600/40 hover:bg-blue-500 transition-all active:scale-95 flex items-center gap-3 cursor-pointer"
+    >
+        IMPRIMIR NOTA DE DESPACHO
+    </button>
+    <button
+        onclick={() => window.close()}
+        class="w-full md:w-auto text-center bg-gray-800/80 backdrop-blur-md text-white px-10 py-5 rounded-2xl font-black shadow-xl hover:bg-gray-700 transition-all active:scale-95 cursor-pointer"
+    >
+        CERRAR
+    </button>
 </div>
 
-<!-- Print Pages Container -->
-<div class="bg-zinc-950/40 min-h-screen py-8 flex flex-col items-center gap-8 no-print:bg-zinc-950">
-  {#each paginatedPages as pageObj, pageIndex}
-    <div class="page-sheet w-[216mm] h-[279mm] bg-white text-zinc-900 p-[12mm] flex flex-col justify-between shadow-2xl relative box-border overflow-hidden">
-      <!-- Top Section -->
-      <div class="space-y-4">
-        <!-- Header -->
-        <div class="flex items-start justify-between border-b-2 border-zinc-900 pb-3">
-          <!-- Company Info -->
-          <div class="flex items-center gap-3.5 max-w-[60%]">
-            {#if logoUrl}
-              <img src={logoUrl} alt="Logo" class="h-12 w-auto object-contain max-w-[120px]" />
-            {/if}
-            <div class="space-y-0.5 text-left">
-              <h2 class="text-sm font-black text-zinc-900 uppercase tracking-tight leading-tight">
-                {branch?.name || "CORPORACIÓN GALPE"}
-              </h2>
-              {#if branch?.rif}
-                <p class="text-[11px] font-bold text-zinc-800">RIF: {branch.rif}</p>
-              {/if}
-              {#if branch?.address}
-                <p class="text-[9px] text-zinc-600 leading-snug line-clamp-2">{branch.address}</p>
-              {/if}
-              {#if branch?.phones}
-                <p class="text-[9px] text-zinc-600">Tel: {branch.phones}</p>
-              {/if}
-            </div>
-          </div>
-
-          <!-- Document Title & Badges -->
-          <div class="text-right space-y-1">
-            <div class="inline-block bg-zinc-900 text-white px-3 py-1 rounded text-xs font-black tracking-wider uppercase">
-              NOTA DE DESPACHO
-            </div>
-            <div class="font-mono text-base font-black text-zinc-900">
-              N° {dispatch?.doc_num}
-            </div>
-            <div class="text-[10px] text-zinc-700 space-y-0.5">
-              <p><span class="font-bold">Emisión:</span> {dayjs(displayFecEmis).format("DD/MM/YYYY hh:mm A")}</p>
-              <p><span class="font-bold">Factura Origen:</span> <span class="font-mono font-bold text-violet-700">{originInvoice}</span></p>
-              {#if dispatch?.anulado}
-                <span class="inline-block text-[9px] font-black uppercase text-red-600 bg-red-100 px-1.5 py-0.5 rounded border border-red-300">
-                  DOCUMENTO ANULADO
-                </span>
-              {/if}
-            </div>
-          </div>
-        </div>
-
-        <!-- Customer Info Box -->
-        <div class="grid grid-cols-2 gap-2 p-2.5 bg-zinc-50 border border-zinc-300 rounded-lg text-[10px]">
-          <div>
-            <p><span class="font-bold text-zinc-600 uppercase text-[9px]">Cliente / Razón Social:</span></p>
-            <p class="font-black text-zinc-900 text-[11px] truncate">{dispatch?.cli_des || "---"}</p>
-            <p class="text-zinc-700 mt-0.5"><span class="font-semibold">Código:</span> {dispatch?.co_cli} • <span class="font-semibold">RIF:</span> {dispatch?.rif || "Sin RIF"}</p>
-          </div>
-          <div>
-            <p><span class="font-bold text-zinc-600 uppercase text-[9px]">Dirección de Entrega:</span></p>
-            <p class="font-medium text-zinc-800 line-clamp-2 leading-tight">{dispatch?.cli_dir || "Dirección no especificada"}</p>
-            <p class="text-zinc-700 mt-0.5"><span class="font-semibold">Tel:</span> {dispatch?.telefonos || "No registrado"}</p>
-          </div>
-        </div>
-
-        <!-- Items Table -->
-        <div class="border border-zinc-900 rounded-lg overflow-hidden">
-          <table class="w-full text-left border-collapse text-[10px]">
-            <thead>
-              <tr class="bg-zinc-900 text-white font-bold uppercase text-[9px] tracking-wider">
-                <th class="py-1.5 px-2 w-8 text-center">#</th>
-                <th class="py-1.5 px-2 w-28">Código</th>
-                <th class="py-1.5 px-2">Descripción del Artículo</th>
-                <th class="py-1.5 px-2 w-28">Almacén</th>
-                <th class="py-1.5 px-2 w-14 text-center">Unidad</th>
-                <th class="py-1.5 px-2 w-20 text-center">Cant. Desp.</th>
-              </tr>
-            </thead>
-            <tbody class="divide-y divide-zinc-300 font-medium">
-              {#if pageObj.items.length === 0}
-                <tr>
-                  <td colspan="6" class="text-center py-6 text-zinc-400 italic">
-                    Sin artículos en esta página
-                  </td>
-                </tr>
-              {:else}
-                {#each pageObj.items as item, idx}
-                  <tr class="hover:bg-zinc-50">
-                    <td class="py-1.5 px-2 text-center text-zinc-500 font-mono text-[9px]">
-                      {idx + 1}
-                    </td>
-                    <td class="py-1.5 px-2 font-mono font-bold text-zinc-900 text-[9px]">
-                      {item.co_art}
-                    </td>
-                    <td class="py-1.5 px-2">
-                      <div class="font-bold text-zinc-900 leading-tight">{item.art_des || item.des_art || item.co_art}</div>
-                      {#if item.referencia || item.modelo}
-                        <div class="text-[8px] text-zinc-600">
-                          {item.referencia ? `Ref: ${item.referencia}` : ''} {item.modelo ? `• Mod: ${item.modelo}` : ''}
+<div class="report-wrapper pb-20 pt-10">
+    {#each pages as page, i}
+        <div class="page-sheet">
+            <div class="print-container">
+                <!-- HEADER FISCAL -->
+                <div class="header-section">
+                    <div class="brand-info">
+                        {#if logoUrl}
+                            <img src={logoUrl} alt="Logo" class="logo-img" />
+                        {/if}
+                        <div class="company-details">
+                            <h1 class="business-name">
+                                {branch?.business_name || branch?.name || "EMPRESA"}
+                            </h1>
+                            <p class="fiscal-id">RIF: {branch?.rif || "---"}</p>
+                            <p class="address">{branch?.address || ""}</p>
                         </div>
-                      {/if}
-                    </td>
-                    <td class="py-1.5 px-2 text-zinc-700 truncate max-w-[110px]">
-                      {item.des_alma || item.co_alma}
-                    </td>
-                    <td class="py-1.5 px-2 text-center text-zinc-600 uppercase font-mono text-[9px]">
-                      {item.unidad || item.co_uni || "UNID"}
-                    </td>
-                    <td class="py-1.5 px-2 text-center font-mono font-black text-zinc-900 text-[11px] bg-zinc-50">
-                      {formatQuantity(item.cant_despachada || item.total_art)}
-                    </td>
-                  </tr>
-                {/each}
-              {/if}
-            </tbody>
-          </table>
+                    </div>
+
+                    <div class="doc-info">
+                        <div class="doc-badge">
+                            <span class="label">Nota de Despacho N°</span>
+                            <span class="number text-red-600">{dispatch?.doc_num}</span>
+                        </div>
+                        <div class="dates mt-2">
+                            <p>
+                                Emisión: <strong>{dayjs(displayFecEmis).format("DD/MM/YYYY")}</strong>
+                            </p>
+                            {#if originInvoice && originInvoice !== "---"}
+                                <p class="currency-line font-mono font-bold">
+                                    Factura Origen: <strong class="text-blue-700">{originInvoice}</strong>
+                                </p>
+                            {/if}
+                            {#if dispatch?.anulado}
+                                <p class="text-red-600 font-bold uppercase tracking-wider text-[9px] mt-1">
+                                    ** DOCUMENTO ANULADO **
+                                </p>
+                            {/if}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- CLIENT & LOGISTICS -->
+                <div class="info-grid">
+                    <div class="client-box">
+                        <h3 class="section-title">Datos del Cliente</h3>
+                        <p class="client-name">
+                            {dispatch?.cli_des || dispatch?.co_cli || "SIN CLIENTE"}
+                        </p>
+                        <p class="client-rif">
+                            RIF: {dispatch?.rif || dispatch?.co_cli || "---"}
+                        </p>
+                        <p class="client-address font-medium">
+                            DIRECCIÓN DE ENTREGA: {dispatch?.cli_dir || dispatch?.direc1 || "Dirección no registrada"}
+                        </p>
+                        {#if dispatch?.telefonos}
+                            <p class="client-phone font-bold mt-1 text-slate-700">
+                                TELÉFONO: {dispatch.telefonos}
+                            </p>
+                        {/if}
+                    </div>
+                    <div class="logistic-box">
+                        <h3 class="section-title">Condiciones y Transporte</h3>
+                        {#if despachadorDisplayName}
+                            <div class="info-row">
+                                <span class="label">Despachador:</span>
+                                <span class="val text-blue-900 font-black">{despachadorDisplayName}</span>
+                            </div>
+                        {/if}
+                        {#if editorDisplayName}
+                            <div class="info-row">
+                                <span class="label">Editado por:</span>
+                                <span class="val text-amber-800 font-bold">{editorDisplayName}</span>
+                            </div>
+                        {/if}
+                        <div class="info-row">
+                            <span class="label">Transporte:</span>
+                            <span class="val">{dispatch?.des_tran || dispatch?.co_tran || "INTERNO (001)"}</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="label">Cond. Pago:</span>
+                            <span class="val">{dispatch?.cond_des || dispatch?.co_cond || "CONTADO"}</span>
+                        </div>
+                        {#if dispatch?.n_control}
+                            <div class="info-row">
+                                <span class="label">N° Control:</span>
+                                <span class="val">{dispatch.n_control}</span>
+                            </div>
+                        {/if}
+                    </div>
+                </div>
+
+                <!-- ITEMS TABLE -->
+                <div class="table-container">
+                    <table class="items-table">
+                        <thead>
+                            <tr>
+                                <th class="col-code">Código</th>
+                                <th class="col-desc">Descripción de Artículo</th>
+                                <th class="col-model">Modelo / Ref</th>
+                                <th class="col-wh">Almacén</th>
+                                <th class="col-uni">Uni.</th>
+                                <th class="col-qty text-right">Cant. Despachada</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {#each page.items as item}
+                                <tr>
+                                    <td class="font-mono">{item.co_art?.trim()}</td>
+                                    <td class="font-bold uppercase text-left">
+                                        {item.art_des?.trim() || item.des_art?.trim() || item.co_art?.trim()}
+                                    </td>
+                                    <td class="font-mono text-center">
+                                        {item.modelo
+                                            ? item.modelo.trim()
+                                            : item.referencia
+                                              ? item.referencia.trim()
+                                              : "-"}
+                                    </td>
+                                    <td class="text-center font-bold">
+                                        {item.des_alma
+                                            ? item.des_alma.trim()
+                                            : item.almacen_des
+                                              ? item.almacen_des.trim()
+                                              : item.co_alma?.trim() === "01"
+                                                ? "TIENDA BCR"
+                                                : item.co_alma?.trim() === "02"
+                                                  ? "EXHIBICION BCR"
+                                                  : item.co_alma?.trim() === "999"
+                                                    ? "TEMPORAL"
+                                                    : item.co_alma?.trim() || "TIENDA BCR"}
+                                    </td>
+                                    <td class="font-black text-center">
+                                        {item.unidad?.trim() || item.co_uni?.trim() || "UND"}
+                                    </td>
+                                    <td class="text-right font-black">
+                                        {formatQuantity(
+                                            item.cant_despachada || item.cantidad || item.total_art || 0
+                                        )}
+                                    </td>
+                                </tr>
+                            {/each}
+                        </tbody>
+                    </table>
+                    {#if !page.showTotals}
+                        <p class="continue-msg">
+                            CONTINÚA EN LA SIGUIENTE PÁGINA...
+                        </p>
+                    {/if}
+                </div>
+
+                {#if page.showTotals}
+                    <!-- SUMMARY & FOOTER -->
+                    <div class="footer-block mt-auto">
+                        <!-- SIGNATURES BLOCK (3 FIRMAS) -->
+                        <div class="signatures-section">
+                            <div class="signature-box">
+                                <div class="signature-line"></div>
+                                <span class="signature-label">
+                                    Despachado por: {despachadorDisplayName || ""}
+                                </span>
+                            </div>
+                            <div class="signature-box">
+                                <div class="signature-line"></div>
+                                <span class="signature-label">
+                                    Transporte / Chofer
+                                </span>
+                            </div>
+                            <div class="signature-box">
+                                <div class="signature-line"></div>
+                                <span class="signature-label">
+                                    Recibido Conforme (Cliente)
+                                </span>
+                            </div>
+                        </div>
+
+                        <div class="footer-grid">
+                            <div class="remarks">
+                                {#if cleanObs}
+                                    <h4 class="section-title">Observaciones</h4>
+                                    <div class="remarks-content">
+                                        {cleanObs}
+                                    </div>
+                                {/if}
+                                <div class="disclaimer mt-1">
+                                    <p>
+                                        * Comprobante oficial de verificación física y salida de existencias de inventario.
+                                    </p>
+                                    {#if originInvoice && originInvoice !== "---"}
+                                        <p>
+                                            * Documento vinculado a la Factura de Venta: <strong class="font-mono">{originInvoice}</strong>.
+                                        </p>
+                                    {/if}
+                                </div>
+                            </div>
+
+                            <div class="totals-box">
+                                <div class="total-row">
+                                    <span>Renglones Despachados</span>
+                                    <span class="font-mono">{allItems.length}</span>
+                                </div>
+                                <div class="grand-total-outline">
+                                    <div class="bs-total">
+                                        <span class="label">Total Unidades Físicas</span>
+                                        <span class="val text-emerald-700 font-mono">
+                                            {formatQuantity(totalPhysicalUnits)} un.
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                {/if}
+
+                <!-- PAGE INDICATOR -->
+                <div class="page-footer">
+                    <span>Página {i + 1} de {pages.length}</span>
+                </div>
+            </div>
         </div>
-      </div>
-
-      <!-- Bottom / Footer Section (Only on final page or summary) -->
-      <div class="space-y-4 pt-2">
-        {#if pageObj.showTotals}
-          <!-- Total Units Banner -->
-          <div class="flex items-center justify-between p-2.5 bg-zinc-100 border border-zinc-300 rounded-lg text-xs">
-            <span class="font-bold uppercase text-zinc-700 tracking-wider">Total Unidades Despachadas:</span>
-            <span class="font-mono font-black text-zinc-900 text-sm">{formatQuantity(totalPhysicalUnits)}</span>
-          </div>
-
-          <!-- Observations -->
-          {#if cleanObs}
-            <div class="p-2 bg-zinc-50 border border-zinc-200 rounded text-[9px] text-zinc-700">
-              <span class="font-bold uppercase text-zinc-800">Observaciones:</span> {cleanObs}
-            </div>
-          {/if}
-
-          <!-- Signatures Grid -->
-          <div class="grid grid-cols-3 gap-4 pt-6 text-center text-[9px]">
-            <!-- Dispatcher / Warehouse -->
-            <div class="space-y-1">
-              <div class="border-t border-zinc-400 pt-1.5">
-                <p class="font-black text-zinc-900 uppercase">Despachado Por (Almacén)</p>
-                <p class="text-zinc-600">{despachadorDisplayName || "Firma y Sello"}</p>
-              </div>
-            </div>
-
-            <!-- Transport / Driver -->
-            <div class="space-y-1">
-              <div class="border-t border-zinc-400 pt-1.5">
-                <p class="font-black text-zinc-900 uppercase">Transporte / Chofer</p>
-                <p class="text-zinc-600">Nombre / C.I. / Placa</p>
-              </div>
-            </div>
-
-            <!-- Client / Receiver -->
-            <div class="space-y-1">
-              <div class="border-t border-zinc-400 pt-1.5">
-                <p class="font-black text-zinc-900 uppercase">Recibido Conforme (Cliente)</p>
-                <p class="text-zinc-600">Firma / C.I. / Fecha</p>
-              </div>
-            </div>
-          </div>
-        {/if}
-
-        <!-- Pagination & Timestamp Footer -->
-        <div class="flex items-center justify-between text-[8px] text-zinc-400 border-t border-zinc-200 pt-1">
-          <span>Generado por Sync2K Enterprise • {dayjs().format("DD/MM/YYYY hh:mm:ss A")}</span>
-          <span>Página {pageIndex + 1} de {paginatedPages.length}</span>
-        </div>
-      </div>
-    </div>
-  {/each}
+    {/each}
 </div>
+
+<style>
+    :global(html, body) {
+        margin: 0 !important;
+        padding: 0 !important;
+        background: #ced4da !important;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+            Helvetica, Arial, sans-serif;
+        color: #000;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+        overflow: auto !important;
+    }
+
+    .report-wrapper {
+        display: flex;
+        flex-direction: column;
+        gap: 30px;
+        align-items: center;
+        width: 100%;
+        padding-bottom: 5rem;
+    }
+
+    .page-sheet {
+        background: #fff;
+        width: 21.59cm;
+        height: 27.94cm;
+        max-height: 27.94cm;
+        padding: 0.6cm 0.8cm 0.8cm 0.8cm;
+        box-sizing: border-box;
+        box-shadow: 0 15px 50px rgba(0, 0, 0, 0.3);
+        display: flex;
+        flex-direction: column;
+        position: relative;
+        flex-shrink: 0;
+        overflow: hidden;
+    }
+
+    .print-container {
+        display: flex;
+        flex-direction: column;
+        height: 100%;
+    }
+
+    .header-section {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        border-bottom: 2px solid #000;
+        padding-bottom: 0;
+        margin-bottom: 5px;
+    }
+
+    .brand-info {
+        display: flex;
+        gap: 12px;
+        max-width: 65%;
+        align-items: center;
+    }
+    .logo-img {
+        max-width: 100px;
+        width: auto;
+        object-fit: contain;
+    }
+    .company-details {
+        display: flex;
+        flex-direction: column;
+    }
+    .business-name {
+        font-size: 15px;
+        font-weight: 900;
+        margin: 0 0 2px 0;
+        text-transform: uppercase;
+        color: #000;
+        line-height: 1.15;
+    }
+    .fiscal-id {
+        font-size: 12px;
+        font-weight: 700;
+        margin: 0;
+        color: #1e293b;
+    }
+    .address {
+        font-size: 12px;
+        margin: 1px 0;
+        color: #334155;
+        line-height: 1.25;
+    }
+
+    .doc-info {
+        text-align: right;
+    }
+    .doc-badge {
+        border: 2px solid #000;
+        padding: 4px 10px;
+        border-radius: 6px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        background: #fff;
+    }
+    .doc-badge .label {
+        font-size: 8.5px;
+        font-weight: 800;
+        text-transform: uppercase;
+        color: #475569;
+        letter-spacing: 0.5px;
+    }
+    .doc-badge .number {
+        font-size: 18px;
+        font-weight: 900;
+        color: #dc2626 !important;
+        letter-spacing: 0.5px;
+        line-height: 1.1;
+    }
+    .dates {
+        font-size: 10px;
+        color: #334155;
+        line-height: 1.3;
+        margin-top: 4px;
+    }
+    .dates p {
+        margin: 1px 0;
+    }
+    .currency-line {
+        font-size: 10px;
+        color: #1e293b;
+        margin-top: 0px;
+    }
+
+    .info-grid {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+        gap: 10px;
+        margin-bottom: 5px;
+        width: 100%;
+        box-sizing: border-box;
+    }
+    .section-title {
+        font-size: 10px;
+        font-weight: 900;
+        text-transform: uppercase;
+        border-bottom: 1.5px solid #cbd5e1;
+        padding-bottom: 3px;
+        margin-bottom: 4px;
+        color: #0f172a;
+        letter-spacing: 0.3px;
+    }
+    .client-box,
+    .logistic-box {
+        background: #f8fafc;
+        padding: 7px 10px;
+        border-radius: 5px;
+        border: 1px solid #cbd5e1;
+        min-width: 0;
+        overflow: hidden;
+        word-break: break-word;
+    }
+    .client-name {
+        font-size: 11.5px;
+        font-weight: 900;
+        margin: 0 0 2px 0;
+        text-transform: uppercase;
+        color: #000;
+        word-break: break-word;
+        line-height: 1.2;
+    }
+    .client-rif,
+    .client-address,
+    .client-phone {
+        font-size: 9.5px;
+        margin: 1.5px 0;
+        line-height: 1.3;
+        word-break: break-word;
+    }
+    .client-rif {
+        font-weight: 700;
+        color: #1e293b;
+    }
+    .client-address {
+        color: #334155;
+    }
+    .client-phone {
+        font-weight: 800;
+        color: #0f172a;
+    }
+    .info-row {
+        display: flex;
+        gap: 6px;
+        font-size: 9.5px;
+        margin-bottom: 3px;
+        align-items: flex-start;
+        line-height: 1.3;
+    }
+    .info-row .label {
+        font-weight: 700;
+        color: #475569;
+        width: 110px;
+        flex-shrink: 0;
+    }
+    .info-row .val {
+        font-weight: 800;
+        text-transform: uppercase;
+        color: #000;
+        flex: 1;
+        min-width: 0;
+        word-break: break-word;
+    }
+
+    .table-container {
+        flex: 1;
+        margin-bottom: 6px;
+    }
+    .items-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 8.5px;
+    }
+    .items-table th {
+        background: #f1f5f9;
+        border: 1px solid #000;
+        padding: 3.5px 4px;
+        text-transform: uppercase;
+        font-weight: 900;
+        font-size: 9px;
+        color: #0f172a;
+    }
+    .items-table td {
+        border: 1px solid #cbd5e1;
+        padding: 2.5px 5px;
+        text-align: center;
+        height: 15px;
+        color: #000;
+    }
+    .items-table .empty-row td {
+        border-left: 1px solid #cbd5e1;
+        border-right: 1px solid #cbd5e1;
+        border-bottom: none;
+        border-top: none;
+    }
+    .text-left {
+        text-align: left !important;
+    }
+    .text-right {
+        text-align: right !important;
+    }
+    .font-mono {
+        font-family: monospace;
+    }
+    .col-code {
+        width: 15%;
+    }
+    .col-desc {
+        width: 37%;
+    }
+    .col-model {
+        width: 15%;
+    }
+    .col-wh {
+        width: 15%;
+    }
+    .col-uni {
+        width: 8%;
+    }
+    .col-qty {
+        width: 10%;
+    }
+
+    .continue-msg {
+        font-size: 8px;
+        font-weight: bold;
+        text-align: right;
+        color: #64748b;
+        margin-top: 3px;
+        font-style: italic;
+    }
+
+    .signatures-section {
+        display: grid;
+        grid-template-columns: 1fr 1fr 1fr;
+        gap: 30px;
+        margin-top: 2px;
+        margin-bottom: 4px;
+        padding: 0 20px;
+    }
+    .signature-box {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+    }
+    .signature-line {
+        width: 100%;
+        border-top: 1px solid #000;
+        margin-bottom: 2px;
+        height: 2px;
+    }
+    .signature-label {
+        font-size: 9px;
+        font-weight: 800;
+        text-transform: uppercase;
+        color: #0f172a;
+        letter-spacing: 0.3px;
+        text-align: center;
+    }
+
+    .footer-grid {
+        display: grid;
+        grid-template-columns: 1fr 220px;
+        gap: 14px;
+        align-items: start;
+    }
+    .remarks-content {
+        font-size: 10px;
+        font-weight: 600;
+        background: #f8fafc;
+        padding: 6px 8px;
+        border: 1px solid #cbd5e1;
+        border-radius: 4px;
+        min-height: 24px;
+        text-transform: uppercase;
+        color: #0f172a;
+        line-height: 1.35;
+    }
+    .disclaimer {
+        font-size: 9px;
+        color: #475569;
+        line-height: 1.4;
+        margin-top: 4px;
+    }
+    .disclaimer p {
+        margin: 1px 0;
+    }
+
+    .totals-box {
+        border: 2px solid #000;
+        border-radius: 6px;
+        overflow: hidden;
+        background: #fff;
+    }
+    .total-row {
+        display: flex;
+        justify-content: space-between;
+        padding: 4px 8px;
+        border-bottom: 1px solid #e2e8f0;
+        font-size: 10px;
+        font-weight: 700;
+        color: #1e293b;
+    }
+    .grand-total-outline {
+        padding: 4px 8px;
+        text-align: right;
+        border-top: 2px solid #000;
+        background: #f8fafc;
+    }
+    .bs-total .label {
+        font-size: 9px;
+        font-weight: 900;
+        text-transform: uppercase;
+        color: #475569;
+        letter-spacing: 0.5px;
+    }
+    .bs-total .val {
+        font-size: 17px;
+        font-weight: 900;
+        line-height: 1.1;
+    }
+
+    .page-footer {
+        position: absolute;
+        bottom: 0.3cm;
+        left: 0;
+        right: 0;
+        text-align: center;
+        font-size: 9px;
+        font-weight: 800;
+        color: #64748b;
+        margin: 0 0.8cm;
+    }
+
+    @media print {
+        :global(html, body) {
+            background: #fff !important;
+            overflow: hidden !important;
+        }
+        .report-wrapper {
+            gap: 0;
+            padding: 0;
+        }
+        .page-sheet {
+            box-shadow: none !important;
+            margin: 0 !important;
+            break-after: page;
+            page-break-after: always;
+        }
+        .no-print {
+            display: none !important;
+        }
+        @page {
+            size: letter portrait;
+            margin: 0;
+        }
+    }
+</style>

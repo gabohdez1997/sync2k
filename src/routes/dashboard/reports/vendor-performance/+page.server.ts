@@ -13,6 +13,8 @@ export const load: PageServerLoad = protectLoad('reports_vendor_performance', as
     let endDate = url.searchParams.get('endDate');
     let branchId = url.searchParams.get('branch_id') || '';
     let coVen = url.searchParams.get('co_ven') || '';
+    let coSucu = url.searchParams.get('co_sucu') || '';
+    let tab = url.searchParams.get('tab') || '';
 
     // Por defecto: últimos 30 días
     if (!startDate || !endDate) {
@@ -26,8 +28,9 @@ export const load: PageServerLoad = protectLoad('reports_vendor_performance', as
     const allowedBranches = profile.allowed_branches || [];
     if (allowedBranches.length === 0) {
         return {
-            startDate, endDate, branchId, coVen,
+            startDate, endDate, branchId, coVen, coSucu, tab,
             branches: [],
+            sucursales: [],
             error: 'No tienes sucursales asignadas.'
         };
     }
@@ -39,8 +42,9 @@ export const load: PageServerLoad = protectLoad('reports_vendor_performance', as
 
     if (!selectedBranch || !selectedBranch.agent_url) {
         return {
-            startDate, endDate, branchId, coVen,
+            startDate, endDate, branchId, coVen, coSucu, tab,
             branches: allowedBranches,
+            sucursales: [],
             error: 'La sucursal seleccionada no tiene agente configurado.'
         };
     }
@@ -59,8 +63,9 @@ export const load: PageServerLoad = protectLoad('reports_vendor_performance', as
 
     try {
         const venParam = coVen ? `&co_ven=${encodeURIComponent(coVen)}` : '';
+        const sucuParam = coSucu ? `&co_sucu=${encodeURIComponent(coSucu)}` : '';
         const response = await agentClient.request<any>(
-            `/rendimiento-vendedores?sede=${branchId}&startDate=${startDate}&endDate=${endDate}${venParam}`,
+            `/rendimiento-vendedores?sede=${branchId}&startDate=${startDate}&endDate=${endDate}${venParam}${sucuParam}`,
             { method: 'GET' }
         );
 
@@ -71,7 +76,10 @@ export const load: PageServerLoad = protectLoad('reports_vendor_performance', as
                 branchId,
                 selectedBranch,
                 selectedCoVen: coVen,
+                selectedCoSucu: coSucu,
+                activeTab: tab,
                 branches: allowedBranches,
+                sucursales: response.sucursales || [],
                 tipoAgrupacion: response.tipoAgrupacion || 'mensual',
                 totales: response.totales || { facturas: 0, devoluciones: 0, docs_exitosos: 0, cotizaciones: 0, pedidos: 0 },
                 timeline: response.timeline || response.mensual || [],
@@ -84,27 +92,31 @@ export const load: PageServerLoad = protectLoad('reports_vendor_performance', as
                 rankingArtCotizados: response.rankingArtCotizados || [],
                 rankingCobrosUsd: response.rankingCobrosUsd || [],
                 rankingCobrosBs: response.rankingCobrosBs || [],
+                rankingFacturadoUsd: response.rankingFacturadoUsd || [],
                 totalArticulosActivos: response.totalArticulosActivos || 0,
                 totalArticulosDistintosGlobal: response.totalArticulosDistintosGlobal || 0,
                 totalArtPedidosGlobal: response.totalArtPedidosGlobal || 0,
                 totalArtCotizadosGlobal: response.totalArtCotizadosGlobal || 0,
                 totalCobrosUsdGlobal: response.totalCobrosUsdGlobal || 0,
                 totalCobrosBsUsdGlobal: response.totalCobrosBsUsdGlobal || 0,
-                totalCobrosBsGlobal: response.totalCobrosBsGlobal || 0
+                totalCobrosBsGlobal: response.totalCobrosBsGlobal || 0,
+                totalFacturadoUsdGlobal: response.totalFacturadoUsdGlobal || 0
             };
         } else {
             return {
-                startDate, endDate, branchId, selectedCoVen: coVen,
+                startDate, endDate, branchId, selectedCoVen: coVen, selectedCoSucu: coSucu, activeTab: tab,
                 selectedBranch,
                 branches: allowedBranches,
+                sucursales: [],
                 error: response?.message || 'Error al obtener rendimiento de vendedores del agente.'
             };
         }
     } catch (e: any) {
         console.error('[Vendor Performance Load]', e);
         return {
-            startDate, endDate, branchId, selectedCoVen: coVen,
+            startDate, endDate, branchId, selectedCoVen: coVen, selectedCoSucu: coSucu, activeTab: tab,
             branches: allowedBranches,
+            sucursales: [],
             error: 'Error comunicándose con el Agente Profit: ' + e.message
         };
     }

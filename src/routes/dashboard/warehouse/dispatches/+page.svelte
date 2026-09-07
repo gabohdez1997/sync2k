@@ -22,7 +22,6 @@
     Loader2,
     Clock,
     Package,
-    Warehouse,
     Edit2
   } from "lucide-svelte";
   import { toast } from "svelte-sonner";
@@ -87,17 +86,19 @@
         comentario: cleanComment
       };
 
+      const defaultDocAlma = p.renglones?.[0]?.co_alma || data.defaultWarehouse || "01";
       dispatchLines = (p.renglones || []).map((l: any) => {
-        const cantActual = Number(l.cant_despachada || l.total_art || 0);
-        const cantPendiente = Number(l.cant_pendiente != null ? l.cant_pendiente : cantActual);
-        const cantOriginal = Number(l.cant_original != null ? l.cant_original : (cantPendiente + cantActual));
+        const cantOriginal = Number(l.cant_original != null ? l.cant_original : (l.total_art || 0));
+        const cantDespachada = Number(l.cant_despachada || 0);
+        const cantPendiente = Number(l.cant_pendiente != null ? l.cant_pendiente : cantDespachada);
+        const isChecked = l.checked !== undefined ? Boolean(l.checked) : cantDespachada > 0;
         return {
           ...l,
-          checked: cantActual > 0,
-          cant_despachada: cantActual,
-          cant_pendiente: cantPendiente > 0 ? cantPendiente : cantActual,
-          cant_original: cantOriginal > 0 ? cantOriginal : cantActual,
-          co_alma: l.co_alma || data.defaultWarehouse || "01"
+          checked: isChecked,
+          cant_despachada: isChecked ? (cantPendiente > 0 ? cantPendiente : cantDespachada) : 0,
+          cant_pendiente: cantPendiente,
+          cant_original: cantOriginal > 0 ? cantOriginal : (cantPendiente || cantDespachada),
+          co_alma: l.co_alma || defaultDocAlma
         };
       });
     }
@@ -134,21 +135,32 @@
       0
     );
 
-    const isFullyDispatched =
-      totalLinesCount === dispatchLines.length &&
-      dispatchLines.every(
-        (l) => Number(l.cant_despachada || 0) === Number(l.cant_pendiente || 0)
-      );
+    const remainingPendingAfterDispatch = dispatchLines.reduce((acc, l) => {
+      const pend = Number(l.cant_pendiente || 0);
+      const desp = l.checked ? Number(l.cant_despachada || 0) : 0;
+      return acc + Math.max(0, pend - desp);
+    }, 0);
+
+    const isFullInvoiceDispatch =
+      linesToProcess.length > 0 &&
+      linesToProcess.length === dispatchLines.length &&
+      remainingPendingAfterDispatch === 0;
+
+    const isPartialFinalDispatch =
+      linesToProcess.length > 0 &&
+      linesToProcess.length < dispatchLines.length &&
+      remainingPendingAfterDispatch === 0;
 
     const isPartiallyDispatched =
-      totalUnitsCount > 0 && totalUnitsCount < totalPendingCount;
+      linesToProcess.length > 0 && remainingPendingAfterDispatch > 0;
 
     return {
       linesToProcess,
       totalLinesCount,
       totalUnitsCount,
       totalPendingCount,
-      isFullyDispatched,
+      isFullInvoiceDispatch,
+      isPartialFinalDispatch,
       isPartiallyDispatched
     };
   });
@@ -257,6 +269,7 @@
         observations = fullInv.comentario ? `Ref Factura: ${fullInv.comentario}` : "";
 
         // Map invoice lines to dispatch lines
+        const defaultDocAlma = fullInv.renglones?.[0]?.co_alma_original || fullInv.co_alma || data.defaultWarehouse || "01";
         dispatchLines = (fullInv.renglones || []).map((r: any) => {
           const cantPend = Number(r.cant_pendiente || 0);
           return {
@@ -267,10 +280,10 @@
             referencia: r.referencia,
             co_uni: r.co_uni,
             unidad: r.unidad,
-            co_alma: r.co_alma_original || data.defaultWarehouse || "01",
+            co_alma: r.co_alma_original || defaultDocAlma,
             cant_original: Number(r.cant_original || 0),
             cant_pendiente: cantPend,
-            cant_despachada: cantPend, // By default dispatch all pending
+            cant_despachada: cantPend, // Toma en totalidad el pendiente por despachar siempre
             checked: cantPend > 0,
             prec_vta: r.prec_vta,
             tipo_imp: r.tipo_imp,
@@ -295,21 +308,15 @@
   }
 
   function toggleAllLines(checked: boolean) {
-    dispatchLines = dispatchLines.map((l) => ({
-      ...l,
-      checked: checked,
-      cant_despachada: checked ? (l.cant_despachada > 0 ? l.cant_despachada : l.cant_pendiente) : 0
-    }));
-  }
-
-  function updateDispatchedQty(index: number, val: number) {
-    const max = Number(dispatchLines[index].cant_pendiente || dispatchLines[index].cant_original || 0);
-    let finalVal = Number(val);
-    if (isNaN(finalVal) || finalVal < 0) finalVal = 0;
-    if (max > 0 && finalVal > max) finalVal = max;
-
-    dispatchLines[index].cant_despachada = finalVal;
-    dispatchLines[index].checked = finalVal > 0;
+    dispatchLines = dispatchLines.map((l) => {
+      const pending = Number(l.cant_pendiente || 0);
+      const isChecked = checked && pending > 0;
+      return {
+        ...l,
+        checked: isChecked,
+        cant_despachada: isChecked ? pending : 0
+      };
+    });
   }
 
   async function submitDispatch() {
@@ -397,13 +404,7 @@
     }
   }
 
-  // Warehouse name helper
-  let defaultWarehouseName = $derived.by(() => {
-    const wh = (data.warehouses || []).find(
-      (w: any) => w.co_alma?.trim() === data.defaultWarehouse?.trim()
-    );
-    return wh ? `${wh.co_alma} - ${wh.des_alma}` : (data.defaultWarehouse || "Principal");
-  });
+
 </script>
 
 <svelte:head>
@@ -569,18 +570,11 @@
                   {selectedInvoice.telefonos || "---"}
                 </p>
               </div>
-              <div class="md:col-span-3 grid grid-cols-1 md:grid-cols-3 gap-4 pt-2 border-t border-border-subtle/30">
+              <div class="md:col-span-3 grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 border-t border-border-subtle/30">
                 <div class="space-y-1">
                   <span class="text-[9px] font-black uppercase tracking-widest text-text-muted">Factura de Venta</span>
                   <p class="text-xs font-bold font-mono text-brand-400">
                     {selectedInvoice.doc_num}
-                  </p>
-                </div>
-                <div class="space-y-1">
-                  <span class="text-[9px] font-black uppercase tracking-widest text-text-muted">Almacén de Salida</span>
-                  <p class="text-xs font-bold text-emerald-400 flex items-center gap-1.5">
-                    <Warehouse size={13} />
-                    {defaultWarehouseName}
                   </p>
                 </div>
                 <div class="space-y-1">
@@ -653,29 +647,32 @@
                   <tr class="bg-surface-soft/60 border-b border-border-subtle text-text-muted font-black uppercase tracking-wider text-[10px]">
                     <th class="py-4 px-4 w-12 text-center">Sel</th>
                     <th class="py-4 px-4 min-w-[220px]">Artículo</th>
-                    <th class="py-4 px-4 min-w-[140px]">Almacén Salida</th>
-                    <th class="py-4 px-4 text-center w-24">Facturado</th>
-                    <th class="py-4 px-4 text-center w-24">Pendiente</th>
-                    <th class="py-4 px-4 text-center w-40">A Despachar</th>
+                    <th class="py-4 px-4 text-center w-28">Facturado</th>
+                    <th class="py-4 px-4 text-center w-28">Pendiente</th>
                   </tr>
                 </thead>
                 <tbody class="divide-y divide-border-subtle/50 font-medium">
                   {#each filteredDispatchLines as { line, originalIndex } (line.reng_num + line.co_art)}
-                    <tr class="hover:bg-surface-soft/30 transition-colors {line.checked ? '' : 'opacity-50'}">
+                    {@const isItemCompleted = !line.checked && Number(line.cant_pendiente || 0) <= 0}
+                    <tr class="hover:bg-surface-soft/30 transition-colors {line.checked ? '' : isItemCompleted ? 'opacity-40 bg-surface-soft/20' : 'opacity-60'}">
                       <!-- Checkbox -->
                       <td class="py-3 px-4 text-center">
                         <button
                           type="button"
+                          disabled={isItemCompleted}
                           onclick={() => {
-                            dispatchLines[originalIndex].checked = !dispatchLines[originalIndex].checked;
-                            if (dispatchLines[originalIndex].checked && Number(dispatchLines[originalIndex].cant_despachada) <= 0) {
-                              dispatchLines[originalIndex].cant_despachada = dispatchLines[originalIndex].cant_pendiente;
-                            }
+                            if (isItemCompleted) return;
+                            const isNowChecked = !dispatchLines[originalIndex].checked;
+                            dispatchLines[originalIndex].checked = isNowChecked;
+                            dispatchLines[originalIndex].cant_despachada = isNowChecked ? Number(dispatchLines[originalIndex].cant_pendiente || 0) : 0;
                           }}
-                          class="text-brand-500 hover:text-brand-400 transition-colors cursor-pointer"
+                          class="text-brand-500 hover:text-brand-400 transition-colors {isItemCompleted ? 'cursor-not-allowed text-text-muted/30' : 'cursor-pointer'}"
+                          title={isItemCompleted ? "Artículo ya despachado en su totalidad" : line.checked ? "Deseleccionar" : "Seleccionar para despachar"}
                         >
                           {#if line.checked}
                             <CheckSquare size={18} />
+                          {:else if isItemCompleted}
+                            <CheckSquare size={18} class="text-emerald-500/30" />
                           {:else}
                             <Square size={18} class="text-text-muted/40" />
                           {/if}
@@ -699,65 +696,24 @@
                         </div>
                       </td>
 
-                      <!-- Warehouse -->
-                      <td class="py-3 px-4">
-                        <select
-                          bind:value={dispatchLines[originalIndex].co_alma}
-                          class="w-full bg-surface-soft border border-border-subtle px-2 py-1.5 rounded-xl text-xs font-bold text-text-base focus:border-brand-500/50 outline-none cursor-pointer"
-                        >
-                          {#each data.warehouses as wh}
-                            <option value={wh.co_alma}>{wh.co_alma} - {wh.des_alma || wh.co_alma}</option>
-                          {/each}
-                        </select>
-                      </td>
-
                       <!-- Invoiced Qty -->
                       <td class="py-3 px-4 text-center font-mono font-bold text-text-muted">
                         {formatQuantity(line.cant_original)}
                       </td>
 
                       <!-- Pending Qty -->
-                      <td class="py-3 px-4 text-center font-mono font-black text-amber-400">
-                        {formatQuantity(line.cant_pendiente)}
-                      </td>
-
-                      <!-- Quantity to Dispatch Input -->
-                      <td class="py-3 px-4">
-                        <div class="flex items-center justify-center gap-1.5 bg-surface-soft p-1 rounded-2xl border border-border-subtle">
-                          <button
-                            type="button"
-                            onclick={() => updateDispatchedQty(originalIndex, Number(dispatchLines[originalIndex].cant_despachada || 0) - 1)}
-                            class="h-8 w-8 rounded-xl bg-surface-strong hover:bg-surface-soft text-text-base font-black flex items-center justify-center transition-all disabled:opacity-30 cursor-pointer"
-                            disabled={Number(dispatchLines[originalIndex].cant_despachada || 0) <= 0}
-                          >
-                            -
-                          </button>
-                          <input
-                            type="number"
-                            min="0"
-                            max={line.cant_pendiente || line.cant_original || 999999}
-                            step="any"
-                            value={dispatchLines[originalIndex].cant_despachada}
-                            oninput={(e) => updateDispatchedQty(originalIndex, parseFloat((e.currentTarget as HTMLInputElement).value) || 0)}
-                            class="w-16 bg-transparent text-center font-mono font-black text-sm text-text-base focus:outline-none"
-                          />
-                          <button
-                            type="button"
-                            onclick={() => updateDispatchedQty(originalIndex, Number(dispatchLines[originalIndex].cant_despachada || 0) + 1)}
-                            class="h-8 w-8 rounded-xl bg-surface-strong hover:bg-surface-soft text-text-base font-black flex items-center justify-center transition-all disabled:opacity-30 cursor-pointer"
-                            disabled={Number(dispatchLines[originalIndex].cant_despachada || 0) >= Number(line.cant_pendiente || line.cant_original || 999999)}
-                          >
-                            +
-                          </button>
-                          <button
-                            type="button"
-                            onclick={() => updateDispatchedQty(originalIndex, Number(line.cant_pendiente || 0))}
-                            class="px-2 py-1 bg-brand-500/10 hover:bg-brand-500/20 text-brand-400 rounded-lg text-[10px] font-black uppercase transition-all cursor-pointer"
-                            title="Despachar todo el saldo pendiente"
-                          >
-                            MAX
-                          </button>
-                        </div>
+                      <td class="py-3 px-4 text-center font-mono font-black">
+                        {#if Number(line.cant_pendiente || 0) > 0}
+                          <span class="text-amber-400">{formatQuantity(line.cant_pendiente)}</span>
+                        {:else if line.despachado_en_otro}
+                          <span class="text-[10px] text-emerald-400 font-bold px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 block whitespace-nowrap" title="Entregado en Nota N° {line.despachado_en_otro}">
+                            0 (En N/D {line.despachado_en_otro})
+                          </span>
+                        {:else}
+                          <span class="text-[10px] text-emerald-400 font-bold px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20">
+                            0 (Listo)
+                          </span>
+                        {/if}
                       </td>
                     </tr>
                   {/each}
@@ -812,11 +768,18 @@
             </div>
 
             <!-- Diagnóstico de Estado de Despacho -->
-            {#if totals.isFullyDispatched}
+            {#if totals.isFullInvoiceDispatch}
               <div class="p-4 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 rounded-2xl text-xs flex gap-3 items-start" transition:slide>
                 <CheckCircle2 size={20} class="shrink-0 mt-0.5" />
                 <p class="font-bold text-xs leading-relaxed">
-                  Despacho Total: Todos los renglones se despachan al 100%. La factura quedará completamente entregada.
+                  Despacho Total: Todos los renglones de la factura se despachan en esta nota al 100%.
+                </p>
+              </div>
+            {:else if totals.isPartialFinalDispatch}
+              <div class="p-4 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 rounded-2xl text-xs flex gap-3 items-start" transition:slide>
+                <CheckCircle2 size={20} class="shrink-0 mt-0.5" />
+                <p class="font-bold text-xs leading-relaxed">
+                  Despacho Parcial (Cierre de Factura): Se despachan {totals.totalLinesCount} de {dispatchLines.length} renglones. Los demás ítems ya fueron entregados en notas anteriores (la factura queda 100% entregada).
                 </p>
               </div>
             {:else if totals.isPartiallyDispatched}

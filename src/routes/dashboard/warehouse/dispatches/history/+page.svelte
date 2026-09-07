@@ -16,7 +16,6 @@
     Ban,
     ChevronLeft,
     ChevronRight,
-    Warehouse,
     AlertCircle,
     X,
     Loader2,
@@ -198,7 +197,7 @@
 
   <!-- SEARCH & FILTERS -->
   <div
-    class="glass p-4 rounded-3xl border border-white/5 shadow-2xl grid grid-cols-1 md:grid-cols-2 gap-4 items-center mb-6 w-full relative z-20"
+    class="glass p-4 rounded-3xl border border-white/5 shadow-2xl grid grid-cols-1 {data.branches && data.branches.length > 1 ? 'md:grid-cols-3' : 'md:grid-cols-2'} gap-4 items-center mb-6 w-full relative z-20"
   >
     {#if data.branches && data.branches.length > 1}
       <div class="w-full">
@@ -214,7 +213,23 @@
       </div>
     {/if}
 
-    <div class="w-full {!(data.branches && data.branches.length > 1) ? 'md:col-span-2' : ''}">
+    <div class="w-full">
+      <Combobox
+        options={[
+          { value: "all", label: "Todos los Estatus" },
+          { value: "despachado", label: "Despachado" },
+          { value: "parcial", label: "Parcialmente Despachado" },
+          { value: "anulado", label: "Anulado" }
+        ]}
+        bind:value={filterStatus}
+        placeholder="Estatus..."
+        icon={Filter}
+        class="w-full h-14"
+        onchange={applyFilters}
+      />
+    </div>
+
+    <div class="w-full">
       <SearchBar
         bind:value={filterSearch}
         isSearching={isSearching}
@@ -241,9 +256,6 @@
             >
             <th class="px-6 py-5 text-xs font-black uppercase tracking-[0.1em] text-text-muted"
               >Cliente</th
-            >
-            <th class="px-6 py-5 text-xs font-black uppercase tracking-[0.1em] text-text-muted"
-              >Almacén</th
             >
             <th class="px-6 py-5 text-xs font-black uppercase tracking-[0.1em] text-text-muted text-center"
               >Renglones / Cant.</th
@@ -298,13 +310,7 @@
                   </div>
                 </td>
 
-                <!-- Almacén -->
-                <td class="px-6 py-5">
-                  <span class="text-xs font-bold text-emerald-400 flex items-center gap-1.5">
-                    <Warehouse size={14} />
-                    {dispatch.almacen_des || dispatch.co_alma || "Principal"}
-                  </span>
-                </td>
+
 
                 <!-- Renglones / Unidades -->
                 <td class="px-6 py-5 text-center">
@@ -320,9 +326,13 @@
                     <span class="px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-red-500/10 text-red-500 border border-red-500/20">
                       Anulado
                     </span>
+                  {:else if (dispatch.factura_total_unidades && Number(dispatch.total_unidades) < Number(dispatch.factura_total_unidades)) || dispatch.factura_status === '1' || (dispatch.factura_pendiente && Number(dispatch.factura_pendiente) > 0)}
+                    <span class="px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                      Parcialmente Despachado
+                    </span>
                   {:else}
                     <span class="px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-green-500/10 text-green-500 border border-green-500/20">
-                      Completado
+                      Despachado
                     </span>
                   {/if}
                 </td>
@@ -391,7 +401,7 @@
             {/each}
           {:else}
             <tr>
-              <td colspan="7" class="py-20 text-center text-text-muted">
+              <td colspan="6" class="py-20 text-center text-text-muted">
                 <div class="flex flex-col items-center justify-center gap-3">
                   <Truck size={48} class="text-text-muted/30 stroke-[1.5]" />
                   <p class="text-base font-bold">No se encontraron notas de despacho registradas</p>
@@ -459,9 +469,24 @@
             <Package size={20} />
           </div>
           <div>
-            <h3 class="text-base font-black text-text-base">
-              Nota de Despacho N° {detailDispatch?.doc_num || "..."}
-            </h3>
+            <div class="flex items-center gap-2">
+              <h3 class="text-base font-black text-text-base">
+                Nota de Despacho N° {detailDispatch?.doc_num || "..."}
+              </h3>
+              {#if detailDispatch?.anulado}
+                <span class="px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-red-500/10 text-red-500 border border-red-500/20">
+                  Anulado
+                </span>
+              {:else if (detailDispatch?.factura_total_unidades && Number(detailDispatch.total_unidades) < Number(detailDispatch.factura_total_unidades)) || detailDispatch?.factura_status === '1' || (detailDispatch?.factura_pendiente && Number(detailDispatch.factura_pendiente) > 0)}
+                <span class="px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                  Parcialmente Despachado
+                </span>
+              {:else if detailDispatch}
+                <span class="px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-green-500/10 text-green-500 border border-green-500/20">
+                  Despachado
+                </span>
+              {/if}
+            </div>
             <p class="text-xs text-text-muted">Detalle físico y artículos despachados</p>
           </div>
         </div>
@@ -482,7 +507,8 @@
             <p class="text-xs text-text-muted">Cargando renglones del documento...</p>
           </div>
         {:else if detailDispatch}
-          {@const totalUnits = (detailDispatch.renglones || []).reduce((acc: number, r: any) => acc + Number(r.cant_despachada || r.total_art || 0), 0)}
+          {@const dispatchedRenglones = (detailDispatch.renglones || []).filter((r: any) => (Number(r.cant_despachada || r.total_art) || 0) > 0)}
+          {@const totalUnits = dispatchedRenglones.reduce((acc: number, r: any) => acc + Number(r.cant_despachada || r.total_art || 0), 0)}
 
           <!-- Info Cliente y Resumen -->
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 p-4 rounded-2xl bg-surface-soft border border-border-subtle">
@@ -521,7 +547,7 @@
           <div class="space-y-3">
             <h4 class="text-xs font-black uppercase tracking-wider text-text-muted">Artículos Despachados</h4>
             <div class="border border-border-subtle rounded-2xl overflow-hidden divide-y divide-border-subtle">
-              {#each detailDispatch.renglones || [] as r}
+              {#each dispatchedRenglones as r}
                 <div class="p-4 bg-surface-soft/40 flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs hover:bg-surface-soft transition-colors">
                   <div class="space-y-1">
                     <div class="flex items-center gap-2">
@@ -543,10 +569,6 @@
                   </div>
 
                   <div class="flex items-center gap-6 text-right">
-                    <div>
-                      <span class="text-[9px] text-text-muted uppercase font-bold block">Almacén</span>
-                      <span class="font-bold text-emerald-400">{r.des_alma || r.co_alma}</span>
-                    </div>
                     <div>
                       <span class="text-[9px] text-text-muted uppercase font-bold block">Cant. Despachada</span>
                       <span class="text-base font-black text-text-base font-mono">{r.cant_despachada || r.total_art} {r.unidad || r.co_uni || "UNI"}</span>
