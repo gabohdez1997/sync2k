@@ -237,7 +237,7 @@ export const actions: Actions = {
 			}
 
 			// --- UPLOAD TO SUPABASE ---
-			const fileName = `${co_art.trim()}-${Date.now()}.webp`;
+			const fileName = `${co_art.trim()}.webp`;
 			const arrayBuffer = await imageFile.arrayBuffer();
 			const buffer = Buffer.from(arrayBuffer);
 
@@ -245,24 +245,12 @@ export const actions: Actions = {
 				.from('articulos')
 				.upload(fileName, buffer, {
 					contentType: 'image/webp',
-					cacheControl: '3600',
+					cacheControl: '300',
 					upsert: true
 				});
 
 			if (uploadError) {
 				return fail(500, { error: `Error subiendo imagen: ${uploadError.message}` });
-			}
-
-			// Eliminar la imagen anterior del bucket si existe
-			if (oldImageFile) {
-				const { error: removeError } = await supabaseAdmin.storage
-					.from('articulos')
-					.remove([oldImageFile]);
-				
-				if (removeError) {
-					console.error('[SUPABASE] Error eliminando imagen antigua:', removeError.message);
-					// No bloqueamos la ejecución si falla el borrado
-				}
 			}
 
 			const { data: publicUrlData } = supabaseAdmin.storage.from('articulos').getPublicUrl(fileName);
@@ -419,23 +407,20 @@ export const actions: Actions = {
 				return fail(500, { error: 'No se pudo conectar con los agentes de las sucursales.' });
 			}
 
-			// 4. Build master map of best image per article (must exist in storage or be highest timestamp)
+			// 4. Build master map of valid images per article directly from storage
 			const masterMap = new Map<string, string>();
+			for (const file of storageSet) {
+				const match = file.match(/^([a-zA-Z0-9_-]+)\.webp$/i);
+				if (match) {
+					masterMap.set(match[1].trim(), file);
+				}
+			}
+
+			// Complement with any other branch articles if valid in storage
 			for (const { map } of branchArticleMaps) {
 				for (const [co_art, campo7] of map.entries()) {
 					if (!campo7) continue;
-					const currentBest = masterMap.get(co_art);
-					const currentTs = extractImageTimestamp(currentBest);
-					const itemTs = extractImageTimestamp(campo7);
-
-					const inStorage = storageSet.has(campo7);
-					const currentInStorage = currentBest ? storageSet.has(currentBest) : false;
-
-					if (!currentBest) {
-						masterMap.set(co_art, campo7);
-					} else if (inStorage && !currentInStorage) {
-						masterMap.set(co_art, campo7);
-					} else if (inStorage === currentInStorage && itemTs > currentTs) {
+					if (!masterMap.has(co_art) && storageSet.has(campo7)) {
 						masterMap.set(co_art, campo7);
 					}
 				}

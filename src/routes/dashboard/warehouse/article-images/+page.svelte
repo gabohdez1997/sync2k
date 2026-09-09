@@ -129,8 +129,21 @@
   let uploadingArticleId = $state<string | null>(null);
   let fileInputRef: HTMLInputElement | null = null;
   let activeArticleForUpload: any = null;
+  let cacheBusters = $state<Record<string, number>>({});
+
+  function getImgSrc(article: any): string {
+    if (!article.campo7 || article.campo7.trim() === "") return "";
+    if (article.campo7.startsWith("http")) return article.campo7;
+    const code = (article.co_art || article.codigo || article.id || "").trim();
+    const bust = cacheBusters[code] ? `?t=${cacheBusters[code]}` : "";
+    return `${PUBLIC_SUPABASE_URL}/storage/v1/object/public/articulos/${article.campo7.trim()}${bust}`;
+  }
 
   function triggerFileInput(article: any) {
+    if (uploadingArticleId) {
+      toast.warning("Hay una subida de imagen en curso. Por favor espera.");
+      return;
+    }
     activeArticleForUpload = article;
     if (fileInputRef) {
       fileInputRef.click();
@@ -187,8 +200,8 @@
       return;
 
     const file = input.files[0];
-    const article = activeArticleForUpload;
-    const artCode = article.co_art || article.codigo || article.id;
+    const currentArticle = activeArticleForUpload;
+    const artCode = (currentArticle.co_art || currentArticle.codigo || currentArticle.id).trim();
 
     // Reset input
     input.value = "";
@@ -202,16 +215,8 @@
       // 2. Send to server action to upload and update agent
       const formData = new FormData();
       formData.append("co_art", artCode);
-      formData.append("imageFile", webpBlob, `${artCode.trim()}.webp`);
+      formData.append("imageFile", webpBlob, `${artCode}.webp`);
       formData.append("branchId", selectedBranch);
-
-      if (
-        article.campo7 &&
-        article.campo7.trim() !== "" &&
-        !article.campo7.startsWith("http")
-      ) {
-        formData.append("oldImageFile", article.campo7.trim());
-      }
 
       const response = await fetch("?/updateImage", {
         method: "POST",
@@ -227,21 +232,11 @@
       ) {
         toast.success(`Imagen actualizada para el artículo ${artCode}`);
 
-        // Extract the .webp filename from the raw SvelteKit ActionResult string
-        const resultText = JSON.stringify(result);
-        const match = resultText.match(/([a-zA-Z0-9_-]+\.webp)/);
-        const newUrl = match ? match[1] : null;
+        const newUrl = `${artCode}.webp`;
+        currentArticle.campo7 = newUrl;
+        cacheBusters[artCode] = Date.now();
 
-        if (newUrl) {
-          if (activeArticleForUpload) {
-            activeArticleForUpload.campo7 = newUrl;
-          }
-          if (article) {
-            article.campo7 = newUrl;
-          }
-        }
-
-        // Forzar recarga en background (ahora con el Service Worker reparado)
+        // Forzar recarga en background
         import("$app/navigation").then((n) =>
           n.invalidateAll().catch((e) => console.error("Invalidate error:", e)),
         );
@@ -497,19 +492,13 @@
                 </div>
               {/if}
 
-
-
               {#if article.campo7 && article.campo7.trim() !== ""}
                 <img
-                  src={article.campo7.startsWith("http")
-                    ? article.campo7
-                    : `${PUBLIC_SUPABASE_URL}/storage/v1/object/public/articulos/${article.campo7}`}
+                  src={getImgSrc(article)}
                   alt={article.descripcion}
                   class="w-full h-full object-contain p-3 drop-shadow-lg transition-transform duration-700 ease-[cubic-bezier(0.25,0.46,0.45,0.94)] group-hover:scale-[1.08] cursor-pointer"
                   onclick={() => {
-                    viewerUrl = article.campo7.startsWith("http")
-                      ? article.campo7
-                      : `${PUBLIC_SUPABASE_URL}/storage/v1/object/public/articulos/${article.campo7}`;
+                    viewerUrl = getImgSrc(article);
                     viewerOpen = true;
                   }}
                   onerror={(e) => (e.currentTarget.style.display = "none")}
@@ -535,7 +524,7 @@
                     class="btn-primary rounded-xl px-6 py-2 flex items-center gap-2 transform translate-y-4 group-hover:translate-y-0 transition-all text-white font-bold"
                   >
                     <UploadCloud size={18} />
-                    {imageUrl ? "Cambiar Imagen" : "Subir Imagen"}
+                    {article.campo7 && article.campo7.trim() !== "" ? "Cambiar Imagen" : "Subir Imagen"}
                   </button>
                 </div>
               {/if}
