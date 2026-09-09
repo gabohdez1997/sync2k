@@ -358,29 +358,25 @@
     </div>
 
     <!-- PAGINACIÓN -->
-    {#if data.pagination && data.pagination.totalPages > 1}
-      <div class="p-6 border-t border-border-subtle flex items-center justify-between">
-        <span class="text-xs text-text-muted font-bold">
-          Total: {data.pagination.total} órdenes
-        </span>
-
+    {#if data.pagination && data.pagination.pages > 1}
+      <div class="p-4 border-t border-border-subtle flex items-center justify-between">
+        <div class="text-xs text-text-muted font-medium">
+          Página {data.pagination.currentPage} de {data.pagination.pages} ({data.pagination.total} órdenes en total)
+        </div>
         <div class="flex items-center gap-2">
           <button
-            disabled={data.pagination.page <= 1}
-            onclick={() => changePage(data.pagination.page - 1)}
-            class="px-4 py-2 rounded-xl bg-surface-soft border border-border-subtle text-xs font-bold disabled:opacity-30 hover:bg-surface-strong transition-all"
+            disabled={data.pagination.currentPage <= 1}
+            onclick={() => changePage(data.pagination.currentPage - 1)}
+            class="p-2 rounded-xl bg-surface-soft border border-border-subtle text-text-base disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
           >
-            Anterior
+            <ChevronLeft size={16} />
           </button>
-          <span class="px-4 py-2 text-xs font-mono font-bold text-brand-400">
-            {data.pagination.page} / {data.pagination.totalPages}
-          </span>
           <button
-            disabled={data.pagination.page >= data.pagination.totalPages}
-            onclick={() => changePage(data.pagination.page + 1)}
-            class="px-4 py-2 rounded-xl bg-surface-soft border border-border-subtle text-xs font-bold disabled:opacity-30 hover:bg-surface-strong transition-all"
+            disabled={data.pagination.currentPage >= data.pagination.pages}
+            onclick={() => changePage(data.pagination.currentPage + 1)}
+            class="p-2 rounded-xl bg-surface-soft border border-border-subtle text-text-base disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
           >
-            Siguiente
+            <ChevronRight size={16} />
           </button>
         </div>
       </div>

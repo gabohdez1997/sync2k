@@ -10,7 +10,7 @@ export const load: PageServerLoad = protectLoad('pur_orders', async ({ url, loca
     const allowedBranches = profile.allowed_branches || [];
     
     if (allowedBranches.length === 0) {
-        return { orders: [], branches: [], error: 'No tienes sucursales asignadas.' };
+        return { orders: [], pagination: { total: 0, pages: 1, currentPage: 1, limit: 20 }, branches: [], error: 'No tienes sucursales asignadas.' };
     }
 
     const urlBranchId = url.searchParams.get('branch_id');
@@ -19,7 +19,7 @@ export const load: PageServerLoad = protectLoad('pur_orders', async ({ url, loca
         : allowedBranches[0];
 
     if (!selectedBranch || !selectedBranch.agent_url) {
-        return { orders: [], branches: allowedBranches, error: 'Sucursal no configurada.' };
+        return { orders: [], pagination: { total: 0, pages: 1, currentPage: 1, limit: 20 }, branches: allowedBranches, error: 'Sucursal no configurada.' };
     }
 
     const agentClient = new AgentClient(selectedBranch, profile, fetch);
@@ -53,9 +53,28 @@ export const load: PageServerLoad = protectLoad('pur_orders', async ({ url, loca
     try {
         const res = await agentClient.getPurchaseOrders(Object.fromEntries(queryParams), parseInt(page), parseInt(limit));
         
+        if (!res.success) {
+            return {
+                orders: [],
+                pagination: { total: 0, pages: 1, currentPage: 1, limit: parseInt(limit) },
+                branches: allowedBranches,
+                error: res.message || 'Error al obtener órdenes de compra',
+                canCreate,
+                canUpdate,
+                canDelete,
+                canVoid,
+                filters: { doc_num, co_prov, search, status, fec_d, fec_h }
+            };
+        }
+
         return {
             orders: res.data || [],
-            pagination: res.pagination || { total: 0, pages: 1, currentPage: 1, limit: 20 },
+            pagination: {
+                total: (res as any).total_items || (res as any).pagination?.total || (res.data || []).length,
+                pages: (res as any).total_pages || (res as any).pagination?.pages || 1,
+                currentPage: (res as any).page || (res as any).pagination?.currentPage || parseInt(page),
+                limit: (res as any).limit || (res as any).pagination?.limit || parseInt(limit)
+            },
             branches: allowedBranches,
             selectedBranchId: selectedBranch.id,
             canCreate,
@@ -67,6 +86,7 @@ export const load: PageServerLoad = protectLoad('pur_orders', async ({ url, loca
     } catch (e: any) {
         return {
             orders: [],
+            pagination: { total: 0, pages: 1, currentPage: 1, limit: parseInt(limit) },
             branches: allowedBranches,
             error: 'Error al conectar con el Agente: ' + e.message,
             canCreate,
