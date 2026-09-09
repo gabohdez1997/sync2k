@@ -35,11 +35,15 @@
   let filterDoc = $state('');
   let filterSearch = $state('');
   let filterSede = $state('');
+  let filterFecD = $state(data.filters?.fec_d || data.filters?.desde || '');
+  let filterFecH = $state(data.filters?.fec_h || data.filters?.hasta || '');
 
   $effect(() => {
     filterDoc = data.filters?.doc_num || '';
     filterSearch = data.filters?.search || '';
     filterSede = data.selectedBranchId || '';
+    filterFecD = data.filters?.fec_d || data.filters?.desde || '';
+    filterFecH = data.filters?.fec_h || data.filters?.hasta || '';
   });
 
   function applyFilters() {
@@ -47,8 +51,18 @@
     if (filterDoc) params.set('doc_num', filterDoc); else params.delete('doc_num');
     if (filterSearch) params.set('search', filterSearch); else params.delete('search');
     if (filterSede) params.set('branch_id', filterSede);
+    if (filterFecD) params.set('fec_d', filterFecD); else params.delete('fec_d');
+    if (filterFecH) params.set('fec_h', filterFecH); else params.delete('fec_h');
     params.set('page', '1');
     goto(`?${params.toString()}`);
+  }
+
+  function clearFilters() {
+    filterSearch = '';
+    filterDoc = '';
+    filterFecD = '';
+    filterFecH = '';
+    applyFilters();
   }
 
   function changePage(p: number) {
@@ -140,7 +154,7 @@
   </div>
 
   <!-- SEARCH & FILTERS ROW -->
-  <div class="glass p-4 rounded-3xl border border-white/5 shadow-2xl grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 items-center relative z-10 mb-8 w-full">
+  <div class="glass p-4 rounded-3xl border border-white/5 shadow-2xl grid grid-cols-1 md:grid-cols-4 gap-4 items-center relative z-10 mb-8 w-full">
     {#if data.branches && data.branches.length > 1}
       <div class="w-full">
         <Combobox
@@ -149,19 +163,43 @@
           placeholder="Sucursal..."
           allLabel="Todas las Sucursales"
           icon={Store}
-          class="w-full h-14"
+          class="w-full h-12"
           onchange={() => applyFilters()}
         />
       </div>
     {/if}
 
-    <div class="w-full">
+    <div class="w-full {!(data.branches && data.branches.length > 1) ? 'md:col-span-2' : ''}">
       <SearchBar 
         bind:value={filterSearch} 
         isSearching={isSearching} 
         onsubmit={applyFilters} 
         placeholder="Buscar por documento, proveedor o RIF..."
-        className="w-full h-14"
+        className="w-full h-12"
+      />
+    </div>
+
+    <!-- Date From -->
+    <div class="w-full">
+      <input
+        type="date"
+        bind:value={filterFecD}
+        onchange={() => applyFilters()}
+        placeholder="Desde"
+        class="w-full h-12 px-4 bg-surface-soft border border-border-subtle rounded-2xl text-xs font-bold text-text-base focus:border-brand-500 outline-none transition-all"
+        title="Fecha Emisión Desde"
+      />
+    </div>
+
+    <!-- Date To -->
+    <div class="w-full">
+      <input
+        type="date"
+        bind:value={filterFecH}
+        onchange={() => applyFilters()}
+        placeholder="Hasta"
+        class="w-full h-12 px-4 bg-surface-soft border border-border-subtle rounded-2xl text-xs font-bold text-text-base focus:border-brand-500 outline-none transition-all"
+        title="Fecha Emisión Hasta"
       />
     </div>
   </div>
@@ -177,7 +215,7 @@
             <th class="px-6 py-5 text-xs font-black uppercase tracking-[0.1em] text-text-muted">Proveedor</th>
             <th class="px-6 py-5 text-xs font-black uppercase tracking-[0.1em] text-text-muted text-right">Monto</th>
             <th class="px-6 py-5 text-xs font-black uppercase tracking-[0.1em] text-text-muted text-center">Estatus</th>
-            <th class="px-6 py-5 text-xs font-black uppercase tracking-[0.1em] text-text-muted text-right">Acciones</th>
+            <th class="px-6 py-5 text-xs font-black uppercase tracking-[0.1em] text-text-muted text-center">Acciones</th>
           </tr>
         </thead>
         <tbody class="divide-y divide-border-subtle/30">
@@ -187,6 +225,14 @@
                 <ShoppingCart size={48} class="mx-auto mb-4 opacity-20 text-text-muted" />
                 <p class="text-xl font-bold">No se encontraron órdenes de compra</p>
                 <p class="text-sm mt-1">Intenta con otros filtros o selecciona otra sede.</p>
+                {#if filterSearch || filterFecD || filterFecH}
+                  <button
+                    onclick={clearFilters}
+                    class="mt-4 px-4 py-2 bg-brand-500/10 hover:bg-brand-500/20 text-brand-500 text-xs font-black rounded-xl transition-all cursor-pointer"
+                  >
+                    Limpiar filtros
+                  </button>
+                {/if}
               </td>
             </tr>
           {:else}
@@ -260,44 +306,46 @@
                   </span>
                 </td>
 
-                <td class="px-6 py-5 text-right">
-                  <div class="flex items-center justify-end gap-2">
+                <td class="px-6 py-5 text-center whitespace-nowrap">
+                  <div class="flex items-center justify-center gap-2">
                     <a
                       href={`/dashboard/purchases/orders/${encodeURIComponent(order.doc_num)}/print?branch_id=${order._branch_id || data.selectedBranchId}`}
                       target="_blank"
-                      class="p-2.5 rounded-xl bg-surface-soft hover:bg-surface-strong text-text-muted hover:text-white transition-all border border-border-subtle"
+                      class="p-2 text-text-muted hover:text-brand-500 hover:bg-brand-500/10 rounded-xl transition-all cursor-pointer flex items-center justify-center"
                       title="Imprimir / PDF"
                     >
-                      <Printer size={16} />
+                      <Printer size={18} />
                     </a>
 
                     {#if data.canUpdate && canEditOrder(order)}
                       <a
                         href={`/dashboard/purchases/orders?doc_num=${encodeURIComponent(order.doc_num)}&branch_id=${order._branch_id || data.selectedBranchId}`}
-                        class="p-2.5 rounded-xl bg-surface-soft hover:bg-surface-strong text-text-muted hover:text-brand-400 transition-all border border-border-subtle"
+                        class="p-2 text-text-muted hover:text-brand-500 hover:bg-brand-500/10 rounded-xl transition-all cursor-pointer flex items-center justify-center"
                         title="Editar Orden"
                       >
-                        <Edit2 size={16} />
+                        <Edit2 size={18} />
                       </a>
                     {/if}
 
                     {#if data.canVoid && !order.anulado && String(order.status).trim() === '0'}
                       <button
+                        type="button"
                         onclick={() => openVoidModal(order)}
-                        class="p-2.5 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 transition-all border border-amber-500/20 cursor-pointer"
+                        class="p-2 text-text-muted hover:text-amber-500 hover:bg-amber-500/10 rounded-xl transition-all cursor-pointer flex items-center justify-center"
                         title="Anular Orden"
                       >
-                        <Ban size={16} />
+                        <Ban size={18} />
                       </button>
                     {/if}
 
                     {#if data.canDelete && canDeleteOrder(order)}
                       <button
+                        type="button"
                         onclick={() => openDeleteModal(order)}
-                        class="p-2.5 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-400 transition-all border border-red-500/20 cursor-pointer"
+                        class="p-2 text-text-muted hover:text-red-500 hover:bg-red-500/10 rounded-xl transition-all cursor-pointer flex items-center justify-center"
                         title="Eliminar Orden"
                       >
-                        <Trash2 size={16} />
+                        <Trash2 size={18} />
                       </button>
                     {/if}
                   </div>

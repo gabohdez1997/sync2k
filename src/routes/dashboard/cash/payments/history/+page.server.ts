@@ -118,6 +118,7 @@ export const load: PageServerLoad = protectLoad('cash_payments', async ({ url, l
 		canVoid,
 		canSeeOthers,
 		canEdit,
+		filters: { search: url.searchParams.get('search') || '', co_cli: url.searchParams.get('co_cli') || '', co_us_in, fec_d: url.searchParams.get('fec_d') || '', fec_h: url.searchParams.get('fec_h') || '' },
 		error: errorMsg || null
 	};
 });

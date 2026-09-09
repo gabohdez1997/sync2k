@@ -45,12 +45,16 @@
     let filterSearch = $state('');
     let filterVen = $state('');
     let filterSede = $state('');
+    let filterFecD = $state('');
+    let filterFecH = $state('');
 
     $effect(() => {
         filterDoc = data.filters?.doc_num || '';
         filterSearch = data.filters?.search || '';
         filterVen = data.filters?.co_ven || '';
         filterSede = data.selectedBranchId || '';
+        filterFecD = data.filters?.fec_d || '';
+        filterFecH = data.filters?.fec_h || '';
     });
 
     function applyFilters() {
@@ -59,6 +63,8 @@
         if (filterSearch) params.set('search', filterSearch); else params.delete('search');
         if (filterVen) params.set('co_ven', filterVen); else params.delete('co_ven');
         if (filterSede) params.set('branch_id', filterSede);
+        if (filterFecD) params.set('fec_d', filterFecD); else params.delete('fec_d');
+        if (filterFecH) params.set('fec_h', filterFecH); else params.delete('fec_h');
         params.set('page', '1');
         goto(`?${params.toString()}`);
     }
@@ -170,7 +176,7 @@
     </div>
 
     <!-- SEARCH & FILTERS ROW -->
-    <div class="glass p-4 rounded-3xl border border-white/5 shadow-2xl grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 items-center relative z-20 mb-8 w-full">
+    <div class="glass p-4 rounded-3xl border border-border-subtle shadow-2xl grid grid-cols-1 md:grid-cols-4 gap-4 items-center relative z-20 mb-8 w-full">
         {#if data.branches && data.branches.length > 1}
             <div class="w-full">
                 <Combobox
@@ -179,19 +185,43 @@
                     placeholder="Sucursal..."
                     allLabel="Todas las Sucursales"
                     icon={Store}
-                    class="w-full h-14"
+                    class="w-full h-12"
                     onchange={() => applyFilters()}
                 />
             </div>
         {/if}
 
-        <div class="w-full">
+        <div class="w-full {!(data.branches && data.branches.length > 1) ? 'md:col-span-2' : ''}">
             <SearchBar 
                 bind:value={filterSearch} 
                 isSearching={isSearching} 
                 onsubmit={applyFilters} 
                 placeholder="Buscar por documento, cliente o RIF..."
-                className="w-full h-14"
+                className="w-full h-12"
+            />
+        </div>
+
+        <!-- Date From -->
+        <div class="w-full">
+            <input
+                type="date"
+                bind:value={filterFecD}
+                onchange={() => applyFilters()}
+                placeholder="Desde"
+                class="w-full h-12 px-4 bg-surface-soft border border-border-subtle rounded-2xl text-xs font-bold text-text-base focus:border-brand-500 outline-none transition-all"
+                title="Fecha Emisión Desde"
+            />
+        </div>
+
+        <!-- Date To -->
+        <div class="w-full">
+            <input
+                type="date"
+                bind:value={filterFecH}
+                onchange={() => applyFilters()}
+                placeholder="Hasta"
+                class="w-full h-12 px-4 bg-surface-soft border border-border-subtle rounded-2xl text-xs font-bold text-text-base focus:border-brand-500 outline-none transition-all"
+                title="Fecha Emisión Hasta"
             />
         </div>
     </div>
@@ -219,7 +249,7 @@
                             <td colspan={data.canSeeOthers ? 7 : 6} class="px-6 py-32 text-center">
                                 <FileText size={48} class="mx-auto text-text-muted/20 mb-4" />
                                 <p class="text-text-muted font-bold text-lg">No se encontraron pedidos</p>
-                                <button onclick={() => {filterDoc=''; filterSearch=''; filterVen=''; applyFilters();}} class="mt-2 text-brand-500 hover:underline text-sm font-bold">Limpiar filtros</button>
+                                <button onclick={() => {filterDoc=''; filterSearch=''; filterVen=''; filterFecD=''; filterFecH=''; applyFilters();}} class="mt-2 text-brand-500 hover:underline text-sm font-bold cursor-pointer">Limpiar filtros</button>
                             </td>
                         </tr>
                     {:else}

@@ -104,6 +104,14 @@
         { id: "pur_sublines", label: "Sub-Líneas" },
         { id: "pur_categories", label: "Categorías" },
         { id: "pur_orders", label: "Órdenes de Compra", hasVoid: true },
+        {
+          id: "pur_invoices",
+          label: "Facturas de Compra",
+          hasOthers: true,
+          hasVoid: true,
+          excludeUpdate: true,
+          excludeDelete: true,
+        },
       ],
     },
     {

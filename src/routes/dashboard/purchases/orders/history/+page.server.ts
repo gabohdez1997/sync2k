@@ -29,8 +29,8 @@ export const load: PageServerLoad = protectLoad('pur_orders', async ({ url, loca
     const doc_num = url.searchParams.get('doc_num') || '';
     const co_prov = url.searchParams.get('co_prov') || '';
     const search = url.searchParams.get('search') || '';
-    const fec_d = url.searchParams.get('fec_d') || '';
-    const fec_h = url.searchParams.get('fec_h') || '';
+    const fec_d = url.searchParams.get('fec_d') || url.searchParams.get('desde') || '';
+    const fec_h = url.searchParams.get('fec_h') || url.searchParams.get('hasta') || '';
     const status = url.searchParams.get('status') || '';
     
     // LÓGICA DE PERMISOS

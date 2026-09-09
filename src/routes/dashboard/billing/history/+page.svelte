@@ -37,10 +37,14 @@
   // Filtros locales
   let filterSearch = $state("");
   let filterSede = $state("");
+  let filterFecD = $state("");
+  let filterFecH = $state("");
 
   $effect(() => {
     filterSearch = data.filters?.search || "";
     filterSede = data.selectedBranchId || "";
+    filterFecD = data.filters?.fec_d || "";
+    filterFecH = data.filters?.fec_h || "";
   });
 
   function applyFilters() {
@@ -48,6 +52,10 @@
     if (filterSearch) params.set("search", filterSearch);
     else params.delete("search");
     if (filterSede) params.set("branch_id", filterSede);
+    if (filterFecD) params.set("fec_d", filterFecD);
+    else params.delete("fec_d");
+    if (filterFecH) params.set("fec_h", filterFecH);
+    else params.delete("fec_h");
     params.set("page", "1");
     goto(`?${params.toString()}`);
   }
@@ -121,10 +129,10 @@
     <div class="flex flex-col gap-2">
       <h1 class="text-4xl font-black tracking-tight flex items-center gap-3">
         <Clock size={40} class="text-brand-500" />
-        Historial Facturas / NE
+        Historial Facturas de Ventas
       </h1>
       <p class="text-text-muted text-lg">
-        Consulta y reimprime facturas o notas de entrega emitidas por caja.
+        Consulta, reimpresión y anulación de facturas de ventas.
       </p>
     </div>
 
@@ -141,7 +149,7 @@
 
   <!-- SEARCH & FILTERS -->
   <div
-    class="glass p-4 rounded-3xl border border-white/5 shadow-2xl grid grid-cols-1 md:grid-cols-2 gap-4 items-center mb-6 w-full relative z-20"
+    class="glass p-4 rounded-3xl border border-border-subtle shadow-2xl grid grid-cols-1 md:grid-cols-4 gap-4 items-center mb-6 w-full relative z-20"
   >
     {#if data.branches && data.branches.length > 1}
       <div class="w-full">
@@ -151,7 +159,7 @@
           placeholder="Sucursal..."
           allLabel="Todas las Sucursales"
           icon={Store}
-          class="w-full h-14"
+          class="w-full h-12"
           onchange={applyFilters}
         />
       </div>
@@ -163,7 +171,31 @@
         isSearching={isSearching}
         onsubmit={applyFilters}
         placeholder="Buscar por factura, cliente o RIF..."
-        className="w-full h-14"
+        className="w-full h-12"
+      />
+    </div>
+
+    <!-- Date From -->
+    <div class="w-full">
+      <input
+        type="date"
+        bind:value={filterFecD}
+        onchange={applyFilters}
+        placeholder="Desde"
+        class="w-full h-12 px-4 bg-surface-soft border border-border-subtle rounded-2xl text-xs font-bold text-text-base focus:border-brand-500 outline-none transition-all"
+        title="Fecha Emisión Desde"
+      />
+    </div>
+
+    <!-- Date To -->
+    <div class="w-full">
+      <input
+        type="date"
+        bind:value={filterFecH}
+        onchange={applyFilters}
+        placeholder="Hasta"
+        class="w-full h-12 px-4 bg-surface-soft border border-border-subtle rounded-2xl text-xs font-bold text-text-base focus:border-brand-500 outline-none transition-all"
+        title="Fecha Emisión Hasta"
       />
     </div>
   </div>
@@ -222,9 +254,11 @@
                 <button
                   onclick={() => {
                     filterSearch = "";
+                    filterFecD = "";
+                    filterFecH = "";
                     applyFilters();
                   }}
-                  class="mt-2 text-brand-500 hover:underline text-sm font-bold"
+                  class="mt-2 text-brand-500 hover:underline text-sm font-bold cursor-pointer"
                   >Limpiar filtros</button
                 >
               </td>

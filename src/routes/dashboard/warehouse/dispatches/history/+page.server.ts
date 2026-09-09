@@ -37,8 +37,8 @@ export const load: PageServerLoad = protectLoad('inv_dispatches', async ({ url, 
     const page = parseInt(url.searchParams.get('page') || '1', 10);
     const limit = parseInt(url.searchParams.get('limit') || '12', 10);
     const search = url.searchParams.get('search') || '';
-    const fec_d = url.searchParams.get('fec_d') || '';
-    const fec_h = url.searchParams.get('fec_h') || '';
+    const fec_d = url.searchParams.get('fec_d') || url.searchParams.get('desde') || '';
+    const fec_h = url.searchParams.get('fec_h') || url.searchParams.get('hasta') || '';
     const status = url.searchParams.get('status') || '';
 
     const agentClient = new AgentClient({

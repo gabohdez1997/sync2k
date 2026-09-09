@@ -119,7 +119,7 @@
       subItems: [
         {
           id: "cash_billing",
-          label: "Facturas",
+          label: "Factura de Venta",
           href: "/dashboard/billing",
           icon: Receipt,
         },
@@ -229,7 +229,7 @@
         },
         {
           id: "pur_invoices",
-          label: "Facturas",
+          label: "Factura de Compra",
           href: "/dashboard/purchases/invoices",
           icon: Receipt,
         },

@@ -707,7 +707,7 @@
     <div>
       <h1 class="text-4xl font-black tracking-tight flex items-center gap-3">
         <Receipt size={40} class="text-brand-500" />
-        Facturas
+        Factura de Venta
       </h1>
       <p class="text-text-muted mt-2 text-lg">
         Importación de pedidos y facturación.
@@ -1103,7 +1103,7 @@
               <div>
                 <span
                   class="text-[10px] font-black uppercase tracking-[0.2em] text-brand-400/60 block mb-2"
-                  >Total a Pagar</span
+                  >Total a Cobrar</span
                 >
                 <div
                   class="text-5xl font-black text-text-base drop-shadow-[0_4px_12px_rgba(var(--brand-rgb),0.3)] tracking-tight leading-none text-brand-400"

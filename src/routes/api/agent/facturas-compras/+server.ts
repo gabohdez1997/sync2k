@@ -1,0 +1,146 @@
+import { json } from '@sveltejs/kit';
+import { supabaseAdmin } from '$lib/server/supabase';
+import { AgentClient } from '$lib/server/agent';
+import { hasPermission } from '$lib/server/auth';
+import type { RequestHandler } from './$types';
+
+export const GET: RequestHandler = async ({ url, locals, fetch: svelteFetch }) => {
+    const profile = (locals as any).profile;
+    if (!profile) {
+        return json({ success: false, message: 'No autenticado.' }, { status: 401 });
+    }
+
+    if (!hasPermission(profile, 'pur_invoices', 'read')) {
+        return json({ success: false, message: 'No tienes permisos para consultar facturas de compra.' }, { status: 403 });
+    }
+
+    const branchId = url.searchParams.get('branch_id');
+    const search = url.searchParams.get('search') || '';
+    const page = url.searchParams.get('page') || '1';
+    const limit = url.searchParams.get('limit') || '20';
+    const doc_num = url.searchParams.get('doc_num') || '';
+    const co_prov = url.searchParams.get('co_prov') || '';
+    const nro_fact = url.searchParams.get('nro_fact') || '';
+    const fec_d = url.searchParams.get('fec_d') || '';
+    const fec_h = url.searchParams.get('fec_h') || '';
+
+    // Permiso de ver compras de otros usuarios
+    const canSeeOthers = hasPermission(profile, 'pur_invoices', 'others');
+    let co_us_in = url.searchParams.get('co_us_in') || '';
+
+    if (!canSeeOthers) {
+        const userCode = (profile.profit_user || '').trim().toUpperCase();
+        if (!userCode) {
+            return json({ success: false, message: 'Tu perfil no tiene asociado un código de Usuario de Profit Plus.' }, { status: 403 });
+        }
+        co_us_in = userCode;
+    }
+
+    if (!branchId) {
+        return json({ success: false, message: 'Parámetro branch_id es obligatorio.' }, { status: 400 });
+    }
+
+    try {
+        const { data: branch, error: bErr } = await supabaseAdmin
+            .from('branches')
+            .select('*')
+            .eq('id', branchId)
+            .single();
+
+        if (bErr || !branch || !branch.agent_url) {
+            return json({ success: false, message: 'Sucursal no válida o agente no configurado.' }, { status: 400 });
+        }
+
+        const agentClient = new AgentClient({
+            slug: branch.id,
+            agent_url: branch.agent_url,
+            agent_api_key: branch.agent_token
+        }, profile, svelteFetch);
+
+        const queryParams = new URLSearchParams({
+            page,
+            limit,
+            doc_num,
+            co_prov,
+            nro_fact,
+            search,
+            co_us_in: co_us_in || '',
+            fec_d,
+            fec_h
+        });
+
+        const response = await agentClient.request<any>(`/facturas-compras?sede=${branchId}&${queryParams.toString()}`);
+        return json(response);
+    } catch (err: any) {
+        console.error('[API FACTURAS COMPRAS LOAD ERROR]:', err);
+        return json({ success: false, message: 'Error de servidor: ' + err.message }, { status: 500 });
+    }
+};
+
+export const POST: RequestHandler = async ({ request, locals, fetch: svelteFetch }) => {
+    const profile = (locals as any).profile;
+    if (!profile) {
+        return json({ success: false, message: 'No autenticado.' }, { status: 401 });
+    }
+
+    if (!hasPermission(profile, 'pur_invoices', 'create')) {
+        return json({ success: false, message: 'No tienes permisos para registrar facturas de compra.' }, { status: 403 });
+    }
+
+    try {
+        const body = await request.json();
+        const { branch_id, invoice } = body;
+
+        if (!branch_id || !invoice) {
+            return json({ success: false, message: 'Faltan parámetros obligatorios (branch_id, invoice).' }, { status: 400 });
+        }
+
+        const { data: branch, error: bErr } = await supabaseAdmin
+            .from('branches')
+            .select('*')
+            .eq('id', branch_id)
+            .single();
+
+        if (bErr || !branch || !branch.agent_url) {
+            return json({ success: false, message: 'Sucursal no válida o agente no configurado.' }, { status: 400 });
+        }
+
+        const agentClient = new AgentClient({
+            slug: branch.id,
+            agent_url: branch.agent_url,
+            agent_api_key: branch.agent_token
+        }, profile, svelteFetch);
+
+        const response = await agentClient.request<any>(`/facturas-compras?sede=${branch_id}`, {
+            method: 'POST',
+            body: JSON.stringify(invoice)
+        });
+
+        if (response && response.success !== false) {
+            try {
+                const docNum = response.results?.[0]?.doc_num || response.doc_num || '';
+                await supabaseAdmin.from('audit_log').insert({
+                    action: 'CREATE',
+                    module: 'pur_invoices',
+                    record_id: docNum,
+                    user_email: profile.email ?? 'system',
+                    branch_id: branch_id,
+                    metadata: {
+                        message: `Factura de Compra ${docNum} (Fiscal N°: ${invoice.nro_fact}) registrada con éxito`,
+                        doc_num: docNum,
+                        nro_fact: invoice.nro_fact,
+                        supplier_code: invoice.co_prov,
+                        total_neto: invoice.total_neto
+                    }
+                });
+            } catch (auditError) {
+                console.error('Error al guardar log de auditoría de creación de factura de compra:', auditError);
+            }
+        }
+
+        return json(response);
+    } catch (err: any) {
+        console.error('[API FACTURAS COMPRAS SAVE ERROR]:', err);
+        return json({ success: false, message: 'Error de servidor: ' + err.message }, { status: 500 });
+    }
+};

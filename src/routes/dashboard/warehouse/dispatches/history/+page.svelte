@@ -44,6 +44,16 @@
   let filterSearch = $state(data.filters?.search || "");
   let filterSede = $state(data.selectedBranchId || "");
   let filterStatus = $state(data.filters?.status || "all");
+  let filterFecD = $state(data.filters?.fec_d || data.filters?.desde || "");
+  let filterFecH = $state(data.filters?.fec_h || data.filters?.hasta || "");
+
+  $effect(() => {
+    filterSearch = data.filters?.search || "";
+    filterSede = data.selectedBranchId || "";
+    filterStatus = data.filters?.status || "all";
+    filterFecD = data.filters?.fec_d || data.filters?.desde || "";
+    filterFecH = data.filters?.fec_h || data.filters?.hasta || "";
+  });
 
   // Detail Modal State
   let showDetailModal = $state(false);
@@ -72,8 +82,21 @@
     if (filterStatus && filterStatus !== "all") params.set("status", filterStatus);
     else params.delete("status");
 
+    if (filterFecD) params.set("fec_d", filterFecD);
+    else params.delete("fec_d");
+    if (filterFecH) params.set("fec_h", filterFecH);
+    else params.delete("fec_h");
+
     params.set("page", "1");
     goto(`?${params.toString()}`);
+  }
+
+  function clearFilters() {
+    filterSearch = "";
+    filterStatus = "all";
+    filterFecD = "";
+    filterFecH = "";
+    applyFilters();
   }
 
   function changePage(p: number) {
@@ -197,7 +220,7 @@
 
   <!-- SEARCH & FILTERS -->
   <div
-    class="glass p-4 rounded-3xl border border-white/5 shadow-2xl grid grid-cols-1 {data.branches && data.branches.length > 1 ? 'md:grid-cols-3' : 'md:grid-cols-2'} gap-4 items-center mb-6 w-full relative z-20"
+    class="glass p-4 rounded-3xl border border-border-subtle shadow-2xl grid grid-cols-1 sm:grid-cols-2 {data.branches && data.branches.length > 1 ? 'xl:grid-cols-5' : 'xl:grid-cols-4'} gap-4 items-center mb-6 w-full relative z-20"
   >
     {#if data.branches && data.branches.length > 1}
       <div class="w-full">
@@ -207,7 +230,7 @@
           placeholder="Sucursal..."
           allLabel="Todas las Sucursales"
           icon={Store}
-          class="w-full h-14"
+          class="w-full h-12"
           onchange={applyFilters}
         />
       </div>
@@ -224,7 +247,7 @@
         bind:value={filterStatus}
         placeholder="Estatus..."
         icon={Filter}
-        class="w-full h-14"
+        class="w-full h-12"
         onchange={applyFilters}
       />
     </div>
@@ -234,8 +257,32 @@
         bind:value={filterSearch}
         isSearching={isSearching}
         onsubmit={applyFilters}
-        placeholder="Buscar por N° despacho, N° factura origen, cliente o RIF..."
-        className="w-full h-14"
+        placeholder="Buscar por N° despacho, factura, cliente o RIF..."
+        className="w-full h-12"
+      />
+    </div>
+
+    <!-- Date From -->
+    <div class="w-full">
+      <input
+        type="date"
+        bind:value={filterFecD}
+        onchange={applyFilters}
+        placeholder="Desde"
+        class="w-full h-12 px-4 bg-surface-soft border border-border-subtle rounded-2xl text-xs font-bold text-text-base focus:border-brand-500 outline-none transition-all"
+        title="Fecha Emisión Desde"
+      />
+    </div>
+
+    <!-- Date To -->
+    <div class="w-full">
+      <input
+        type="date"
+        bind:value={filterFecH}
+        onchange={applyFilters}
+        placeholder="Hasta"
+        class="w-full h-12 px-4 bg-surface-soft border border-border-subtle rounded-2xl text-xs font-bold text-text-base focus:border-brand-500 outline-none transition-all"
+        title="Fecha Emisión Hasta"
       />
     </div>
   </div>
@@ -408,6 +455,15 @@
                   <p class="text-xs text-text-muted/60 max-w-sm">
                     Intenta ajustar los filtros de búsqueda o registra un nuevo despacho desde facturas de venta.
                   </p>
+                  {#if filterSearch || (filterStatus && filterStatus !== 'all') || filterFecD || filterFecH}
+                    <button
+                      type="button"
+                      onclick={clearFilters}
+                      class="mt-2 text-brand-500 hover:underline text-sm font-bold cursor-pointer"
+                    >
+                      Limpiar filtros
+                    </button>
+                  {/if}
                 </div>
               </td>
             </tr>

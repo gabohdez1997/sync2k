@@ -27,11 +27,15 @@
 
   let searchInput = $state('');
   let selectedBranch = $state(data.selectedBranchId);
+  let filterFecD = $state('');
+  let filterFecH = $state('');
 
   // Sincronizar inputs si cambian desde la URL
   $effect(() => {
     selectedBranch = data.selectedBranchId;
-    searchInput = $page.url.searchParams.get('search') || '';
+    searchInput = data.filters?.search || $page.url.searchParams.get('search') || '';
+    filterFecD = data.filters?.fec_d || $page.url.searchParams.get('fec_d') || '';
+    filterFecH = data.filters?.fec_h || $page.url.searchParams.get('fec_h') || '';
   });
 
   // Funciones de navegación y filtrado
@@ -40,12 +44,16 @@
     qParams.set('branch_id', selectedBranch);
     qParams.set('page', String(pageNumber));
     if (searchInput) qParams.set('search', searchInput);
+    if (filterFecD) qParams.set('fec_d', filterFecD);
+    if (filterFecH) qParams.set('fec_h', filterFecH);
     
     goto(`?${qParams.toString()}`);
   }
 
   function clearFilters() {
     searchInput = '';
+    filterFecD = '';
+    filterFecH = '';
     applyFilters(1);
   }
 
@@ -689,7 +697,7 @@
 
   <!-- FILTROS -->
   <div
-    class="glass p-4 rounded-3xl border border-white/5 shadow-2xl grid grid-cols-1 md:grid-cols-2 gap-4 items-center mb-6 w-full relative z-20"
+    class="glass p-4 rounded-3xl border border-border-subtle shadow-2xl grid grid-cols-1 md:grid-cols-4 gap-4 items-center mb-6 w-full relative z-20"
   >
     {#if data.branches && data.branches.length > 1}
       <div class="w-full">
@@ -698,7 +706,7 @@
           bind:value={selectedBranch}
           placeholder="Sucursal..."
           icon={Store}
-          class="w-full h-14"
+          class="w-full h-12"
           onchange={() => applyFilters(1)}
         />
       </div>
@@ -710,7 +718,31 @@
         isSearching={false}
         onsubmit={() => applyFilters(1)}
         placeholder="Buscar por cliente, RIF, cobro o recibo..."
-        className="w-full h-14"
+        className="w-full h-12"
+      />
+    </div>
+
+    <!-- Date From -->
+    <div class="w-full">
+      <input
+        type="date"
+        bind:value={filterFecD}
+        onchange={() => applyFilters(1)}
+        placeholder="Desde"
+        class="w-full h-12 px-4 bg-surface-soft border border-border-subtle rounded-2xl text-xs font-bold text-text-base focus:border-brand-500 outline-none transition-all"
+        title="Fecha Cobro Desde"
+      />
+    </div>
+
+    <!-- Date To -->
+    <div class="w-full">
+      <input
+        type="date"
+        bind:value={filterFecH}
+        onchange={() => applyFilters(1)}
+        placeholder="Hasta"
+        class="w-full h-12 px-4 bg-surface-soft border border-border-subtle rounded-2xl text-xs font-bold text-text-base focus:border-brand-500 outline-none transition-all"
+        title="Fecha Cobro Hasta"
       />
     </div>
   </div>
@@ -882,6 +914,12 @@
       </div>
       <h2 class="text-2xl font-bold text-text-muted">Sin movimientos registrados</h2>
       <p class="text-text-muted/60 max-w-sm">No se encontraron cobros registrados con los filtros aplicados. Intenta modificarlos o registra uno nuevo.</p>
+      <button 
+        onclick={clearFilters}
+        class="mt-2 text-brand-500 hover:underline text-sm font-bold cursor-pointer"
+      >
+        Limpiar filtros
+      </button>
     </div>
   {/if}
 </div>

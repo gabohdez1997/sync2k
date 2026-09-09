@@ -32,8 +32,8 @@ export const load: PageServerLoad = protectLoad('inv_receipts', async ({ url, lo
     const limit = parseInt(url.searchParams.get('limit') || '12');
     const search = url.searchParams.get('search') || '';
     const status = url.searchParams.get('status') || '';
-    const fec_d = url.searchParams.get('desde') || '';
-    const fec_h = url.searchParams.get('hasta') || '';
+    const fec_d = url.searchParams.get('fec_d') || url.searchParams.get('desde') || '';
+    const fec_h = url.searchParams.get('fec_h') || url.searchParams.get('hasta') || '';
     const orden_compra = url.searchParams.get('orden_compra') || '';
 
     const filters: Record<string, string> = {};
