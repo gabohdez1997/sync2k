@@ -82,7 +82,8 @@ export const load: PageServerLoad = protectLoad('reports_article_stock', async (
                 agent_url: branch.agent_url,
                 agent_api_key: branch.agent_token
             }, profile, fetch);
-            return client.request<any>(`/reportes/articulos-stock?${query.toString()}`);
+            const res = await client.request<any>(`/reportes/articulos-stock?${query.toString()}`);
+            return { branch, res };
         });
 
         const reportResponses = await Promise.allSettled(reportPromises);
@@ -90,28 +91,57 @@ export const load: PageServerLoad = protectLoad('reports_article_stock', async (
         // Consolidación de artículos en caso de existir agentes distribuidos
         const mergedArticles = new Map<string, any>();
 
-        for (const res of reportResponses) {
-            if (res.status === 'fulfilled' && res.value && res.value.success && Array.isArray(res.value.data)) {
-                for (const item of res.value.data) {
-                    if (!mergedArticles.has(item.co_art)) {
-                        mergedArticles.set(item.co_art, {
-                            ...item,
-                            sedes: { ...(item.sedes || {}) },
-                            almacenes: [...(item.almacenes || [])]
-                        });
-                    } else {
-                        const existing = mergedArticles.get(item.co_art);
-                        // Fusionar sedes
-                        if (item.sedes) {
-                            existing.sedes = { ...existing.sedes, ...item.sedes };
+        for (const itemResult of reportResponses) {
+            if (itemResult.status === 'fulfilled' && itemResult.value) {
+                const { branch, res } = itemResult.value;
+                if (res && res.success && Array.isArray(res.data)) {
+                    for (const item of res.data) {
+                        const sName = (item.sede_nombre || branch.name || '').trim();
+                        item.sede_nombre = sName;
+                        item.sede_id = item.sede_id || branch.id;
+
+                        const itemAlms = (item.almacenes || []).map((alm: any) => ({
+                            ...alm,
+                            sede_id: alm.sede_id || item.sede_id || branch.id,
+                            sede_nombre: (alm.sede_nombre && alm.sede_nombre !== 'General' ? alm.sede_nombre : sName).trim()
+                        }));
+
+                        if (!mergedArticles.has(item.co_art)) {
+                            mergedArticles.set(item.co_art, {
+                                ...item,
+                                sede_nombre: sName,
+                                sedes: {
+                                    [sName]: {
+                                        sede_id: item.sede_id,
+                                        sede_nombre: sName,
+                                        stock_act: item.stock_total_act,
+                                        stock_com: item.stock_total_com,
+                                        stock_disp: item.stock_total
+                                    },
+                                    ...(item.sedes || {})
+                                },
+                                almacenes: itemAlms
+                            });
+                        } else {
+                            const existing = mergedArticles.get(item.co_art);
+                            if (item.sedes) {
+                                existing.sedes = { ...existing.sedes, ...item.sedes };
+                            } else {
+                                existing.sedes[sName] = {
+                                    sede_id: item.sede_id,
+                                    sede_nombre: sName,
+                                    stock_act: item.stock_total_act,
+                                    stock_com: item.stock_total_com,
+                                    stock_disp: item.stock_total
+                                };
+                            }
+                            if (itemAlms.length > 0) {
+                                existing.almacenes.push(...itemAlms);
+                            }
+                            existing.stock_total_act = (existing.stock_total_act || 0) + (item.stock_total_act || 0);
+                            existing.stock_total_com = (existing.stock_total_com || 0) + (item.stock_total_com || 0);
+                            existing.stock_total = (existing.stock_total || 0) + (item.stock_total || 0);
                         }
-                        // Fusionar almacenes
-                        if (item.almacenes && item.almacenes.length > 0) {
-                            existing.almacenes.push(...item.almacenes);
-                        }
-                        existing.stock_total_act = (existing.stock_total_act || 0) + (item.stock_total_act || 0);
-                        existing.stock_total_com = (existing.stock_total_com || 0) + (item.stock_total_com || 0);
-                        existing.stock_total = (existing.stock_total || 0) + (item.stock_total || 0);
                     }
                 }
             }

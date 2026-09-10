@@ -246,8 +246,8 @@
         const warehouses = Array.from(warehouseMap.values());
         const sedesList = Array.from(sedesSet);
         if (sedesList.length === 0) {
-            const fallbackBranch = (data.branches && data.branches[0]?.name) || 'General';
-            sedesList.push(fallbackBranch);
+            const fallbackBranch = (data.branches && data.branches[0]?.name) || '';
+            if (fallbackBranch) sedesList.push(fallbackBranch);
         }
 
         const rows: any[] = [];
@@ -780,7 +780,7 @@
                                                 class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-mono font-bold {alm.stock_disp > 0
                                                     ? 'bg-surface-raised text-text-base border border-border-subtle'
                                                     : 'bg-surface-soft/40 text-text-muted/50 border border-transparent'}"
-                                                title="{alm.des_alma}: Disp: {alm.stock_disp} (Act: {alm.stock_act}, Com: {alm.stock_com})"
+                                                title="{alm.des_alma} ({alm.sede_nombre || item.sede_nombre || ''}): Disp: {alm.stock_disp} (Act: {alm.stock_act}, Com: {alm.stock_com})"
                                             >
                                                 <span class="text-[10px] text-text-muted uppercase font-semibold">{alm.co_alma}:</span>
                                                 <span class={alm.stock_disp > 0 ? "text-brand-400" : ""}>{formatQuantity(alm.stock_disp)}</span>
@@ -872,7 +872,7 @@
                                                     <tbody class="divide-y divide-border-subtle/20 font-mono">
                                                         {#each item.almacenes as alm}
                                                             <tr class="hover:bg-surface-soft/30 transition-colors">
-                                                                <td class="py-2 text-text-muted font-sans font-semibold">{alm.sede_nombre || "General"}</td>
+                                                                <td class="py-2 text-text-muted font-sans font-semibold">{alm.sede_nombre || item.sede_nombre || ""}</td>
                                                                 <td class="py-2 text-brand-400 font-bold">{alm.co_alma}</td>
                                                                 <td class="py-2 font-sans text-text-base">{alm.des_alma}</td>
                                                                 <td class="py-2 text-right text-text-muted">{formatQuantity(alm.stock_act)}</td>
