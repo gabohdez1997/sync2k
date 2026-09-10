@@ -118,6 +118,36 @@ export class AgentClient {
 			}
 		}
 
+		// Si el endpoint remoto falló por red/DNS (ej: dominio Tailscale inaccesible localmente),
+		// intentar con el agente local en http://127.0.0.1:3001
+		if (!url.includes('localhost') && !url.includes('127.0.0.1')) {
+			try {
+				const localUrl = url.replace(/^https?:\/\/[^/]+/, 'http://127.0.0.1:3001');
+				console.warn(`[AgentClient] Probando fallback a agente local: ${localUrl}`);
+				const fetchToUse = this.customFetch || fetch;
+				const localRes = await fetchToUse(localUrl, {
+					cache: 'no-store',
+					...options,
+					headers
+				});
+				if (localRes.ok) {
+					console.log(`[AgentClient] <- Fallback local respondió OK (${localRes.status})`);
+					const data = await localRes.json();
+					if (data.total_items !== undefined) {
+						data.pagination = {
+							total: data.total_items,
+							pages: data.total_pages,
+							currentPage: data.page,
+							limit: data.limit
+						};
+					}
+					return data;
+				}
+			} catch (fallbackErr: any) {
+				console.warn(`[AgentClient] Fallback local también falló:`, fallbackErr.message);
+			}
+		}
+
 		console.error(`[AgentClient] Error fatal tras ${maxRetries} intentos en ${url}:`, lastError);
 		return {
 			success: false,

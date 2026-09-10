@@ -149,6 +149,52 @@ export const load: PageServerLoad = protectLoad('reports_article_stock', async (
 
         const finalData = Array.from(mergedArticles.values());
 
+        // Asegurar catálogos: si vinieron vacíos del agente, extraerlos directamente de los artículos cargados
+        if (lineas.length === 0) {
+            const linMap = new Map<string, any>();
+            for (const art of finalData) {
+                const code = (art.co_lin || '').trim();
+                if (code && !linMap.has(code)) {
+                    linMap.set(code, {
+                        co_lin: code,
+                        lin_des: (art.des_lin || art.lin_des || code).trim()
+                    });
+                }
+            }
+            lineas.push(...Array.from(linMap.values()).sort((a: any, b: any) => (a.lin_des || '').localeCompare(b.lin_des || '')));
+        }
+
+        if (sublineas.length === 0) {
+            const sublMap = new Map<string, any>();
+            for (const art of finalData) {
+                const code = (art.co_subl || '').trim();
+                if (code && !sublMap.has(code)) {
+                    sublMap.set(code, {
+                        co_subl: code,
+                        subl_des: (art.des_subl || art.subl_des || code).trim(),
+                        co_lin: (art.co_lin || '').trim()
+                    });
+                }
+            }
+            sublineas.push(...Array.from(sublMap.values()).sort((a: any, b: any) => (a.subl_des || '').localeCompare(b.subl_des || '')));
+        }
+
+        if (categorias.length === 0) {
+            const catMap = new Map<string, any>();
+            for (const art of finalData) {
+                const code = (art.co_cat || '').trim();
+                if (code && !catMap.has(code)) {
+                    catMap.set(code, {
+                        co_cat: code,
+                        cat_des: (art.des_cat || art.cat_des || code).trim(),
+                        co_lin: (art.co_lin || '').trim(),
+                        co_subl: (art.co_subl || '').trim()
+                    });
+                }
+            }
+            categorias.push(...Array.from(catMap.values()).sort((a: any, b: any) => (a.cat_des || '').localeCompare(b.cat_des || '')));
+        }
+
         return {
             report: {
                 success: true,

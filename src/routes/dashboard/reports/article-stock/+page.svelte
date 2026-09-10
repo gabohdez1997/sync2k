@@ -55,105 +55,192 @@
         expandedRows = next;
     }
 
-    // Catalogs options (Direct from catalog, O(1) performance)
-    const lineasOptions = $derived(
-        (data.catalogs?.lineas || []).map((l: any) => ({
-            value: (l.co_lin || "").trim(),
-            label: l.lin_des ? `${l.lin_des.trim()} (${l.co_lin.trim()})` : l.co_lin,
-        }))
-    );
+    // Datos completos del reporte
+    const reportData = $derived(data.report?.data || []);
 
-    const sublineasOptions = $derived(
-        (data.catalogs?.sublineas || [])
-            .filter(
-                (sl: any) =>
-                    !filterLine ||
-                    filterLine === "all" ||
-                    (sl.co_lin && sl.co_lin.trim() === filterLine.trim())
-            )
-            .map((sl: any) => ({
-                value: (sl.co_subl || "").trim(),
-                label: sl.subl_des ? `${sl.subl_des.trim()} (${sl.co_subl.trim()})` : sl.co_subl,
-            }))
-    );
+    // Catalogs options (combinando data.catalogs con data.report?.data para garantizar que SIEMPRE haya opciones disponibles)
+    const lineasOptions = $derived.by(() => {
+        const map = new Map<string, string>();
+        for (const l of (data.catalogs?.lineas || [])) {
+            const val = (l.co_lin || "").trim();
+            if (val) {
+                const desc = (l.lin_des || val).trim();
+                map.set(val, desc ? `${desc} (${val})` : val);
+            }
+        }
+        for (const a of reportData) {
+            const val = (a.co_lin || "").trim();
+            if (val && !map.has(val)) {
+                const desc = (a.des_lin || a.lin_des || val).trim();
+                map.set(val, desc ? `${desc} (${val})` : val);
+            }
+        }
+        return Array.from(map.entries())
+            .map(([value, label]) => ({ value, label }))
+            .sort((a, b) => a.label.localeCompare(b.label));
+    });
 
-    const categoriasOptions = $derived(
-        (data.catalogs?.categorias || []).map((c: any) => ({
-            value: (c.co_cat || "").trim(),
-            label: c.cat_des ? `${c.cat_des.trim()} (${c.co_cat.trim()})` : c.co_cat,
-        }))
-    );
+    const sublineasOptions = $derived.by(() => {
+        const map = new Map<string, { label: string; co_lin?: string }>();
+        for (const sl of (data.catalogs?.sublineas || [])) {
+            const val = (sl.co_subl || "").trim();
+            if (val) {
+                const desc = (sl.subl_des || val).trim();
+                map.set(val, {
+                    label: desc ? `${desc} (${val})` : val,
+                    co_lin: (sl.co_lin || "").trim()
+                });
+            }
+        }
+        for (const a of reportData) {
+            const val = (a.co_subl || "").trim();
+            if (val && !map.has(val)) {
+                const desc = (a.des_subl || a.subl_des || val).trim();
+                map.set(val, {
+                    label: desc ? `${desc} (${val})` : val,
+                    co_lin: (a.co_lin || "").trim()
+                });
+            }
+        }
+        return Array.from(map.entries())
+            .filter(([_, item]) => !filterLine || filterLine === "all" || !item.co_lin || item.co_lin.toLowerCase() === filterLine.trim().toLowerCase())
+            .map(([value, item]) => ({ value, label: item.label }))
+            .sort((a, b) => a.label.localeCompare(b.label));
+    });
 
-    // Auto-limpiar sublínea si la línea cambia y ya no pertenece
+    const categoriasOptions = $derived.by(() => {
+        const map = new Map<string, { label: string; co_lin?: string; co_subl?: string }>();
+        for (const c of (data.catalogs?.categorias || [])) {
+            const val = (c.co_cat || "").trim();
+            if (val) {
+                const desc = (c.cat_des || val).trim();
+                map.set(val, {
+                    label: desc ? `${desc} (${val})` : val,
+                    co_lin: (c.co_lin || "").trim(),
+                    co_subl: (c.co_subl || "").trim()
+                });
+            }
+        }
+        for (const a of reportData) {
+            const val = (a.co_cat || "").trim();
+            if (val && !map.has(val)) {
+                const desc = (a.des_cat || a.cat_des || val).trim();
+                map.set(val, {
+                    label: desc ? `${desc} (${val})` : val,
+                    co_lin: (a.co_lin || "").trim(),
+                    co_subl: (a.co_subl || "").trim()
+                });
+            }
+        }
+        return Array.from(map.entries())
+            .filter(([_, item]) => {
+                if (filterSubline && filterSubline !== "all" && item.co_subl && item.co_subl.toLowerCase() !== filterSubline.trim().toLowerCase()) {
+                    return false;
+                }
+                if (filterLine && filterLine !== "all" && item.co_lin && item.co_lin.toLowerCase() !== filterLine.trim().toLowerCase()) {
+                    return false;
+                }
+                return true;
+            })
+            .map(([value, item]) => ({ value, label: item.label }))
+            .sort((a, b) => a.label.localeCompare(b.label));
+    });
+
+    // Auto-limpiar sublínea si la línea cambia y la sublínea ya no pertenece
     $effect(() => {
         if (filterLine && filterLine !== "all" && filterSubline && filterSubline !== "all") {
-            const valid = (data.catalogs?.sublineas || []).some(
-                (sl: any) =>
-                    sl.co_lin &&
-                    sl.co_lin.trim() === filterLine.trim() &&
-                    sl.co_subl &&
-                    sl.co_subl.trim() === filterSubline.trim()
-            );
+            const valid = sublineasOptions.some(sl => sl.value === filterSubline.trim());
             if (!valid) {
                 filterSubline = "";
             }
         }
     });
 
-    // Sincronizar filtros con query params
+    // Auto-limpiar categoría si la línea o sublínea cambia y ya no pertenece
+    $effect(() => {
+        if (filterCategory && filterCategory !== "all" && ((filterSubline && filterSubline !== "all") || (filterLine && filterLine !== "all"))) {
+            const valid = categoriasOptions.some(c => c.value === filterCategory.trim());
+            if (!valid) {
+                filterCategory = "";
+            }
+        }
+    });
+
+    // Sincronizar filtros con query params al cargar la página
     $effect(() => {
         filterSearch = $page.url.searchParams.get("search") || "";
         filterLine = $page.url.searchParams.get("linea") || "";
         filterSubline = $page.url.searchParams.get("sublinea") || "";
         filterCategory = $page.url.searchParams.get("categoria") || "";
+        const urlStock = $page.url.searchParams.get("stock");
+        if (urlStock) filterStock = urlStock;
+        const urlEstatus = $page.url.searchParams.get("estatus");
+        if (urlEstatus) filterEstatus = urlEstatus;
     });
 
-    // Reset pagination to page 1 on filter changes
+    // Reset pagination to page 1 on any filter change
     $effect(() => {
         const _ = [filterSearch, filterLine, filterSubline, filterCategory, filterStock, filterEstatus];
         currentPage = 1;
     });
 
-    function applyFilters() {
-        isSearching = true;
-        const params = new URLSearchParams($page.url.searchParams);
+    function syncUrl() {
+        if (typeof window === "undefined") return;
+        const params = new URLSearchParams(window.location.search);
+        if (filterSearch.trim()) params.set("search", filterSearch.trim());
+        else params.delete("search");
 
-        if (filterSearch.trim()) {
-            params.set("search", filterSearch.trim());
-        } else {
-            params.delete("search");
-        }
+        if (filterLine && filterLine !== "all") params.set("linea", filterLine);
+        else params.delete("linea");
 
-        if (filterLine && filterLine !== "all") {
-            params.set("linea", filterLine);
-        } else {
-            params.delete("linea");
-        }
+        if (filterSubline && filterSubline !== "all") params.set("sublinea", filterSubline);
+        else params.delete("sublinea");
 
-        if (filterSubline && filterSubline !== "all") {
-            params.set("sublinea", filterSubline);
-        } else {
-            params.delete("sublinea");
-        }
+        if (filterCategory && filterCategory !== "all") params.set("categoria", filterCategory);
+        else params.delete("categoria");
 
-        if (filterCategory && filterCategory !== "all") {
-            params.set("categoria", filterCategory);
-        } else {
-            params.delete("categoria");
-        }
+        if (filterStock && filterStock !== "all") params.set("stock", filterStock);
+        else params.delete("stock");
+
+        if (filterEstatus && filterEstatus !== "all") params.set("estatus", filterEstatus);
+        else params.delete("estatus");
 
         params.delete("page");
 
-        goto(`?${params.toString()}`).finally(() => {
-            isSearching = false;
-        });
+        const newUrl = `${window.location.pathname}${params.toString() ? '?' + params.toString() : ''}`;
+        window.history.replaceState({}, '', newUrl);
     }
 
-    // Datos completos del reporte
-    const reportData = $derived(data.report?.data || []);
+    function applyFilters() {
+        currentPage = 1;
+        syncUrl();
+    }
 
+    // Filtrado dinámico instantáneo en memoria
     const filteredReportData = $derived.by(() => {
+        const s = filterSearch.trim().toLowerCase();
+        const l = filterLine && filterLine !== "all" ? filterLine.trim().toLowerCase() : "";
+        const sl = filterSubline && filterSubline !== "all" ? filterSubline.trim().toLowerCase() : "";
+        const c = filterCategory && filterCategory !== "all" ? filterCategory.trim().toLowerCase() : "";
+
         return reportData.filter((item: any) => {
+            // Buscador por código, descripción o modelo
+            if (s) {
+                const matchCode = (item.co_art || "").toLowerCase().includes(s);
+                const matchDesc = (item.art_des || "").toLowerCase().includes(s);
+                const matchModel = (item.modelo || "").toLowerCase().includes(s);
+                if (!matchCode && !matchDesc && !matchModel) return false;
+            }
+
+            // Filtro por Línea
+            if (l && (item.co_lin || "").trim().toLowerCase() !== l) return false;
+
+            // Filtro por Sublínea
+            if (sl && (item.co_subl || "").trim().toLowerCase() !== sl) return false;
+
+            // Filtro por Categoría
+            if (c && (item.co_cat || "").trim().toLowerCase() !== c) return false;
+
             // Estatus Switch
             if (filterEstatus === "active" && item.anulado) return false;
             if (filterEstatus === "inactive" && !item.anulado) return false;
@@ -549,6 +636,7 @@
                         type="text"
                         placeholder="Buscar por código o descripción..."
                         bind:value={filterSearch}
+                        oninput={() => syncUrl()}
                         class="w-full h-full bg-surface-raised pl-10 pr-8 rounded-2xl border border-border-subtle focus:border-brand-500/30 outline-none text-text-base text-sm font-bold placeholder:font-normal placeholder:text-text-muted transition-all"
                     />
                     <Search
@@ -560,7 +648,7 @@
                             type="button"
                             onclick={() => {
                                 filterSearch = "";
-                                applyFilters();
+                                syncUrl();
                             }}
                             class="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-base cursor-pointer"
                         >
@@ -571,7 +659,7 @@
                 <BarcodeScanner
                     onScan={(code) => {
                         filterSearch = code;
-                        applyFilters();
+                        syncUrl();
                     }}
                 />
             </div>
@@ -582,7 +670,10 @@
                 bind:value={filterLine}
                 placeholder="Líneas (Todas)"
                 allLabel="Líneas (Todas)"
-                onchange={() => applyFilters()}
+                onchange={(val) => {
+                    filterLine = val;
+                    syncUrl();
+                }}
             />
 
             <!-- 3. Sub-Líneas -->
@@ -591,7 +682,10 @@
                 bind:value={filterSubline}
                 placeholder="Sub-Líneas (Todas)"
                 allLabel="Sub-Líneas (Todas)"
-                onchange={() => applyFilters()}
+                onchange={(val) => {
+                    filterSubline = val;
+                    syncUrl();
+                }}
             />
 
             <!-- 4. Categorías -->
@@ -600,7 +694,10 @@
                 bind:value={filterCategory}
                 placeholder="Categorías (Todas)"
                 allLabel="Categorías (Todas)"
-                onchange={() => applyFilters()}
+                onchange={(val) => {
+                    filterCategory = val;
+                    syncUrl();
+                }}
             />
         </div>
 
@@ -619,7 +716,10 @@
                 >
                     <button
                         type="button"
-                        onclick={() => (filterStock = "all")}
+                        onclick={() => {
+                            filterStock = "all";
+                            syncUrl();
+                        }}
                         class="flex-1 h-full rounded-xl text-xs font-bold transition-all cursor-pointer px-2 {filterStock ===
                         'all'
                             ? 'bg-brand-500 text-white shadow-md'
@@ -628,7 +728,10 @@
                     >
                     <button
                         type="button"
-                        onclick={() => (filterStock = "with")}
+                        onclick={() => {
+                            filterStock = "with";
+                            syncUrl();
+                        }}
                         class="flex-1 h-full rounded-xl text-xs font-bold transition-all cursor-pointer px-2 {filterStock ===
                         'with'
                             ? 'bg-brand-500 text-white shadow-md'
@@ -637,7 +740,10 @@
                     >
                     <button
                         type="button"
-                        onclick={() => (filterStock = "without")}
+                        onclick={() => {
+                            filterStock = "without";
+                            syncUrl();
+                        }}
                         class="flex-1 h-full rounded-xl text-xs font-bold transition-all cursor-pointer px-2 {filterStock ===
                         'without'
                             ? 'bg-brand-500 text-white shadow-md'
@@ -658,7 +764,10 @@
                 >
                     <button
                         type="button"
-                        onclick={() => (filterEstatus = "all")}
+                        onclick={() => {
+                            filterEstatus = "all";
+                            syncUrl();
+                        }}
                         class="flex-1 h-full rounded-xl text-xs font-bold transition-all cursor-pointer px-2 {filterEstatus ===
                         'all'
                             ? 'bg-brand-500 text-white shadow-md'
@@ -667,7 +776,10 @@
                     >
                     <button
                         type="button"
-                        onclick={() => (filterEstatus = "active")}
+                        onclick={() => {
+                            filterEstatus = "active";
+                            syncUrl();
+                        }}
                         class="flex-1 h-full rounded-xl text-xs font-bold transition-all cursor-pointer px-2 {filterEstatus ===
                         'active'
                             ? 'bg-emerald-500 text-white shadow-md'
@@ -676,7 +788,10 @@
                     >
                     <button
                         type="button"
-                        onclick={() => (filterEstatus = "inactive")}
+                        onclick={() => {
+                            filterEstatus = "inactive";
+                            syncUrl();
+                        }}
                         class="flex-1 h-full rounded-xl text-xs font-bold transition-all cursor-pointer px-2 {filterEstatus ===
                         'inactive'
                             ? 'bg-red-500 text-white shadow-md'
