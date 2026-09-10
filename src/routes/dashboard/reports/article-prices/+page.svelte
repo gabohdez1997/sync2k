@@ -17,6 +17,8 @@
         ClipboardList,
         DollarSign,
         Percent,
+        ChevronLeft,
+        ChevronRight,
     } from "lucide-svelte";
     import { goto } from "$app/navigation";
     import { page } from "$app/stores";
@@ -249,6 +251,20 @@
 
             return true;
         });
+    });
+
+    // Pagination state (50 items per page)
+    let currentPage = $state(1);
+    const pageSize = 50;
+    const totalPages = $derived(Math.max(1, Math.ceil(filteredReportData.length / pageSize)));
+    const paginatedReportData = $derived(
+        filteredReportData.slice((currentPage - 1) * pageSize, currentPage * pageSize)
+    );
+
+    // Reset pagination to page 1 on filter changes
+    $effect(() => {
+        const _ = [filterSearch, filterLine, filterSubline, filterCategory, filterPrecio1, filterMargen1, filterPrecio2, filterMargen2, filterCosto, filterStock, filterEstatus, filterBranch];
+        currentPage = 1;
     });
 
     const stats = $derived.by(() => {
@@ -907,7 +923,7 @@
                 <tbody
                     class="text-text-base print:divide-gray-200 print:text-black"
                 >
-                    {#each filteredReportData as item (item.co_art)}
+                    {#each paginatedReportData as item (item.co_art)}
                         <tr
                             class="hover:bg-surface-soft/30 transition-colors group print:hover:bg-transparent"
                         >
@@ -1028,6 +1044,49 @@
                 </tbody>
             </table>
         </div>
+
+        <!-- Pagination Footer (Estilo Suppliers) -->
+        {#if totalPages > 1}
+            <div
+                class="px-8 py-6 bg-white/1 border-t border-white/5 flex items-center justify-between print:hidden"
+            >
+                <p
+                    class="text-xs font-bold text-text-muted uppercase tracking-widest"
+                >
+                    Página <span class="text-text-base">{currentPage}</span>
+                    de <span class="text-text-base">{totalPages}</span>
+                    (Total: {filteredReportData.length})
+                </p>
+
+                <div class="flex gap-2">
+                    <button
+                        onclick={() => {
+                            if (currentPage > 1) {
+                                currentPage -= 1;
+                            }
+                        }}
+                        disabled={currentPage <= 1}
+                        class="h-10 w-10 flex items-center justify-center rounded-xl bg-white/5 hover:bg-white/10 disabled:opacity-30 transition-all border border-white/5 text-text-muted cursor-pointer"
+                        title="Página anterior"
+                    >
+                        <ChevronLeft size={20} />
+                    </button>
+
+                    <button
+                        onclick={() => {
+                            if (currentPage < totalPages) {
+                                currentPage += 1;
+                            }
+                        }}
+                        disabled={currentPage >= totalPages}
+                        class="h-10 w-10 flex items-center justify-center rounded-xl bg-white/5 hover:bg-white/10 disabled:opacity-30 transition-all border border-white/5 text-text-muted cursor-pointer"
+                        title="Página siguiente"
+                    >
+                        <ChevronRight size={20} />
+                    </button>
+                </div>
+            </div>
+        {/if}
     </div>
 </div>
 

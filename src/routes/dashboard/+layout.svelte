@@ -50,6 +50,7 @@
     TrendingUp,
     BarChart2,
     Inbox,
+    Boxes,
   } from "lucide-svelte";
   import { slide, fade } from "svelte/transition";
 
@@ -287,6 +288,12 @@
           label: "Artículos con Precios",
           href: "/dashboard/reports/article-prices",
           icon: Tag,
+        },
+        {
+          id: "reports_article_stock",
+          label: "Stock de Artículos",
+          href: "/dashboard/reports/article-stock",
+          icon: Boxes,
         },
         {
           id: "reports_article_sales",

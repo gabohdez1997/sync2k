@@ -155,6 +155,13 @@
           onlyRead: true,
         },
         {
+          id: "reports_article_stock",
+          label: "Stock de Artículos",
+          hasOthers: false,
+          hasVoid: false,
+          onlyRead: true,
+        },
+        {
           id: "reports_article_sales",
           label: "Cantidad Real Vendida",
           hasOthers: false,

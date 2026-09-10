@@ -28,6 +28,8 @@
         FileSpreadsheet,
         AlertTriangle,
         ShoppingBag,
+        ChevronLeft,
+        ChevronRight,
     } from "lucide-svelte";
     import Combobox from "$lib/components/ui/Combobox.svelte";
     import BarcodeScanner from "$lib/components/ui/BarcodeScanner.svelte";
@@ -524,6 +526,20 @@
         });
 
         return sorted;
+    });
+
+    // Pagination state (50 items per page)
+    let currentPage = $state(1);
+    const pageSize = 50;
+    const totalPages = $derived(Math.max(1, Math.ceil(filteredItems.length / pageSize)));
+    const paginatedItems = $derived(
+        filteredItems.slice((currentPage - 1) * pageSize, currentPage * pageSize)
+    );
+
+    // Reset pagination to page 1 on filter/search change
+    $effect(() => {
+        const _ = [searchTerm, selectedLinea, selectedSublinea, selectedCategoria, selectedCategorizacion, selectedStockStatus, sortBy, sortAsc];
+        currentPage = 1;
     });
 
     const stats = $derived.by(() => {
@@ -1187,7 +1203,7 @@
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-border-subtle font-medium">
-                        {#each filteredItems as item, idx}
+                        {#each paginatedItems as item, idx}
                             {@const stockVal = Number(item.stock_actual) || 0}
                             {@const hasStock = stockVal > 0}
                             {@const unit = getUnitLabel(item)}
@@ -1198,7 +1214,7 @@
                             >
                                 <!-- Índice -->
                                 <td class="py-3.5 px-4 text-center font-mono font-bold text-text-muted text-[11px]">
-                                    {idx + 1}
+                                    {(currentPage - 1) * pageSize + idx + 1}
                                 </td>
 
                                 <!-- Artículo (Código + Descripción + Categorías) -->
@@ -1288,6 +1304,49 @@
                     </tbody>
                 </table>
             </div>
+
+            <!-- Pagination Footer (Estilo Suppliers) -->
+            {#if totalPages > 1}
+                <div
+                    class="px-8 py-6 bg-white/1 border-t border-white/5 flex items-center justify-between print:hidden"
+                >
+                    <p
+                        class="text-xs font-bold text-text-muted uppercase tracking-widest"
+                    >
+                        Página <span class="text-text-base">{currentPage}</span>
+                        de <span class="text-text-base">{totalPages}</span>
+                        (Total: {filteredItems.length})
+                    </p>
+
+                    <div class="flex gap-2">
+                        <button
+                            onclick={() => {
+                                if (currentPage > 1) {
+                                    currentPage -= 1;
+                                }
+                            }}
+                            disabled={currentPage <= 1}
+                            class="h-10 w-10 flex items-center justify-center rounded-xl bg-white/5 hover:bg-white/10 disabled:opacity-30 transition-all border border-white/5 text-text-muted cursor-pointer"
+                            title="Página anterior"
+                        >
+                            <ChevronLeft size={20} />
+                        </button>
+
+                        <button
+                            onclick={() => {
+                                if (currentPage < totalPages) {
+                                    currentPage += 1;
+                                }
+                            }}
+                            disabled={currentPage >= totalPages}
+                            class="h-10 w-10 flex items-center justify-center rounded-xl bg-white/5 hover:bg-white/10 disabled:opacity-30 transition-all border border-white/5 text-text-muted cursor-pointer"
+                            title="Página siguiente"
+                        >
+                            <ChevronRight size={20} />
+                        </button>
+                    </div>
+                </div>
+            {/if}
         </div>
     {/if}
 </div>
