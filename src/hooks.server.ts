@@ -54,6 +54,13 @@ export const handle: Handle = async ({ event, resolve }) => {
       const { data: { user }, error } = await supabase.auth.getUser();
       if (error) {
         authErrorObj = error;
+        // Resiliencia: si el token en la sesión aún es cronológicamente válido,
+        // no descartar la sesión por un hipo de red con Supabase Cloud
+        const expiresAtSec = resAuth.data.session.expires_at || 0;
+        if (expiresAtSec * 1000 > Date.now() && resAuth.data.session.user) {
+          console.warn('[HOOKS] getUser() falló pero la sesión es válida hasta:', new Date(expiresAtSec * 1000).toISOString(), error.message);
+          session = resAuth.data.session;
+        }
       } else {
         session = resAuth.data.session;
         session.user = user;
@@ -120,8 +127,7 @@ export const handle: Handle = async ({ event, resolve }) => {
       redirect(303, `/?redirectTo=${encodeURIComponent(path)}`);
     }
     if (!event.locals.profile) {
-      await supabase.auth.signOut().catch(()=>null);
-      event.cookies.delete('sync2k_local_session', { path: '/' });
+      console.warn(`[HOOKS] Perfil no disponible para usuario ${event.locals.session.user.id}. Redirigiendo a inicio.`);
       redirect(303, '/?error=profile_not_found');
     }
   }

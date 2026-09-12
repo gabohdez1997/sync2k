@@ -55,11 +55,33 @@ export function hasPermission(
   return hasIt;
 }
 
+interface CachedProfile {
+  profile: Profile;
+  expiresAt: number;
+}
+
+const profileCache = new Map<string, CachedProfile>();
+const PROFILE_CACHE_TTL_MS = 2 * 60 * 1000; // 2 minutos de cache en memoria
+
+export function clearProfileCache(userId?: string) {
+  if (userId) {
+    profileCache.delete(userId);
+  } else {
+    profileCache.clear();
+  }
+}
+
 /**
  * Obtiene el perfil completo del usuario desde la vista profile_complete.
  * Prioriza Supabase (Cloud). Si falla por red, usa PostgreSQL (Local).
  */
 export async function getUserProfile(userId: string, fetchFn?: typeof fetch): Promise<Profile | null> {
+  const now = Date.now();
+  const cached = profileCache.get(userId);
+  if (cached && cached.expiresAt > now) {
+    return cached.profile;
+  }
+
   const supabaseAdmin = getSupabaseAdmin(fetchFn);
   let isOfflineFallback = false;
   let rawData = null;
@@ -120,6 +142,10 @@ export async function getUserProfile(userId: string, fetchFn?: typeof fetch): Pr
 
   // ── 3. Parseo y formateo común ──
   if (!rawData) {
+    if (cached) {
+      console.warn(`[AUTH] Usando perfil en cache de respaldo para ${userId} tras fallo en BD.`);
+      return cached.profile;
+    }
     console.warn(`[AUTH] Perfil no encontrado para UID: ${userId}`);
     return null;
   }
@@ -148,7 +174,7 @@ export async function getUserProfile(userId: string, fetchFn?: typeof fetch): Pr
      console.warn(`[AUTH] Advertencia: El perfil de ${rawData.email} no tiene permisos definidos.`);
   }
 
-  return {
+  const profile: Profile = {
     id:                rawData.id,
     full_name:         rawData.full_name ?? null,
     email:             rawData.email ?? null,
@@ -161,4 +187,11 @@ export async function getUserProfile(userId: string, fetchFn?: typeof fetch): Pr
     profit_pass:       rawData.profit_pass ?? null,
     theme_config:      rawData.theme_config || null,
   };
+
+  profileCache.set(userId, {
+    profile,
+    expiresAt: Date.now() + PROFILE_CACHE_TTL_MS
+  });
+
+  return profile;
 }

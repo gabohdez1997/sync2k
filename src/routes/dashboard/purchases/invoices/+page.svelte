@@ -32,6 +32,49 @@
   let activeTasa = $state(data.activeRate || 1);
   let taxRateOption = $state(16); // 16 o 0 (Cargar 16% o Exento 0%)
 
+  // Sucursal Resolution (idéntico a /dashboard/billing)
+  const selectedBranchConfig = $derived(
+    (data.branches || []).find((b: any) => b.id === filterSede)
+  );
+
+  const profitBranchCodes = $derived.by(() => {
+    if (!selectedBranchConfig?.profit_branch_codes) return [];
+    let codes = selectedBranchConfig.profit_branch_codes;
+    if (typeof codes === "string") {
+      try {
+        codes = JSON.parse(codes);
+      } catch (e) {
+        return [];
+      }
+    }
+    return Array.isArray(codes) ? codes : [];
+  });
+
+  const defaultBranchCode = $derived.by(() => {
+    const found = profitBranchCodes.find(
+      (c: any) =>
+        c.is_default === true ||
+        String(c.is_default) === "true" ||
+        c.default === true
+    );
+    return found ? found.code : "";
+  });
+
+  const nonDefaultBranchCode = $derived.by(() => {
+    const found = profitBranchCodes.find(
+      (c: any) =>
+        c.is_default === false ||
+        String(c.is_default) === "false" ||
+        !c.is_default
+    );
+    return found ? found.code : "";
+  });
+
+  const activeBranchCode = $derived.by(() => {
+    const hasIVA = invoiceTotals.totalTaxUSD > 0;
+    return hasIVA ? (defaultBranchCode || "01") : (nonDefaultBranchCode || defaultBranchCode || "02");
+  });
+
   // Supplier & Invoice Metadata
   let selectedSupplier = $state<any>(null);
   let invoiceMetadata = $state({
@@ -71,6 +114,7 @@
   let saveSuccess = $state(false);
   let generatedDocNum = $state("");
   let savedNroFact = $state("");
+  let savedSucu = $state("");
 
   // Import Modal State
   let showImportModal = $state(false);
@@ -350,6 +394,7 @@
     saveSuccess = false;
     generatedDocNum = "";
     savedNroFact = "";
+    savedSucu = "";
   }
 
   // --- SAVE PURCHASE INVOICE ---
@@ -402,6 +447,8 @@
         co_mone: "USD",
         tasa: Number(activeTasa || 1),
         co_cond: selectedSupplier.co_cond || "01",
+        co_sucu: activeBranchCode,
+        force_sucu: activeBranchCode,
         monto_desc_glob: Number(invoiceMetadata.descuento_global || 0),
         renglones: activeLines.map((l) => ({
           co_art: l.co_art,
@@ -410,8 +457,9 @@
           co_uni: l.co_uni,
           co_alma: l.co_alma,
           costo: Number(l.costo_usd), // En USD
+          cost_unit_om: Number(l.costo_usd), // En USD explícito
           porc_imp: taxRateOption === 0 ? 0 : Number(l.porc_imp),
-          tipo_imp: taxRateOption === 0 ? "2" : (l.tipo_imp || "1"), // '2' = Exento in Profit Plus
+          tipo_imp: taxRateOption === 0 ? "7" : (l.tipo_imp || "1"), // '7' = Exento in Profit Plus
           tipo_doc: "NREC",
           num_doc: l.doc_num_reception,
           reng_doc: l.reng_num_reception,
@@ -437,6 +485,7 @@
       const docNumGenerated = result.doc_num || result.results?.[0]?.doc_num || "REGISTRADA";
       generatedDocNum = docNumGenerated;
       savedNroFact = nroFactClean;
+      savedSucu = `${activeBranchCode} (${invoiceTotals.totalTaxUSD > 0 ? 'Fiscal / Defecto' : 'Exenta / Otra'})`;
       saveSuccess = true;
 
       toast.success(`Factura de Compra ${docNumGenerated} (Fiscal N°: ${nroFactClean}) registrada exitosamente.`);
@@ -476,6 +525,12 @@
         <span class="text-[10px] text-text-muted/70 uppercase font-bold tracking-wider">N° Factura Fiscal</span>
         <div class="text-xl font-black text-text-base mt-0.5 font-mono">{savedNroFact}</div>
       </div>
+      {#if savedSucu}
+        <div class="col-span-2 bg-surface-soft/60 px-4 py-2.5 rounded-xl border border-border-subtle text-left flex justify-between items-center text-xs">
+          <span class="text-text-muted font-medium">Sucursal Asignada en Profit:</span>
+          <span class="font-mono font-bold text-brand-400">{savedSucu}</span>
+        </div>
+      {/if}
     </div>
 
     <div class="flex gap-4 w-full">

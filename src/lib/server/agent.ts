@@ -77,12 +77,26 @@ export class AgentClient {
 				const fetchToUse = this.customFetch || fetch;
 				if (!fetchToUse) throw new Error("Fetch method not available");
 
+				const controller = new AbortController();
+				const timeoutMs = 12000; // 12s timeout por intento
+				const timeoutId = setTimeout(() => controller.abort(new Error(`Timeout tras ${timeoutMs}ms`)), timeoutMs);
+
+				if (options.signal) {
+					options.signal.addEventListener('abort', () => controller.abort());
+				}
+
 				console.log(`[AgentClient] -> ${options.method || 'GET'} ${url}`);
-				const response = await fetchToUse(url, { 
-					cache: 'no-store',
-					...options, 
-					headers 
-				});
+				let response: Response;
+				try {
+					response = await fetchToUse(url, { 
+						cache: 'no-store',
+						...options, 
+						headers,
+						signal: controller.signal
+					});
+				} finally {
+					clearTimeout(timeoutId);
+				}
 				console.log(`[AgentClient] <- ${response.status} ${response.statusText}`);
 				
 				if (!response.ok) {
@@ -125,11 +139,19 @@ export class AgentClient {
 				const localUrl = url.replace(/^https?:\/\/[^/]+/, 'http://127.0.0.1:3001');
 				console.warn(`[AgentClient] Probando fallback a agente local: ${localUrl}`);
 				const fetchToUse = this.customFetch || fetch;
-				const localRes = await fetchToUse(localUrl, {
-					cache: 'no-store',
-					...options,
-					headers
-				});
+				const fallbackController = new AbortController();
+				const fallbackTimeoutId = setTimeout(() => fallbackController.abort(new Error('Timeout fallback local 6s')), 6000);
+				let localRes: Response;
+				try {
+					localRes = await fetchToUse(localUrl, {
+						cache: 'no-store',
+						...options,
+						headers,
+						signal: fallbackController.signal
+					});
+				} finally {
+					clearTimeout(fallbackTimeoutId);
+				}
 				if (localRes.ok) {
 					console.log(`[AgentClient] <- Fallback local respondió OK (${localRes.status})`);
 					const data = await localRes.json();

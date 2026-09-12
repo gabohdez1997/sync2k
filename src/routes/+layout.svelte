@@ -4,10 +4,19 @@
 	import { initTheme } from '$lib/theme.svelte';
 	import { onMount } from 'svelte';
 
+	import { supabase } from '$lib/supabase';
+
 	let { data, children } = $props();
 
 	onMount(() => {
 		initTheme();
+
+		// Auto-renovación silenciosa del token de Supabase en segundo plano
+		const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
+			if (event === 'TOKEN_REFRESHED') {
+				console.log('🔄 [AUTH] Token de sesión renovado automáticamente.');
+			}
+		});
 
 		const handleChunkError = (event: ErrorEvent | PromiseRejectionEvent) => {
 			const errorMsg = 'reason' in event ? event.reason?.message : event.message;
@@ -26,6 +35,7 @@
 		window.addEventListener('unhandledrejection', handleChunkError);
 
 		return () => {
+			authListener?.subscription?.unsubscribe();
 			window.removeEventListener('error', handleChunkError);
 			window.removeEventListener('unhandledrejection', handleChunkError);
 		};
