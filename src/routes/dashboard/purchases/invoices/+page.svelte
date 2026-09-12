@@ -411,7 +411,7 @@
           co_alma: l.co_alma,
           costo: Number(l.costo_usd), // En USD
           porc_imp: taxRateOption === 0 ? 0 : Number(l.porc_imp),
-          tipo_imp: taxRateOption === 0 ? "0" : (l.tipo_imp || "1"),
+          tipo_imp: taxRateOption === 0 ? "2" : (l.tipo_imp || "1"), // '2' = Exento in Profit Plus
           tipo_doc: "NREC",
           num_doc: l.doc_num_reception,
           reng_doc: l.reng_num_reception,

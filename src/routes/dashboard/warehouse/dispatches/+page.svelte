@@ -14,8 +14,6 @@
     CheckCircle2,
     AlertTriangle,
     X,
-    CheckSquare,
-    Square,
     Store,
     ChevronDown,
     Check,
@@ -645,7 +643,33 @@
               <table class="w-full text-left border-collapse text-xs">
                 <thead>
                   <tr class="bg-surface-soft/60 border-b border-border-subtle text-text-muted font-black uppercase tracking-wider text-[10px]">
-                    <th class="py-4 px-4 w-12 text-center">Sel</th>
+                    <th class="py-4 px-4 w-12 text-center">
+                      <label class="group relative inline-flex items-center cursor-pointer justify-center" title="Seleccionar Todos">
+                        <input
+                          type="checkbox"
+                          checked={dispatchLines.length > 0 && dispatchLines.filter((l) => Number(l.cant_pendiente || 0) > 0).every((l) => l.checked)}
+                          onchange={() => {
+                            const activeLines = dispatchLines.filter((l) => Number(l.cant_pendiente || 0) > 0);
+                            const allChecked = activeLines.length > 0 && activeLines.every((l) => l.checked);
+                            toggleAllLines(!allChecked);
+                          }}
+                          class="sr-only peer"
+                        />
+                        <div
+                          class="w-6 h-6 bg-surface-base border-2 border-border-subtle rounded-lg peer-checked:bg-brand-500 peer-checked:border-brand-500 transition-all flex items-center justify-center shadow-inner group-hover:border-brand-500/30"
+                        >
+                          {#if dispatchLines.length > 0 && dispatchLines.filter((l) => Number(l.cant_pendiente || 0) > 0).every((l) => l.checked)}
+                            <div in:fade={{ duration: 100 }}>
+                              <Check
+                                size={14}
+                                class="text-white"
+                                strokeWidth={4}
+                              />
+                            </div>
+                          {/if}
+                        </div>
+                      </label>
+                    </th>
                     <th class="py-4 px-4 min-w-[220px]">Artículo</th>
                     <th class="py-4 px-4 text-center w-28">Facturado</th>
                     <th class="py-4 px-4 text-center w-28">Pendiente</th>
@@ -657,26 +681,40 @@
                     <tr class="hover:bg-surface-soft/30 transition-colors {line.checked ? '' : isItemCompleted ? 'opacity-40 bg-surface-soft/20' : 'opacity-60'}">
                       <!-- Checkbox -->
                       <td class="py-3 px-4 text-center">
-                        <button
-                          type="button"
-                          disabled={isItemCompleted}
-                          onclick={() => {
-                            if (isItemCompleted) return;
-                            const isNowChecked = !dispatchLines[originalIndex].checked;
-                            dispatchLines[originalIndex].checked = isNowChecked;
-                            dispatchLines[originalIndex].cant_despachada = isNowChecked ? Number(dispatchLines[originalIndex].cant_pendiente || 0) : 0;
-                          }}
-                          class="text-brand-500 hover:text-brand-400 transition-colors {isItemCompleted ? 'cursor-not-allowed text-text-muted/30' : 'cursor-pointer'}"
-                          title={isItemCompleted ? "Artículo ya despachado en su totalidad" : line.checked ? "Deseleccionar" : "Seleccionar para despachar"}
-                        >
-                          {#if line.checked}
-                            <CheckSquare size={18} />
-                          {:else if isItemCompleted}
-                            <CheckSquare size={18} class="text-emerald-500/30" />
-                          {:else}
-                            <Square size={18} class="text-text-muted/40" />
-                          {/if}
-                        </button>
+                        {#if isItemCompleted}
+                          <div
+                            class="w-6 h-6 bg-surface-base border-2 border-border-subtle/40 rounded-lg flex items-center justify-center mx-auto cursor-not-allowed opacity-30 shadow-inner"
+                            title="Artículo ya despachado en su totalidad"
+                          >
+                            <Check size={14} class="text-emerald-500/50" strokeWidth={4} />
+                          </div>
+                        {:else}
+                          <label class="group relative inline-flex items-center cursor-pointer justify-center" title={line.checked ? "Deseleccionar" : "Seleccionar para despachar"}>
+                            <input
+                              type="checkbox"
+                              checked={line.checked}
+                              onchange={() => {
+                                const isNowChecked = !dispatchLines[originalIndex].checked;
+                                dispatchLines[originalIndex].checked = isNowChecked;
+                                dispatchLines[originalIndex].cant_despachada = isNowChecked ? Number(dispatchLines[originalIndex].cant_pendiente || 0) : 0;
+                              }}
+                              class="sr-only peer"
+                            />
+                            <div
+                              class="w-6 h-6 bg-surface-base border-2 border-border-subtle rounded-lg peer-checked:bg-brand-500 peer-checked:border-brand-500 transition-all flex items-center justify-center shadow-inner group-hover:border-brand-500/30"
+                            >
+                              {#if line.checked}
+                                <div in:fade={{ duration: 100 }}>
+                                  <Check
+                                    size={14}
+                                    class="text-white"
+                                    strokeWidth={4}
+                                  />
+                                </div>
+                              {/if}
+                            </div>
+                          </label>
+                        {/if}
                       </td>
 
                       <!-- Article Info -->

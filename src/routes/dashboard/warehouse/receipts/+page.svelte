@@ -17,8 +17,6 @@
     AlertTriangle,
     X,
     ShieldAlert,
-    CheckSquare,
-    Square,
     Store,
     ChevronLeft,
     ChevronDown,
@@ -707,18 +705,27 @@
                 <thead>
                   <tr class="bg-surface-strong border-b border-border-subtle text-xs font-black uppercase tracking-wider text-text-muted">
                     <th class="px-6 py-4 w-12 text-center">
-                      <button
-                        type="button"
-                        onclick={toggleSelectAll}
-                        class="p-1 rounded hover:bg-white/10 text-brand-400 cursor-pointer"
-                        title="Seleccionar Todos"
-                      >
-                        {#if receiptLines.every((l) => l.checked)}
-                          <CheckSquare size={16} />
-                        {:else}
-                          <Square size={16} />
-                        {/if}
-                      </button>
+                      <label class="group relative inline-flex items-center cursor-pointer justify-center" title="Seleccionar Todos">
+                        <input
+                          type="checkbox"
+                          checked={receiptLines.length > 0 && receiptLines.every((l) => l.checked)}
+                          onchange={toggleSelectAll}
+                          class="sr-only peer"
+                        />
+                        <div
+                          class="w-6 h-6 bg-surface-base border-2 border-border-subtle rounded-lg peer-checked:bg-brand-500 peer-checked:border-brand-500 transition-all flex items-center justify-center shadow-inner group-hover:border-brand-500/30"
+                        >
+                          {#if receiptLines.length > 0 && receiptLines.every((l) => l.checked)}
+                            <div in:fade={{ duration: 100 }}>
+                              <Check
+                                size={14}
+                                class="text-white"
+                                strokeWidth={4}
+                              />
+                            </div>
+                          {/if}
+                        </div>
+                      </label>
                     </th>
                     <th class="px-6 py-4">Artículo</th>
                     <th class="px-6 py-4 text-center">OC / Pendiente</th>
@@ -729,11 +736,26 @@
                   {#each filteredReceiptLines as { line, originalIndex } (line.co_art + '_' + originalIndex)}
                     <tr class="hover:bg-surface-soft/60 transition-colors {receiptLines[originalIndex].checked ? '' : 'opacity-50'}">
                       <td class="px-6 py-4 text-center">
-                        <input
-                          type="checkbox"
-                          bind:checked={receiptLines[originalIndex].checked}
-                          class="h-4 w-4 rounded bg-surface-soft border-border-subtle text-brand-600 focus:ring-brand-500/40 cursor-pointer"
-                        />
+                        <label class="group relative inline-flex items-center cursor-pointer justify-center">
+                          <input
+                            type="checkbox"
+                            bind:checked={receiptLines[originalIndex].checked}
+                            class="sr-only peer"
+                          />
+                          <div
+                            class="w-6 h-6 bg-surface-base border-2 border-border-subtle rounded-lg peer-checked:bg-brand-500 peer-checked:border-brand-500 transition-all flex items-center justify-center shadow-inner group-hover:border-brand-500/30"
+                          >
+                            {#if receiptLines[originalIndex].checked}
+                              <div in:fade={{ duration: 100 }}>
+                                <Check
+                                  size={14}
+                                  class="text-white"
+                                  strokeWidth={4}
+                                />
+                              </div>
+                            {/if}
+                          </div>
+                        </label>
                       </td>
 
                       <td class="px-6 py-4">
