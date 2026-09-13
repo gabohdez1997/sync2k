@@ -268,6 +268,30 @@ export const actions: Actions = {
 			if (isEdit && !hasPermission(profile, 'pur_orders', 'update')) return fail(403, { message: 'Sin permiso para actualizar órdenes de compra' });
 			if (!isEdit && !hasPermission(profile, 'pur_orders', 'create')) return fail(403, { message: 'Sin permiso para crear órdenes de compra' });
 			
+			if (!orderData.renglones || !Array.isArray(orderData.renglones) || orderData.renglones.length === 0) {
+				return fail(400, { message: 'La orden debe tener al menos un artículo.' });
+			}
+
+			for (let idx = 0; idx < orderData.renglones.length; idx++) {
+				const item = orderData.renglones[idx];
+				const qty = Number(item.cantidad || 0);
+				const price = Number(item.precio != null ? item.precio : (item.cost_unit || 0));
+
+				if (isNaN(qty) || qty <= 0) {
+					return fail(400, {
+						message: `El renglón ${idx + 1} (${item.co_art || 'Desconocido'}) tiene una cantidad inválida. Debe ser mayor a 0.`
+					});
+				}
+
+				if (isNaN(price) || price <= 0) {
+					const artCode = item.co_art ? String(item.co_art).trim() : `Renglón ${idx + 1}`;
+					const artDes = item.art_des ? ` - ${String(item.art_des).trim()}` : '';
+					return fail(400, {
+						message: `El artículo "${artCode}${artDes}" tiene costo unitario de 0. En Profit Plus todos los renglones de una orden deben tener un costo mayor a 0.`
+					});
+				}
+			}
+
 			const enrichedOrderData = { 
 				...orderData, 
 				co_cta_ingr_egr: "02", 

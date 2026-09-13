@@ -667,6 +667,49 @@
     }
   }
 
+  const invalidCartItems = $derived.by(() => {
+    return cart.map((item, index) => {
+      const pUSD = Number(item.price_selected?.precio ?? item.precio_usd ?? 0);
+      const pBS = Number(item.price_selected?.precio_ves ?? item.precio_ves ?? 0);
+      const cost = showUSD ? pUSD : pBS;
+      const qty = Number(item.qty || 0);
+      const isCostInvalid = isNaN(cost) || cost <= 0;
+      const isQtyInvalid = isNaN(qty) || qty <= 0;
+      return {
+        index,
+        co_art: String(item.co_art || item.article?.co_art || item.codigo || '').trim(),
+        art_des: String(item.art_des || item.article?.art_des || item.descripcion || '').trim(),
+        cost,
+        qty,
+        isCostInvalid,
+        isQtyInvalid,
+        isInvalid: isCostInvalid || isQtyInvalid
+      };
+    }).filter(i => i.isInvalid);
+  });
+
+  const hasInvalidCartItems = $derived(invalidCartItems.length > 0);
+
+  function validateCart(): boolean {
+    if (cart.length === 0) {
+      toast.error("El carrito está vacío. Agregue artículos para continuar.");
+      return false;
+    }
+
+    if (invalidCartItems.length > 0) {
+      const first = invalidCartItems[0];
+      if (first.isQtyInvalid) {
+        toast.error(`El artículo "${first.co_art}${first.art_des ? ' - ' + first.art_des : ''}" tiene una cantidad inválida (${first.qty}). Debe ser mayor a 0.`);
+      } else if (first.isCostInvalid) {
+        toast.error(`El artículo "${first.co_art}${first.art_des ? ' - ' + first.art_des : ''}" tiene costo unitario de 0. En Profit Plus todos los renglones deben tener un costo mayor a 0.`);
+      }
+      activeTab = 2;
+      return false;
+    }
+
+    return true;
+  }
+
   function nextStep() {
     if (activeTab === 0 && !selectedSupplier) {
       toast.error("Por favor seleccione o registre un proveedor.");
@@ -693,6 +736,7 @@
   let detectedColumns = $state<string[]>([]);
   let selectedCodeCol = $state('');
   let selectedQtyCol = $state('');
+  let selectedCostCol = $state('');
   let isDragging = $state(false);
   let isReadingFile = $state(false);
   let isImportingToCart = $state(false);
@@ -708,6 +752,7 @@
     detectedColumns = [];
     selectedCodeCol = '';
     selectedQtyCol = '';
+    selectedCostCol = '';
     isDragging = false;
     isReadingFile = false;
     isImportingToCart = false;
@@ -739,6 +784,7 @@
   function autoDetectColumns(cols: string[]) {
     const codeCandidates = ['codigo', 'co_art', 'coart', 'cod', 'articulo', 'art_des', 'item', 'referencia', 'ref', 'sku', 'code', 'material', 'id'];
     const qtyCandidates = ['cantidad', 'cant', 'qty', 'total_art', 'unidades', 'cant.', 'total', 'count', 'quantity', 'bultos', 'piezas', 'uds', 'und', 'cant_enviada'];
+    const costCandidates = ['costo', 'cost', 'precio', 'price', 'cost_unit', 'costo_unitario', 'prec_vta', 'prec1', 'p1', 'costounit', 'preciounit', 'valor', 'monto'];
 
     let foundCode = '';
     for (const cand of codeCandidates) {
@@ -764,8 +810,21 @@
       }
     }
 
+    let foundCost = '';
+    for (const cand of costCandidates) {
+      const match = cols.find(c => {
+        const norm = normalizeHeader(c);
+        return (norm === cand || norm.startsWith(cand) || norm.includes(cand)) && c !== foundCode && c !== foundQty;
+      });
+      if (match) {
+        foundCost = match;
+        break;
+      }
+    }
+
     selectedCodeCol = foundCode || cols[0] || '';
     selectedQtyCol = foundQty || cols.find(c => c !== selectedCodeCol) || cols[1] || cols[0] || '';
+    selectedCostCol = foundCost || '';
   }
 
   function parseSheetData(sheetName: string) {
@@ -854,12 +913,26 @@
       const rawCode = String(row[selectedCodeCol] ?? '').trim();
       const rawQty = selectedQtyCol ? String(row[selectedQtyCol] ?? '').trim() : '1';
       const numQty = parseFloat(rawQty.replace(',', '.'));
+
+      let rawCost = '';
+      let parsedCost = 0;
+      if (selectedCostCol && row[selectedCostCol] !== undefined && row[selectedCostCol] !== '') {
+        rawCost = String(row[selectedCostCol]).trim();
+        const cleanCost = rawCost.replace(/\$/g, '').replace(/Bs\.?/gi, '').trim();
+        const numCost = parseFloat(cleanCost.replace(',', '.'));
+        if (!isNaN(numCost) && numCost > 0) {
+          parsedCost = numCost;
+        }
+      }
+
       return {
         rowNumber: idx + 1,
         rawCode,
         rawQty,
         isValidQty: !isNaN(numQty) && numQty > 0,
-        parsedQty: !isNaN(numQty) && numQty > 0 ? numQty : 1
+        parsedQty: !isNaN(numQty) && numQty > 0 ? numQty : 1,
+        rawCost,
+        parsedCost
       };
     });
   });
@@ -883,7 +956,7 @@
       return;
     }
 
-    const itemsMap = new Map<string, number>();
+    const itemsMap = new Map<string, { qty: number; cost?: number }>();
     let invalidCount = 0;
 
     for (const row of parsedRawRows) {
@@ -898,8 +971,23 @@
         invalidCount++;
         continue;
       }
-      const current = itemsMap.get(code) || 0;
-      itemsMap.set(code, Math.round((current + parsedQty) * 100) / 100);
+
+      let parsedCost: number | undefined = undefined;
+      if (selectedCostCol && row[selectedCostCol] !== undefined && row[selectedCostCol] !== '') {
+        const rawCost = String(row[selectedCostCol]).trim().replace(/\$/g, '').replace(/Bs\.?/gi, '').trim();
+        const numCost = parseFloat(rawCost.replace(',', '.'));
+        if (!isNaN(numCost) && numCost > 0) {
+          parsedCost = numCost;
+        }
+      }
+
+      const existing = itemsMap.get(code);
+      if (existing) {
+        existing.qty = Math.round((existing.qty + parsedQty) * 100) / 100;
+        if (parsedCost !== undefined) existing.cost = parsedCost;
+      } else {
+        itemsMap.set(code, { qty: parsedQty, cost: parsedCost });
+      }
     }
 
     if (itemsMap.size === 0) {
@@ -928,6 +1016,7 @@
       const foundCodesSet = new Set<string>();
       let addedCount = 0;
       let updatedCount = 0;
+      let zeroCostImportCount = 0;
 
       const defaultAlma = selectedWarehouse || data.context?.warehouses?.[0]?.co_alma || '01';
 
@@ -937,14 +1026,20 @@
         foundCodesSet.add(artCode.toUpperCase());
         foundCodesSet.add(artCode);
 
-        const rawQtyToAdd = itemsMap.get(artCode) || itemsMap.get(artCode.toUpperCase()) || 1;
+        const rowItem = itemsMap.get(artCode) || itemsMap.get(artCode.toUpperCase());
+        const rawQtyToAdd = rowItem?.qty || 1;
         const qtyToAdd = Math.round(rawQtyToAdd * 100) / 100;
         const warehouse = selectedItemWarehouse[artCode] || art.disponibilidad?.[0]?.co_alma || defaultAlma;
         const tasa = Number(art.tasa_bcv || 1);
 
-        const enteredCost = Number(itemCosts[artCode] ?? getSuggestedUnitCost(art));
+        const fileCost = rowItem?.cost;
+        const enteredCost = Number(fileCost != null && fileCost > 0 ? fileCost : (itemCosts[artCode] ?? getSuggestedUnitCost(art)));
         const costUSD = showUSD ? enteredCost : (tasa > 0 ? Number((enteredCost / tasa).toFixed(4)) : enteredCost);
         const costVES = showUSD ? Number((enteredCost * tasa).toFixed(2)) : enteredCost;
+
+        if (enteredCost <= 0) {
+          zeroCostImportCount++;
+        }
 
         const existingIndex = cart.findIndex(
           (item) => (item.article?.co_art || item.co_art) === artCode && (item.warehouse || item.co_alma_selected) === warehouse
@@ -990,6 +1085,10 @@
 
       if (addedCount > 0 || updatedCount > 0) {
         toast.success(`Importación completada: ${addedCount} artículo(s) agregado(s)${updatedCount > 0 ? `, ${updatedCount} actualizado(s)` : ''}.`);
+      }
+
+      if (zeroCostImportCount > 0) {
+        toast.warning(`${zeroCostImportCount} artículo(s) importados tienen costo 0.00. Por favor asigne el costo unitario en el carrito antes de guardar.`);
       }
 
       if (notFoundCodes.length > 0) {
@@ -2127,7 +2226,7 @@
               {:else}
                 {#each filteredCart as { item, originalIndex: i } (item.co_art + '_' + (item.co_alma_selected || '') + '_' + i)}
                   {@const unitCost = Number(showUSD ? (item.price_selected?.precio || item.precio_usd || 0) : (item.price_selected?.precio_ves || item.precio_ves || 0))}
-                  <div class="p-8 flex flex-col lg:flex-row items-start lg:items-center gap-8 transition-all hover:bg-surface-soft group relative border-b border-border-subtle last:border-0">
+                  <div class="p-8 flex flex-col lg:flex-row items-start lg:items-center gap-8 transition-all hover:bg-surface-soft group relative border-b border-border-subtle last:border-0 {unitCost <= 0 ? 'bg-red-500/[0.04] border-l-4 border-l-red-500' : ''}">
                     <!-- Product Identity & Qty -->
                     <div class="flex items-center gap-6 shrink-0 w-full lg:w-auto">
                       <div class="h-16 w-16 rounded-2xl bg-surface-soft flex items-center justify-center text-brand-400 relative group-hover:scale-110 transition-transform duration-500">
@@ -2168,7 +2267,7 @@
                         <div class="text-lg font-black text-text-base leading-tight">
                           {item.art_des || item.descripcion}
                         </div>
-                        <div class="flex items-center gap-4 text-[11px] font-bold uppercase tracking-[0.15em]">
+                        <div class="flex items-center gap-4 text-[11px] font-bold uppercase tracking-[0.15em] flex-wrap">
                           <span class="text-brand-400 font-mono">{item.co_art}</span>
                           <span class="h-1 w-1 rounded-full bg-border-subtle"></span>
                           <span class="text-text-muted">{item.unidad || item.co_uni || "UNID"}</span>
@@ -2176,6 +2275,12 @@
                           <span class={item.article?.ultimo_costo_om > 0 ? "text-emerald-400" : "text-amber-400"}>
                             {item.article?.ultimo_costo_om > 0 ? "Costo Real" : "Costo Calculado"}
                           </span>
+                          {#if unitCost <= 0}
+                            <span class="h-1 w-1 rounded-full bg-border-subtle"></span>
+                            <span class="inline-flex items-center gap-1 text-red-500 bg-red-500/10 border border-red-500/20 px-2.5 py-0.5 rounded-md font-bold tracking-normal normal-case">
+                              ⚠️ Costo requerido (&gt; 0)
+                            </span>
+                          {/if}
                         </div>
                       </div>
 
@@ -2211,16 +2316,16 @@
                           <input
                             type="number"
                             step="0.01"
-                            min="0"
+                            min="0.0001"
                             value={unitCost}
                             oninput={(e) => {
                               const v = parseFloat((e.currentTarget as HTMLInputElement).value);
                               if (!isNaN(v)) updateCartCost(i, v);
                             }}
-                            class="w-full h-11 bg-surface-soft rounded-xl pl-4 pr-12 text-sm font-black outline-none border border-border-subtle focus:border-brand-500/30 transition-all hover:bg-surface-strong text-brand-400 font-mono"
+                            class="w-full h-11 rounded-xl pl-4 pr-12 text-sm font-black outline-none border transition-all font-mono {unitCost <= 0 ? 'bg-red-500/10 border-red-500 text-red-400 focus:border-red-500' : 'bg-surface-soft border-border-subtle text-brand-400 focus:border-brand-500/30 hover:bg-surface-strong'}"
                             placeholder="Costo Unitario..."
                           />
-                          <span class="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-black text-text-muted pointer-events-none">
+                          <span class="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-black pointer-events-none {unitCost <= 0 ? 'text-red-400' : 'text-text-muted'}">
                             {showUSD ? '$' : 'Bs.'}
                           </span>
                         </div>
@@ -2447,6 +2552,18 @@
                     })}
                   />
 
+                  {#if hasInvalidCartItems}
+                    <div class="p-4 rounded-2xl bg-red-500/10 border border-red-500/20 text-red-400 space-y-2">
+                      <div class="flex items-center gap-2 font-black text-sm">
+                        <AlertCircle size={18} class="shrink-0" />
+                        <span>{invalidCartItems.length} renglón(es) sin costo válido (&gt; 0)</span>
+                      </div>
+                      <p class="text-xs text-text-muted leading-relaxed">
+                        Profit Plus no permite artículos con costo cero. Por favor asigna el costo unitario a los renglones resaltados en rojo para poder procesar la orden.
+                      </p>
+                    </div>
+                  {/if}
+
                   <button
                     type="button"
                     onclick={() => {
@@ -2458,9 +2575,10 @@
                         toast.error("El carrito está vacío. Agregue artículos.");
                         return;
                       }
+                      if (!validateCart()) return;
                       showSaveConfirmationModal = true;
                     }}
-                    disabled={savingOrder || cart.length === 0 || !selectedSupplier}
+                    disabled={savingOrder || cart.length === 0 || !selectedSupplier || hasInvalidCartItems}
                     class="w-full h-20 bg-brand-600 hover:bg-brand-500 text-white rounded-[24px] font-black text-xl uppercase tracking-[0.2em] shadow-[0_20px_40px_-10px_rgba(var(--brand-rgb),0.3)] active:scale-[0.97] transition-all flex items-center justify-center gap-4 disabled:opacity-50 disabled:grayscale group cursor-pointer"
                   >
                     {#if savingOrder}
@@ -2735,6 +2853,10 @@
         <button
           type="button"
           onclick={() => {
+            if (!validateCart()) {
+              showSaveConfirmationModal = false;
+              return;
+            }
             const formEl = document.getElementById('saveOrderForm') as HTMLFormElement;
             if (formEl) formEl.requestSubmit();
           }}
@@ -2902,7 +3024,7 @@
             </div>
 
             <!-- SELECTORES DE COLUMNAS (INTERACTIVO) -->
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
               
               <!-- Selector Columna Código -->
               <div class="glass p-5 rounded-2xl border border-border-subtle space-y-2 relative">
@@ -2950,6 +3072,30 @@
                 <p class="text-[10px] text-text-muted">Unidades numéricas a comprar por artículo.</p>
               </div>
 
+              <!-- Selector Columna Costo (Opcional) -->
+              <div class="glass p-5 rounded-2xl border border-border-subtle space-y-2 relative">
+                <div class="flex items-center justify-between">
+                  <label class="text-[10px] font-black uppercase tracking-wider text-brand-400 block" for="costColSelect">
+                    Columna de Costo
+                  </label>
+                  <span class="text-[9px] font-bold text-emerald-400 uppercase">Opcional</span>
+                </div>
+                <div class="relative">
+                  <select
+                    id="costColSelect"
+                    bind:value={selectedCostCol}
+                    class="w-full h-12 bg-surface-base rounded-xl px-4 text-xs font-black text-text-base border border-border-subtle appearance-none cursor-pointer focus:border-brand-500/50 outline-none transition-all pr-10"
+                  >
+                    <option value="">(No importar costo)</option>
+                    {#each detectedColumns as col}
+                      <option value={col}>{col}</option>
+                    {/each}
+                  </select>
+                  <ChevronDown size={16} class="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none" />
+                </div>
+                <p class="text-[10px] text-text-muted">Costo / precio unitario del archivo (si aplica).</p>
+              </div>
+
             </div>
 
             <!-- PREVISUALIZACIÓN EN VIVO DE LAS PRIMERAS 5 FILAS -->
@@ -2971,13 +3117,16 @@
                       <th class="p-3 w-12 text-center">Fila</th>
                       <th class="p-3">Código ({selectedCodeCol || '---'})</th>
                       <th class="p-3 text-right">Cantidad ({selectedQtyCol || '---'})</th>
+                      {#if selectedCostCol}
+                        <th class="p-3 text-right">Costo ({selectedCostCol})</th>
+                      {/if}
                       <th class="p-3 text-center w-28">Estado</th>
                     </tr>
                   </thead>
                   <tbody class="divide-y divide-border-subtle">
                     {#if mappingPreview.length === 0}
                       <tr>
-                        <td colspan="4" class="p-4 text-center text-text-muted">
+                        <td colspan={selectedCostCol ? 5 : 4} class="p-4 text-center text-text-muted">
                           No hay datos disponibles para previsualizar.
                         </td>
                       </tr>
@@ -2991,6 +3140,11 @@
                           <td class="p-3 text-right font-black text-brand-400">
                             {row.rawQty || '0'}
                           </td>
+                          {#if selectedCostCol}
+                            <td class="p-3 text-right font-bold {row.parsedCost > 0 ? 'text-emerald-400' : 'text-text-muted'}">
+                              {row.rawCost || '0.00'}
+                            </td>
+                          {/if}
                           <td class="p-3 text-center">
                             {#if row.rawCode && row.isValidQty}
                               <span class="px-2 py-0.5 rounded-md bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[10px] font-bold">
