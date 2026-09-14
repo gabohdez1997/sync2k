@@ -2,6 +2,7 @@ import { protectLoad, protectAction } from '$lib/server/permissions';
 import { AgentClient } from '$lib/server/agent';
 import { hasPermission } from '$lib/server/auth';
 import { logAction } from '$lib/server/audit';
+import { getActiveBranches } from '$lib/server/branches';
 import { supabaseAdmin } from '$lib/server/supabase';
 import { redirect, fail, type Actions } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
@@ -135,9 +136,8 @@ export const actions: Actions = {
 		const formData = await request.formData();
 		const payload = { ...Object.fromEntries(formData), contribuyente: formData.has('contribuyente'), contribu_e: formData.has('contribu_e') || formData.has('contribuu_e'), porc_esp: parseFloat(formData.get('porc_esp') as string) || 0 };
 
-		// Broadcast: obtener TODAS las sucursales activas desde Supabase para replicación universal
-		const { data: branchesData } = await supabaseAdmin.from('branches').select('*').eq('active', true);
-		const targetBranches = branchesData || [];
+		// Broadcast: obtener TODAS las sucursales activas (con caché en memoria)
+		const targetBranches = await getActiveBranches(fetch);
 		if (targetBranches.length === 0) return fail(400, { message: 'No se encontraron sucursales activas.' });
 
 		let successCount = 0; let failedBranches: string[] = []; let createdClient = null;

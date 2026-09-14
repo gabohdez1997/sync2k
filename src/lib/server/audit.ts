@@ -24,7 +24,13 @@ export interface AuditLog {
 export async function logAction(log: AuditLog) {
   try {
     const supabaseAdmin = getSupabaseAdmin();
-    const { data, error } = await supabaseAdmin.rpc('log_action', {
+    
+    // Timeout de 5 segundos para que una lentitud en Supabase RPC no congele la UI
+    const timeoutPromise = new Promise<{ data: null; error: { message: string } }>((resolve) =>
+      setTimeout(() => resolve({ data: null, error: { message: 'Timeout RPC log_action (5s)' } }), 5000)
+    );
+
+    const rpcPromise = supabaseAdmin.rpc('log_action', {
       p_user_id:    log.uid,
       p_user_email: log.user_email,
       p_action:     log.action,
@@ -36,12 +42,14 @@ export async function logAction(log: AuditLog) {
       p_source:     log.source      ?? 'cloud'
     });
 
+    const { data, error } = await Promise.race([rpcPromise, timeoutPromise]);
+
     if (error) {
-      console.error('[AUDIT] Error registrando acción (RPC):', error);
+      console.warn('[AUDIT] No se pudo registrar auditoría en Supabase:', error.message || error);
     } else {
-      console.log('[AUDIT] Acción registrada con éxito, ID:', data);
+      // Éxito silencioso
     }
-  } catch (err) {
-    console.error('[AUDIT] Error registrando acción (Excepción):', err);
+  } catch (err: any) {
+    console.warn('[AUDIT] Excepción registrando auditoría:', err.message || err);
   }
 }

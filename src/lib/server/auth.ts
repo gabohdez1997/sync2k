@@ -58,140 +58,166 @@ export function hasPermission(
 interface CachedProfile {
   profile: Profile;
   expiresAt: number;
+  staleUntil: number;
 }
 
 const profileCache = new Map<string, CachedProfile>();
-const PROFILE_CACHE_TTL_MS = 2 * 60 * 1000; // 2 minutos de cache en memoria
+const inFlightProfiles = new Map<string, Promise<Profile | null>>();
+const PROFILE_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutos de cache fresco en memoria
+const PROFILE_STALE_TTL_MS = 60 * 60 * 1000; // 1 hora de respaldo stale en caso de caída/saturación
 
 export function clearProfileCache(userId?: string) {
   if (userId) {
     profileCache.delete(userId);
+    inFlightProfiles.delete(userId);
   } else {
     profileCache.clear();
+    inFlightProfiles.clear();
   }
 }
 
 /**
  * Obtiene el perfil completo del usuario desde la vista profile_complete.
- * Prioriza Supabase (Cloud). Si falla por red, usa PostgreSQL (Local).
+ * Prioriza Supabase (Cloud). Si falla por red o saturación 500/502, usa PostgreSQL (Local) o sirve caché stale.
  */
 export async function getUserProfile(userId: string, fetchFn?: typeof fetch): Promise<Profile | null> {
   const now = Date.now();
   const cached = profileCache.get(userId);
+
+  // 1. Si el caché está fresco, retornar de inmediato
   if (cached && cached.expiresAt > now) {
     return cached.profile;
   }
 
-  const supabaseAdmin = getSupabaseAdmin(fetchFn);
-  let isOfflineFallback = false;
-  let rawData = null;
-
-  try {
-    // ── 1. Intento Online (Supabase Cloud) ──
-    const { data: results, error } = await supabaseAdmin
-      .from('profile_complete')
-      .select('*')
-      .eq('id', userId);
-
-    if (error) {
-      if (error.message?.includes('fetch failed') || error.message?.includes('Failed to fetch')) {
-        throw new Error('OFFLINE');
-      }
-      console.error(`[AUTH ONLINE] Error obteniendo perfil para ${userId}:`, error.message);
-      return null;
-    }
-    
-    if (!results || results.length === 0) {
-      console.warn(`[AUTH ONLINE] Perfil no encontrado para UID: ${userId}`);
-      return null;
-    }
-
-    if (results.length > 1) {
-      console.error(`[AUTH ONLINE] ¡CRÍTICO! Se encontraron ${results.length} registros para el UID: ${userId}. Usando el primero.`);
-    }
-
-    rawData = results[0];
-
-  } catch (err: any) {
-    if (err.message !== 'OFFLINE' && !err.message?.includes('fetch failed') && !err.message?.includes('ETIMEDOUT')) {
-      console.error(`[AUTH] Error crítico inesperado para ${userId}:`, err.message);
-      return null;
-    }
-    isOfflineFallback = true;
+  // 2. Si ya hay una consulta en curso a Supabase para este usuario, reutilizar la misma promesa (Promise Deduplication)
+  if (inFlightProfiles.has(userId)) {
+    return inFlightProfiles.get(userId)!;
   }
 
-  // ── 2. Intento Offline (PostgreSQL Local) ──
-  if (isOfflineFallback) {
-    console.warn(`[AUTH] 🔴 Sin internet. Obteniendo perfil de ${userId} desde Base de Datos Local...`);
+  const fetchPromise = (async () => {
+    const supabaseAdmin = getSupabaseAdmin(fetchFn);
+    let isOfflineFallback = false;
+    let rawData = null;
+
     try {
-      const { queryLocalDb } = await import('$lib/server/local-db');
-      const res = await queryLocalDb('SELECT * FROM profile_complete WHERE id = $1', [userId]);
+      // ── 1. Intento Online (Supabase Cloud) ──
+      const { data: results, error } = await supabaseAdmin
+        .from('profile_complete')
+        .select('*')
+        .eq('id', userId);
 
-      if (res.rows.length === 0) {
-        console.warn(`[AUTH OFFLINE] Perfil no encontrado localmente para UID: ${userId}`);
-        return null;
-      }
-
-      rawData = res.rows[0];
-
-    } catch (localErr: any) {
-      console.error(`[AUTH OFFLINE] Error catastrófico: falló Supabase y falló PG local para ${userId}:`, localErr.message);
-      return null;
-    }
-  }
-
-  // ── 3. Parseo y formateo común ──
-  if (!rawData) {
-    if (cached) {
-      console.warn(`[AUTH] Usando perfil en cache de respaldo para ${userId} tras fallo en BD.`);
-      return cached.profile;
-    }
-    console.warn(`[AUTH] Perfil no encontrado para UID: ${userId}`);
-    return null;
-  }
-
-  // Fallback: Si la vista profile_complete no tiene theme_config (stale view)
-  // intentamos obtenerlo directamente de la tabla profiles.
-  if (rawData.theme_config === undefined) {
-    try {
-        if (isOfflineFallback) {
-            const { queryLocalDb } = await import('$lib/server/local-db');
-            const res = await queryLocalDb('SELECT theme_config FROM profiles WHERE id = $1', [userId]);
-            if (res.rows[0]) rawData.theme_config = res.rows[0].theme_config;
-        } else {
-            const { data } = await supabaseAdmin.from('profiles').select('theme_config').eq('id', userId).single();
-            if (data) rawData.theme_config = data.theme_config;
+      if (error) {
+        console.warn(`[AUTH ONLINE] Supabase error para ${userId}: ${error.message} (Code: ${error.code || 'N/A'})`);
+        
+        // Si la BD de Supabase está saturada (500, 502, timeout, etc.) y tenemos caché stale, usarlo sin expulsar al usuario
+        if (cached && cached.staleUntil > now) {
+          console.warn(`[AUTH ONLINE] Usando perfil en caché stale de respaldo para ${userId} tras error de Supabase.`);
+          return cached.profile;
         }
-    } catch (e) {
-        // Ignorar si falla el fallback
+
+        const isNetworkOrServerError = 
+          error.message?.includes('fetch failed') || 
+          error.message?.includes('Failed to fetch') ||
+          error.message?.includes('502') ||
+          error.message?.includes('500') ||
+          error.message?.includes('503') ||
+          error.message?.includes('504') ||
+          error.message?.includes('upstream connect error') ||
+          error.message?.includes('timeout') ||
+          error.message?.includes('ETIMEDOUT');
+
+        if (isNetworkOrServerError) {
+          isOfflineFallback = true;
+        } else {
+          return null;
+        }
+      } else if (!results || results.length === 0) {
+        console.warn(`[AUTH ONLINE] Perfil no encontrado para UID: ${userId}`);
+        if (cached && cached.staleUntil > now) return cached.profile;
+        return null;
+      } else {
+        rawData = results[0];
+      }
+
+    } catch (err: any) {
+      console.warn(`[AUTH] Excepción consultando Supabase para ${userId}:`, err.message);
+      if (cached && cached.staleUntil > now) {
+        console.warn(`[AUTH] Usando perfil en caché stale para ${userId} tras excepción.`);
+        return cached.profile;
+      }
+      isOfflineFallback = true;
     }
+
+    // ── 2. Intento Offline (PostgreSQL Local) ──
+    if (isOfflineFallback) {
+      console.warn(`[AUTH] 🔴 Supabase no disponible o saturado. Intentando perfil de ${userId} desde BD Local...`);
+      try {
+        const { queryLocalDb } = await import('$lib/server/local-db');
+        const res = await queryLocalDb('SELECT * FROM profile_complete WHERE id = $1', [userId]);
+
+        if (res.rows.length > 0) {
+          rawData = res.rows[0];
+        } else {
+          console.warn(`[AUTH OFFLINE] Perfil no encontrado localmente para UID: ${userId}`);
+        }
+      } catch (localErr: any) {
+        console.warn(`[AUTH OFFLINE] Falló PG local para ${userId}:`, localErr.message);
+      }
+    }
+
+    // ── 3. Parseo y formateo común ──
+    if (!rawData) {
+      if (cached && cached.staleUntil > now) {
+        console.warn(`[AUTH] Usando perfil en caché de respaldo para ${userId} tras fallo en BDs.`);
+        return cached.profile;
+      }
+      console.warn(`[AUTH] Perfil definitivamente no encontrado para UID: ${userId}`);
+      return null;
+    }
+
+    // Fallback: Si la vista profile_complete no tiene theme_config (stale view)
+    if (rawData.theme_config === undefined) {
+      try {
+        if (isOfflineFallback) {
+          const { queryLocalDb } = await import('$lib/server/local-db');
+          const res = await queryLocalDb('SELECT theme_config FROM profiles WHERE id = $1', [userId]);
+          if (res.rows[0]) rawData.theme_config = res.rows[0].theme_config;
+        } else {
+          const { data } = await supabaseAdmin.from('profiles').select('theme_config').eq('id', userId).single();
+          if (data) rawData.theme_config = data.theme_config;
+        }
+      } catch (e) {
+        // Ignorar si falla el fallback
+      }
+    }
+
+    const profile: Profile = {
+      id:                rawData.id,
+      full_name:         rawData.full_name ?? null,
+      email:             rawData.email ?? null,
+      active:            rawData.active ?? false,
+      permissions:       rawData.permissions ?? {},
+      roles:             rawData.roles ?? [],
+      allowed_branches:  rawData.allowed_branches ?? [],
+      allowed_warehouses: rawData.allowed_warehouses ?? [],
+      profit_user:       rawData.profit_user ?? null,
+      profit_pass:       rawData.profit_pass ?? null,
+      theme_config:      rawData.theme_config || null,
+    };
+
+    profileCache.set(userId, {
+      profile,
+      expiresAt: Date.now() + PROFILE_CACHE_TTL_MS,
+      staleUntil: Date.now() + PROFILE_STALE_TTL_MS
+    });
+
+    return profile;
+  })();
+
+  inFlightProfiles.set(userId, fetchPromise);
+  try {
+    return await fetchPromise;
+  } finally {
+    inFlightProfiles.delete(userId);
   }
-
-  // Log de éxito interno para depuración en Vercel si es necesario
-  if (rawData.permissions && Object.keys(rawData.permissions).length > 0) {
-     console.log(`[AUTH] Perfil cargado para ${rawData.email}. Permisos detected: ${Object.keys(rawData.permissions).length}`);
-  } else {
-     console.warn(`[AUTH] Advertencia: El perfil de ${rawData.email} no tiene permisos definidos.`);
-  }
-
-  const profile: Profile = {
-    id:                rawData.id,
-    full_name:         rawData.full_name ?? null,
-    email:             rawData.email ?? null,
-    active:            rawData.active ?? false,
-    permissions:       rawData.permissions ?? {},
-    roles:             rawData.roles ?? [],
-    allowed_branches:  rawData.allowed_branches ?? [],
-    allowed_warehouses: rawData.allowed_warehouses ?? [],
-    profit_user:       rawData.profit_user ?? null,
-    profit_pass:       rawData.profit_pass ?? null,
-    theme_config:      rawData.theme_config || null,
-  };
-
-  profileCache.set(userId, {
-    profile,
-    expiresAt: Date.now() + PROFILE_CACHE_TTL_MS
-  });
-
-  return profile;
 }

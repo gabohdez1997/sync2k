@@ -1,5 +1,6 @@
 import { protectLoad, protectAction } from '$lib/server/permissions';
 import { AgentClient } from '$lib/server/agent';
+import { getActiveBranches } from '$lib/server/branches';
 import { supabaseAdmin } from '$lib/server/supabase';
 import { fail } from '@sveltejs/kit';
 import { logAction } from '$lib/server/audit';
@@ -9,19 +10,8 @@ export const load: PageServerLoad = protectLoad('pur_articles', async ({ url, lo
     try {
         const userProfile = (locals as any).profile;
 
-        // 1. CARGAR SUCURSALES
-        let allBranches: any[] = [];
-        const { data: dbBranches, error: dbError } = await supabaseAdmin
-            .from('branches')
-            .select('id, name, agent_url, agent_token, active, sort_order')
-            .eq('active', true)
-            .order('sort_order');
-
-        if (dbBranches) {
-            allBranches = dbBranches.map(b => ({
-                id: b.id, name: b.name, agent_url: b.agent_url, agent_token: b.agent_token
-            }));
-        }
+        // 1. CARGAR SUCURSALES (Caché en memoria)
+        const allBranches = await getActiveBranches(fetch);
 
         const profileAllowed = userProfile?.allowed_branches || [];
         const profileBranchIds: string[] = Array.isArray(profileAllowed) 
@@ -155,7 +145,7 @@ export const actions: Actions = {
         const { error: authErr } = await locals.supabase.auth.signInWithPassword({ email, password });
         if (authErr) return fail(401, { deleteError: 'Contraseña de confirmación incorrecta.' });
 
-        const { data: dbBranches } = await supabaseAdmin.from('branches').select('*').eq('active', true);
+        const dbBranches = await getActiveBranches(fetch);
         if (!dbBranches || dbBranches.length === 0) return fail(500, { deleteError: 'Error cargando sucursales' });
 
         const userProfile = (locals as any).profile;

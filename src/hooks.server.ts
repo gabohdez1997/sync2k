@@ -17,6 +17,14 @@ const PUBLIC_ROUTES = [
   '/api/login',
 ];
 
+// Caché en memoria de tokens validados recientemente (evita peticiones HTTP repetidas a /auth/v1/user)
+interface VerifiedTokenCache {
+  user: any;
+  expiresAt: number;
+}
+const verifiedTokensCache = new Map<string, VerifiedTokenCache>();
+const TOKEN_CACHE_TTL_MS = 60 * 1000; // 60 segundos de gracia por token
+
 export const handle: Handle = async ({ event, resolve }) => {
   // ── 1. Cliente Nube (Supabase SSR) ──
   const supabase = createServerClient(
@@ -44,32 +52,79 @@ export const handle: Handle = async ({ event, resolve }) => {
   event.locals.session  = null;
   event.locals.profile  = null;
 
-  // ── 2. Identificación Principal (Online) ──────────────────────────
+  // ── 2. Identificación Principal (Online con Caché de Validación) ────
   let authErrorObj = null;
   let session = null;
 
   try {
     const resAuth = await supabase.auth.getSession();
     if (resAuth.data.session) {
-      const { data: { user }, error } = await supabase.auth.getUser();
-      if (error) {
-        authErrorObj = error;
-        // Resiliencia: si el token en la sesión aún es cronológicamente válido,
-        // no descartar la sesión por un hipo de red con Supabase Cloud
-        const expiresAtSec = resAuth.data.session.expires_at || 0;
-        if (expiresAtSec * 1000 > Date.now() && resAuth.data.session.user) {
-          console.warn('[HOOKS] getUser() falló pero la sesión es válida hasta:', new Date(expiresAtSec * 1000).toISOString(), error.message);
-          session = resAuth.data.session;
+      const currentSession = resAuth.data.session;
+      const accessToken = currentSession.access_token;
+      const expiresAtSec = currentSession.expires_at || 0;
+      const isTokenChronologicallyValid = expiresAtSec * 1000 > Date.now();
+
+      if (isTokenChronologicallyValid) {
+        const now = Date.now();
+        const cachedToken = verifiedTokensCache.get(accessToken);
+
+        if (cachedToken && cachedToken.expiresAt > now) {
+          // Token ya validado en este proceso: reutilizar sin llamada de red a Supabase Auth
+          session = currentSession;
+          session.user = cachedToken.user;
+        } else {
+          // Validar con Supabase Auth con tolerancia total ante 500/502/timeout
+          try {
+            const { data: { user }, error } = await supabase.auth.getUser();
+            if (error) {
+              authErrorObj = error;
+              console.warn('[HOOKS] getUser() arrojó error pero la sesión es válida hasta:', new Date(expiresAtSec * 1000).toISOString(), error.message);
+              // Si el token en la sesión aún es cronológicamente válido, no descartar la sesión
+              session = currentSession;
+              if (currentSession.user) {
+                session.user = currentSession.user;
+                verifiedTokensCache.set(accessToken, {
+                  user: currentSession.user,
+                  expiresAt: now + 30 * 1000 // Cooldown de 30s para no martillar Supabase si está saturado
+                });
+              }
+            } else if (user) {
+              session = currentSession;
+              session.user = user;
+              verifiedTokensCache.set(accessToken, {
+                user,
+                expiresAt: now + TOKEN_CACHE_TTL_MS
+              });
+            }
+          } catch (getUserErr: any) {
+            console.warn('[HOOKS] Excepción en getUser(), preservando sesión válida:', getUserErr.message);
+            session = currentSession;
+            if (currentSession.user) {
+              session.user = currentSession.user;
+            }
+          }
         }
       } else {
-        session = resAuth.data.session;
-        session.user = user;
+        // Token expirado: intentar obtener usuario / renovar
+        const { data: { user }, error } = await supabase.auth.getUser();
+        if (!error && user) {
+          session = currentSession;
+          session.user = user;
+        }
       }
     }
     if (resAuth.error) authErrorObj = resAuth.error;
   } catch (err: any) {
     authErrorObj = err;
     console.warn('[HOOKS] Supabase Auth falló (¿Offline?):', err.message);
+  }
+
+  // Limpieza preventiva de caché si crece demasiado
+  if (verifiedTokensCache.size > 500) {
+    const now = Date.now();
+    verifiedTokensCache.forEach((entry, t) => {
+      if (entry.expiresAt <= now) verifiedTokensCache.delete(t);
+    });
   }
 
   // ── 3. Identificación Fallback (Offline) ────────────────────────
@@ -90,9 +145,6 @@ export const handle: Handle = async ({ event, resolve }) => {
             access_token: localToken,
             refresh_token: ''
           } as any;
-          
-          // Opcional: si hay red, podríamos intentar redirigir a login o forzar limpieza, 
-          // pero dejémoslo usar su sesión local sin problema por hoy.
         }
       } catch (err) {
         // Token inválido o expirado. Limpiar.
@@ -105,7 +157,7 @@ export const handle: Handle = async ({ event, resolve }) => {
   if (session?.user) {
     event.locals.session = session;
 
-    // Obtiene perfil (automáticamente hace fallback a BD local si Supabase se cae)
+    // Obtiene perfil (con deduplicación de consultas y caché Stale-While-Revalidate)
     const profile = await getUserProfile(session.user.id, event.fetch);
 
     if (profile?.active) {
@@ -115,7 +167,6 @@ export const handle: Handle = async ({ event, resolve }) => {
     }
   }
 
-
   // ── 5. Protección de rutas privadas ────────────────────────────────
   const path = event.url.pathname;
   const isPublic = PUBLIC_ROUTES.some(r =>
@@ -123,11 +174,26 @@ export const handle: Handle = async ({ event, resolve }) => {
   );
 
   if (!isPublic) {
+    const isApiRequest = path.startsWith('/api/');
+
     if (!event.locals.session) {
+      if (isApiRequest) {
+        return new Response(JSON.stringify({ error: 'unauthorized', message: 'Sesión no iniciada' }), {
+          status: 401,
+          headers: { 'content-type': 'application/json' }
+        });
+      }
       redirect(303, `/?redirectTo=${encodeURIComponent(path)}`);
     }
+
     if (!event.locals.profile) {
-      console.warn(`[HOOKS] Perfil no disponible para usuario ${event.locals.session.user.id}. Redirigiendo a inicio.`);
+      console.warn(`[HOOKS] Perfil no disponible para usuario ${event.locals.session.user.id}.`);
+      if (isApiRequest) {
+        return new Response(JSON.stringify({ error: 'profile_not_found', message: 'Perfil no disponible temporalmente' }), {
+          status: 503,
+          headers: { 'content-type': 'application/json' }
+        });
+      }
       redirect(303, '/?error=profile_not_found');
     }
   }

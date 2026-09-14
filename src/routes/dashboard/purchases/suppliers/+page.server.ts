@@ -2,6 +2,7 @@
 import { protectLoad, protectAction } from '$lib/server/permissions';
 import { AgentClient } from '$lib/server/agent';
 import { hasPermission } from '$lib/server/auth';
+import { getActiveBranches } from '$lib/server/branches';
 import { fail } from '@sveltejs/kit';
 import { supabaseAdmin } from '$lib/server/supabase';
 import { logAction } from '$lib/server/audit';
@@ -27,40 +28,8 @@ export const load: PageServerLoad = protectLoad('pur_suppliers', async ({ locals
         const canUpdate = hasPermission(profile, 'pur_suppliers', 'update');
         const canDelete = hasPermission(profile, 'pur_suppliers', 'delete');
 
-        // 1. Obtener todas las sucursales de Supabase
-        let allBranches: any[] = [];
-        const { data: dbBranches, error } = await supabaseAdmin
-            .from('branches')
-            .select('id, name, agent_url, agent_token, profit_branch_codes, active, sort_order')
-            .eq('active', true)
-            .order('sort_order')
-            .order('name');
-
-        if (error) {
-            console.error('[SUPPLIERS] Supabase branches error:', error.message);
-        } else if (dbBranches) {
-            allBranches = dbBranches.map(b => {
-                let defaultCode = '';
-                let isDefault = false;
-                if (Array.isArray(b.profit_branch_codes) && b.profit_branch_codes.length > 0) {
-                    const def = b.profit_branch_codes.find((c: any) => c.is_default);
-                    if (def) {
-                        defaultCode = def.code;
-                        isDefault = true;
-                    } else {
-                        defaultCode = b.profit_branch_codes[0].code;
-                    }
-                }
-                return {
-                    id: b.id,
-                    name: b.name,
-                    agent_url: b.agent_url,
-                    agent_token: b.agent_token,
-                    profit_branch_code: defaultCode,
-                    is_default: isDefault
-                };
-            });
-        }
+        // 1. Obtener todas las sucursales (con caché en memoria)
+        const allBranches = await getActiveBranches(fetch);
 
         // Filtrar sucursales según permisos del perfil
         const profileAllowed = profile?.allowed_branches || [];
@@ -214,9 +183,8 @@ export const actions: Actions = {
             return fail(403, { message: 'No tienes permiso para ACTUALIZAR proveedores.' });
         }
 
-        // 1. Determinar sucursales para Broadcast (todas las sucursales activas para consistencia de maestros)
-        const { data: branchesData } = await supabaseAdmin.from('branches').select('*').eq('active', true);
-        const targetBranches = branchesData || [];
+        // 1. Determinar sucursales para Broadcast (todas las sucursales activas con caché)
+        const targetBranches = await getActiveBranches(fetch);
 
         if (targetBranches.length === 0) {
             return fail(400, { message: 'No se encontraron sucursales activas.' });
@@ -340,8 +308,7 @@ export const actions: Actions = {
         const isAdmin = profileAllowed.length === 0;
 
         if (isAdmin) {
-            const { data } = await supabaseAdmin.from('branches').select('*').eq('active', true);
-            targetBranches = data || [];
+            targetBranches = await getActiveBranches(fetch);
         } else {
             targetBranches = profileAllowed;
         }

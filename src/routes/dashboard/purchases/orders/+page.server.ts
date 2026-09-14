@@ -2,6 +2,7 @@ import { protectLoad, protectAction } from '$lib/server/permissions';
 import { AgentClient } from '$lib/server/agent';
 import { hasPermission } from '$lib/server/auth';
 import { logAction } from '$lib/server/audit';
+import { getActiveBranches } from '$lib/server/branches';
 import { supabaseAdmin } from '$lib/server/supabase';
 import { redirect, fail, type Actions } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
@@ -19,41 +20,8 @@ export const load: PageServerLoad = protectLoad('pur_orders', async ({ url, loca
 	}
 
 	try {
-		// 1. Obtener todas las sucursales de Supabase
-		let allBranches: any[] = [];
-		const { data: dbBranches, error } = await supabaseAdmin
-			.from('branches')
-			.select('id, name, agent_url, agent_token, profit_branch_codes, active, sort_order')
-			.eq('active', true)
-			.order('sort_order')
-			.order('name');
-
-		if (error) {
-			console.error('[PUR_ORDERS] Supabase branches error:', error.message);
-		} else if (dbBranches) {
-			allBranches = dbBranches.map(b => {
-				let defaultCode = '';
-				let isDefault = false;
-				if (Array.isArray(b.profit_branch_codes) && b.profit_branch_codes.length > 0) {
-					const def = b.profit_branch_codes.find((c: any) => c.is_default);
-					if (def) {
-						defaultCode = def.code;
-						isDefault = true;
-					} else {
-						defaultCode = b.profit_branch_codes[0].code;
-					}
-				}
-				return {
-					id: b.id,
-					name: b.name,
-					agent_url: b.agent_url,
-					agent_token: b.agent_token,
-					profit_branch_code: defaultCode,
-					profit_branch_codes: b.profit_branch_codes,
-					is_default: isDefault
-				};
-			});
-		}
+		// 1. Obtener todas las sucursales (con caché en memoria resiliente)
+		const allBranches = await getActiveBranches(fetch);
 
 		// Filtrar sucursales según permisos del perfil
 		const profileAllowed = profile?.allowed_branches || [];
@@ -206,8 +174,7 @@ export const actions: Actions = {
 		};
 
 		// Broadcast: crear proveedor en todas las sedes activas para paridad universal
-		const { data: branchesData } = await supabaseAdmin.from('branches').select('*').eq('active', true);
-		const targetBranches = branchesData || [];
+		const targetBranches = await getActiveBranches(fetch);
 		if (targetBranches.length === 0) return fail(400, { message: 'No se encontraron sucursales activas.' });
 
 		let successCount = 0; let failedBranches: string[] = []; let createdSupplier = null;
