@@ -24,6 +24,7 @@ export class AgentClient {
 	private apiKey: string;
 	private sqlAuth: string | null = null;
 	private branchId: string | null = null;
+	private profitUser: string | null = null;
 
 	constructor(
 		company: { slug: string; agent_url?: string; agent_api_key?: string; agent_token?: string }, 

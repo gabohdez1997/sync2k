@@ -236,7 +236,7 @@
         },
         {
           id: "pur_payments",
-          label: "Pagos",
+          label: "Pagos a Proveedores",
           href: "/dashboard/purchases/payments",
           icon: Wallet,
         },
@@ -428,7 +428,12 @@
   }
 
   function getEffectiveHref(item: any) {
+    const isAdmin = profile?.roles?.some((r: any) => 
+      (typeof r === "string" && (r.toLowerCase().includes("admin") || r.toLowerCase().includes("administrador"))) || 
+      (typeof r === "object" && (r.name?.toLowerCase().includes("admin") || r.name?.toLowerCase().includes("administrador")))
+    );
     const perms = profile?.permissions?.[item.id];
+    if (isAdmin && (!perms || perms.read !== false)) return item.href;
     if (!perms) return null;
     if (perms.read) return item.href;
     if (perms.create) return `${item.href}/new`; // Ruta de creación si no puede leer

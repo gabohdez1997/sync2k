@@ -4,6 +4,7 @@
 import { fail } from '@sveltejs/kit';
 import { protectLoad, protectAction } from '$lib/server/permissions';
 import { supabaseAdmin } from '$lib/server/supabase';
+import { clearProfileCache } from '$lib/server/auth';
 import type { PageServerLoad, Actions } from './$types';
 
 // ─── Load ──────────────────────────────────────────────────────
@@ -97,6 +98,9 @@ export const actions: Actions = {
       p_old_data:   oldData ? JSON.stringify(oldData) : null,
       p_new_data:   JSON.stringify(payload)
     });
+
+    // Invalidate profile cache so all active users get updated permissions immediately
+    clearProfileCache();
 
     return { success: true, savedId, savedName: roleName };
   }),

@@ -399,7 +399,7 @@ export const actions: Actions = {
     // Obtener las sucursales activas con agent_url
     const { data: branches } = await supabaseAdmin
       .from('branches')
-      .select('id, name, agent_url, agent_token, active')
+      .select('id, name, agent_url, agent_token, active, profit_branch_codes')
       .eq('active', true);
 
     const activeBranches = (branches || []).filter(b => b.agent_url);
@@ -507,9 +507,31 @@ export const actions: Actions = {
             const missingUsers = unifiedUsers.filter(u => !userKeySet.has(String(u.Cod_Usuario || '').trim().toUpperCase()));
             const missingMapas = unifiedMapas.filter(m => !mapaKeySet.has(`${String(m.co_mapa || '').trim().toUpperCase()}__${String(m.producto || 'ADMI').trim().toUpperCase()}`));
 
+            // Obtener la sucursal por defecto configurada para la sede destino b
+            let defaultSucuCode: string | null = null;
+            let validCodes: string[] = [];
+            if (Array.isArray(b.branch.profit_branch_codes) && b.branch.profit_branch_codes.length > 0) {
+              const def = b.branch.profit_branch_codes.find((c: any) => c && c.is_default);
+              defaultSucuCode = def ? String(def.code).trim() : String(b.branch.profit_branch_codes[0]?.code || b.branch.profit_branch_codes[0]).trim();
+              validCodes = b.branch.profit_branch_codes.map((c: any) => String(typeof c === 'object' ? c.code : c).trim());
+            } else if (typeof b.branch.profit_branch_codes === 'string' && b.branch.profit_branch_codes.trim()) {
+              defaultSucuCode = b.branch.profit_branch_codes.trim();
+              validCodes = [defaultSucuCode];
+            }
+
+            // Asignar a los usuarios la sucursal por defecto de la sede destino si no tienen una válida en dicha sede
+            const branchUsers = unifiedUsers.map(u => {
+              const userSucu = u.Sucursal ? String(u.Sucursal).trim() : null;
+              const sucursalToUse = (userSucu && validCodes.includes(userSucu)) ? userSucu : (defaultSucuCode || userSucu);
+              return {
+                ...u,
+                Sucursal: sucursalToUse
+              };
+            });
+
             const payload = {
               mapas: unifiedMapas,
-              usuarios: unifiedUsers,
+              usuarios: branchUsers,
               perfiles: unifiedPerfiles,
               reportes_mapa: unifiedReportesMapa
             };
@@ -519,7 +541,7 @@ export const actions: Actions = {
             let branchMigratedMapas = missingMapas.length;
 
             try {
-              const importRes = await b.client.importMasterUsers(payload);
+              const importRes = await b.client.importMasterUsers(payload, b.branch.id);
               if (!importRes || !importRes.success) {
                 branchErrors.push(importRes?.message || 'Error al importar datos a MasterProfitPro');
               } else {

@@ -56,12 +56,36 @@ export async function getActiveBranches(fetchFn?: typeof fetch): Promise<BranchR
   inFlightBranchesPromise = (async () => {
     try {
       const supabaseAdmin = getSupabaseAdmin(fetchFn);
-      const { data: dbBranches, error } = await supabaseAdmin
+      let { data: dbBranches, error } = await supabaseAdmin
         .from('branches')
         .select('id, name, agent_url, agent_token, profit_branch_codes, profit_server_id, local_dns_alias, default_warehouse, allow_decimals_units, default_seller, active, sort_order')
         .eq('active', true)
         .order('sort_order')
         .order('name');
+
+      // Fallback si la columna default_seller aún no ha sido migrada en Supabase
+      if (error && error.message.includes('default_seller')) {
+        const fallback = await supabaseAdmin
+          .from('branches')
+          .select('id, name, agent_url, agent_token, profit_branch_codes, profit_server_id, local_dns_alias, default_warehouse, allow_decimals_units, active, sort_order')
+          .eq('active', true)
+          .order('sort_order')
+          .order('name');
+        dbBranches = fallback.data;
+        error = fallback.error;
+      }
+
+      // Fallback si default_warehouse o allow_decimals_units no existen
+      if (error && (error.message.includes('default_warehouse') || error.message.includes('allow_decimals_units'))) {
+        const fallback = await supabaseAdmin
+          .from('branches')
+          .select('id, name, agent_url, agent_token, profit_branch_codes, profit_server_id, local_dns_alias, active, sort_order')
+          .eq('active', true)
+          .order('sort_order')
+          .order('name');
+        dbBranches = fallback.data;
+        error = fallback.error;
+      }
 
       if (error) {
         console.warn(`[BRANCHES] Supabase error (${error.message}).`);

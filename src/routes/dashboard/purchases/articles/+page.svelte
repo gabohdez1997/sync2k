@@ -35,9 +35,9 @@
 
   let { data }: { data: PageData } = $props();
 
-  const canCreate = data.crud?.create ?? true;
-  const canEdit = data.crud?.update ?? true;
-  const canDelete = data.crud?.delete ?? true;
+  const canCreate = $derived(data.crud?.create ?? true);
+  const canEdit = $derived(data.crud?.update ?? true);
+  const canDelete = $derived(data.crud?.delete ?? true);
 
   let selectedBranch = $state($page.url.searchParams.get("branch_id") || "");
   let searchTerm = $state($page.url.searchParams.get("search") || "");

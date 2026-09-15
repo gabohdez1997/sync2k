@@ -112,6 +112,13 @@
           excludeUpdate: true,
           excludeDelete: true,
         },
+        {
+          id: "pur_payments",
+          label: "Pagos a Proveedores",
+          hasOthers: true,
+          hasVoid: true,
+          excludeDelete: true,
+        },
       ],
     },
     {

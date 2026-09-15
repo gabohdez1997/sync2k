@@ -45,6 +45,18 @@ export function hasPermission(
     return false;
   }
 
+  const isAdmin = profile.roles?.some((r: any) => 
+    (typeof r === 'string' && (r.toLowerCase().includes('admin') || r.toLowerCase().includes('administrador'))) || 
+    (typeof r === 'object' && (r.name?.toLowerCase().includes('admin') || r.name?.toLowerCase().includes('administrador')))
+  );
+
+  if (isAdmin) {
+    if (profile.permissions[optionId]?.[action] === false) {
+      return false;
+    }
+    return true;
+  }
+
   const hasIt = profile.permissions[optionId]?.[action] ?? false;
 
   if (!hasIt) {
