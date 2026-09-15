@@ -198,7 +198,8 @@
       .filter(({ item }) => {
         const code = String(item.article?.co_art || item.article?.codigo || item.co_art || '').toLowerCase();
         const desc = String(item.article?.art_des || item.article?.descripcion || item.art_des || '').toLowerCase();
-        return code.includes(term) || desc.includes(term);
+        const mod = String(item.modelo || item.article?.modelo || '').toLowerCase();
+        return code.includes(term) || desc.includes(term) || mod.includes(term);
       });
   });
 
@@ -260,6 +261,7 @@
               co_lin: String(r.co_lin || "").trim(),
               co_subl: String(r.co_subl || "").trim(),
               art_des: String(r.art_des || "").trim(),
+              modelo: String(r.modelo || "").trim(),
               qty: Number(r.cantidad || 0),
               precio_ves: Number(r.cost_unit || r.precio || 0),
               precio_usd: Number(r.cost_unit_om || 0),
@@ -347,6 +349,7 @@
             co_lin: fresh.co_lin || cart[i].co_lin,
             co_subl: fresh.co_subl || cart[i].co_subl,
             art_des: fresh.descripcion || fresh.art_des || cart[i].art_des,
+            modelo: fresh.modelo || cart[i].modelo,
             disponibilidad: validDispo,
             precios: fresh.precios && fresh.precios.length > 0 ? fresh.precios : cart[i].precios,
             unidad: fresh.unidad || cart[i].unidad,
@@ -542,6 +545,7 @@
         article,
         co_art: code,
         art_des: article.art_des || article.descripcion,
+        modelo: article.modelo || "",
         qty,
         precio_usd: costUSD,
         precio_ves: costVES,
@@ -1060,6 +1064,7 @@
             article: art,
             co_art: artCode,
             art_des: art.art_des || art.descripcion || artCode,
+            modelo: art.modelo || "",
             qty: qtyToAdd,
             precio_usd: costUSD,
             precio_ves: costVES,
@@ -1910,9 +1915,13 @@
                 <h3 class="font-black text-sm leading-tight group-hover:text-brand-400 transition-colors">
                   {article.art_des || article.descripcion}
                 </h3>
-                <p class="text-[10px] text-text-muted mt-1 font-bold uppercase tracking-wider">
+                <div class="flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider mt-1 flex-wrap">
                   <span class="text-brand-400">{article.unidad || "UNID"}</span>
-                </p>
+                  {#if (article.modelo || article.item?.modelo)?.trim()}
+                    <span class="h-1 w-1 rounded-full bg-border-subtle"></span>
+                    <span class="text-text-muted">{(article.modelo || article.item?.modelo).trim()}</span>
+                  {/if}
+                </div>
 
                 <!-- Costo Unitario Editable (Real o Calculado) -->
                 <div class="mt-4 flex flex-col gap-1.5">
@@ -2271,6 +2280,10 @@
                           <span class="text-brand-400 font-mono">{item.co_art}</span>
                           <span class="h-1 w-1 rounded-full bg-border-subtle"></span>
                           <span class="text-text-muted">{item.unidad || item.co_uni || "UNID"}</span>
+                          {#if (item.modelo || item.article?.modelo)?.trim()}
+                            <span class="h-1 w-1 rounded-full bg-border-subtle"></span>
+                            <span class="text-text-muted">{(item.modelo || item.article?.modelo).trim()}</span>
+                          {/if}
                           <span class="h-1 w-1 rounded-full bg-border-subtle"></span>
                           <span class={item.article?.ultimo_costo_om > 0 ? "text-emerald-400" : "text-amber-400"}>
                             {item.article?.ultimo_costo_om > 0 ? "Costo Real" : "Costo Calculado"}
