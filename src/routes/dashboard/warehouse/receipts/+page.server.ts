@@ -1,8 +1,8 @@
-// src/routes/dashboard/warehouse/receipts/+page.server.ts
 import { protectLoad, protectAction } from '$lib/server/permissions';
 import { AgentClient } from '$lib/server/agent';
 import { hasPermission } from '$lib/server/auth';
 import { logAction } from '$lib/server/audit';
+import { supabaseAdmin } from '$lib/server/supabase';
 import { fail, type Actions } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
 
@@ -87,6 +87,20 @@ export const load: PageServerLoad = protectLoad('inv_receipts', async ({ url, lo
     const canUpdate = hasPermission(profile, 'inv_receipts', 'update');
     const canVoid = hasPermission(profile, 'inv_receipts', 'void');
 
+    const buyersMap: Record<string, string> = {};
+    try {
+        const { data: profs } = await supabaseAdmin
+            .from('profiles')
+            .select('profit_user, full_name');
+        (profs || []).forEach((p: any) => {
+            if (p.profit_user && p.full_name) {
+                buyersMap[p.profit_user.trim().toUpperCase()] = p.full_name.trim();
+            }
+        });
+    } catch (e) {
+        console.warn('[RECEIPTS LOAD] Advertencia cargando perfiles de compradores:', e);
+    }
+
     return {
         title: 'Nota de Recepción de Almacén',
         branches: allowedBranches,
@@ -96,6 +110,7 @@ export const load: PageServerLoad = protectLoad('inv_receipts', async ({ url, lo
         defaultWarehouse,
         tasa: currentTasa,
         preloadedReceipt,
+        buyersMap,
         canCreate,
         canUpdate,
         canVoid
@@ -108,6 +123,8 @@ export const actions: Actions = {
         const formData = await request.formData();
         const branchId = formData.get('branch_id') as string;
         const searchQuery = (formData.get('search') as string || '').trim();
+        const coProv = (formData.get('co_prov') as string || '').trim();
+        const coUsIn = (formData.get('co_us_in') as string || '').trim();
 
         const branch = (profile.allowed_branches || []).find((b: any) => b.id === branchId);
         if (!branch || !branch.agent_url) {
@@ -121,7 +138,15 @@ export const actions: Actions = {
         }, profile, fetch);
 
         try {
-            const res = await agentClient.getPendingPurchaseOrders({ search: searchQuery });
+            const filters: Record<string, string> = {};
+            if (searchQuery) filters.search = searchQuery;
+            if (coProv) {
+                filters.co_prov = coProv;
+                filters.exact = 'true';
+            }
+            if (coUsIn) filters.co_us_in = coUsIn;
+
+            const res = await agentClient.getPendingPurchaseOrders(filters);
             return {
                 success: true,
                 orders: res?.data || []
@@ -214,16 +239,20 @@ export const actions: Actions = {
             ).toString().trim();
 
             // Registrar log de auditoría
+            const ocDisplay = Array.isArray(payload.doc_num_oc)
+                ? payload.doc_num_oc.filter(Boolean).join(', ')
+                : String(payload.doc_num_oc || '---');
+
             await logAction({
                 profile_id: profile.id,
                 module: 'inv_receipts',
                 action: 'CREATE',
-                description: `Nota de Recepción N° ${docNum} creada para proveedor ${payload.co_prov} (OC: ${payload.doc_num_oc || '---'})`,
+                description: `Nota de Recepción N° ${docNum} creada para proveedor ${payload.co_prov} (OC: ${ocDisplay})`,
                 branch_id: branch.id,
                 details: {
                     doc_num: docNum,
                     co_prov: payload.co_prov,
-                    doc_num_oc: payload.doc_num_oc,
+                    doc_num_oc: ocDisplay,
                     total_neto: saveRes.data?.total_neto || saveRes.results?.[0]?.data?.total_neto,
                     total_art: saveRes.data?.total_art || saveRes.results?.[0]?.data?.total_art,
                     almacen_ingreso: saveRes.data?.almacen_ingreso || saveRes.results?.[0]?.data?.almacen_ingreso

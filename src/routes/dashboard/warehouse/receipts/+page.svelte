@@ -29,7 +29,8 @@
     Layers,
     Tag,
     History,
-    Edit2
+    Edit2,
+    User
   } from "lucide-svelte";
   import { toast } from "svelte-sonner";
   import { goto } from "$app/navigation";
@@ -48,11 +49,35 @@
   let showUSD = $state(true);
   let activeTasa = $state(data.tasa || 1);
 
-  let selectedOrder = $state<any>(null);
+  let selectedOrders = $state<any[]>([]);
   let receiptLines = $state<any[]>([]);
   let observations = $state("");
   let nroFacturaProveedor = $state("");
   let isSavingReceipt = $state(false);
+
+  // Orden principal y criterios de compatibilidad (mismo proveedor y mismo comprador)
+  const primaryOrder = $derived(selectedOrders[0] || null);
+  const primarySupplier = $derived(
+    primaryOrder
+      ? {
+          co_prov: primaryOrder.co_prov,
+          prov_des: primaryOrder.prov_des,
+          rif: primaryOrder.rif,
+          prov_dir: primaryOrder.prov_dir,
+          telefonos: primaryOrder.telefonos,
+          co_cond: primaryOrder.co_cond,
+          cond_des: primaryOrder.cond_des,
+          co_mone: primaryOrder.co_mone
+        }
+      : null
+  );
+  const primaryBuyer = $derived(primaryOrder?.co_us_in?.trim().toUpperCase() || null);
+
+  function getBuyerName(code?: string) {
+    if (!code) return "Sin Comprador";
+    const upper = code.trim().toUpperCase();
+    return data.buyersMap?.[upper] ? `${data.buyersMap[upper]} (${upper})` : upper;
+  }
 
   // Edit Mode State
   let isEditing = $state(false);
@@ -75,7 +100,7 @@
       observations = cleanDescrip;
       nroFacturaProveedor = p.nro_fact ? p.nro_fact.trim() : "";
 
-      selectedOrder = {
+      selectedOrders = [{
         doc_num: p.orden_compra || (p.renglones && p.renglones[0]?.num_doc) || p.n_control,
         co_prov: p.co_prov,
         prov_des: p.prov_des,
@@ -86,9 +111,10 @@
         cond_des: p.cond_des,
         co_mone: p.co_mone,
         tasa: p.tasa,
+        co_us_in: p.oc_co_us_in || p.co_us_in,
         nro_fact: p.nro_fact ? p.nro_fact.trim() : "",
         comentario: cleanComment
-      };
+      }];
 
       receiptLines = (p.renglones || []).map((l: any) => {
         const cantActual = Number(l.cantidad || l.total_art || 0);
@@ -96,6 +122,7 @@
         const cantOriginal = Number(l.cant_original != null ? l.cant_original : cantPendiente);
         return {
           ...l,
+          doc_num: (l.num_doc || p.orden_compra || "").trim(),
           checked: cantActual > 0,
           cant_recibida: cantActual,
           cant_pendiente: cantPendiente > 0 ? cantPendiente : cantActual,
@@ -217,6 +244,16 @@
       formData.append("branch_id", filterSede);
       formData.append("search", importSearchQuery);
 
+      // Si ya hay al menos una orden cargada, filtramos estrictamente por ese mismo proveedor y comprador
+      if (primaryOrder) {
+        if (primaryOrder.co_prov) {
+          formData.append("co_prov", primaryOrder.co_prov.trim());
+        }
+        if (primaryOrder.co_us_in) {
+          formData.append("co_us_in", primaryOrder.co_us_in.trim());
+        }
+      }
+
       const res = await fetch("?/searchPendingOrders", {
         method: "POST",
         body: formData
@@ -224,7 +261,24 @@
 
       const result = deserialize(await res.text());
       if (result.type === "success" && (result.data as any)?.orders) {
-        foundOrders = (result.data as any).orders;
+        let orders = (result.data as any).orders || [];
+
+        // Excluir órdenes que ya estén agregadas en selectedOrders
+        const loadedDocNums = new Set(selectedOrders.map((o) => o.doc_num?.trim().toUpperCase()));
+        orders = orders.filter((o: any) => !loadedDocNums.has(o.doc_num?.trim().toUpperCase()));
+
+        // Asegurar filtro en cliente si ya hay orden cargada (doble garantía)
+        if (primaryOrder) {
+          const reqProv = (primaryOrder.co_prov || "").trim().toUpperCase();
+          const reqBuyer = (primaryOrder.co_us_in || "").trim().toUpperCase();
+          orders = orders.filter((o: any) => {
+            const oProv = (o.co_prov || "").trim().toUpperCase();
+            const oBuyer = (o.co_us_in || "").trim().toUpperCase();
+            return (!reqProv || oProv === reqProv) && (!reqBuyer || oBuyer === reqBuyer);
+          });
+        }
+
+        foundOrders = orders;
       } else if (result.type === "failure") {
         toast.error((result.data as any)?.message || "Error al buscar órdenes.");
       }
@@ -245,8 +299,31 @@
     searchPendingOrders();
   }
 
-  // --- SELECCIONAR E IMPORTAR ORDEN DE COMPRA ---
+  // --- SELECCIONAR E INCORPORAR ORDEN DE COMPRA ---
   async function selectOrder(order: any) {
+    // Validar si ya está cargada
+    if (selectedOrders.some((o) => o.doc_num?.trim().toUpperCase() === order.doc_num?.trim().toUpperCase())) {
+      toast.info(`La orden ${order.doc_num} ya está en la recepción.`);
+      return;
+    }
+
+    // Validar compatibilidad de proveedor y comprador si ya hay órdenes cargadas
+    if (primaryOrder) {
+      const pProv = (primaryOrder.co_prov || "").trim().toUpperCase();
+      const oProv = (order.co_prov || "").trim().toUpperCase();
+      if (pProv && oProv && pProv !== oProv) {
+        toast.error(`No se puede agregar: La orden es del proveedor (${order.prov_des || order.co_prov}), pero la recepción actual es para (${primaryOrder.prov_des || primaryOrder.co_prov}).`);
+        return;
+      }
+
+      const pBuyer = (primaryOrder.co_us_in || "").trim().toUpperCase();
+      const oBuyer = (order.co_us_in || "").trim().toUpperCase();
+      if (pBuyer && oBuyer && pBuyer !== oBuyer) {
+        toast.error(`No se puede agregar: El comprador de la orden (${getBuyerName(order.co_us_in)}) no coincide con el comprador de la recepción (${getBuyerName(primaryOrder.co_us_in)}).`);
+        return;
+      }
+    }
+
     isLoadingOrderDetail = true;
     try {
       const formData = new FormData();
@@ -262,18 +339,23 @@
 
       if (result.type === "success" && (result.data as any)?.order) {
         const orderData = (result.data as any).order;
-        selectedOrder = orderData;
-        
-        observations = "";
+        // Preservar co_us_in de order si orderData no lo trae
+        if (!orderData.co_us_in && order.co_us_in) {
+          orderData.co_us_in = order.co_us_in;
+        }
 
-        // Inicializar renglones con cantidad recibida pre-llenada igual al saldo pendiente
-        receiptLines = (orderData.renglones || [])
+        // Agregar orden a la lista de órdenes seleccionadas
+        selectedOrders = [...selectedOrders, orderData];
+
+        // Mapear renglones de la nueva orden agregando su num_doc origen
+        const newLines = (orderData.renglones || [])
           .filter((l: any) => Number(l.cant_pendiente != null ? l.cant_pendiente : l.pendiente) > 0)
           .map((l: any) => {
             const pending = Number(l.cant_pendiente != null ? l.cant_pendiente : l.pendiente);
             const original = Number(l.cant_original != null ? l.cant_original : l.total_art);
             return {
               ...l,
+              doc_num: orderData.doc_num,
               checked: true,
               cant_recibida: pending,
               cant_pendiente: pending,
@@ -282,10 +364,11 @@
             };
           });
 
+        receiptLines = [...receiptLines, ...newLines];
         showImportModal = false;
-        toast.success(`Orden de compra ${orderData.doc_num} importada correctamente.`);
+        toast.success(`Orden de compra ${orderData.doc_num} agregada a la recepción.`);
       } else {
-        toast.error((result.data as any)?.message || "No se pudo cargar el detalle de la orden.");
+        toast.error(((result as any).data)?.message || "No se pudo cargar el detalle de la orden.");
       }
     } catch (e: any) {
       console.error(e);
@@ -295,8 +378,20 @@
     }
   }
 
-  function removeOrder() {
-    selectedOrder = null;
+  // Quitar una orden específica
+  function removeSingleOrder(docNum: string) {
+    selectedOrders = selectedOrders.filter((o) => o.doc_num !== docNum);
+    receiptLines = receiptLines.filter((l) => l.doc_num !== docNum);
+    if (selectedOrders.length === 0) {
+      observations = "";
+      linesSearchTerm = "";
+    }
+    toast.info(`Orden ${docNum} retirada de la recepción.`);
+  }
+
+  // Quitar todas las órdenes
+  function removeAllOrders() {
+    selectedOrders = [];
     receiptLines = [];
     observations = "";
     linesSearchTerm = "";
@@ -328,8 +423,8 @@
 
   // --- GUARDAR / PROCESAR NOTA DE RECEPCIÓN ---
   async function submitReceipt() {
-    if (!selectedOrder) {
-      toast.error("Debes importar una orden de compra primero.");
+    if (selectedOrders.length === 0 || !primaryOrder) {
+      toast.error("Debes importar al menos una orden de compra.");
       return;
     }
 
@@ -362,26 +457,28 @@
     isSavingReceipt = true;
 
     try {
-      // Costos y valores mantenidos internamente para el SP de Profit Plus
+      const ocNums = selectedOrders.map((o) => String(o.doc_num || '').trim()).filter(Boolean);
+      const ocDisplay = ocNums.join(", ");
+
       const payload = {
         isEditing: isEditing,
         doc_num: isEditing ? editingDocNum : undefined,
-        co_prov: selectedOrder.co_prov,
-        co_mone: selectedOrder.co_mone || (showUSD ? "USD" : "BS"),
+        co_prov: primaryOrder.co_prov,
+        co_mone: primaryOrder.co_mone || (showUSD ? "USD" : "BS"),
         tasa: activeTasa,
         showUSD: showUSD,
-        doc_num_oc: selectedOrder.doc_num,
-        descrip: observations.trim() || `RECEPCION OC ${selectedOrder.doc_num}`,
-        co_cond: selectedOrder.co_cond || "CONT",
-        n_control: undefined,
+        doc_num_oc: ocNums,
+        descrip: observations.trim() || `RECEPCION OC ${ocDisplay}`.substring(0, 60),
+        co_cond: primaryOrder.co_cond || "CONT",
+        n_control: ocNums.length === 1 ? ocNums[0] : undefined,
         nro_fact: nroFacturaProveedor.trim() || undefined,
-        comentario: `Recepción de OC ${selectedOrder.doc_num}`,
+        comentario: observations.trim() ? `${observations.trim()} | OC: ${ocDisplay}` : `Recepción de OC: ${ocDisplay}`,
         co_alma_defecto: data.defaultWarehouse || "01",
         renglones: linesToProcess.map((l, i) => ({
           reng_num: i + 1,
-          reng_num_oc: l.reng_num,
+          reng_num_oc: l.reng_num_oc || l.reng_num,
           rowguid_doc: l.rowguid_doc,
-          num_doc: selectedOrder.doc_num,
+          num_doc: l.doc_num || primaryOrder.doc_num,
           co_art: l.co_art,
           art_des: l.art_des,
           co_uni: l.co_uni || "UNI",
@@ -412,7 +509,7 @@
         saveSuccess = true;
         toast.success(isEditing ? `Nota de Recepción N° ${generatedDocNum} actualizada con éxito.` : `Nota de Recepción N° ${generatedDocNum} generada con éxito.`);
       } else {
-        toast.error((result.data as any)?.message || "Error al procesar la nota de recepción.");
+        toast.error(((result as any).data)?.message || "Error al procesar la nota de recepción.");
       }
     } catch (e: any) {
       console.error(e);
@@ -423,7 +520,7 @@
   }
 
   function resetForm() {
-    selectedOrder = null;
+    selectedOrders = [];
     receiptLines = [];
     observations = "";
     nroFacturaProveedor = "";
@@ -559,14 +656,14 @@
     <div class="grid grid-cols-1 xl:grid-cols-3 gap-8">
       <!-- LEFT/CENTER: RECEIPT FORM & LINES -->
       <div class="xl:col-span-2 space-y-6">
-        <!-- SUPPLIER INFO BOX -->
+        <!-- SUPPLIER & ORDERS INFO BOX -->
         <div class="glass p-6 rounded-3xl border border-border-subtle shadow-xl space-y-4">
           <h3 class="text-sm font-black uppercase tracking-widest text-text-muted flex items-center gap-2">
             <Building size={16} />
-            Datos del Proveedor y Orden
+            Datos del Proveedor y Comprador
           </h3>
 
-          {#if !selectedOrder}
+          {#if selectedOrders.length === 0 || !primarySupplier}
             <div class="p-8 border border-dashed border-border-subtle rounded-2xl flex flex-col items-center justify-center text-center gap-2">
               <Building size={32} class="text-text-muted/30" />
               <p class="text-xs text-text-muted font-bold">
@@ -578,27 +675,36 @@
               <div class="md:col-span-2 space-y-1">
                 <span class="text-[9px] font-black uppercase tracking-widest text-text-muted">Razón Social / Proveedor</span>
                 <p class="text-base font-black text-text-base">
-                  {selectedOrder.prov_des || selectedOrder.co_prov}
+                  {primarySupplier.prov_des || primarySupplier.co_prov}
                 </p>
               </div>
               <div class="space-y-1">
                 <span class="text-[9px] font-black uppercase tracking-widest text-text-muted">RIF / Código</span>
                 <p class="text-base font-bold font-mono text-text-base">
-                  {selectedOrder.rif || selectedOrder.co_prov}
+                  {primarySupplier.rif || primarySupplier.co_prov}
                 </p>
               </div>
-              <div class="md:col-span-2 space-y-1">
+              <div class="space-y-1">
                 <span class="text-[9px] font-black uppercase tracking-widest text-text-muted">Dirección</span>
                 <p class="text-xs text-text-muted font-bold leading-relaxed">
-                  {selectedOrder.prov_dir || "Sin dirección registrada"}
+                  {primarySupplier.prov_dir || "Sin dirección registrada"}
                 </p>
               </div>
               <div class="space-y-1">
                 <span class="text-[9px] font-black uppercase tracking-widest text-text-muted">Teléfono</span>
                 <p class="text-xs text-text-muted font-bold font-mono">
-                  {selectedOrder.telefonos || "---"}
+                  {primarySupplier.telefonos || "---"}
                 </p>
               </div>
+              <div class="space-y-1">
+                <span class="text-[9px] font-black uppercase tracking-widest text-text-muted">Comprador (OC)</span>
+                <p class="text-xs font-bold font-mono text-blue-400 flex items-center gap-1.5 truncate" title={getBuyerName(primaryBuyer)}>
+                  <User size={13} class="shrink-0" />
+                  {getBuyerName(primaryBuyer)}
+                </p>
+              </div>
+
+              <!-- Sub-detalles y Órdenes vinculadas -->
               <div class="md:col-span-3 grid grid-cols-2 md:grid-cols-4 gap-4 pt-3 border-t border-border-subtle/30">
                 {#if isEditing}
                   <div class="space-y-1">
@@ -609,15 +715,9 @@
                   </div>
                 {/if}
                 <div class="space-y-1">
-                  <span class="text-[9px] font-black uppercase tracking-widest text-text-muted">Orden de Compra</span>
-                  <p class="text-xs font-bold font-mono text-brand-400">
-                    {selectedOrder.doc_num}
-                  </p>
-                </div>
-                <div class="space-y-1">
                   <span class="text-[9px] font-black uppercase tracking-widest text-text-muted">N° Factura / NDR</span>
                   <p class="text-xs font-bold font-mono text-cyan-400">
-                    {nroFacturaProveedor || selectedOrder.nro_fact || "---"}
+                    {nroFacturaProveedor || primaryOrder?.nro_fact || "---"}
                   </p>
                 </div>
                 <div class="space-y-1">
@@ -630,8 +730,38 @@
                 <div class="space-y-1">
                   <span class="text-[9px] font-black uppercase tracking-widest text-text-muted">Condición Pago</span>
                   <p class="text-xs font-bold text-text-base">
-                    {selectedOrder.cond_des || selectedOrder.co_cond || "CONTADO"}
+                    {primarySupplier.cond_des || primarySupplier.co_cond || "CONTADO"}
                   </p>
+                </div>
+              </div>
+
+              <!-- Órdenes de Compra Vinculadas -->
+              <div class="md:col-span-3 space-y-2 pt-3 border-t border-border-subtle/30">
+                <div class="flex items-center justify-between">
+                  <span class="text-[10px] font-black uppercase tracking-wider text-text-muted flex items-center gap-1.5">
+                    <ShoppingBag size={13} class="text-brand-400" />
+                    Órdenes de Compra en esta Recepción ({selectedOrders.length})
+                  </span>
+                </div>
+                <div class="flex flex-wrap gap-2 pt-1">
+                  {#each selectedOrders as ord (ord.doc_num)}
+                    {@const ordLinesCount = receiptLines.filter(l => l.doc_num === ord.doc_num).length}
+                    {@const ordUnitsCount = receiptLines.filter(l => l.doc_num === ord.doc_num && l.checked).reduce((acc, l) => acc + Number(l.cant_recibida || 0), 0)}
+                    <div class="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-surface-soft border border-border-subtle text-xs font-bold shadow-sm">
+                      <span class="font-mono text-brand-400 font-black">OC: {ord.doc_num}</span>
+                      <span class="text-[10px] text-text-muted font-normal">({ordLinesCount} arts &bull; {formatQuantity(ordUnitsCount)} un.)</span>
+                      {#if !isEditing}
+                        <button
+                          type="button"
+                          onclick={() => removeSingleOrder(ord.doc_num)}
+                          class="p-0.5 hover:bg-red-500/20 hover:text-red-400 text-text-muted rounded transition-colors cursor-pointer"
+                          title="Quitar orden {ord.doc_num}"
+                        >
+                          <X size={13} />
+                        </button>
+                      {/if}
+                    </div>
+                  {/each}
                 </div>
               </div>
             </div>
@@ -663,16 +793,19 @@
               {/if}
             </div>
 
-            {#if selectedOrder}
-              <div class="flex items-center gap-2.5 px-4 py-2 bg-brand-500/10 border border-brand-500/20 text-xs md:text-sm font-bold text-text-base rounded-2xl transition-all shadow-sm shrink-0">
-                <span class="font-black text-brand-400 font-mono">OC: {selectedOrder.doc_num}</span>
+            {#if selectedOrders.length > 0}
+              <div class="flex items-center gap-2 shrink-0 flex-wrap">
+                <div class="flex items-center gap-1.5 px-3 py-1.5 bg-brand-500/10 border border-brand-500/20 text-xs font-bold text-text-base rounded-2xl">
+                  <span class="font-black text-brand-400 font-mono">{selectedOrders.length} {selectedOrders.length === 1 ? 'Orden' : 'Órdenes'}</span>
+                </div>
                 {#if !isEditing}
                   <button
-                    onclick={removeOrder}
-                    class="p-1 hover:bg-brand-500/20 text-brand-400 hover:text-brand-300 rounded-lg transition-colors cursor-pointer flex items-center justify-center border-none bg-transparent shrink-0"
-                    title="Quitar orden"
+                    type="button"
+                    onclick={removeAllOrders}
+                    class="p-1.5 hover:bg-red-500/20 text-text-muted hover:text-red-400 rounded-xl transition-colors cursor-pointer"
+                    title="Quitar todas las órdenes"
                   >
-                    <X size={14} class="stroke-[3]" />
+                    <Trash2 size={15} />
                   </button>
                 {/if}
               </div>
@@ -763,7 +896,12 @@
                           <span class="font-black text-text-base text-sm leading-snug" title={line.art_des}>
                             {line.art_des}
                           </span>
-                          <div class="flex items-center gap-2">
+                          <div class="flex items-center gap-2 flex-wrap">
+                            {#if line.doc_num}
+                              <span class="text-[10px] text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded font-mono font-bold">
+                                OC: {line.doc_num}
+                              </span>
+                            {/if}
                             <span class="text-[10px] text-text-muted font-mono font-bold">{line.co_art?.trim()}</span>
                             {#if line.modelo}
                               <span class="text-[10px] text-brand-400 font-bold">• Mod: {line.modelo.trim()}</span>
@@ -952,9 +1090,13 @@
       <!-- Modal Header -->
       <div class="p-8 border-b border-border-subtle flex justify-between items-center bg-surface-soft/50">
         <div>
-          <h2 class="text-2xl font-black tracking-tight">Importar Orden de Compra</h2>
+          <h2 class="text-2xl font-black tracking-tight">
+            {selectedOrders.length > 0 ? "Agregar Otra Orden de Compra" : "Importar Orden de Compra"}
+          </h2>
           <p class="text-text-muted text-sm">
-            Selecciona una orden de compra con saldo pendiente para recibir
+            {selectedOrders.length > 0
+              ? `Selecciona órdenes compatibles del mismo proveedor y comprador (${selectedOrders.length} ya agregada${selectedOrders.length > 1 ? 's' : ''})`
+              : "Selecciona una orden de compra con saldo pendiente para recibir"}
           </p>
         </div>
         <button
@@ -968,12 +1110,26 @@
 
       <!-- Contenido Modal -->
       <div class="flex-1 overflow-y-auto p-6 space-y-6 no-scrollbar min-h-[300px] custom-scrollbar">
+        {#if primaryOrder}
+          <div class="p-4 rounded-2xl bg-blue-500/10 border border-blue-500/20 flex items-start gap-3 text-xs" in:slide>
+            <Filter size={18} class="text-blue-400 shrink-0 mt-0.5" />
+            <div class="space-y-1">
+              <span class="font-black text-blue-400 uppercase tracking-wider block text-[10px]">
+                Filtro Automático de Órdenes Compatibles
+              </span>
+              <p class="text-text-base leading-relaxed">
+                Mostrando únicamente órdenes pendientes para el proveedor <strong class="text-white font-bold">{primarySupplier?.prov_des || primarySupplier?.co_prov}</strong> y comprador <strong class="text-blue-300 font-mono font-bold">{getBuyerName(primaryBuyer)}</strong>.
+              </p>
+            </div>
+          </div>
+        {/if}
+
         <!-- Buscador -->
         <div class="relative">
           <Search size={18} class="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted" />
           <input
             type="text"
-            placeholder="Buscar por nro. orden, RIF o nombre de proveedor..."
+            placeholder={primaryOrder ? "Buscar en órdenes compatibles por N° orden..." : "Buscar por nro. orden, RIF o nombre de proveedor..."}
             bind:value={importSearchQuery}
             oninput={searchPendingOrders}
             class="w-full bg-surface-soft border border-border-subtle pl-12 pr-4 py-3.5 rounded-2xl text-sm text-text-base placeholder-text-muted/50 focus:border-brand-500/50 focus:ring-0 focus:outline-hidden transition-all font-medium"
@@ -995,7 +1151,11 @@
           {:else if foundOrders.length === 0}
             <div class="flex flex-col items-center justify-center py-20 gap-3 text-text-muted opacity-50 bg-surface-base">
               <FileText size={48} />
-              <p class="font-bold">No se encontraron órdenes de compra pendientes</p>
+              <p class="font-bold">
+                {primaryOrder
+                  ? "No se encontraron otras órdenes de compra pendientes para este proveedor y comprador"
+                  : "No se encontraron órdenes de compra pendientes"}
+              </p>
             </div>
           {:else}
             {#each foundOrders as order (order.doc_num + order.sede_id)}
@@ -1009,6 +1169,7 @@
                 statusClass={isParcial ? 'bg-amber-500/10 text-amber-400 border-amber-500/20' : 'bg-brand-500/10 text-brand-400 border-brand-500/20'}
                 clientName={order.prov_des || order.co_prov}
                 clientRif={order.rif || order.co_prov}
+                cashierName={`Comprador: ${getBuyerName(order.co_us_in)}`}
                 dateEmis={dayjs(order.fec_emis).format("DD/MM/YYYY")}
                 qtyLabel={`${formatQuantity(pendingQty)} un.`}
                 branchName={order.sede_nombre || "N/A"}
