@@ -279,6 +279,35 @@ async function runSync() {
     } catch (auditErr) {
       console.warn('   ⚠ Error sincronizando audit_log:', auditErr.message);
     }
+
+    // Tabla: GLOBAL_CONSECUTIVOS (Bidireccional multi-sede)
+    try {
+      console.log('   Sincronizando correlativos globales (global_consecutivos)...');
+      const { data: cloudConsec, error: errConsec } = await supabase
+        .from('global_consecutivos')
+        .select('*');
+
+      if (!errConsec && cloudConsec) {
+        for (const row of cloudConsec) {
+          const localRowRes = await localClient.query(`SELECT prox_n FROM global_consecutivos WHERE tipo = $1`, [row.tipo]);
+          if (localRowRes.rows.length > 0) {
+            const localN = Number(localRowRes.rows[0].prox_n);
+            const cloudN = Number(row.prox_n);
+            if (localN > cloudN) {
+              await supabase.from('global_consecutivos').update({ prox_n: localN, updated_at: new Date().toISOString() }).eq('tipo', row.tipo);
+            } else if (cloudN > localN) {
+              await localClient.query(`UPDATE global_consecutivos SET prox_n = $1, updated_at = NOW() WHERE tipo = $2`, [cloudN, row.tipo]);
+            }
+          } else {
+            await localClient.query(`INSERT INTO global_consecutivos (tipo, prox_n, updated_at) VALUES ($1, $2, NOW()) ON CONFLICT (tipo) DO UPDATE SET prox_n = GREATEST(global_consecutivos.prox_n, EXCLUDED.prox_n)`, [row.tipo, row.prox_n]);
+          }
+        }
+        tablesSynced.push('global_consecutivos');
+        console.log('   ✓ Correlativos globales sincronizados.');
+      }
+    } catch (consecErr) {
+      console.warn('   ⚠ Error sincronizando global_consecutivos:', consecErr.message);
+    }
     // Registrar éxito
     if (recordsSynced > 0) {
       await localClient.query(`
