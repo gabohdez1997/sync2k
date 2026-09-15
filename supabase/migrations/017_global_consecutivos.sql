@@ -12,7 +12,7 @@ CREATE TABLE IF NOT EXISTS global_consecutivos (
 -- Seed con los valores actuales consolidados de las sedes (Boca de Río / Paraparal)
 INSERT INTO global_consecutivos (tipo, prox_n, updated_at)
 VALUES 
-    ('C016', 4888, NOW()), -- Retención de IVA compras (IVAN)
+    ('C016', 4880, NOW()), -- Retención de IVA compras (IVAN)
     ('C015', 1116, NOW())  -- Retención de ISLR compras (ISLR)
 ON CONFLICT (tipo) DO UPDATE 
 SET prox_n = GREATEST(global_consecutivos.prox_n, EXCLUDED.prox_n),
