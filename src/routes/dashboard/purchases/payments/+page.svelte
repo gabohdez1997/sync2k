@@ -290,30 +290,17 @@
     ) / 100,
   );
 
-  // Saldo total pendiente original
-  let totalDeudaPendienteUsd = $derived(
+  // Saldo total pendiente solo de las facturas seleccionadas
+  let saldoPendientePorCobrar = $derived(
     Math.round(
       documentos.reduce((acc, doc) => {
+        if (!checkedDocs[doc.nro_doc.trim()]) return acc;
         const isNC = doc.co_tipo_doc.trim() === "N/CR";
         const docTasa = doc.tasa > 0 ? doc.tasa : 1;
         const saldoDocUsd = doc.saldo / docTasa;
         return isNC ? acc - saldoDocUsd : acc + saldoDocUsd;
       }, 0) * 100,
     ) / 100,
-  );
-
-  // Saldo pendiente por pagar restante
-  let saldoPendientePorCobrar = $derived(
-    Math.max(
-      0,
-      Math.round(
-        (totalDeudaPendienteUsd -
-          totalCobradoNeto -
-          totalRetenidoIvaVista -
-          totalRetenidoIslrVista) *
-          100,
-      ) / 100,
-    ),
   );
 
   // Cuadre
@@ -324,6 +311,25 @@
       ) * 100
     ) / 100
   );
+
+  // Condición para habilitar Guardar Pago
+  let canSave = $derived.by(() => {
+    if (saving) return false;
+    const selectedCount = Object.values(checkedDocs).filter(Boolean).length;
+    if (selectedCount === 0) return false;
+
+    // Caso 1: Pago normal o mixto (requiere instrumentos y cuadre con el neto abonado)
+    if (totalCobradoNeto > 0) {
+      return diferenciaCuadre === 0 && formasPago.length > 0;
+    }
+
+    // Caso 2: Pago parcial exclusivamente de retenciones (IVA y/o ISLR aplicadas sin instrumentos)
+    if (totalCobradoNeto === 0) {
+      return totalRetenidoIva > 0 || totalRetenidoIslr > 0;
+    }
+
+    return false;
+  });
 
   // Sincronizar sucursal seleccionada
   let selectedBranch = $state(data.selectedBranchId || "");
@@ -634,8 +640,18 @@
       return;
     }
 
+    if (totalCobradoNeto === 0 && totalRetenidoIva === 0 && totalRetenidoIslr === 0) {
+      toast.error("Debe ingresar un monto a pagar o aplicar al menos una retención (IVA o ISLR).");
+      return;
+    }
+
     if (totalCobradoNeto > 0 && formasPago.length === 0) {
       toast.error("Debe agregar al menos un instrumento de pago (Efectivo, Banco, etc.).");
+      return;
+    }
+
+    if (totalCobradoNeto > 0 && diferenciaCuadre !== 0) {
+      toast.error("El monto abonado en facturas debe coincidir exactamente con los instrumentos de pago.");
       return;
     }
 
@@ -1705,7 +1721,7 @@
           {#if selectedSupplier}
             <button
               onclick={savePago}
-              disabled={saving || totalCobradoNeto <= 0}
+              disabled={!canSave}
               class="w-full py-4 rounded-2xl bg-brand-600 hover:bg-brand-500 active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none text-white font-black text-base transition-all shadow-xl shadow-brand-500/25 flex items-center justify-center gap-3 cursor-pointer mt-4"
             >
               {#if saving}
@@ -1713,7 +1729,7 @@
                 Procesando Pago...
               {:else}
                 <Wallet size={20} />
-                Guardar Pago ({totalCobradoNeto.toLocaleString("de-DE", { minimumFractionDigits: 2 })} $)
+                Guardar Pago
               {/if}
             </button>
           {/if}
