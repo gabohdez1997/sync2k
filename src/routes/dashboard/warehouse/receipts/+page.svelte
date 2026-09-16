@@ -30,7 +30,8 @@
     Tag,
     History,
     Edit2,
-    User
+    User,
+    Sparkles
   } from "lucide-svelte";
   import { toast } from "svelte-sonner";
   import { goto } from "$app/navigation";
@@ -100,21 +101,45 @@
       observations = cleanDescrip;
       nroFacturaProveedor = p.nro_fact ? p.nro_fact.trim() : "";
 
-      selectedOrders = [{
-        doc_num: p.orden_compra || (p.renglones && p.renglones[0]?.num_doc) || p.n_control,
-        co_prov: p.co_prov,
-        prov_des: p.prov_des,
-        rif: p.rif,
-        prov_dir: p.prov_dir,
-        telefonos: p.telefonos,
-        co_cond: p.co_cond,
-        cond_des: p.cond_des,
-        co_mone: p.co_mone,
-        tasa: p.tasa,
-        co_us_in: p.oc_co_us_in || p.co_us_in,
-        nro_fact: p.nro_fact ? p.nro_fact.trim() : "",
-        comentario: cleanComment
-      }];
+      const distinctOCs = [...new Set(
+        (p.renglones || [])
+          .map((r: any) => (r.num_doc || "").trim())
+          .filter(Boolean)
+      )];
+
+      if (distinctOCs.length > 0) {
+        selectedOrders = distinctOCs.map((ocNum) => ({
+          doc_num: ocNum,
+          co_prov: p.co_prov,
+          prov_des: p.prov_des,
+          rif: p.rif,
+          prov_dir: p.prov_dir,
+          telefonos: p.telefonos,
+          co_cond: p.co_cond,
+          cond_des: p.cond_des,
+          co_mone: p.co_mone,
+          tasa: p.tasa,
+          co_us_in: p.oc_co_us_in || p.co_us_in,
+          nro_fact: p.nro_fact ? p.nro_fact.trim() : "",
+          comentario: cleanComment
+        }));
+      } else {
+        selectedOrders = [{
+          doc_num: p.orden_compra || (p.renglones && p.renglones[0]?.num_doc) || p.n_control,
+          co_prov: p.co_prov,
+          prov_des: p.prov_des,
+          rif: p.rif,
+          prov_dir: p.prov_dir,
+          telefonos: p.telefonos,
+          co_cond: p.co_cond,
+          cond_des: p.cond_des,
+          co_mone: p.co_mone,
+          tasa: p.tasa,
+          co_us_in: p.oc_co_us_in || p.co_us_in,
+          nro_fact: p.nro_fact ? p.nro_fact.trim() : "",
+          comentario: cleanComment
+        }];
+      }
 
       receiptLines = (p.renglones || []).map((l: any) => {
         const cantActual = Number(l.cantidad || l.total_art || 0);
@@ -127,7 +152,8 @@
           cant_recibida: cantActual,
           cant_pendiente: cantPendiente > 0 ? cantPendiente : cantActual,
           cant_original: cantOriginal > 0 ? cantOriginal : cantActual,
-          co_alma: l.co_alma || data.defaultWarehouse || "01"
+          co_alma: l.co_alma || data.defaultWarehouse || "01",
+          isNewlyAdded: false
         };
       });
     }
@@ -249,8 +275,8 @@
         if (primaryOrder.co_prov) {
           formData.append("co_prov", primaryOrder.co_prov.trim());
         }
-        if (primaryOrder.co_us_in) {
-          formData.append("co_us_in", primaryOrder.co_us_in.trim());
+        if (primaryBuyer) {
+          formData.append("co_us_in", primaryBuyer.trim());
         }
       }
 
@@ -263,14 +289,10 @@
       if (result.type === "success" && (result.data as any)?.orders) {
         let orders = (result.data as any).orders || [];
 
-        // Excluir órdenes que ya estén agregadas en selectedOrders
-        const loadedDocNums = new Set(selectedOrders.map((o) => o.doc_num?.trim().toUpperCase()));
-        orders = orders.filter((o: any) => !loadedDocNums.has(o.doc_num?.trim().toUpperCase()));
-
-        // Asegurar filtro en cliente si ya hay orden cargada (doble garantía)
+        // Asegurar filtro en cliente si ya hay orden cargada (doble garantía: mismo proveedor y comprador)
         if (primaryOrder) {
           const reqProv = (primaryOrder.co_prov || "").trim().toUpperCase();
-          const reqBuyer = (primaryOrder.co_us_in || "").trim().toUpperCase();
+          const reqBuyer = (primaryBuyer || "").trim().toUpperCase();
           orders = orders.filter((o: any) => {
             const oProv = (o.co_prov || "").trim().toUpperCase();
             const oBuyer = (o.co_us_in || "").trim().toUpperCase();
@@ -301,25 +323,23 @@
 
   // --- SELECCIONAR E INCORPORAR ORDEN DE COMPRA ---
   async function selectOrder(order: any) {
-    // Validar si ya está cargada
-    if (selectedOrders.some((o) => o.doc_num?.trim().toUpperCase() === order.doc_num?.trim().toUpperCase())) {
-      toast.info(`La orden ${order.doc_num} ya está en la recepción.`);
-      return;
-    }
+    const isAlreadyLoaded = selectedOrders.some(
+      (o) => o.doc_num?.trim().toUpperCase() === order.doc_num?.trim().toUpperCase()
+    );
 
-    // Validar compatibilidad de proveedor y comprador si ya hay órdenes cargadas
+    // Validar compatibilidad estricta de proveedor y comprador si ya hay órdenes cargadas
     if (primaryOrder) {
       const pProv = (primaryOrder.co_prov || "").trim().toUpperCase();
       const oProv = (order.co_prov || "").trim().toUpperCase();
       if (pProv && oProv && pProv !== oProv) {
-        toast.error(`No se puede agregar: La orden es del proveedor (${order.prov_des || order.co_prov}), pero la recepción actual es para (${primaryOrder.prov_des || primaryOrder.co_prov}).`);
+        toast.error(`No se puede agregar: La orden es del proveedor (${order.prov_des || order.co_prov}), pero la recepción actual es para (${primarySupplier?.prov_des || primaryOrder.co_prov}).`);
         return;
       }
 
-      const pBuyer = (primaryOrder.co_us_in || "").trim().toUpperCase();
+      const pBuyer = (primaryBuyer || "").trim().toUpperCase();
       const oBuyer = (order.co_us_in || "").trim().toUpperCase();
       if (pBuyer && oBuyer && pBuyer !== oBuyer) {
-        toast.error(`No se puede agregar: El comprador de la orden (${getBuyerName(order.co_us_in)}) no coincide con el comprador de la recepción (${getBuyerName(primaryOrder.co_us_in)}).`);
+        toast.error(`No se puede agregar: El comprador de la orden (${getBuyerName(order.co_us_in)}) no coincide con el comprador de la recepción (${getBuyerName(primaryBuyer)}).`);
         return;
       }
     }
@@ -344,29 +364,81 @@
           orderData.co_us_in = order.co_us_in;
         }
 
-        // Agregar orden a la lista de órdenes seleccionadas
-        selectedOrders = [...selectedOrders, orderData];
+        // Si la orden aún no está en selectedOrders, la agregamos
+        if (!isAlreadyLoaded) {
+          selectedOrders = [...selectedOrders, orderData];
+        }
 
-        // Mapear renglones de la nueva orden agregando su num_doc origen
-        const newLines = (orderData.renglones || [])
-          .filter((l: any) => Number(l.cant_pendiente != null ? l.cant_pendiente : l.pendiente) > 0)
-          .map((l: any) => {
-            const pending = Number(l.cant_pendiente != null ? l.cant_pendiente : l.pendiente);
-            const original = Number(l.cant_original != null ? l.cant_original : l.total_art);
-            return {
-              ...l,
-              doc_num: orderData.doc_num,
-              checked: true,
-              cant_recibida: pending,
-              cant_pendiente: pending,
-              cant_original: original,
-              co_alma: data.defaultWarehouse || "01"
-            };
+        const incomingRenglones = orderData.renglones || [];
+        let addedCount = 0;
+        let reactivatedCount = 0;
+        const newLinesToAdd: any[] = [];
+
+        for (const l of incomingRenglones) {
+          const pending = Number(l.cant_pendiente != null ? l.cant_pendiente : l.pendiente);
+          const original = Number(l.cant_original != null ? l.cant_original : l.total_art);
+
+          // Buscar si este renglón ya está en receiptLines
+          const existingIndex = receiptLines.findIndex((rl) => {
+            const sameDoc = (rl.doc_num || "").trim().toUpperCase() === (orderData.doc_num || "").trim().toUpperCase();
+            if (!sameDoc) return false;
+            if (rl.rowguid_doc && l.rowguid_doc) {
+              return String(rl.rowguid_doc).toLowerCase() === String(l.rowguid_doc).toLowerCase();
+            }
+            return (rl.co_art || "").trim().toUpperCase() === (l.co_art || "").trim().toUpperCase();
           });
 
-        receiptLines = [...receiptLines, ...newLines];
+          if (existingIndex >= 0) {
+            const existing = receiptLines[existingIndex];
+            // Si estaba desmarcado o con cantidad 0, reactivarlo si tiene saldo pendiente
+            if (!existing.checked || Number(existing.cant_recibida || 0) === 0) {
+              if (pending > 0) {
+                receiptLines[existingIndex].checked = true;
+                receiptLines[existingIndex].cant_recibida = pending;
+                receiptLines[existingIndex].cant_pendiente = pending;
+                reactivatedCount++;
+              }
+            } else {
+              // Ya tiene cantidad recibida ingresada. Actualizamos el tope si la orden reporta más pendiente
+              if (pending > Number(existing.cant_pendiente || 0)) {
+                receiptLines[existingIndex].cant_pendiente = pending;
+              }
+            }
+          } else {
+            // Renglón nuevo para esta recepción: incorporarlo con su saldo pendiente y marcarlo como recién añadido
+            if (pending > 0) {
+              newLinesToAdd.push({
+                ...l,
+                doc_num: orderData.doc_num,
+                checked: true,
+                cant_recibida: pending,
+                cant_pendiente: pending,
+                cant_original: original,
+                co_alma: data.defaultWarehouse || "01",
+                isNewlyAdded: true
+              });
+              addedCount++;
+            }
+          }
+        }
+
+        if (newLinesToAdd.length > 0) {
+          receiptLines = [...receiptLines, ...newLinesToAdd];
+        }
+
         showImportModal = false;
-        toast.success(`Orden de compra ${orderData.doc_num} agregada a la recepción.`);
+
+        if (addedCount > 0 && reactivatedCount > 0) {
+          toast.success(`Orden ${orderData.doc_num}: ${addedCount} artículo(s) agregado(s) y ${reactivatedCount} reactivado(s).`);
+        } else if (addedCount > 0) {
+          toast.success(`Orden ${orderData.doc_num}: ${addedCount} artículo(s) pendiente(s) incorporado(s).`);
+        } else if (reactivatedCount > 0) {
+          toast.success(`Orden ${orderData.doc_num}: ${reactivatedCount} artículo(s) reactivado(s).`);
+        } else if (isAlreadyLoaded) {
+          toast.info(`Todos los artículos con saldo pendiente de la orden ${orderData.doc_num} ya están en la recepción.`);
+        } else {
+          toast.info(`La orden ${orderData.doc_num} fue vinculada, pero no tiene artículos con saldo pendiente.`);
+        }
       } else {
         toast.error(((result as any).data)?.message || "No se pudo cargar el detalle de la orden.");
       }
@@ -387,6 +459,15 @@
       linesSearchTerm = "";
     }
     toast.info(`Orden ${docNum} retirada de la recepción.`);
+  }
+
+  // Quitar un renglón individual específico (especialmente útil para líneas recién importadas)
+  function removeSingleLine(index: number) {
+    const line = receiptLines[index];
+    if (!line) return;
+    const desc = line.art_des || line.co_art || "Artículo";
+    receiptLines = receiptLines.filter((_, i) => i !== index);
+    toast.info(`Artículo "${desc}" retirado de la recepción.`);
   }
 
   // Quitar todas las órdenes
@@ -438,6 +519,22 @@
     if (linesToProcess.length === 0) {
       toast.error("Debes seleccionar al menos un artículo con cantidad recibida mayor a cero.");
       return;
+    }
+
+    // Validar coherencia: todas las órdenes deben ser del mismo proveedor y comprador
+    const mainProv = (primaryOrder.co_prov || "").trim().toUpperCase();
+    const mainBuyer = (primaryBuyer || "").trim().toUpperCase();
+    for (const ord of selectedOrders) {
+      const oProv = (ord.co_prov || "").trim().toUpperCase();
+      const oBuyer = (ord.co_us_in || "").trim().toUpperCase();
+      if (mainProv && oProv && mainProv !== oProv) {
+        toast.error(`Conflicto de proveedor: La orden ${ord.doc_num} pertenece a otro proveedor.`);
+        return;
+      }
+      if (mainBuyer && oBuyer && mainBuyer !== oBuyer) {
+        toast.error(`Conflicto de comprador: La orden ${ord.doc_num} tiene un comprador diferente (${getBuyerName(oBuyer)}).`);
+        return;
+      }
     }
 
     // Validación estricta de límites antes de procesar
@@ -617,15 +714,14 @@
           </div>
         {/if}
 
-        {#if !isEditing}
-          <button
-            onclick={openImportModal}
-            class="flex items-center justify-center gap-2 px-6 h-14 rounded-2xl bg-brand-500/10 hover:bg-brand-500/20 text-brand-400 border border-brand-500/30 transition-all font-bold active:scale-95 shadow-sm shrink-0 cursor-pointer w-full sm:w-auto"
-          >
-            <ShoppingBag size={18} />
-            Importar Orden
-          </button>
-        {/if}
+        <button
+          onclick={openImportModal}
+          class="flex items-center justify-center gap-2 px-6 h-14 rounded-2xl bg-brand-500/10 hover:bg-brand-500/20 text-brand-400 border border-brand-500/30 transition-all font-bold active:scale-95 shadow-sm shrink-0 cursor-pointer w-full sm:w-auto"
+          title={isEditing ? "Importar o re-importar órdenes de compra compatibles" : "Importar orden de compra"}
+        >
+          <ShoppingBag size={18} />
+          <span>{isEditing ? "Importar Orden" : "Importar Orden"}</span>
+        </button>
 
         <button
           onclick={() => {
@@ -742,6 +838,15 @@
                     <ShoppingBag size={13} class="text-brand-400" />
                     Órdenes de Compra en esta Recepción ({selectedOrders.length})
                   </span>
+                  <button
+                    type="button"
+                    onclick={openImportModal}
+                    class="flex items-center gap-1.5 px-3 py-1 rounded-xl bg-brand-500/10 hover:bg-brand-500/20 text-brand-400 border border-brand-500/20 text-xs font-bold transition-all cursor-pointer shadow-xs active:scale-95"
+                    title="Importar o agregar otra orden de compra de este mismo proveedor y comprador"
+                  >
+                    <Plus size={13} />
+                    Importar / Agregar Orden
+                  </button>
                 </div>
                 <div class="flex flex-wrap gap-2 pt-1">
                   {#each selectedOrders as ord (ord.doc_num)}
@@ -750,7 +855,7 @@
                     <div class="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-surface-soft border border-border-subtle text-xs font-bold shadow-sm">
                       <span class="font-mono text-brand-400 font-black">OC: {ord.doc_num}</span>
                       <span class="text-[10px] text-text-muted font-normal">({ordLinesCount} arts &bull; {formatQuantity(ordUnitsCount)} un.)</span>
-                      {#if !isEditing}
+                      {#if !isEditing || selectedOrders.length > 1}
                         <button
                           type="button"
                           onclick={() => removeSingleOrder(ord.doc_num)}
@@ -795,6 +900,13 @@
 
             {#if selectedOrders.length > 0}
               <div class="flex items-center gap-2 shrink-0 flex-wrap">
+                {#if receiptLines.some(l => l.isNewlyAdded)}
+                  {@const newCount = receiptLines.filter(l => l.isNewlyAdded).length}
+                  <div class="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-500/15 border border-emerald-500/30 text-xs font-bold text-emerald-400 rounded-2xl animate-pulse shadow-xs">
+                    <Sparkles size={14} />
+                    <span>+{newCount} {newCount === 1 ? 'artículo nuevo' : 'artículos nuevos'}</span>
+                  </div>
+                {/if}
                 <div class="flex items-center gap-1.5 px-3 py-1.5 bg-brand-500/10 border border-brand-500/20 text-xs font-bold text-text-base rounded-2xl">
                   <span class="font-black text-brand-400 font-mono">{selectedOrders.length} {selectedOrders.length === 1 ? 'Orden' : 'Órdenes'}</span>
                 </div>
@@ -863,11 +975,12 @@
                     <th class="px-6 py-4">Artículo</th>
                     <th class="px-6 py-4 text-center">OC / Pendiente</th>
                     <th class="px-6 py-4 text-center">Cant. Recibida</th>
+                    <th class="px-3 py-4 text-center w-12"></th>
                   </tr>
                 </thead>
                 <tbody class="divide-y divide-border-subtle text-xs">
                   {#each filteredReceiptLines as { line, originalIndex } (line.co_art + '_' + originalIndex)}
-                    <tr class="hover:bg-surface-soft/60 transition-colors {receiptLines[originalIndex].checked ? '' : 'opacity-50'}">
+                    <tr class="transition-all {receiptLines[originalIndex].checked ? '' : 'opacity-50'} {line.isNewlyAdded ? 'bg-emerald-500/10 hover:bg-emerald-500/15 border-l-4 border-l-emerald-500' : 'hover:bg-surface-soft/60'}">
                       <td class="px-6 py-4 text-center">
                         <label class="group relative inline-flex items-center cursor-pointer justify-center">
                           <input
@@ -892,10 +1005,18 @@
                       </td>
 
                       <td class="px-6 py-4">
-                        <div class="flex flex-col gap-0.5 max-w-md">
-                          <span class="font-black text-text-base text-sm leading-snug" title={line.art_des}>
-                            {line.art_des}
-                          </span>
+                        <div class="flex flex-col gap-1 max-w-md">
+                          <div class="flex items-center gap-2 flex-wrap">
+                            <span class="font-black text-text-base text-sm leading-snug" title={line.art_des}>
+                              {line.art_des}
+                            </span>
+                            {#if line.isNewlyAdded}
+                              <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[10px] font-black uppercase tracking-wider animate-pulse shadow-xs">
+                                <Sparkles size={11} class="text-emerald-400 shrink-0" />
+                                {isEditing ? "Nuevo en esta Edición" : "Recién Importado"}
+                              </span>
+                            {/if}
+                          </div>
                           <div class="flex items-center gap-2 flex-wrap">
                             {#if line.doc_num}
                               <span class="text-[10px] text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded font-mono font-bold">
@@ -957,6 +1078,19 @@
                             +
                           </button>
                         </div>
+                      </td>
+
+                      <td class="px-3 py-4 text-center">
+                        {#if line.isNewlyAdded}
+                          <button
+                            type="button"
+                            onclick={() => removeSingleLine(originalIndex)}
+                            class="p-2 hover:bg-red-500/20 text-text-muted hover:text-red-400 rounded-xl transition-colors cursor-pointer"
+                            title="Quitar este artículo nuevo de la recepción"
+                          >
+                            <X size={14} />
+                          </button>
+                        {/if}
                       </td>
                     </tr>
                   {/each}
@@ -1044,6 +1178,16 @@
                 </p>
               </div>
             {/if}
+
+            {#if isEditing && receiptLines.some(l => l.isNewlyAdded && l.checked)}
+              {@const newActiveCount = receiptLines.filter(l => l.isNewlyAdded && l.checked).length}
+              <div class="p-4 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 rounded-2xl text-xs flex gap-3 items-start" transition:slide>
+                <Sparkles size={20} class="shrink-0 mt-0.5 text-emerald-400 animate-pulse" />
+                <p class="font-bold text-xs leading-relaxed">
+                  Esta edición incorpora <span class="text-white font-black">{newActiveCount} artículo(s) nuevo(s)</span> que no formaban parte de la recepción inicial.
+                </p>
+              </div>
+            {/if}
           </div>
 
           <!-- SAVE BUTTON -->
@@ -1091,11 +1235,11 @@
       <div class="p-8 border-b border-border-subtle flex justify-between items-center bg-surface-soft/50">
         <div>
           <h2 class="text-2xl font-black tracking-tight">
-            {selectedOrders.length > 0 ? "Agregar Otra Orden de Compra" : "Importar Orden de Compra"}
+            {selectedOrders.length > 0 ? "Importar / Agregar Órdenes de Compra" : "Importar Orden de Compra"}
           </h2>
           <p class="text-text-muted text-sm">
             {selectedOrders.length > 0
-              ? `Selecciona órdenes compatibles del mismo proveedor y comprador (${selectedOrders.length} ya agregada${selectedOrders.length > 1 ? 's' : ''})`
+              ? `Selecciona órdenes del mismo proveedor y comprador para agregar o re-importar ítems pendientes (${selectedOrders.length} vinculada${selectedOrders.length > 1 ? 's' : ''})`
               : "Selecciona una orden de compra con saldo pendiente para recibir"}
           </p>
         </div>
@@ -1161,12 +1305,13 @@
             {#each foundOrders as order (order.doc_num + order.sede_id)}
               {@const isParcial = String(order.status).trim() === '1'}
               {@const pendingQty = Number(order.cant_pendiente || 0)}
+              {@const isAlreadyLoaded = selectedOrders.some((o) => o.doc_num?.trim().toUpperCase() === order.doc_num?.trim().toUpperCase())}
 
               <ImportItemCard
                 docType="ORD"
                 docNum={order.doc_num}
-                statusLabel={isParcial ? 'Parcial' : 'Sin Procesar'}
-                statusClass={isParcial ? 'bg-amber-500/10 text-amber-400 border-amber-500/20' : 'bg-brand-500/10 text-brand-400 border-brand-500/20'}
+                statusLabel={isAlreadyLoaded ? 'En Recepción • Re-importar' : (isParcial ? 'Parcial' : 'Sin Procesar')}
+                statusClass={isAlreadyLoaded ? 'bg-purple-500/10 text-purple-400 border-purple-500/20' : (isParcial ? 'bg-amber-500/10 text-amber-400 border-amber-500/20' : 'bg-brand-500/10 text-brand-400 border-brand-500/20')}
                 clientName={order.prov_des || order.co_prov}
                 clientRif={order.rif || order.co_prov}
                 cashierName={`Comprador: ${getBuyerName(order.co_us_in)}`}
