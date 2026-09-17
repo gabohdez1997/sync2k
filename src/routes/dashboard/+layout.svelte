@@ -435,7 +435,26 @@
     const perms = profile?.permissions?.[item.id];
     if (isAdmin && (!perms || perms.read !== false)) return item.href;
     if (!perms) return null;
-    if (perms.read) return item.href;
+    if (perms.read) {
+      // Si el usuario no tiene permiso de crear y el módulo tiene historial, cargar historial por defecto
+      if (!perms.create) {
+        const historyModules = [
+          'sales_quotes',
+          'sales_orders',
+          'cash_billing',
+          'cash_payments',
+          'inv_receipts',
+          'inv_dispatches',
+          'pur_orders',
+          'pur_invoices',
+          'pur_payments'
+        ];
+        if (historyModules.includes(item.id)) {
+          return `${item.href}/history`;
+        }
+      }
+      return item.href;
+    }
     if (perms.create) return `${item.href}/new`; // Ruta de creación si no puede leer
     return null;
   }

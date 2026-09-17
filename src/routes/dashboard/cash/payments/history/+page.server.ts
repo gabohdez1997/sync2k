@@ -19,6 +19,7 @@ export const load: PageServerLoad = protectLoad('cash_payments', async ({ url, l
 			pagination: { total: 0, page: 1, limit: 12, totalPages: 0 },
 			canVoid: false,
 			canSeeOthers: false,
+			canCreate: false,
 			error: 'No tienes sucursales asignadas.'
 		};
 	}
@@ -34,6 +35,7 @@ export const load: PageServerLoad = protectLoad('cash_payments', async ({ url, l
 	const canVoid = hasPermission(profile, 'cash_payments', 'void');
 	const canSeeOthers = hasPermission(profile, 'cash_payments', 'others');
 	const canEdit = hasPermission(profile, 'cash_payments', 'update');
+	const canCreate = hasPermission(profile, 'cash_payments', 'create');
 
 	let co_us_in = url.searchParams.get('co_us_in') || '';
 
@@ -48,6 +50,7 @@ export const load: PageServerLoad = protectLoad('cash_payments', async ({ url, l
 				canVoid,
 				canSeeOthers,
 				canEdit,
+				canCreate,
 				error: 'Tu perfil no tiene asociado un usuario de Profit Plus. No puedes visualizar cobros.'
 			};
 		}
@@ -118,6 +121,7 @@ export const load: PageServerLoad = protectLoad('cash_payments', async ({ url, l
 		canVoid,
 		canSeeOthers,
 		canEdit,
+		canCreate,
 		filters: { search: url.searchParams.get('search') || '', co_cli: url.searchParams.get('co_cli') || '', co_us_in, fec_d: url.searchParams.get('fec_d') || '', fec_h: url.searchParams.get('fec_h') || '' },
 		error: errorMsg || null
 	};

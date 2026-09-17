@@ -2,6 +2,7 @@ import type { PageServerLoad, Actions } from './$types';
 import { protectLoad, protectAction } from '$lib/server/permissions';
 import { supabaseAdmin } from '$lib/server/supabase';
 import { AgentClient } from '$lib/server/agent';
+import { hasPermission } from '$lib/server/auth';
 import { fail, redirect } from '@sveltejs/kit';
 
 export const load: PageServerLoad = protectLoad('inv_transfers', async ({ locals, fetch, url }) => {
@@ -48,6 +49,13 @@ export const load: PageServerLoad = protectLoad('inv_transfers', async ({ locals
 	const isAdmin = profileWarehouses.length === 0 || profile?.role === 'admin' || (Array.isArray(profile?.roles) && profile.roles.includes('admin'));
 
 	const editingId = url.searchParams.get('id');
+	const canCreate = hasPermission(profile, 'inv_transfers', 'create');
+	const canUpdate = hasPermission(profile, 'inv_transfers', 'update') || hasPermission(profile, 'inv_transfers', 'edit');
+	const canAccess = editingId ? canUpdate : canCreate;
+	if (!canAccess) {
+		throw redirect(303, '/dashboard/warehouse/transfers');
+	}
+
 	let editingTransfer: any = null;
 
 	if (editingId) {

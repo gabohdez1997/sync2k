@@ -3,7 +3,7 @@ import { AgentClient } from '$lib/server/agent';
 import { hasPermission } from '$lib/server/auth';
 import { logAction } from '$lib/server/audit';
 import { supabaseAdmin } from '$lib/server/supabase';
-import { fail, type Actions } from '@sveltejs/kit';
+import { fail, redirect, type Actions } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
 
 export const load: PageServerLoad = protectLoad('inv_receipts', async ({ url, locals, fetch }) => {
@@ -86,6 +86,11 @@ export const load: PageServerLoad = protectLoad('inv_receipts', async ({ url, lo
     const canCreate = hasPermission(profile, 'inv_receipts', 'create');
     const canUpdate = hasPermission(profile, 'inv_receipts', 'update');
     const canVoid = hasPermission(profile, 'inv_receipts', 'void');
+
+    const canAccess = docNum ? canUpdate : canCreate;
+    if (!canAccess) {
+        throw redirect(303, '/dashboard/warehouse/receipts/history');
+    }
 
     const buyersMap: Record<string, string> = {};
     try {

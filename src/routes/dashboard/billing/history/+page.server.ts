@@ -35,6 +35,7 @@ export const load: PageServerLoad = protectLoad('cash_billing', async ({ url, lo
     // LÓGICA DE PERMISOS
     const canSeeOthers = hasPermission(profile, 'cash_billing', 'others');
     const canVoid = hasPermission(profile, 'cash_billing', 'void');
+    const canCreate = hasPermission(profile, 'cash_billing', 'create');
 
     let co_us_in = url.searchParams.get('co_us_in') || '';
 
@@ -46,7 +47,8 @@ export const load: PageServerLoad = protectLoad('cash_billing', async ({ url, lo
                 branches: allowedBranches,
                 error: 'Tu perfil no tiene asociado un código de Cajero/Usuario de Profit Plus. No puedes visualizar facturas propias ni ajenas.',
                 canSeeOthers,
-                canVoid
+                canVoid,
+                canCreate
             };
         }
         co_us_in = cashierCode;
@@ -109,13 +111,17 @@ export const load: PageServerLoad = protectLoad('cash_billing', async ({ url, lo
             selectedBranchId: selectedBranch.id,
             canSeeOthers,
             canVoid,
+            canCreate,
             filters: { doc_num, co_cli, search, co_us_in, fec_d, fec_h }
         };
     } catch (e: any) {
         return {
             invoices: [],
             branches: allowedBranches,
-            error: 'Error al conectar con el Agente: ' + e.message
+            error: 'Error al conectar con el Agente: ' + e.message,
+            canSeeOthers: false,
+            canVoid: false,
+            canCreate: false
         };
     }
 });

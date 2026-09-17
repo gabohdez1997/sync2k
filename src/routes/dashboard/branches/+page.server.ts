@@ -4,6 +4,7 @@
 import { protectLoad, protectAction } from '$lib/server/permissions';
 import { supabaseAdmin } from '$lib/server/supabase';
 import { AgentClient } from '$lib/server/agent';
+import { hasPermission } from '$lib/server/auth';
 import { fail } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
 
@@ -13,6 +14,11 @@ export const config = {
 
 // ─── Load ──────────────────────────────────────────────────────
 export const load: PageServerLoad = protectLoad('sec_branches', async ({ locals, fetch }) => {
+  const profile = locals.profile;
+  const canCreate = hasPermission(profile, 'sec_branches', 'create');
+  const canUpdate = hasPermission(profile, 'sec_branches', 'update');
+  const canDelete = hasPermission(profile, 'sec_branches', 'delete');
+
   try {
     // Intentamos obtener todos los campos, incluyendo 'default_warehouse', 'allow_decimals_units' y 'default_seller'
     let { data: branches, error } = await supabaseAdmin
@@ -121,7 +127,10 @@ export const load: PageServerLoad = protectLoad('sec_branches', async ({ locals,
       branches:     branches ?? [],
       agentServers,
       branchStats,
-      loadError
+      loadError,
+      canCreate,
+      canUpdate,
+      canDelete
     };
   } catch (fatalErr: any) {
     console.error('[BRANCHES FATAL LOAD ERROR]:', fatalErr);
@@ -129,7 +138,10 @@ export const load: PageServerLoad = protectLoad('sec_branches', async ({ locals,
       branches: [],
       agentServers: [],
       branchStats: {},
-      loadError: fatalErr.message || 'Error inesperado al cargar sucursales'
+      loadError: fatalErr.message || 'Error inesperado al cargar sucursales',
+      canCreate: false,
+      canUpdate: false,
+      canDelete: false
     };
   }
 });

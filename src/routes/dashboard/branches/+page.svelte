@@ -220,13 +220,15 @@
         <span>Sincronizar</span>
       </button>
 
-      <button
-        onclick={openNewModal}
-        class="flex items-center justify-center gap-2 bg-brand-600 hover:bg-brand-500 text-white px-6 py-3 rounded-2xl font-bold shadow-lg shadow-brand-500/20 transition-all active:scale-95"
-      >
-        <Plus size={20} />
-        Nueva Sucursal
-      </button>
+      {#if data.canCreate}
+        <button
+          onclick={openNewModal}
+          class="flex items-center justify-center gap-2 bg-brand-600 hover:bg-brand-500 text-white px-6 py-3 rounded-2xl font-bold shadow-lg shadow-brand-500/20 transition-all active:scale-95"
+        >
+          <Plus size={20} />
+          Nueva Sucursal
+        </button>
+      {/if}
     </div>
   </div>
 

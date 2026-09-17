@@ -103,13 +103,15 @@
       <p class="text-text-muted mt-2 text-lg">Administra los accesos y credenciales de Profit.</p>
     </div>
     
-    <button 
-      onclick={openCreateModal}
-      class="flex items-center justify-center gap-2 bg-brand-600 hover:bg-brand-500 text-white px-6 py-3 rounded-2xl font-bold hover:shadow-lg hover:shadow-brand-500/30 transition-all active:scale-95"
-    >
-      <UserPlus size={20} />
-      Nuevo Usuario
-    </button>
+    {#if data.canCreate}
+      <button 
+        onclick={openCreateModal}
+        class="flex items-center justify-center gap-2 bg-brand-600 hover:bg-brand-500 text-white px-6 py-3 rounded-2xl font-bold hover:shadow-lg hover:shadow-brand-500/30 transition-all active:scale-95"
+      >
+        <UserPlus size={20} />
+        Nuevo Usuario
+      </button>
+    {/if}
   </div>
 
   <!-- Search & Filters -->

@@ -1,12 +1,17 @@
-// src/routes/dashboard/purchases/invoices/+page.server.ts
 import { protectLoad } from '$lib/server/permissions';
 import { AgentClient } from '$lib/server/agent';
 import { hasPermission } from '$lib/server/auth';
+import { redirect } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
 
 export const load: PageServerLoad = protectLoad('pur_invoices', async ({ url, locals, fetch }) => {
     const profile = (locals as any).profile;
     if (!profile) throw new Error('Perfil no cargado.');
+
+    const canCreate = hasPermission(profile, 'pur_invoices', 'create');
+    if (!canCreate) {
+        throw redirect(303, '/dashboard/purchases/invoices/history');
+    }
 
     const allowedBranches = profile.allowed_branches || [];
     if (allowedBranches.length === 0) {
@@ -24,7 +29,6 @@ export const load: PageServerLoad = protectLoad('pur_invoices', async ({ url, lo
         ? allowedBranches.find((b: any) => b.id === urlBranchId) 
         : allowedBranches[0];
 
-    const canCreate = hasPermission(profile, 'pur_invoices', 'create');
     const canSeeOthers = hasPermission(profile, 'pur_invoices', 'others');
 
     let activeRate = 1;

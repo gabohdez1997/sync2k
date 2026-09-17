@@ -1,11 +1,18 @@
 // src/routes/dashboard/billing/+page.server.ts
 import { protectLoad } from '$lib/server/permissions';
 import { supabaseAdmin } from '$lib/server/supabase';
+import { hasPermission } from '$lib/server/auth';
+import { redirect } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
 
 export const load: PageServerLoad = protectLoad('cash_billing', async ({ url, locals }) => {
     const profile = (locals as any).profile;
     if (!profile) throw new Error('Perfil no cargado.');
+
+    const canCreate = hasPermission(profile, 'cash_billing', 'create');
+    if (!canCreate) {
+        throw redirect(303, '/dashboard/billing/history');
+    }
 
     const allowedBranches = profile.allowed_branches || [];
     if (allowedBranches.length === 0) {

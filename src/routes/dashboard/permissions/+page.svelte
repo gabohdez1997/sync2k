@@ -508,13 +508,15 @@
       </p>
     </div>
     <div class="flex items-center gap-3">
-      <button
-        onclick={newRole}
-        class="flex items-center gap-2 bg-white/5 hover:bg-white/10 text-text-base px-4 py-2.5 rounded-xl font-bold transition-all active:scale-95"
-      >
-        <Plus size={18} />
-        Nuevo
-      </button>
+      {#if data.canCreate}
+        <button
+          onclick={newRole}
+          class="flex items-center gap-2 bg-white/5 hover:bg-white/10 text-text-base px-4 py-2.5 rounded-xl font-bold transition-all active:scale-95"
+        >
+          <Plus size={18} />
+          Nuevo
+        </button>
+      {/if}
 
       <!-- Save Role form -->
       <form

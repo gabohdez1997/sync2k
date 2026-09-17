@@ -1,11 +1,16 @@
 import { protectLoad, protectAction } from '$lib/server/permissions';
 import { supabaseAdmin } from '$lib/server/supabase';
 import { AgentClient } from '$lib/server/agent';
+import { hasPermission } from '$lib/server/auth';
 import { fail } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
 
 // ─── Load ──────────────────────────────────────────────────────
 export const load: PageServerLoad = protectLoad('sec_printers', async ({ locals, fetch }) => {
+  const profile = (locals as any).profile;
+  const canCreate = hasPermission(profile, 'sec_printers', 'create');
+  const canUpdate = hasPermission(profile, 'sec_printers', 'update');
+  const canDelete = hasPermission(profile, 'sec_printers', 'delete');
   const { data: branches, error: bErr } = await supabaseAdmin
     .from('branches')
     .select('id, name, agent_url, agent_token, active')
@@ -49,7 +54,10 @@ export const load: PageServerLoad = protectLoad('sec_printers', async ({ locals,
   return {
     branches: branches ?? [],
     printers: printers ?? [],
-    sublines
+    sublines,
+    canCreate,
+    canUpdate,
+    canDelete
   };
 });
 

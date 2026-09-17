@@ -4,11 +4,17 @@
 import { fail } from '@sveltejs/kit';
 import { protectLoad, protectAction } from '$lib/server/permissions';
 import { supabaseAdmin } from '$lib/server/supabase';
+import { hasPermission } from '$lib/server/auth';
 import bcrypt from 'bcryptjs';
 import type { PageServerLoad, Actions } from './$types';
 
 // ─── Load ──────────────────────────────────────────────────────
-export const load: PageServerLoad = protectLoad('sec_users', async () => {
+export const load: PageServerLoad = protectLoad('sec_users', async ({ locals }) => {
+  const profile = locals.profile;
+  const canCreate = hasPermission(profile, 'sec_users', 'create');
+  const canUpdate = hasPermission(profile, 'sec_users', 'update');
+  const canDelete = hasPermission(profile, 'sec_users', 'delete');
+
   const [
     { data: users },
     { data: roles },
@@ -46,7 +52,10 @@ export const load: PageServerLoad = protectLoad('sec_users', async () => {
   return {
     users:          usersMapped,
     availableRoles: roles ?? [],
-    branches:       branches ?? []
+    branches:       branches ?? [],
+    canCreate,
+    canUpdate,
+    canDelete
   };
 });
 

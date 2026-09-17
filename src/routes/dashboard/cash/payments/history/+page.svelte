@@ -666,15 +666,17 @@
       <p class="text-text-muted mt-2 text-lg">Historial de cobros y abonos de facturas de clientes en la sede.</p>
     </div>
 
-    <div class="flex flex-wrap items-center gap-4">
-      <a 
-        href="/dashboard/cash/payments?branch_id={selectedBranch}"
-        class="flex items-center justify-center gap-3 bg-brand-600 hover:bg-brand-500 text-white h-14 px-8 rounded-2xl font-black shadow-xl shadow-brand-500/20 transition-all active:scale-95 shrink-0 w-full md:w-auto cursor-pointer"
-      >
-        <Plus size={20} />
-        Nuevo Cobro
-      </a>
-    </div>
+    {#if data.canCreate}
+      <div class="flex flex-wrap items-center gap-4">
+        <a 
+          href="/dashboard/cash/payments?branch_id={selectedBranch}"
+          class="flex items-center justify-center gap-3 bg-brand-600 hover:bg-brand-500 text-white h-14 px-8 rounded-2xl font-black shadow-xl shadow-brand-500/20 transition-all active:scale-95 shrink-0 w-full md:w-auto cursor-pointer"
+        >
+          <Plus size={20} />
+          Nuevo Cobro
+        </a>
+      </div>
+    {/if}
   </div>
 
   <!-- ERRORES DE CARGA -->

@@ -384,16 +384,18 @@
     </div>
 
     <!-- BOTÓN AGREGAR IMPRESORA -->
-    <div class="flex items-center gap-3">
-      <button
-        type="button"
-        onclick={openCreateModal}
-        class="px-5 h-12 bg-gradient-to-r from-brand-600 to-brand-500 hover:from-brand-500 hover:to-brand-400 text-white rounded-2xl font-bold text-sm transition-all active:scale-95 shadow-lg shadow-brand-500/20 flex items-center gap-2 cursor-pointer shrink-0"
-      >
-        <Plus size={18} />
-        Registrar Impresora
-      </button>
-    </div>
+    {#if data.canCreate}
+      <div class="flex items-center gap-3">
+        <button
+          type="button"
+          onclick={openCreateModal}
+          class="px-5 h-12 bg-gradient-to-r from-brand-600 to-brand-500 hover:from-brand-500 hover:to-brand-400 text-white rounded-2xl font-bold text-sm transition-all active:scale-95 shadow-lg shadow-brand-500/20 flex items-center gap-2 cursor-pointer shrink-0"
+        >
+          <Plus size={18} />
+          Registrar Impresora
+        </button>
+      </div>
+    {/if}
   </div>
 
   <!-- MAIN PRINTERS TABLE (FULL WIDTH) -->
@@ -432,13 +434,15 @@
           <p class="text-xs text-text-muted/50 max-w-sm leading-relaxed">
             Registra una impresora fiscal, matricial de notas de entrega o térmica de pre-despacho para habilitar la emisión de documentos.
           </p>
-          <button
-            type="button"
-            onclick={openCreateModal}
-            class="mt-2 px-4 py-2 bg-brand-600/10 hover:bg-brand-600/20 text-brand-400 border border-brand-500/30 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5"
-          >
-            <Plus size={14} /> Registrar ahora
-          </button>
+          {#if data.canCreate}
+            <button
+              type="button"
+              onclick={openCreateModal}
+              class="mt-2 px-4 py-2 bg-brand-600/10 hover:bg-brand-600/20 text-brand-400 border border-brand-500/30 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5"
+            >
+              <Plus size={14} /> Registrar ahora
+            </button>
+          {/if}
         </div>
       {:else}
         <div class="overflow-x-auto">

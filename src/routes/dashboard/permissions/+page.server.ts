@@ -4,11 +4,16 @@
 import { fail } from '@sveltejs/kit';
 import { protectLoad, protectAction } from '$lib/server/permissions';
 import { supabaseAdmin } from '$lib/server/supabase';
-import { clearProfileCache } from '$lib/server/auth';
+import { clearProfileCache, hasPermission } from '$lib/server/auth';
 import type { PageServerLoad, Actions } from './$types';
 
 // ─── Load ──────────────────────────────────────────────────────
-export const load: PageServerLoad = protectLoad('sec_roles', async () => {
+export const load: PageServerLoad = protectLoad('sec_roles', async ({ locals }) => {
+  const profile = locals.profile;
+  const canCreate = hasPermission(profile, 'sec_roles', 'create');
+  const canUpdate = hasPermission(profile, 'sec_roles', 'update');
+  const canDelete = hasPermission(profile, 'sec_roles', 'delete');
+
   const { data: roles, error } = await supabaseAdmin
     .from('roles')
     .select('id, name, permissions, branch_ids, warehouse_ids, updated_at')
@@ -16,7 +21,7 @@ export const load: PageServerLoad = protectLoad('sec_roles', async () => {
 
   if (error) {
     console.error('[PERMISSIONS] Error cargando roles:', error.message);
-    return { roles: [] };
+    return { roles: [], canCreate, canUpdate, canDelete };
   }
 
   const { data: branches } = await supabaseAdmin
@@ -27,7 +32,10 @@ export const load: PageServerLoad = protectLoad('sec_roles', async () => {
 
   return {
     roles: roles ?? [],
-    branches: branches ?? []
+    branches: branches ?? [],
+    canCreate,
+    canUpdate,
+    canDelete
   };
 });
 
@@ -41,6 +49,13 @@ export const actions: Actions = {
     const rawPerms     = formData.get('permissions') as string;
     const rawBranchIds    = formData.get('branchIds') as string;
     const rawWarehouseIds = formData.get('warehouseIds') as string;
+
+    if (!roleId && !hasPermission(locals.profile, 'sec_roles', 'create')) {
+      return fail(403, { error: 'No tienes permiso para crear roles.' });
+    }
+    if (roleId && !hasPermission(locals.profile, 'sec_roles', 'update')) {
+      return fail(403, { error: 'No tienes permiso para modificar roles.' });
+    }
 
     if (!roleName) return fail(400, { error: 'El nombre del rol es requerido.' });
 

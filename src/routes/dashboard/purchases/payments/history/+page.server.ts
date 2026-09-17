@@ -19,6 +19,7 @@ export const load: PageServerLoad = protectLoad('pur_payments', async ({ url, lo
 			pagination: { total: 0, page: 1, limit: 12, totalPages: 0 },
 			canVoid: false,
 			canSeeOthers: false,
+			canCreate: false,
 			error: 'No tienes sucursales asignadas.'
 		};
 	}
@@ -39,6 +40,7 @@ export const load: PageServerLoad = protectLoad('pur_payments', async ({ url, lo
 	const canSeeOthers = isAdmin || hasPermission(profile, 'pur_payments', 'others');
 	const canEdit = isAdmin || hasPermission(profile, 'pur_payments', 'update');
 	const canDelete = isAdmin || hasPermission(profile, 'pur_payments', 'delete');
+	const canCreate = isAdmin || hasPermission(profile, 'pur_payments', 'create');
 
 	let co_us_in = url.searchParams.get('co_us_in') || '';
 
@@ -54,6 +56,7 @@ export const load: PageServerLoad = protectLoad('pur_payments', async ({ url, lo
 				canSeeOthers,
 				canEdit,
 				canDelete,
+				canCreate,
 				error: 'Tu perfil no tiene asociado un usuario de Profit Plus. No puedes visualizar pagos.'
 			};
 		}
@@ -125,6 +128,7 @@ export const load: PageServerLoad = protectLoad('pur_payments', async ({ url, lo
 		canSeeOthers,
 		canEdit,
 		canDelete,
+		canCreate,
 		filters: {
 			search: url.searchParams.get('search') || '',
 			co_prov: url.searchParams.get('co_prov') || '',

@@ -136,15 +136,17 @@
       </p>
     </div>
 
-    <div class="flex items-center gap-3 shrink-0">
-      <button
-        onclick={() => goto("/dashboard/billing")}
-        class="flex items-center justify-center gap-3 bg-brand-600 hover:bg-brand-500 text-white h-14 px-8 rounded-2xl font-black shadow-xl shadow-brand-500/20 transition-all active:scale-95 shrink-0 w-full md:w-auto cursor-pointer"
-      >
-        <Plus size={20} />
-        Nueva Factura
-      </button>
-    </div>
+    {#if data.canCreate}
+      <div class="flex items-center gap-3 shrink-0">
+        <button
+          onclick={() => goto("/dashboard/billing")}
+          class="flex items-center justify-center gap-3 bg-brand-600 hover:bg-brand-500 text-white h-14 px-8 rounded-2xl font-black shadow-xl shadow-brand-500/20 transition-all active:scale-95 shrink-0 w-full md:w-auto cursor-pointer"
+        >
+          <Plus size={20} />
+          Nueva Factura
+        </button>
+      </div>
+    {/if}
   </div>
 
   <!-- SEARCH & FILTERS -->

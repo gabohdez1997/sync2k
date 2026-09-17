@@ -3,7 +3,7 @@ import { protectLoad, protectAction } from '$lib/server/permissions';
 import { AgentClient } from '$lib/server/agent';
 import { hasPermission } from '$lib/server/auth';
 import { logAction } from '$lib/server/audit';
-import { fail, type Actions } from '@sveltejs/kit';
+import { fail, redirect, type Actions } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
 
 export const load: PageServerLoad = protectLoad('inv_dispatches', async ({ url, locals, fetch }) => {
@@ -77,6 +77,11 @@ export const load: PageServerLoad = protectLoad('inv_dispatches', async ({ url, 
     const canCreate = hasPermission(profile, 'inv_dispatches', 'create');
     const canUpdate = hasPermission(profile, 'inv_dispatches', 'update');
     const canVoid   = hasPermission(profile, 'inv_dispatches', 'void');
+
+    const canAccess = docNum ? canUpdate : canCreate;
+    if (!canAccess) {
+        throw redirect(303, '/dashboard/warehouse/dispatches/history');
+    }
 
     return {
         title: 'Despacho de Mercancía',

@@ -1,13 +1,22 @@
 import { protectLoad, protectAction } from '$lib/server/permissions';
 import { AgentClient } from '$lib/server/agent';
 import { supabaseAdmin } from '$lib/server/supabase';
-import { fail } from '@sveltejs/kit';
+import { hasPermission } from '$lib/server/auth';
+import { fail, redirect } from '@sveltejs/kit';
 import { logAction } from '$lib/server/audit';
 import type { PageServerLoad, Actions } from './$types';
 
 export const load: PageServerLoad = protectLoad('pur_articles', async ({ url, locals, fetch }) => {
+    const profile = (locals as any).profile;
+    const articleId = url.searchParams.get('id');
+    const canCreate = hasPermission(profile, 'pur_articles', 'create');
+    const canUpdate = hasPermission(profile, 'pur_articles', 'update');
+    const canAccess = articleId ? canUpdate : canCreate;
+    if (!canAccess) {
+        throw redirect(303, '/dashboard/purchases/articles');
+    }
+
     try {
-        const articleId = url.searchParams.get('id');
         const branchId = url.searchParams.get('branch_id'); // Para saber de dónde leer el original
 
         // ─── 1. LOAD BRANCH FOR READING ────────────────────────────────
