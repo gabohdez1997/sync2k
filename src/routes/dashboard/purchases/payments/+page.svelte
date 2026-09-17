@@ -356,6 +356,37 @@
   $effect(() => {
     if (selectedBranch) {
       fetchExchangeRate();
+
+      const urlProv = $page.url.searchParams.get("co_prov");
+      const editFrom = $page.url.searchParams.get("edit_from");
+      if (urlProv && !selectedSupplier && !loadingDocs) {
+        fetch(
+          `/api/agent/payables/pending-documents?branch_id=${selectedBranch}&co_prov=${encodeURIComponent(urlProv)}&limit=100`,
+        )
+          .then((r) => r.json())
+          .then((json) => {
+            if (json.data && json.data.length > 0) {
+              const first = json.data[0];
+              selectedSupplier = {
+                co_prov: first.co_prov?.trim(),
+                descripcion: first.prov_des?.trim(),
+                rif: first.rif?.trim(),
+                contribu_e: first.contribu_e,
+                porc_esp: first.porc_esp || 75,
+                direc1: "",
+                telefonos: "",
+              };
+              co_prov = selectedSupplier.co_prov;
+              loadSupplierDocuments(co_prov);
+              if (editFrom) {
+                toast.info(
+                  `Editando pago anterior ${editFrom}. Se cargaron las facturas del proveedor.`,
+                );
+              }
+            }
+          })
+          .catch(console.error);
+      }
     }
   });
 

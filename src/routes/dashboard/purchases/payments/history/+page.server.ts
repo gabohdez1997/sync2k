@@ -31,9 +31,14 @@ export const load: PageServerLoad = protectLoad('pur_payments', async ({ url, lo
 	let pagination = { total: 0, page: 1, limit: 12, totalPages: 0 };
 	let errorMsg = '';
 
-	const canVoid = hasPermission(profile, 'pur_payments', 'void');
-	const canSeeOthers = hasPermission(profile, 'pur_payments', 'others');
-	const canEdit = hasPermission(profile, 'pur_payments', 'update');
+	const isAdmin = profile.roles?.some((r: any) => 
+		(typeof r === 'string' && (r.toLowerCase().includes('admin') || r.toLowerCase().includes('administrador'))) || 
+		(typeof r === 'object' && (r.name?.toLowerCase().includes('admin') || r.name?.toLowerCase().includes('administrador')))
+	);
+	const canVoid = isAdmin || hasPermission(profile, 'pur_payments', 'void') || hasPermission(profile, 'pur_payments', 'delete');
+	const canSeeOthers = isAdmin || hasPermission(profile, 'pur_payments', 'others');
+	const canEdit = isAdmin || hasPermission(profile, 'pur_payments', 'update');
+	const canDelete = isAdmin || hasPermission(profile, 'pur_payments', 'delete');
 
 	let co_us_in = url.searchParams.get('co_us_in') || '';
 
@@ -48,6 +53,7 @@ export const load: PageServerLoad = protectLoad('pur_payments', async ({ url, lo
 				canVoid,
 				canSeeOthers,
 				canEdit,
+				canDelete,
 				error: 'Tu perfil no tiene asociado un usuario de Profit Plus. No puedes visualizar pagos.'
 			};
 		}
@@ -118,6 +124,7 @@ export const load: PageServerLoad = protectLoad('pur_payments', async ({ url, lo
 		canVoid,
 		canSeeOthers,
 		canEdit,
+		canDelete,
 		filters: {
 			search: url.searchParams.get('search') || '',
 			co_prov: url.searchParams.get('co_prov') || '',
@@ -137,7 +144,11 @@ export const actions = {
 		const password = String(formData.get('password') || '');
 		const profile = (locals as any).profile;
 
-		if (!hasPermission(profile, 'pur_payments', 'void')) {
+		const isAdmin = profile.roles?.some((r: any) => 
+			(typeof r === 'string' && (r.toLowerCase().includes('admin') || r.toLowerCase().includes('administrador'))) || 
+			(typeof r === 'object' && (r.name?.toLowerCase().includes('admin') || r.name?.toLowerCase().includes('administrador')))
+		);
+		if (!isAdmin && !hasPermission(profile, 'pur_payments', 'void') && !hasPermission(profile, 'pur_payments', 'delete')) {
 			return fail(403, { success: false, message: 'No tienes permiso para anular pagos a proveedores.' });
 		}
 
@@ -160,11 +171,148 @@ export const actions = {
 		const agentClient = new AgentClient(branch, profile, fetch);
 
 		try {
-			const res: any = await agentClient.request(`/pagos/${cob_num}/anular`, { method: 'POST' });
-			if (res && res.success) {
+			const res: any = await agentClient.request(`/pagos/${encodeURIComponent(cob_num)}/anular?sede=${encodeURIComponent(branch.id)}`, { method: 'POST' });
+			if (res && (res.success || res.success !== false)) {
+				try {
+					await supabaseAdmin.from('audit_log').insert({
+						action: 'VOID',
+						module: 'pur_payments',
+						record_id: cob_num,
+						user_email: email,
+						branch_id: branch.id,
+						metadata: { message: `Pago ${cob_num} anulado por el usuario` }
+					});
+				} catch (eAudit) {
+					console.error('Error logging audit for void payment:', eAudit);
+				}
 				return { success: true, message: `Pago ${cob_num} anulado exitosamente.` };
 			} else {
 				return fail(500, { success: false, message: res?.message || 'No se pudo anular el pago en el Agente.' });
+			}
+		} catch (err: any) {
+			return fail(500, { success: false, message: `Error de red con el Agente: ${err.message}` });
+		}
+	}),
+
+	editPayment: protectAction('pur_payments', async ({ request, locals, fetch }) => {
+		const formData = await request.formData();
+		const cob_num = String(formData.get('cob_num') || '').trim();
+		const branch_id = String(formData.get('branch_id') || '').trim();
+		const co_prov = String(formData.get('co_prov') || '').trim();
+		const password = String(formData.get('password') || '');
+		const isAnulado = formData.get('anulado') === 'true' || formData.get('anulado') === '1';
+		const profile = (locals as any).profile;
+
+		const isAdmin = profile.roles?.some((r: any) => 
+			(typeof r === 'string' && (r.toLowerCase().includes('admin') || r.toLowerCase().includes('administrador'))) || 
+			(typeof r === 'object' && (r.name?.toLowerCase().includes('admin') || r.name?.toLowerCase().includes('administrador')))
+		);
+		if (!isAdmin && !hasPermission(profile, 'pur_payments', 'update')) {
+			return fail(403, { success: false, message: 'No tienes permiso para editar pagos a proveedores.' });
+		}
+
+		if (!cob_num) return fail(400, { success: false, message: 'Número de pago no válido.' });
+		if (!branch_id) return fail(400, { success: false, message: 'Sucursal no válida.' });
+		if (!password) {
+			return fail(400, { success: false, message: 'La contraseña es requerida para confirmar la edición.' });
+		}
+
+		const email = locals.session?.user?.email;
+		if (!email) return fail(401, { success: false, message: 'Sesión no válida.' });
+
+		// Confirmación de seguridad: validar contraseña actual del usuario
+		const { error: authErr } = await locals.supabase.auth.signInWithPassword({ email, password });
+		if (authErr) return fail(401, { success: false, message: 'Contraseña de confirmación incorrecta.' });
+
+		const branch = profile.allowed_branches?.find((b: any) => b.id === branch_id);
+		if (!branch) return fail(403, { success: false, message: 'Sucursal no autorizada.' });
+
+		const agentClient = new AgentClient(branch, profile, fetch);
+
+		try {
+			// Si el pago está activo, anularlo primero para liberar sus facturas y permitir re-emisión
+			if (!isAnulado) {
+				const res: any = await agentClient.request(`/pagos/${encodeURIComponent(cob_num)}/anular?sede=${encodeURIComponent(branch.id)}`, { method: 'POST' });
+				if (!res || res.success === false) {
+					return fail(500, { success: false, message: res?.message || 'No se pudo anular el pago previo para edición.' });
+				}
+			}
+
+			try {
+				await supabaseAdmin.from('audit_log').insert({
+					action: 'UPDATE',
+					module: 'pur_payments',
+					record_id: cob_num,
+					user_email: email,
+					branch_id: branch.id,
+					metadata: { message: `Pago ${cob_num} revertido para reedición por el usuario` }
+				});
+			} catch (eAudit) {
+				console.error('Error logging audit for edit payment:', eAudit);
+			}
+
+			return {
+				success: true,
+				actionType: 'edit',
+				message: `Pago ${cob_num} liberado para edición. Cargando editor...`,
+				redirectUrl: `/dashboard/purchases/payments?branch_id=${branch_id}&co_prov=${encodeURIComponent(co_prov)}&edit_from=${encodeURIComponent(cob_num)}`
+			};
+		} catch (err: any) {
+			return fail(500, { success: false, message: `Error de red con el Agente: ${err.message}` });
+		}
+	}),
+
+	deletePayment: protectAction('pur_payments', async ({ request, locals, fetch }) => {
+		const formData = await request.formData();
+		const cob_num = String(formData.get('cob_num') || '').trim();
+		const branch_id = String(formData.get('branch_id') || '').trim();
+		const password = String(formData.get('password') || '');
+		const profile = (locals as any).profile;
+
+		const isAdmin = profile.roles?.some((r: any) => 
+			(typeof r === 'string' && (r.toLowerCase().includes('admin') || r.toLowerCase().includes('administrador'))) || 
+			(typeof r === 'object' && (r.name?.toLowerCase().includes('admin') || r.name?.toLowerCase().includes('administrador')))
+		);
+		if (!isAdmin && !hasPermission(profile, 'pur_payments', 'delete')) {
+			return fail(403, { success: false, message: 'No tienes permiso para eliminar pagos a proveedores.' });
+		}
+
+		if (!cob_num) return fail(400, { success: false, message: 'Número de pago no válido.' });
+		if (!branch_id) return fail(400, { success: false, message: 'Sucursal no válida.' });
+		if (!password) {
+			return fail(400, { success: false, message: 'La contraseña es requerida para confirmar la eliminación.' });
+		}
+
+		const email = locals.session?.user?.email;
+		if (!email) return fail(401, { success: false, message: 'Sesión no válida.' });
+
+		// Confirmación de seguridad: validar contraseña actual del usuario
+		const { error: authErr } = await locals.supabase.auth.signInWithPassword({ email, password });
+		if (authErr) return fail(401, { success: false, message: 'Contraseña de confirmación incorrecta.' });
+
+		const branch = profile.allowed_branches?.find((b: any) => b.id === branch_id);
+		if (!branch) return fail(403, { success: false, message: 'Sucursal no autorizada.' });
+
+		const agentClient = new AgentClient(branch, profile, fetch);
+
+		try {
+			const res: any = await agentClient.request(`/pagos/${encodeURIComponent(cob_num)}/eliminar?sede=${encodeURIComponent(branch.id)}`, { method: 'POST' });
+			if (res && (res.success || res.success !== false)) {
+				try {
+					await supabaseAdmin.from('audit_log').insert({
+						action: 'DELETE',
+						module: 'pur_payments',
+						record_id: cob_num,
+						user_email: email,
+						branch_id: branch.id,
+						metadata: { message: `Pago ${cob_num} eliminado físicamente por el usuario` }
+					});
+				} catch (eAudit) {
+					console.error('Error logging audit for delete payment:', eAudit);
+				}
+				return { success: true, message: `Pago ${cob_num} eliminado exitosamente.` };
+			} else {
+				return fail(500, { success: false, message: res?.message || 'No se pudo eliminar el pago en el Agente.' });
 			}
 		} catch (err: any) {
 			return fail(500, { success: false, message: `Error de red con el Agente: ${err.message}` });

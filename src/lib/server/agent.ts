@@ -165,6 +165,13 @@ export class AgentClient {
 						};
 					}
 					return data;
+				} else {
+					const errorData = await localRes.json().catch(() => ({}));
+					return {
+						success: false,
+						message: errorData.message || `Error del Agente: ${localRes.statusText}`,
+						details: errorData.results || errorData.error
+					};
 				}
 			} catch (fallbackErr: any) {
 				console.warn(`[AgentClient] Fallback local también falló:`, fallbackErr.message);

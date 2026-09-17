@@ -4,9 +4,9 @@
   import { goto, invalidateAll } from '$app/navigation';
   import { enhance } from '$app/forms';
   import { 
-    Wallet, Search, Plus, Eye, X, Trash2,
+    Wallet, Search, Plus, Eye, X, Trash2, Edit2,
     AlertCircle, RefreshCw, AlertTriangle, Building, CreditCard, Landmark, CheckCircle,
-    FileText, ChevronLeft, ChevronRight, Ban, Store, Lock, Check, Loader2, Clock
+    FileText, ChevronLeft, ChevronRight, Ban, Store, Lock, Check, Loader2, Clock, Receipt
   } from 'lucide-svelte';
   import { fade } from 'svelte/transition';
   import { toast } from 'svelte-sonner';
@@ -25,6 +25,30 @@
     paymentToVoid = payment;
     voidPassword = '';
     showVoidModal = true;
+  }
+
+  // Modal de Edición
+  let showEditModal = $state(false);
+  let paymentToEdit = $state<any>(null);
+  let editPassword = $state('');
+  let isEditing = $state(false);
+
+  function openEditModal(payment: any) {
+    paymentToEdit = payment;
+    editPassword = '';
+    showEditModal = true;
+  }
+
+  // Modal de Eliminación Definitiva
+  let showDeleteModal = $state(false);
+  let paymentToDelete = $state<any>(null);
+  let deletePassword = $state('');
+  let isDeleting = $state(false);
+
+  function openDeleteModal(payment: any) {
+    paymentToDelete = payment;
+    deletePassword = '';
+    showDeleteModal = true;
   }
 
   let searchInput = $state('');
@@ -65,18 +89,21 @@
     loadingDetail = true;
     detailError = null;
     detailData = null;
-    const cobNum = typeof payment === 'string' ? payment : payment?.cob_num;
+    const rawCob = typeof payment === 'string' ? payment : payment?.cob_num;
+    const cobNum = (rawCob || '').trim();
+    const branchId = selectedBranch || payment?.branch_id || data.selectedBranchId;
     try {
-      const res = await fetch(`/api/agent/payables/payments/${encodeURIComponent(cobNum)}?branch_id=${data.selectedBranchId}`);
+      const res = await fetch(`/api/agent/payables/payments/${encodeURIComponent(cobNum)}?branch_id=${branchId}`);
       if (res.ok) {
         const resJson = await res.json();
         if (resJson.success && resJson.data) {
           detailData = Array.isArray(resJson.data) ? resJson.data[0] : resJson.data;
         } else {
-          detailError = resJson.message || 'No se pudo obtener el detalle del pago.';
+          detailError = resJson.message || 'No se pudo obtener el desglose del pago en el agente.';
         }
       } else {
-        detailError = `Error al consultar: ${res.statusText}`;
+        const resErr = await res.json().catch(() => ({}));
+        detailError = resErr.message || resErr.error || `Error al consultar: ${res.statusText}`;
       }
     } catch (e: any) {
       detailError = `Error de red: ${e.message}`;
@@ -281,7 +308,7 @@
                   {/if}
                 </td>
                 <td class="px-6 py-5">
-                  <div class="flex items-center justify-center gap-2">
+                  <div class="flex items-center justify-center gap-1.5">
                     <button 
                       onclick={() => openDetail(p)}
                       class="p-2 text-text-muted hover:text-brand-500 hover:bg-brand-500/10 rounded-xl transition-all cursor-pointer"
@@ -289,6 +316,15 @@
                     >
                       <Eye size={18} />
                     </button>
+                    {#if data.canEdit && !p.anulado}
+                      <button 
+                        onclick={() => openEditModal(p)}
+                        class="p-2 text-text-muted hover:text-blue-500 hover:bg-blue-500/10 rounded-xl transition-all cursor-pointer"
+                        title="Editar Pago (Revertir y cargar)"
+                      >
+                        <Edit2 size={18} />
+                      </button>
+                    {/if}
                     {#if data.canVoid && !p.anulado}
                       <button 
                         onclick={() => openVoidModal(p)}
@@ -296,6 +332,15 @@
                         title="Anular Pago"
                       >
                         <Ban size={18} />
+                      </button>
+                    {/if}
+                    {#if data.canDelete}
+                      <button 
+                        onclick={() => openDeleteModal(p)}
+                        class="p-2 text-text-muted hover:text-red-500 hover:bg-red-500/10 rounded-xl transition-all cursor-pointer"
+                        title="Eliminar Pago Permanentemente"
+                      >
+                        <Trash2 size={18} />
                       </button>
                     {/if}
                   </div>
@@ -382,24 +427,42 @@
             <p class="text-sm font-bold">Cargando desglose del pago...</p>
           </div>
         {:else if detailError}
-          <div class="p-6 bg-red-500/10 border border-red-500/20 rounded-2xl text-red-400 text-sm">
-            {detailError}
+          <div class="p-6 bg-red-500/10 border border-red-500/20 rounded-2xl text-red-400 space-y-3">
+            <div class="flex items-center gap-2 font-bold text-sm">
+              <AlertTriangle size={18} />
+              <span>No se pudo cargar el desglose del pago</span>
+            </div>
+            <p class="text-xs text-red-300/80 leading-relaxed">{detailError}</p>
+            <div class="pt-2 flex gap-3">
+              <button 
+                onclick={() => openDetail(selectedPayment)}
+                class="px-3.5 py-2 bg-red-500/20 hover:bg-red-500/30 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
+              >
+                <RefreshCw size={14} /> Reintentar
+              </button>
+              <button 
+                onclick={() => detailModalOpen = false}
+                class="px-3.5 py-2 bg-white/5 hover:bg-white/10 text-text-muted hover:text-white rounded-xl text-xs font-bold transition-all cursor-pointer"
+              >
+                Cerrar
+              </button>
+            </div>
           </div>
         {:else if detailData}
           <!-- Resumen de Cabecera -->
           <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 bg-surface-soft/40 p-4 rounded-2xl border border-border-subtle text-xs">
             <div>
               <span class="text-[9px] uppercase font-bold text-text-muted block">Fecha Emisión</span>
-              <span class="font-bold text-text-base">{new Date(detailData.fecha).toLocaleDateString('es-VE')}</span>
+              <span class="font-bold text-text-base">{new Date(detailData.fecha || Date.now()).toLocaleDateString('es-VE')}</span>
             </div>
             <div>
               <span class="text-[9px] uppercase font-bold text-text-muted block">Tasa Cambiaria</span>
-              <span class="font-bold text-text-base">{Number(detailData.tasa).toFixed(2)} Bs/$</span>
+              <span class="font-bold text-text-base">{Number(detailData.tasa || 1).toFixed(2)} Bs/$</span>
             </div>
             <div>
               <span class="text-[9px] uppercase font-bold text-text-muted block">Monto Total</span>
               <span class="font-bold text-brand-400 font-mono">
-                $ {(Number(detailData.monto) / (Number(detailData.tasa) > 0 ? Number(detailData.tasa) : 1)).toFixed(2)}
+                $ {(Number(detailData.monto || 0) / (Number(detailData.tasa || 1) > 0 ? Number(detailData.tasa || 1) : 1)).toFixed(2)}
               </span>
             </div>
             <div>
@@ -444,48 +507,189 @@
 
           <!-- Retenciones de IVA -->
           {#if detailData.retenciones_iva && detailData.retenciones_iva.length > 0}
-            <div class="space-y-2">
-              <h4 class="text-xs font-black uppercase tracking-wider text-green-400 flex items-center gap-2">
-                <CheckCircle size={14} />
-                Comprobantes de Retención de IVA
-              </h4>
-              <div class="bg-green-500/5 border border-green-500/20 rounded-2xl p-3 space-y-2 text-xs">
-                {#each detailData.retenciones_iva as ri}
-                  <div class="flex flex-wrap justify-between items-center py-1 border-b border-green-500/10 last:border-0">
-                    <div>
-                      <span class="font-mono font-black text-green-400">Comp: {ri.num_comprobante}</span>
-                      <span class="text-text-muted ml-2">Doc: {ri.numero_documento_afectado || ''}</span>
+            {@const uniqueRetIva = (() => {
+              const factRenglones = (detailData.renglones || []).filter(r => r.co_tipo_doc !== 'IVAN' && r.co_tipo_doc !== 'ISLR');
+
+              const list = detailData.retenciones_iva.map((ri) => {
+                const rawDoc = (ri.numero_documento_afectado || ri.nro_doc || '').trim();
+                const docCode = (rawDoc !== '0' && rawDoc !== '---') ? rawDoc : '';
+
+                // 1. Intentar buscar factura por coincidencia directa de doc o rowguid
+                let renglon = factRenglones.find((r) => 
+                  (docCode && (r.nro_doc?.trim() === docCode || r.nro_fact?.trim() === docCode)) ||
+                  (ri.rowguid_reng_cob && r.rowguid === ri.rowguid_reng_cob)
+                );
+
+                // 2. Si el doc recibido era el del IVAN, buscar el renglón original a través de rowguid_reng_ori
+                if (!renglon && docCode) {
+                  const ivanRow = detailData.renglones?.find(r => r.co_tipo_doc === 'IVAN' && r.nro_doc?.trim() === docCode);
+                  if (ivanRow?.rowguid_reng_ori) {
+                    renglon = factRenglones.find(r => r.rowguid === ivanRow.rowguid_reng_ori);
+                  }
+                }
+
+                // 3. Si solo hay una factura en el pago o con retención de IVA, asociarla
+                if (!renglon && factRenglones.length === 1) {
+                  renglon = factRenglones[0];
+                }
+
+                const factNum = (ri.nro_fact && ri.nro_fact !== '---' && ri.nro_fact !== '0')
+                  ? ri.nro_fact.trim()
+                  : (renglon?.nro_fact && renglon.nro_fact !== '---' && renglon.nro_fact !== '0')
+                    ? renglon.nro_fact.trim()
+                    : '';
+
+                const internalDoc = (renglon?.nro_doc && renglon.nro_doc !== '---')
+                  ? renglon.nro_doc.trim()
+                  : (docCode && !docCode.startsWith('IVAN') ? docCode : '');
+
+                return {
+                  ...ri,
+                  resolvedFactura: factNum,
+                  resolvedDoc: internalDoc,
+                  hasFacturaOrDoc: Boolean(factNum || internalDoc)
+                };
+              });
+
+              // Filtrar solo los que tengan número de comprobante y factura/documento
+              let valid = list.filter((r) => {
+                const hasComp = Boolean(r.num_comprobante && r.num_comprobante.trim() !== '' && r.num_comprobante !== '---');
+                return hasComp && r.hasFacturaOrDoc;
+              });
+
+              // Respaldo: si ninguno trajo doc directo, asociar con las facturas que tengan retención de IVA en el pago
+              if (valid.length === 0 && list.length > 0) {
+                const facturasConReten = factRenglones.filter(r => Number(r.monto_retencion_iva || 0) > 0);
+                list.forEach((ri, idx) => {
+                  const match = facturasConReten[idx] || facturasConReten[0] || factRenglones[0];
+                  if (match) {
+                    ri.resolvedFactura = (match.nro_fact && match.nro_fact !== '---') ? match.nro_fact : '';
+                    ri.resolvedDoc = match.nro_doc || '';
+                    ri.hasFacturaOrDoc = true;
+                  }
+                });
+                valid = list.filter(r => r.num_comprobante && r.num_comprobante.trim() !== '' && r.hasFacturaOrDoc);
+              }
+
+              const seen = new Set();
+              return valid.filter((item) => {
+                const compKey = item.num_comprobante.trim();
+                const docKey = item.resolvedFactura || item.resolvedDoc || '';
+                const key = `${compKey}-${docKey}`;
+                if (seen.has(key)) return false;
+                seen.add(key);
+                return true;
+              });
+            })()}
+            {#if uniqueRetIva.length > 0}
+              <div class="space-y-2">
+                <h4 class="text-xs font-black uppercase tracking-wider text-green-400 flex items-center gap-2">
+                  <CheckCircle size={14} />
+                  Comprobantes de Retención de IVA
+                </h4>
+                <div class="bg-green-500/5 border border-green-500/20 rounded-2xl p-3 space-y-2 text-xs">
+                  {#each uniqueRetIva as ri}
+                    {@const factDisplay = ri.resolvedFactura 
+                      ? `${ri.resolvedFactura}${ri.resolvedDoc && ri.resolvedDoc !== ri.resolvedFactura ? ` (${ri.resolvedDoc})` : ''}` 
+                      : ri.resolvedDoc}
+                    <div class="flex flex-wrap justify-between items-center py-1 border-b border-green-500/10 last:border-0">
+                      <div>
+                        <span class="font-mono font-black text-green-400">Comp: {ri.num_comprobante}</span>
+                        <span class="text-text-muted ml-2">Factura: {factDisplay}</span>
+                      </div>
+                      <div class="font-mono font-bold text-green-300">
+                        Retenido: Bs. {Number(ri.monto_ret_imp).toLocaleString('de-DE', {minimumFractionDigits: 2})} (Base: Bs. {Number(ri.base_imponible).toLocaleString('de-DE', {minimumFractionDigits: 2})})
+                      </div>
                     </div>
-                    <div class="font-mono font-bold text-green-300">
-                      Retenido: Bs. {Number(ri.monto_ret_imp).toLocaleString('de-DE', {minimumFractionDigits: 2})} (Base: Bs. {Number(ri.base_imponible).toLocaleString('de-DE', {minimumFractionDigits: 2})})
-                    </div>
-                  </div>
-                {/each}
+                  {/each}
+                </div>
               </div>
-            </div>
+            {/if}
           {/if}
 
           <!-- Retenciones de ISLR -->
           {#if detailData.retenciones_islr && detailData.retenciones_islr.length > 0}
-            <div class="space-y-2">
-              <h4 class="text-xs font-black uppercase tracking-wider text-amber-400 flex items-center gap-2">
-                <Landmark size={14} />
-                Retenciones de ISLR
-              </h4>
-              <div class="bg-amber-500/5 border border-amber-500/20 rounded-2xl p-3 space-y-2 text-xs">
-                {#each detailData.retenciones_islr as rn}
-                  <div class="flex flex-wrap justify-between items-center py-1 border-b border-amber-500/10 last:border-0">
-                    <div>
-                      <span class="font-mono font-black text-amber-400">Concepto: {rn.co_islr}</span>
-                      <span class="text-text-muted ml-2">Porc: {rn.porc_retn}%</span>
+            {@const uniqueRetIslr = (() => {
+              const factRenglones = (detailData.renglones || []).filter(r => r.co_tipo_doc !== 'IVAN' && r.co_tipo_doc !== 'ISLR');
+
+              const list = detailData.retenciones_islr.map((rn) => {
+                const rawDoc = (rn.nro_doc || '').trim();
+                const docCode = (rawDoc !== '0' && rawDoc !== '---') ? rawDoc : '';
+
+                let renglon = factRenglones.find((r) => 
+                  (docCode && (r.nro_doc?.trim() === docCode || r.nro_fact?.trim() === docCode)) ||
+                  (rn.rowguid_reng_cob && r.rowguid === rn.rowguid_reng_cob)
+                );
+
+                if (!renglon && docCode) {
+                  const islrRow = detailData.renglones?.find(r => r.co_tipo_doc === 'ISLR' && r.nro_doc?.trim() === docCode);
+                  if (islrRow?.rowguid_reng_ori) {
+                    renglon = factRenglones.find(r => r.rowguid === islrRow.rowguid_reng_ori);
+                  }
+                }
+
+                if (!renglon && factRenglones.length === 1) {
+                  renglon = factRenglones[0];
+                }
+
+                const factNum = (rn.nro_fact && rn.nro_fact !== '---' && rn.nro_fact !== '0')
+                  ? rn.nro_fact.trim()
+                  : (renglon?.nro_fact && renglon.nro_fact !== '---' && renglon.nro_fact !== '0')
+                    ? renglon.nro_fact.trim()
+                    : '';
+
+                const internalDoc = (renglon?.nro_doc && renglon.nro_doc !== '---')
+                  ? renglon.nro_doc.trim()
+                  : (docCode && !docCode.startsWith('ISLR') ? docCode : '');
+
+                return {
+                  ...rn,
+                  resolvedFactura: factNum,
+                  resolvedDoc: internalDoc,
+                  hasFacturaOrDoc: Boolean(factNum || internalDoc)
+                };
+              });
+
+              let valid = list.filter((r) => r.hasFacturaOrDoc);
+              if (valid.length === 0 && list.length > 0) {
+                valid = list;
+              }
+
+              const seen = new Set();
+              return valid.filter((item) => {
+                const key = `${item.co_islr?.trim()}-${item.resolvedFactura || item.resolvedDoc || ''}-${Number(item.monto_reten || 0).toFixed(2)}`;
+                if (seen.has(key)) return false;
+                seen.add(key);
+                return true;
+              });
+            })()}
+            {#if uniqueRetIslr.length > 0}
+              <div class="space-y-2">
+                <h4 class="text-xs font-black uppercase tracking-wider text-amber-400 flex items-center gap-2">
+                  <Landmark size={14} />
+                  Retenciones de ISLR
+                </h4>
+                <div class="bg-amber-500/5 border border-amber-500/20 rounded-2xl p-3 space-y-2 text-xs">
+                  {#each uniqueRetIslr as rn}
+                    {@const factDisplay = rn.resolvedFactura 
+                      ? `${rn.resolvedFactura}${rn.resolvedDoc && rn.resolvedDoc !== rn.resolvedFactura ? ` (${rn.resolvedDoc})` : ''}` 
+                      : rn.resolvedDoc}
+                    <div class="flex flex-wrap justify-between items-center py-1 border-b border-amber-500/10 last:border-0">
+                      <div>
+                        <span class="font-mono font-black text-amber-400">Concepto: {rn.co_islr}</span>
+                        <span class="text-text-muted ml-2">Porc: {rn.porc_retn}%</span>
+                        {#if factDisplay}
+                          <span class="text-text-muted ml-2">Factura: {factDisplay}</span>
+                        {/if}
+                      </div>
+                      <div class="font-mono font-bold text-amber-300">
+                        Retenido: Bs. {Number(rn.monto_reten).toLocaleString('de-DE', {minimumFractionDigits: 2})} (Base: Bs. {Number(rn.monto_obj).toLocaleString('de-DE', {minimumFractionDigits: 2})})
+                      </div>
                     </div>
-                    <div class="font-mono font-bold text-amber-300">
-                      Retenido: Bs. {Number(rn.monto_reten).toLocaleString('de-DE', {minimumFractionDigits: 2})} (Base: Bs. {Number(rn.monto_obj).toLocaleString('de-DE', {minimumFractionDigits: 2})})
-                    </div>
-                  </div>
-                {/each}
+                  {/each}
+                </div>
               </div>
-            </div>
+            {/if}
           {/if}
 
           <!-- Formas de Pago -->
@@ -521,6 +725,61 @@
           {/if}
         {/if}
       </div>
+
+      <!-- MODAL FOOTER CON ACCIONES -->
+      <div class="p-5 border-t border-border-subtle bg-surface-soft/40 flex flex-wrap items-center justify-between gap-4">
+        <div class="flex items-center gap-2">
+          <span class="text-xs text-text-muted">Estado:</span>
+          {#if (detailData?.anulado || selectedPayment?.anulado)}
+            <span class="px-2.5 py-1 rounded-full text-xs font-bold bg-red-500/10 text-red-400 border border-red-500/20">
+              Anulado
+            </span>
+          {:else}
+            <span class="px-2.5 py-1 rounded-full text-xs font-bold bg-green-500/10 text-green-400 border border-green-500/20">
+              Activo
+            </span>
+          {/if}
+        </div>
+
+        <div class="flex items-center gap-2.5">
+          {#if data.canEdit && !(detailData?.anulado || selectedPayment?.anulado)}
+            <button
+              onclick={() => { const p = detailData || selectedPayment; detailModalOpen = false; openEditModal(p); }}
+              class="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 border border-blue-500/30 text-xs font-bold transition-all cursor-pointer"
+            >
+              <Edit2 size={15} />
+              Editar Pago
+            </button>
+          {/if}
+
+          {#if data.canVoid && !(detailData?.anulado || selectedPayment?.anulado)}
+            <button
+              onclick={() => { const p = detailData || selectedPayment; detailModalOpen = false; openVoidModal(p); }}
+              class="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/30 text-xs font-bold transition-all cursor-pointer"
+            >
+              <Ban size={15} />
+              Anular Pago
+            </button>
+          {/if}
+
+          {#if data.canDelete}
+            <button
+              onclick={() => { const p = detailData || selectedPayment; detailModalOpen = false; openDeleteModal(p); }}
+              class="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 text-xs font-bold transition-all cursor-pointer"
+            >
+              <Trash2 size={15} />
+              Eliminar Pago
+            </button>
+          {/if}
+
+          <button
+            onclick={() => detailModalOpen = false}
+            class="px-4 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-text-base text-xs font-bold transition-all cursor-pointer"
+          >
+            Cerrar
+          </button>
+        </div>
+      </div>
     </div>
   </div>
 {/if}
@@ -532,10 +791,10 @@
     transition:fade={{ duration: 150 }}
   >
     <div
-      class="glass border border-red-500/30 rounded-[32px] w-full max-w-md p-6 space-y-6 shadow-2xl animate-in zoom-in-95 duration-150"
+      class="glass border border-amber-500/30 rounded-[32px] w-full max-w-md p-6 space-y-6 shadow-2xl animate-in zoom-in-95 duration-150"
     >
-      <div class="flex items-center gap-3 text-red-400">
-        <div class="h-12 w-12 rounded-2xl bg-red-500/10 flex items-center justify-center">
+      <div class="flex items-center gap-3 text-amber-400">
+        <div class="h-12 w-12 rounded-2xl bg-amber-500/10 flex items-center justify-center">
           <Ban size={24} />
         </div>
         <div>
@@ -545,8 +804,8 @@
       </div>
 
       <p class="text-xs text-text-muted leading-relaxed">
-        ¿Estás seguro de que deseas anular el pago <span class="font-bold text-text-base">{paymentToVoid.cob_num}</span> del proveedor <span class="font-bold text-text-base">{paymentToVoid.prov_des}</span>?
-        Esta acción restaurará el saldo pendiente de las facturas de compra y anulará los documentos de retención asociados.
+        ¿Estás seguro de que deseas anular el pago <span class="font-bold text-text-base">{paymentToVoid.cob_num}</span> del proveedor <span class="font-bold text-text-base">{paymentToVoid.prov_des || paymentToVoid.co_prov}</span>?
+        Esta acción restaurará el saldo pendiente de las facturas de compra y anulará los documentos de retención y movimientos asociados.
       </p>
 
       <form
@@ -571,18 +830,18 @@
         <input type="hidden" name="branch_id" value={selectedBranch} />
 
         <div>
-          <label for="password" class="block text-xs font-black uppercase tracking-wider text-text-muted mb-1.5">
+          <label for="void-password" class="block text-xs font-black uppercase tracking-wider text-text-muted mb-1.5">
             Ingresa tu contraseña para confirmar
           </label>
           <div class="relative">
             <input
-              id="password"
+              id="void-password"
               name="password"
               type="password"
               required
               bind:value={voidPassword}
               placeholder="Contraseña actual"
-              class="w-full h-12 pl-10 pr-4 bg-surface-soft border border-border-subtle rounded-xl text-sm focus:border-red-500 outline-none text-text-base"
+              class="w-full h-12 pl-10 pr-4 bg-surface-soft border border-border-subtle rounded-xl text-sm focus:border-amber-500 outline-none text-text-base"
             />
             <Lock size={16} class="absolute left-3.5 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none" />
           </div>
@@ -599,13 +858,210 @@
           <button
             type="submit"
             disabled={isVoiding || !voidPassword}
-            class="flex-1 h-12 rounded-xl bg-red-600 hover:bg-red-500 disabled:opacity-50 text-white font-bold text-xs transition-all shadow-lg shadow-red-500/20 flex items-center justify-center gap-2 cursor-pointer"
+            class="flex-1 h-12 rounded-xl bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white font-bold text-xs transition-all shadow-lg shadow-amber-500/20 flex items-center justify-center gap-2 cursor-pointer"
           >
             {#if isVoiding}
               <Loader2 size={16} class="animate-spin" />
               Anulando...
             {:else}
               Confirmar Anulación
+            {/if}
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+{/if}
+
+<!-- MODAL PARA CONFIRMAR EDICIÓN CON CONTRASEÑA -->
+{#if showEditModal && paymentToEdit}
+  <div
+    class="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-4"
+    transition:fade={{ duration: 150 }}
+  >
+    <div
+      class="glass border border-blue-500/30 rounded-[32px] w-full max-w-md p-6 space-y-6 shadow-2xl animate-in zoom-in-95 duration-150"
+    >
+      <div class="flex items-center gap-3 text-blue-400">
+        <div class="h-12 w-12 rounded-2xl bg-blue-500/10 flex items-center justify-center">
+          <Edit2 size={24} />
+        </div>
+        <div>
+          <h3 class="font-black text-lg text-text-base">Editar Pago</h3>
+          <p class="text-xs text-text-muted font-mono">{paymentToEdit.cob_num}</p>
+        </div>
+      </div>
+
+      <div class="bg-blue-500/10 border border-blue-500/20 rounded-2xl p-4 text-xs text-blue-300 space-y-2 leading-relaxed">
+        <p class="font-bold text-white flex items-center gap-2">
+          <AlertCircle size={15} class="text-blue-400 shrink-0" />
+          Reversión y Carga en Editor
+        </p>
+        <p>
+          Para editar este pago, se revertirá el pago actual <span class="font-mono font-bold text-white">{paymentToEdit.cob_num}</span> en Profit Plus para liberar los saldos de sus facturas y serás redirigido al editor con el proveedor cargado.
+        </p>
+      </div>
+
+      <form
+        method="POST"
+        action="?/editPayment"
+        use:enhance={() => {
+          isEditing = true;
+          return async ({ result }) => {
+            isEditing = false;
+            if (result.type === 'success') {
+              showEditModal = false;
+              toast.success(result.data?.message || 'Pago preparado para edición.');
+              if (result.data?.redirectUrl) {
+                goto(result.data.redirectUrl);
+              } else {
+                invalidateAll();
+              }
+            } else if (result.type === 'failure') {
+              toast.error(result.data?.message || 'Error al autorizar edición del pago.');
+            }
+          };
+        }}
+        class="space-y-4"
+      >
+        <input type="hidden" name="cob_num" value={paymentToEdit.cob_num} />
+        <input type="hidden" name="branch_id" value={selectedBranch} />
+        <input type="hidden" name="co_prov" value={paymentToEdit.co_prov} />
+        <input type="hidden" name="anulado" value={paymentToEdit.anulado ? 'true' : 'false'} />
+
+        <div>
+          <label for="edit-password" class="block text-xs font-black uppercase tracking-wider text-text-muted mb-1.5">
+            Ingresa tu contraseña para confirmar
+          </label>
+          <div class="relative">
+            <input
+              id="edit-password"
+              name="password"
+              type="password"
+              required
+              bind:value={editPassword}
+              placeholder="Contraseña actual"
+              class="w-full h-12 pl-10 pr-4 bg-surface-soft border border-border-subtle rounded-xl text-sm focus:border-blue-500 outline-none text-text-base"
+            />
+            <Lock size={16} class="absolute left-3.5 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none" />
+          </div>
+        </div>
+
+        <div class="flex gap-3 pt-2">
+          <button
+            type="button"
+            onclick={() => showEditModal = false}
+            class="flex-1 h-12 rounded-xl bg-white/5 hover:bg-white/10 text-text-base font-bold text-xs transition-all cursor-pointer"
+          >
+            Cancelar
+          </button>
+          <button
+            type="submit"
+            disabled={isEditing || !editPassword}
+            class="flex-1 h-12 rounded-xl bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-bold text-xs transition-all shadow-lg shadow-blue-500/20 flex items-center justify-center gap-2 cursor-pointer"
+          >
+            {#if isEditing}
+              <Loader2 size={16} class="animate-spin" />
+              Procesando...
+            {:else}
+              Confirmar y Editar
+            {/if}
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+{/if}
+
+<!-- MODAL PARA CONFIRMAR ELIMINACIÓN DEFINITIVA CON CONTRASEÑA -->
+{#if showDeleteModal && paymentToDelete}
+  <div
+    class="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-4"
+    transition:fade={{ duration: 150 }}
+  >
+    <div
+      class="glass border border-red-500/30 rounded-[32px] w-full max-w-md p-6 space-y-6 shadow-2xl animate-in zoom-in-95 duration-150"
+    >
+      <div class="flex items-center gap-3 text-red-400">
+        <div class="h-12 w-12 rounded-2xl bg-red-500/10 flex items-center justify-center">
+          <Trash2 size={24} />
+        </div>
+        <div>
+          <h3 class="font-black text-lg text-text-base">Eliminar Pago</h3>
+          <p class="text-xs text-text-muted font-mono">{paymentToDelete.cob_num}</p>
+        </div>
+      </div>
+
+      <div class="bg-red-500/10 border border-red-500/20 rounded-2xl p-4 text-xs text-red-300 space-y-2 leading-relaxed">
+        <p class="font-bold text-red-400 flex items-center gap-2">
+          <AlertTriangle size={15} class="shrink-0" />
+          ¡ADVERTENCIA: ACCIÓN DESTRUCTIVA!
+        </p>
+        <p>
+          ¿Estás seguro de que deseas eliminar permanentemente el pago <span class="font-bold text-white">{paymentToDelete.cob_num}</span> del proveedor <span class="font-bold text-white">{paymentToDelete.prov_des || paymentToDelete.co_prov}</span>?
+        </p>
+        <p class="text-red-400/90 text-[11px]">
+          Esta acción removerá físicamente el registro del pago en Profit Plus, restaurará el saldo de las facturas asociadas y limpiará los comprobantes generados. Esta operación NO se puede deshacer.
+        </p>
+      </div>
+
+      <form
+        method="POST"
+        action="?/deletePayment"
+        use:enhance={() => {
+          isDeleting = true;
+          return async ({ result }) => {
+            isDeleting = false;
+            if (result.type === 'success') {
+              showDeleteModal = false;
+              toast.success(result.data?.message || 'Pago eliminado permanentemente.');
+              invalidateAll();
+            } else if (result.type === 'failure') {
+              toast.error(result.data?.message || 'Error al eliminar el pago.');
+            }
+          };
+        }}
+        class="space-y-4"
+      >
+        <input type="hidden" name="cob_num" value={paymentToDelete.cob_num} />
+        <input type="hidden" name="branch_id" value={selectedBranch} />
+
+        <div>
+          <label for="delete-password" class="block text-xs font-black uppercase tracking-wider text-text-muted mb-1.5">
+            Ingresa tu contraseña para confirmar la eliminación
+          </label>
+          <div class="relative">
+            <input
+              id="delete-password"
+              name="password"
+              type="password"
+              required
+              bind:value={deletePassword}
+              placeholder="Contraseña actual"
+              class="w-full h-12 pl-10 pr-4 bg-surface-soft border border-border-subtle rounded-xl text-sm focus:border-red-500 outline-none text-text-base"
+            />
+            <Lock size={16} class="absolute left-3.5 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none" />
+          </div>
+        </div>
+
+        <div class="flex gap-3 pt-2">
+          <button
+            type="button"
+            onclick={() => showDeleteModal = false}
+            class="flex-1 h-12 rounded-xl bg-white/5 hover:bg-white/10 text-text-base font-bold text-xs transition-all cursor-pointer"
+          >
+            Cancelar
+          </button>
+          <button
+            type="submit"
+            disabled={isDeleting || !deletePassword}
+            class="flex-1 h-12 rounded-xl bg-red-600 hover:bg-red-500 disabled:opacity-50 text-white font-bold text-xs transition-all shadow-lg shadow-red-500/20 flex items-center justify-center gap-2 cursor-pointer"
+          >
+            {#if isDeleting}
+              <Loader2 size={16} class="animate-spin" />
+              Eliminando...
+            {:else}
+              Confirmar Eliminación
             {/if}
           </button>
         </div>
