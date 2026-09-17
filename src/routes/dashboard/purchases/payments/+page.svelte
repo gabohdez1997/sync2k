@@ -864,7 +864,7 @@
       <!-- Botón Importar Factura de Compra -->
       <button
         onclick={openImportModal}
-        class="flex items-center justify-center gap-2 px-6 h-14 rounded-2xl bg-brand-500/10 hover:bg-brand-500/20 text-brand-400 border border-brand-500/30 transition-all font-bold active:scale-95 shadow-sm shrink-0 cursor-pointer w-full sm:w-auto text-sm"
+        class="flex items-center justify-center gap-2 px-6 h-14 rounded-2xl bg-brand-500/10 hover:bg-brand-500/20 text-brand-600 dark:text-brand-400 border border-brand-500/30 transition-all font-bold active:scale-95 shadow-sm shrink-0 cursor-pointer w-full sm:w-auto text-sm"
       >
         <ShoppingBag size={18} />
         Importar Factura
@@ -875,7 +875,7 @@
         href="/dashboard/purchases/payments/history?branch_id={selectedBranch}"
         class="flex items-center justify-center gap-2 px-6 h-14 rounded-2xl bg-surface-strong hover:bg-surface-base text-text-base border border-border-subtle transition-all font-bold active:scale-95 shadow-sm shrink-0 cursor-pointer w-full sm:w-auto text-sm"
       >
-        <Clock size={18} class="text-brand-400" />
+        <Clock size={18} class="text-brand-600 dark:text-brand-400" />
         Ver Historial
       </a>
     </div>
@@ -1773,18 +1773,27 @@
 <!-- MODAL PARA IMPORTAR FACTURA PENDIENTE -->
 {#if showImportModal}
   <div
-    class="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-4 sm:p-6"
+    class="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 backdrop-blur-md"
+    style="background-color: var(--modal-backdrop);"
     transition:fade={{ duration: 150 }}
   >
+    <!-- Backdrop Click to Close -->
+    <!-- svelte-ignore a11y_click_events_have_key_events -->
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
     <div
-      class="glass border border-border-subtle rounded-[32px] w-full max-w-4xl max-h-[85vh] flex flex-col shadow-2xl overflow-hidden animate-in zoom-in-95 duration-150"
+      class="fixed inset-0"
+      onclick={closeImportModal}
+    ></div>
+
+    <div
+      class="relative z-10 bg-surface-raised border border-border-subtle rounded-[32px] w-full max-w-4xl max-h-[85vh] flex flex-col shadow-2xl overflow-hidden animate-in zoom-in-95 duration-150"
     >
       <div
-        class="p-6 border-b border-border-subtle flex items-center justify-between"
+        class="p-6 border-b border-border-subtle flex items-center justify-between bg-surface-soft"
       >
         <div class="flex items-center gap-3">
           <div
-            class="h-10 w-10 rounded-xl bg-brand-500/10 flex items-center justify-center text-brand-400"
+            class="h-10 w-10 rounded-xl bg-brand-500/10 border border-brand-500/20 flex items-center justify-center text-brand-500 shrink-0"
           >
             <ShoppingBag size={20} />
           </div>
@@ -1792,27 +1801,28 @@
             <h3 class="font-black text-lg text-text-base">
               Importar Factura de Compra
             </h3>
-            <p class="text-xs text-text-muted">
+            <p class="text-xs text-text-muted font-medium">
               Selecciona una factura o documento de compra con saldo para cargar los datos del proveedor
             </p>
           </div>
         </div>
         <button
           onclick={closeImportModal}
-          class="h-10 w-10 rounded-xl bg-white/5 hover:bg-white/10 flex items-center justify-center text-text-muted hover:text-text-base transition-all cursor-pointer"
+          class="h-10 w-10 rounded-xl bg-surface-soft hover:bg-surface-strong flex items-center justify-center text-text-muted hover:text-text-base transition-all cursor-pointer"
+          aria-label="Cerrar modal"
         >
           <X size={18} />
         </button>
       </div>
 
-      <div class="p-6 border-b border-border-subtle">
+      <div class="p-6 border-b border-border-subtle bg-surface-soft/50">
         <div class="relative">
           <input
             type="text"
             placeholder="Buscar por número de documento, factura de proveedor, RIF o razón social..."
             bind:value={searchQuery}
             oninput={() => searchPendingInvoices(searchQuery)}
-            class="w-full h-12 pl-12 pr-4 bg-surface-soft border border-border-subtle rounded-xl text-sm font-medium focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none text-text-base"
+            class="w-full h-12 pl-12 pr-4 bg-surface-base border border-border-subtle rounded-xl text-sm font-medium focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none text-text-base placeholder:text-text-muted transition-all"
           />
           <Search
             size={18}
@@ -1821,7 +1831,7 @@
         </div>
       </div>
 
-      <div class="flex-1 overflow-y-auto p-6 space-y-3">
+      <div class="flex-1 overflow-y-auto p-6 space-y-3 bg-surface-raised">
         {#if searchingInvoices}
           <div class="py-12 flex flex-col items-center justify-center gap-3 text-text-muted">
             <RefreshCw size={24} class="animate-spin text-brand-500" />
@@ -1835,11 +1845,11 @@
           {#each pendingInvoices as inv}
             <button
               onclick={() => selectInvoiceFromModal(inv)}
-              class="w-full text-left bg-surface-soft/40 hover:bg-surface-soft border border-border-subtle p-4 rounded-2xl transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-4 group cursor-pointer"
+              class="w-full text-left bg-surface-base hover:bg-surface-soft border border-border-subtle hover:border-brand-500/40 p-4 rounded-2xl transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-4 group cursor-pointer shadow-xs hover:shadow-md"
             >
               <div class="space-y-1">
                 <div class="flex items-center gap-2">
-                  <span class="bg-brand-500/10 text-brand-400 font-bold px-2 py-0.5 rounded-md text-xs">
+                  <span class="bg-brand-500/10 text-brand-500 font-bold px-2 py-0.5 rounded-md text-xs border border-brand-500/20">
                     {inv.co_tipo_doc} {inv.nro_doc}
                   </span>
                   {#if inv.nro_fact && inv.nro_fact !== inv.nro_doc}
@@ -1851,7 +1861,7 @@
                     Control: {inv.n_control || "N/A"}
                   </span>
                 </div>
-                <p class="font-black text-sm text-text-base group-hover:text-brand-400 transition-colors">
+                <p class="font-black text-sm text-text-base group-hover:text-brand-500 transition-colors">
                   {inv.prov_des}
                 </p>
                 <p class="text-xs text-text-muted font-mono">
@@ -1861,7 +1871,7 @@
 
               <div class="text-left sm:text-right shrink-0">
                 <span class="text-[10px] uppercase font-bold text-text-muted block">Saldo Pendiente</span>
-                <span class="text-base font-black text-brand-400">
+                <span class="text-base font-black text-brand-500">
                   $ {(inv.saldo / (inv.tasa > 0 ? inv.tasa : 1)).toLocaleString("de-DE", { minimumFractionDigits: 2 })}
                 </span>
                 <span class="block text-xs text-text-muted font-bold">
