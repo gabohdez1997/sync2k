@@ -16,7 +16,7 @@
     Hash,
     MoreHorizontal,
     Globe,
-    Edit2,
+    Pen,
     Trash2,
     X,
     Check,
@@ -418,7 +418,7 @@
                           class="p-2 text-text-muted hover:text-brand-500 hover:bg-brand-500/10 rounded-xl transition-all"
                           title="Editar"
                         >
-                          <Edit2 size={18} />
+                          <Pen size={18} />
                         </button>
                       {/if}
                       {#if canDelete}
@@ -525,13 +525,10 @@
 
 <!-- Management Modal -->
 {#if showModal}
-  {@const handleBackdropClose = (e) => {
-    if (e.target === e.currentTarget) showModal = false;
-  }}
   <div
     class="fixed inset-0 bg-black/60 backdrop-blur-md z-50 flex items-center justify-center p-4 text-text-base"
     transition:fade
-    onmousedown={handleBackdropClose}
+    onmousedown={(e) => { if (e.target === e.currentTarget) showModal = false; }}
   >
     <div
       class="bg-surface-raised w-full max-w-2xl rounded-[40px] border border-border-subtle shadow-2xl overflow-hidden flex flex-col"
@@ -844,7 +841,7 @@
 {#if showDeleteModal}
   <div class="fixed inset-0 z-[60] flex items-center justify-center p-4">
     <div
-      class="absolute inset-0 bg-black/90 backdrop-blur-md"
+      class="absolute inset-0 bg-black/60 backdrop-blur-sm"
       onclick={() => !isDeleting && (showDeleteModal = false)}
       onkeydown={(e) =>
         e.key === "Escape" && !isDeleting && (showDeleteModal = false)}
@@ -853,7 +850,7 @@
     ></div>
 
     <div
-      class="glass w-full max-w-md rounded-[40px] border border-white/10 shadow-2xl relative z-10 overflow-hidden"
+      class="bg-surface-raised w-full max-w-md rounded-[40px] border border-border-bold shadow-2xl relative z-10 overflow-hidden text-text-base"
       transition:scale={{ duration: 300, start: 0.95 }}
     >
       <div class="p-8 text-center space-y-6">
@@ -864,7 +861,7 @@
         </div>
 
         <div class="space-y-2">
-          <h2 class="text-2xl font-black tracking-tight">
+          <h2 class="text-2xl font-black tracking-tight text-text-base">
             Confirmar Eliminación
           </h2>
           <p class="text-text-muted text-sm px-4">
@@ -913,7 +910,7 @@
                 bind:value={deletePassword}
                 required
                 placeholder="Introduzca su contraseña"
-                class="w-full h-14 bg-white/5 border border-white/10 rounded-2xl pl-12 pr-5 focus:border-red-500/50 outline-none transition-all"
+                class="w-full h-14 bg-surface-base border border-border-bold rounded-2xl pl-12 pr-5 focus:border-red-500 outline-none transition-all text-text-base"
               />
             </div>
           </div>
@@ -923,14 +920,14 @@
               type="button"
               onclick={() => (showDeleteModal = false)}
               disabled={isDeleting}
-              class="flex-1 h-14 rounded-2xl font-bold bg-white/5 hover:bg-white/10 transition-all text-text-muted disabled:opacity-50"
+              class="flex-1 h-14 rounded-2xl font-bold bg-surface-soft hover:bg-surface-strong transition-all text-text-muted hover:text-text-base border border-border-subtle cursor-pointer disabled:opacity-50"
             >
               Cancelar
             </button>
             <button
               type="submit"
               disabled={isDeleting || !deletePassword}
-              class="flex-1 h-14 rounded-2xl font-bold bg-red-600 hover:bg-red-500 text-white shadow-lg shadow-red-500/20 transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2"
+              class="flex-1 h-14 rounded-2xl font-bold bg-red-600 hover:bg-red-500 text-white shadow-lg shadow-red-500/20 transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer"
             >
               {#if isDeleting}
                 <Loader2 size={18} class="animate-spin" />

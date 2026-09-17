@@ -6,7 +6,7 @@
   import { 
     Wallet, Search, Filter, Plus, Calendar, Eye, X, Trash2,
     AlertCircle, RefreshCw, Printer, AlertTriangle, Building, CreditCard, Landmark, CheckCircle,
-    FileText, ChevronLeft, ChevronRight, Ban, Edit2, Store, Lock, Check, Loader2
+    FileText, ChevronLeft, ChevronRight, Ban, Pen, Store, Lock, Check, Loader2
   } from 'lucide-svelte';
   import { fade } from 'svelte/transition';
   import SearchBar from "$lib/components/ui/SearchBar.svelte";
@@ -846,23 +846,27 @@
                 </td>
                 <td class="px-6 py-5">
                   <div class="flex items-center justify-center gap-2">
-                    {#if p.anulado}
-                      <button 
-                        onclick={() => openDetail(p.cob_num)}
-                        class="p-2 text-text-muted hover:text-brand-500 hover:bg-brand-500/10 rounded-xl transition-all cursor-pointer"
-                        title="Ver Detalle"
-                      >
-                        <Eye size={18} />
-                      </button>
-                    {:else if data.canEdit}
+                    <!-- Ver Detalle -->
+                    <button 
+                      onclick={() => openDetail(p.cob_num)}
+                      class="p-2 text-text-muted hover:text-brand-500 hover:bg-brand-500/10 rounded-xl transition-all cursor-pointer"
+                      title="Ver Detalle"
+                    >
+                      <Eye size={18} />
+                    </button>
+
+                    <!-- Editar -->
+                    {#if data.canEdit && !p.anulado}
                       <button 
                         onclick={() => openEditDirectly(p.cob_num)}
                         class="p-2 text-text-muted hover:text-brand-500 hover:bg-brand-500/10 rounded-xl transition-all cursor-pointer"
                         title="Editar Cobro"
                       >
-                        <Edit2 size={18} />
+                        <Pen size={18} />
                       </button>
                     {/if}
+
+                    <!-- Anular -->
                     {#if data.canVoid && !p.anulado}
                       <button 
                         onclick={() => openVoidModal(p)}

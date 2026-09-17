@@ -11,7 +11,7 @@
     Plus,
     Printer,
     Eye,
-    Edit2,
+    Pen,
     Trash2,
     Ban,
     ChevronLeft,
@@ -387,6 +387,26 @@
                 <!-- Acciones -->
                 <td class="px-6 py-5 text-center whitespace-nowrap">
                   <div class="flex items-center justify-center gap-2 whitespace-nowrap">
+                    <!-- Imprimir -->
+                    <a
+                      href="/dashboard/warehouse/dispatches/{dispatch.doc_num}/print?branch_id={dispatch.sede_id || filterSede}"
+                      target="_blank"
+                      class="p-2 text-text-muted hover:text-brand-500 hover:bg-brand-500/10 rounded-xl transition-all inline-block cursor-pointer"
+                      title="Imprimir Comprobante"
+                    >
+                      <Printer size={18} />
+                    </a>
+
+                    <!-- Ver Detalle -->
+                    <button
+                      type="button"
+                      onclick={() => openDetailModal(dispatch)}
+                      class="p-2 text-text-muted hover:text-brand-500 hover:bg-brand-500/10 rounded-xl transition-all cursor-pointer"
+                      title="Ver Detalle"
+                    >
+                      <Eye size={18} />
+                    </button>
+
                     <!-- Editar -->
                     {#if data.canUpdate && !dispatch.anulado}
                       <button
@@ -395,7 +415,7 @@
                         class="p-2 text-text-muted hover:text-brand-500 hover:bg-brand-500/10 rounded-xl transition-all cursor-pointer"
                         title="Editar Nota de Despacho"
                       >
-                        <Edit2 size={18} />
+                        <Pen size={18} />
                       </button>
                     {/if}
 
@@ -422,26 +442,6 @@
                         <Trash2 size={18} />
                       </button>
                     {/if}
-
-                    <!-- Ver Detalle -->
-                    <button
-                      type="button"
-                      onclick={() => openDetailModal(dispatch)}
-                      class="p-2 text-text-muted hover:text-brand-500 hover:bg-brand-500/10 rounded-xl transition-all cursor-pointer"
-                      title="Ver Detalle"
-                    >
-                      <Eye size={18} />
-                    </button>
-
-                    <!-- Imprimir -->
-                    <a
-                      href="/dashboard/warehouse/dispatches/{dispatch.doc_num}/print?branch_id={dispatch.sede_id || filterSede}"
-                      target="_blank"
-                      class="p-2 text-text-muted hover:text-brand-500 hover:bg-brand-500/10 rounded-xl transition-all inline-block"
-                      title="Imprimir Comprobante"
-                    >
-                      <Printer size={18} />
-                    </a>
                   </div>
                 </td>
               </tr>
@@ -670,7 +670,7 @@
 {#if showDeleteModal && dispatchToDelete}
   <div class="fixed inset-0 z-[60] flex items-center justify-center p-4">
     <div
-      class="absolute inset-0 bg-black/90 backdrop-blur-md"
+      class="absolute inset-0 bg-black/60 backdrop-blur-sm"
       onclick={() => !isDeleting && (showDeleteModal = false)}
       onkeydown={(e) => e.key === "Escape" && !isDeleting && (showDeleteModal = false)}
       role="button"
@@ -678,7 +678,7 @@
     ></div>
 
     <div
-      class="glass w-full max-w-md rounded-[40px] border border-white/10 shadow-2xl relative z-10 overflow-hidden"
+      class="bg-surface-raised w-full max-w-md rounded-[40px] border border-border-bold shadow-2xl relative z-10 overflow-hidden text-text-base"
       transition:slide
     >
       <div class="p-8 text-center space-y-6">
@@ -689,25 +689,25 @@
         </div>
 
         <div class="space-y-2">
-          <h2 class="text-2xl font-black tracking-tight">Confirmar Eliminación</h2>
+          <h2 class="text-2xl font-black tracking-tight text-text-base">Confirmar Eliminación</h2>
           <p class="text-text-muted text-sm px-4">
             ¿Estás seguro de que deseas eliminar la nota de despacho
             <span class="text-text-base font-bold">{dispatchToDelete?.doc_num}</span>?
             Esta acción revertirá la salida de stock en inventario y restaurará el saldo pendiente de la factura de venta.
           </p>
 
-          <div class="text-left p-4 rounded-2xl bg-white/5 border border-white/10 space-y-2 mt-4">
+          <div class="text-left p-4 rounded-2xl bg-surface-soft border border-border-subtle space-y-2 mt-4">
             <p class="text-xs text-text-muted">
-              <span class="font-bold">Cliente:</span> {dispatchToDelete.cli_des || dispatchToDelete.co_cli}
+              <span class="font-bold text-text-base">Cliente:</span> {dispatchToDelete.cli_des || dispatchToDelete.co_cli}
             </p>
             <p class="text-xs text-text-muted">
-              <span class="font-bold">Fecha:</span> {dayjs(dispatchToDelete.fec_emis).format('DD/MM/YYYY HH:mm')}
+              <span class="font-bold text-text-base">Fecha:</span> {dayjs(dispatchToDelete.fec_emis).format('DD/MM/YYYY HH:mm')}
             </p>
             <p class="text-xs text-text-muted">
-              <span class="font-bold">Total Unidades:</span> {formatQuantity(dispatchToDelete.total_unidades || 0)} un.
+              <span class="font-bold text-text-base">Total Unidades:</span> {formatQuantity(dispatchToDelete.total_unidades || 0)} un.
             </p>
             <p class="text-xs text-text-muted flex items-center gap-2">
-              <span class="font-bold">Estatus:</span>
+              <span class="font-bold text-text-base">Estatus:</span>
               <span class="px-2 py-0.5 rounded-full border text-[10px] font-black uppercase tracking-widest {dispatchToDelete.anulado ? 'bg-red-500/10 text-red-500 border-red-500/20' : 'bg-green-500/10 text-green-500 border-green-500/20'}">
                 {dispatchToDelete.anulado ? 'Anulado' : 'Completado'}
               </span>
@@ -758,7 +758,7 @@
                 bind:value={deletePassword}
                 required
                 placeholder="Introduzca su contraseña"
-                class="w-full h-14 bg-white/5 border border-white/10 rounded-2xl pl-12 pr-5 focus:border-red-500/50 outline-none transition-all text-text-base font-medium"
+                class="w-full h-14 bg-surface-base border border-border-bold rounded-2xl pl-12 pr-5 focus:border-red-500 outline-none transition-all text-text-base font-medium"
               />
             </div>
           </div>
@@ -768,7 +768,7 @@
               type="button"
               onclick={() => (showDeleteModal = false)}
               disabled={isDeleting}
-              class="flex-1 h-14 rounded-2xl font-bold bg-white/5 hover:bg-white/10 transition-all text-text-muted disabled:opacity-50 cursor-pointer"
+              class="flex-1 h-14 rounded-2xl font-bold bg-surface-soft hover:bg-surface-strong transition-all text-text-muted hover:text-text-base border border-border-subtle cursor-pointer disabled:opacity-50"
             >
               Cancelar
             </button>
@@ -797,7 +797,7 @@
 {#if showVoidModal && dispatchToVoid}
   <div class="fixed inset-0 z-[60] flex items-center justify-center p-4">
     <div
-      class="absolute inset-0 bg-black/90 backdrop-blur-md"
+      class="absolute inset-0 bg-black/60 backdrop-blur-sm"
       onclick={() => !isVoiding && (showVoidModal = false)}
       onkeydown={(e) => e.key === "Escape" && !isVoiding && (showVoidModal = false)}
       role="button"
@@ -805,7 +805,7 @@
     ></div>
 
     <div
-      class="glass w-full max-w-md rounded-[40px] border border-white/10 shadow-2xl relative z-10 overflow-hidden"
+      class="bg-surface-raised w-full max-w-md rounded-[40px] border border-border-bold shadow-2xl relative z-10 overflow-hidden text-text-base"
       transition:slide
     >
       <div class="p-8 text-center space-y-6">
@@ -816,25 +816,25 @@
         </div>
 
         <div class="space-y-2">
-          <h2 class="text-2xl font-black tracking-tight">Confirmar Anulación</h2>
+          <h2 class="text-2xl font-black tracking-tight text-text-base">Confirmar Anulación</h2>
           <p class="text-text-muted text-sm px-4">
             ¿Estás seguro de que deseas anular la nota de despacho
             <span class="text-text-base font-bold">{dispatchToVoid?.doc_num}</span>?
             Esta acción no eliminará físicamente el documento, pero lo marcará como anulado, revertirá el inventario y restaurará los pendientes en la factura de venta.
           </p>
 
-          <div class="text-left p-4 rounded-2xl bg-white/5 border border-white/10 space-y-2 mt-4">
+          <div class="text-left p-4 rounded-2xl bg-surface-soft border border-border-subtle space-y-2 mt-4">
             <p class="text-xs text-text-muted">
-              <span class="font-bold">Cliente:</span> {dispatchToVoid.cli_des || dispatchToVoid.co_cli}
+              <span class="font-bold text-text-base">Cliente:</span> {dispatchToVoid.cli_des || dispatchToVoid.co_cli}
             </p>
             <p class="text-xs text-text-muted">
-              <span class="font-bold">Fecha:</span> {dayjs(dispatchToVoid.fec_emis).format('DD/MM/YYYY HH:mm')}
+              <span class="font-bold text-text-base">Fecha:</span> {dayjs(dispatchToVoid.fec_emis).format('DD/MM/YYYY HH:mm')}
             </p>
             <p class="text-xs text-text-muted">
-              <span class="font-bold">Total Unidades:</span> {formatQuantity(dispatchToVoid.total_unidades || 0)} un.
+              <span class="font-bold text-text-base">Total Unidades:</span> {formatQuantity(dispatchToVoid.total_unidades || 0)} un.
             </p>
             <p class="text-xs text-text-muted flex items-center gap-2">
-              <span class="font-bold">Estatus:</span>
+              <span class="font-bold text-text-base">Estatus:</span>
               <span class="px-2 py-0.5 rounded-full border text-[10px] font-black uppercase tracking-widest {dispatchToVoid.anulado ? 'bg-red-500/10 text-red-500 border-red-500/20' : 'bg-green-500/10 text-green-500 border-green-500/20'}">
                 {dispatchToVoid.anulado ? 'Anulado' : 'Completado'}
               </span>
@@ -879,7 +879,7 @@
               name="reason"
               bind:value={voidReason}
               placeholder="Ej. Error en entrega o mercancía devuelta"
-              class="w-full h-14 bg-white/5 border border-white/10 rounded-2xl px-5 focus:border-amber-500/50 outline-none transition-all text-text-base font-medium text-xs"
+              class="w-full h-14 bg-surface-base border border-border-bold rounded-2xl px-5 focus:border-amber-500 outline-none transition-all text-text-base font-medium text-xs"
             />
           </div>
 
@@ -902,7 +902,7 @@
                 bind:value={voidPassword}
                 required
                 placeholder="Introduzca su contraseña"
-                class="w-full h-14 bg-white/5 border border-white/10 rounded-2xl pl-12 pr-5 focus:border-amber-500/50 outline-none transition-all text-text-base font-medium"
+                class="w-full h-14 bg-surface-base border border-border-bold rounded-2xl pl-12 pr-5 focus:border-amber-500 outline-none transition-all text-text-base font-medium"
               />
             </div>
           </div>
@@ -912,14 +912,14 @@
               type="button"
               onclick={() => (showVoidModal = false)}
               disabled={isVoiding}
-              class="flex-1 h-14 rounded-2xl font-bold bg-white/5 hover:bg-white/10 transition-all text-text-muted disabled:opacity-50 cursor-pointer"
+              class="flex-1 h-14 rounded-2xl font-bold bg-surface-soft hover:bg-surface-strong transition-all text-text-muted hover:text-text-base border border-border-subtle cursor-pointer disabled:opacity-50"
             >
               Cancelar
             </button>
             <button
               type="submit"
               disabled={isVoiding || !voidPassword}
-              class="flex-1 h-14 rounded-2xl font-bold bg-amber-600 hover:bg-amber-500 text-white shadow-lg shadow-amber-500/20 transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer"
+              class="flex-1 h-14 rounded-2xl font-bold bg-amber-500 hover:bg-amber-600 text-white shadow-lg shadow-amber-500/20 transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer"
             >
               {#if isVoiding}
                 <Loader2 size={18} class="animate-spin" />

@@ -24,7 +24,7 @@
     Loader2,
     ChevronLeft,
     ChevronRight,
-    Pencil,
+    Pen,
     Ban,
     Undo2,
     FileSpreadsheet,
@@ -763,6 +763,7 @@
                 </td>
                 <td class="px-6 py-4 text-right">
                   <div class="flex items-center justify-end gap-2">
+                    <!-- Ver Detalle -->
                     <button
                       onclick={() => openDetail(item)}
                       class="p-2 rounded-xl bg-surface-soft hover:bg-surface-strong text-text-muted hover:text-text-base border border-border-subtle transition-all cursor-pointer"
@@ -771,36 +772,7 @@
                       <Eye size={18} />
                     </button>
 
-                    {#if (data.canEdit || data.canCreate) && item.status === "TRANSITO" && (selectedBranch === "all" ? item.source_branch_id === data.userBranchId : item.source_branch_id === selectedBranch)}
-                      <a
-                        href="/dashboard/warehouse/transfers/new?id={item.id}"
-                        class="p-2 rounded-xl bg-surface-soft hover:bg-amber-500/10 text-text-muted hover:text-amber-500 border border-border-subtle transition-all cursor-pointer flex items-center justify-center"
-                        title="Editar Ajuste de Salida"
-                      >
-                        <Pencil size={18} />
-                      </a>
-                    {/if}
-
-                    {#if data.canVoid && item.status === "TRANSITO" && (selectedBranch === "all" ? item.source_branch_id === data.userBranchId : item.source_branch_id === selectedBranch)}
-                      <button
-                        onclick={() => promptVoidTransfer(item)}
-                        class="p-2 rounded-xl bg-surface-soft hover:bg-red-500/10 text-text-muted hover:text-red-400 border border-border-subtle transition-all cursor-pointer flex items-center justify-center"
-                        title="Anular Traslado"
-                      >
-                        <Ban size={18} />
-                      </button>
-                    {/if}
-
-                    {#if data.canVoid && item.status === "ACEPTADO" && (selectedBranch === "all" ? item.target_branch_id === data.userBranchId : item.target_branch_id === selectedBranch)}
-                      <button
-                        onclick={() => promptVoidEntry(item)}
-                        class="p-2 rounded-xl bg-surface-soft hover:bg-amber-500/10 text-text-muted hover:text-amber-500 border border-border-subtle transition-all cursor-pointer flex items-center justify-center"
-                        title="Anular Ingreso de Traslado"
-                      >
-                        <Undo2 size={18} />
-                      </button>
-                    {/if}
-
+                    <!-- Ingresar Inventario (Confirmar recepción) -->
                     {#if item.status === "TRANSITO" && activeTab !== "outgoing" && (selectedBranch === "all" || item.target_branch_id === selectedBranch)}
                       <button
                         onclick={() => promptAcceptTransfer(item)}
@@ -814,6 +786,39 @@
                           <Check size={14} />
                         {/if}
                         Ingresar
+                      </button>
+                    {/if}
+
+                    <!-- Editar -->
+                    {#if (data.canEdit || data.canCreate) && item.status === "TRANSITO" && (selectedBranch === "all" ? item.source_branch_id === data.userBranchId : item.source_branch_id === selectedBranch)}
+                      <a
+                        href="/dashboard/warehouse/transfers/new?id={item.id}"
+                        class="p-2 rounded-xl bg-surface-soft hover:bg-amber-500/10 text-text-muted hover:text-amber-500 border border-border-subtle transition-all cursor-pointer flex items-center justify-center"
+                        title="Editar Ajuste de Salida"
+                      >
+                        <Pen size={18} />
+                      </a>
+                    {/if}
+
+                    <!-- Anular Ingreso -->
+                    {#if data.canVoid && item.status === "ACEPTADO" && (selectedBranch === "all" ? item.target_branch_id === data.userBranchId : item.target_branch_id === selectedBranch)}
+                      <button
+                        onclick={() => promptVoidEntry(item)}
+                        class="p-2 rounded-xl bg-surface-soft hover:bg-amber-500/10 text-text-muted hover:text-amber-500 border border-border-subtle transition-all cursor-pointer flex items-center justify-center"
+                        title="Anular Ingreso de Traslado"
+                      >
+                        <Undo2 size={18} />
+                      </button>
+                    {/if}
+
+                    <!-- Anular Traslado -->
+                    {#if data.canVoid && item.status === "TRANSITO" && (selectedBranch === "all" ? item.source_branch_id === data.userBranchId : item.source_branch_id === selectedBranch)}
+                      <button
+                        onclick={() => promptVoidTransfer(item)}
+                        class="p-2 rounded-xl bg-surface-soft hover:bg-red-500/10 text-text-muted hover:text-red-400 border border-border-subtle transition-all cursor-pointer flex items-center justify-center"
+                        title="Anular Traslado"
+                      >
+                        <Ban size={18} />
                       </button>
                     {/if}
                   </div>

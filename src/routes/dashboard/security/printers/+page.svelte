@@ -4,7 +4,7 @@
   import {
     Printer,
     Plus,
-    Edit2,
+    Pen,
     Trash2,
     ShieldCheck,
     RefreshCw,
@@ -607,7 +607,7 @@
                         class="p-2 bg-surface-soft hover:bg-surface-strong border border-border-subtle text-text-muted hover:text-text-base rounded-xl transition-all active:scale-95 cursor-pointer"
                         title="Editar"
                       >
-                        <Edit2 size={14} />
+                        <Pen size={14} />
                       </button>
 
                       <button

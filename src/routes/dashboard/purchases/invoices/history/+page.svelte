@@ -408,10 +408,17 @@
 
 <!-- INVOICE DETAIL MODAL -->
 {#if showDetailModal}
-  <div class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm" in:fade>
-    <div class="glass border border-border-subtle rounded-3xl w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden shadow-2xl" in:slide>
+  <div class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" in:fade>
+    <div
+      class="fixed inset-0"
+      onclick={() => (showDetailModal = false)}
+      onkeydown={(e) => e.key === "Escape" && (showDetailModal = false)}
+      role="button"
+      tabindex="-1"
+    ></div>
+    <div class="bg-surface-raised border border-border-bold text-text-base rounded-[32px] w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden shadow-2xl relative z-10" in:slide>
       <!-- Modal Header -->
-      <div class="p-6 border-b border-border-subtle bg-surface-soft/50 flex items-center justify-between">
+      <div class="p-6 border-b border-border-subtle bg-surface-soft/40 flex items-center justify-between">
         <div>
           <h3 class="text-lg font-black text-text-base flex items-center gap-2">
             <Receipt size={20} class="text-brand-500" />
@@ -419,16 +426,16 @@
           </h3>
           {#if selectedInvoiceDetail}
             <p class="text-xs text-text-muted mt-0.5">
-              Doc N° <span class="font-mono text-brand-400 font-bold">{selectedInvoiceDetail.doc_num}</span> &bull; Factura Fiscal N° <span class="font-mono text-text-base font-bold">{selectedInvoiceDetail.nro_fact}</span>
+              Doc N° <span class="font-mono text-brand-500 font-bold">{selectedInvoiceDetail.doc_num}</span> &bull; Factura Fiscal N° <span class="font-mono text-text-base font-bold">{selectedInvoiceDetail.nro_fact}</span>
             </p>
           {/if}
         </div>
         <button
           type="button"
           onclick={() => (showDetailModal = false)}
-          class="p-2 text-text-muted hover:text-text-base hover:bg-surface-soft rounded-xl transition-colors cursor-pointer"
+          class="h-9 w-9 rounded-xl bg-surface-soft hover:bg-surface-strong text-text-muted hover:text-text-base flex items-center justify-center transition-colors cursor-pointer"
         >
-          <X size={20} />
+          <X size={18} />
         </button>
       </div>
 
@@ -455,7 +462,7 @@
             <div class="bg-surface-soft p-4 rounded-2xl border border-border-subtle space-y-1">
               <span class="text-[9px] font-black uppercase text-text-muted">Condición & Tasa</span>
               <p class="font-bold text-text-base">{selectedInvoiceDetail.cond_des || selectedInvoiceDetail.co_cond || "Contado"}</p>
-              <p class="text-brand-400 font-mono">Tasa: {Number(selectedInvoiceDetail.tasa || 1).toFixed(2)} Bs/$</p>
+              <p class="text-brand-500 font-mono font-bold">Tasa: {Number(selectedInvoiceDetail.tasa || 1).toFixed(2)} Bs/$</p>
             </div>
           </div>
 
@@ -463,7 +470,7 @@
           <div class="border border-border-subtle rounded-2xl overflow-hidden">
             <table class="w-full text-left border-collapse">
               <thead>
-                <tr class="bg-surface-strong border-b border-border-subtle text-[10px] font-black uppercase tracking-wider text-text-muted">
+                <tr class="bg-surface-soft border-b border-border-subtle text-[10px] font-black uppercase tracking-wider text-text-muted">
                   <th class="px-4 py-2.5 w-10 text-center">#</th>
                   <th class="px-4 py-2.5">Artículo</th>
                   <th class="px-4 py-2.5 text-center">Origen</th>
@@ -475,7 +482,7 @@
               </thead>
               <tbody class="divide-y divide-border-subtle text-xs">
                 {#each selectedInvoiceDetail.renglones || [] as r}
-                  <tr class="hover:bg-surface-soft/40">
+                  <tr class="hover:bg-surface-soft/40 transition-colors">
                     <td class="px-4 py-2.5 text-center text-text-muted font-mono">{r.reng_num}</td>
                     <td class="px-4 py-2.5">
                       <div class="font-bold text-text-base">{r.art_des}</div>
@@ -483,7 +490,7 @@
                     </td>
                     <td class="px-4 py-2.5 text-center">
                       {#if r.num_doc}
-                        <span class="px-2 py-0.5 rounded bg-surface-soft border border-border-subtle text-[10px] font-mono font-bold text-brand-400">
+                        <span class="px-2 py-0.5 rounded bg-surface-soft border border-border-subtle text-[10px] font-mono font-bold text-brand-500">
                           {r.tipo_doc}: {r.num_doc}
                         </span>
                       {:else}
@@ -493,13 +500,13 @@
                     <td class="px-4 py-2.5 text-center font-bold text-text-base">
                       {Number(r.cantidad).toFixed(2)} {r.unidad || r.co_uni}
                     </td>
-                    <td class="px-4 py-2.5 text-right font-mono">
+                    <td class="px-4 py-2.5 text-right font-mono text-text-base font-semibold">
                       ${Number(r.costo_om || (Number(r.costo) / Number(selectedInvoiceDetail.tasa || 1))).toFixed(2)}
                     </td>
                     <td class="px-4 py-2.5 text-center font-mono text-text-muted">
                       {Number(r.porc_imp).toFixed(0)}%
                     </td>
-                    <td class="px-4 py-2.5 text-right font-mono font-bold text-brand-400">
+                    <td class="px-4 py-2.5 text-right font-mono font-bold text-brand-500">
                       ${(Number(r.total_renglon) / Number(selectedInvoiceDetail.tasa || 1)).toFixed(2)}
                     </td>
                   </tr>
@@ -518,16 +525,16 @@
               {#if Number(selectedInvoiceDetail.monto_desc_glob) > 0}
                 <div class="flex justify-between text-text-muted font-bold">
                   <span>Descuento:</span>
-                  <span class="font-mono text-red-400">-${(Number(selectedInvoiceDetail.monto_desc_glob) / Number(selectedInvoiceDetail.tasa || 1)).toFixed(2)}</span>
+                  <span class="font-mono text-red-500">-${(Number(selectedInvoiceDetail.monto_desc_glob) / Number(selectedInvoiceDetail.tasa || 1)).toFixed(2)}</span>
                 </div>
               {/if}
               <div class="flex justify-between text-text-muted font-bold">
                 <span>I.V.A:</span>
-                <span class="font-mono text-brand-400">${(Number(selectedInvoiceDetail.monto_imp) / Number(selectedInvoiceDetail.tasa || 1)).toFixed(2)}</span>
+                <span class="font-mono text-brand-500 font-bold">${(Number(selectedInvoiceDetail.monto_imp) / Number(selectedInvoiceDetail.tasa || 1)).toFixed(2)}</span>
               </div>
               <div class="border-t border-border-subtle pt-2 flex justify-between font-black text-sm">
                 <span>Total Neto:</span>
-                <span class="font-mono text-brand-400">${(Number(selectedInvoiceDetail.total_neto) / Number(selectedInvoiceDetail.tasa || 1)).toFixed(2)} USD</span>
+                <span class="font-mono text-brand-500">${(Number(selectedInvoiceDetail.total_neto) / Number(selectedInvoiceDetail.tasa || 1)).toFixed(2)} USD</span>
               </div>
               <div class="text-right text-[10px] text-text-muted font-mono">
                 Bs. {Number(selectedInvoiceDetail.total_neto).toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
@@ -536,103 +543,105 @@
           </div>
         {/if}
       </div>
-
-      <!-- Modal Footer -->
-      <div class="p-4 border-t border-border-subtle bg-surface-soft/30 flex justify-end">
-        <button
-          type="button"
-          onclick={() => (showDetailModal = false)}
-          class="px-5 py-2.5 bg-surface-soft hover:bg-surface-strong text-text-base border border-border-subtle rounded-xl text-xs font-bold transition-all cursor-pointer"
-        >
-          Cerrar
-        </button>
-      </div>
     </div>
   </div>
 {/if}
 
 <!-- VOID CONFIRMATION MODAL -->
 {#if showVoidModal}
-  <div class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm" in:fade>
-    <div class="glass border border-red-500/20 rounded-3xl max-w-md w-full p-8 text-center space-y-6 shadow-2xl relative" in:slide>
-      <div class="h-16 w-16 rounded-2xl bg-red-500/10 text-red-400 mx-auto flex items-center justify-center shadow-lg shadow-red-500/10">
-        <Ban size={36} />
-      </div>
+  <div class="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div
+      class="absolute inset-0 bg-black/60 backdrop-blur-sm"
+      onclick={() => !isVoiding && (showVoidModal = false)}
+      onkeydown={(e) => e.key === "Escape" && !isVoiding && (showVoidModal = false)}
+      role="button"
+      tabindex="-1"
+    ></div>
 
-      <div class="space-y-2">
-        <h2 class="text-xl font-black text-text-base">Confirmar Anulación de Factura</h2>
-        <p class="text-xs text-text-muted px-2 leading-relaxed">
-          ¿Estás seguro de que deseas anular la factura de compra
-          <span class="text-text-base font-bold font-mono">{invoiceToVoid?.doc_num}</span> (Fiscal N°: <span class="text-text-base font-bold font-mono">{invoiceToVoid?.nro_fact}</span>)?
-          Esto anulará el documento en Cuentas por Pagar y restaurará las cantidades pendientes en las recepciones de mercancía origen.
-        </p>
-      </div>
+    <div
+      class="bg-surface-raised w-full max-w-md rounded-[40px] border border-border-bold shadow-2xl relative z-10 overflow-hidden text-text-base"
+      transition:slide
+    >
+      <div class="p-8 text-center space-y-6">
+        <div class="h-20 w-20 rounded-3xl bg-amber-500/20 text-amber-500 mx-auto flex items-center justify-center shadow-lg shadow-amber-500/10">
+          <Ban size={40} />
+        </div>
 
-      <form
-        method="POST"
-        action="?/voidInvoice"
-        use:enhance={() => {
-          isVoiding = true;
-          return async ({ result, update }) => {
-            await update();
-            isVoiding = false;
+        <div class="space-y-2">
+          <h2 class="text-2xl font-black tracking-tight text-text-base">Confirmar Anulación</h2>
+          <p class="text-text-muted text-sm px-4">
+            ¿Estás seguro de que deseas anular la factura de compra
+            <span class="text-text-base font-bold font-mono">{invoiceToVoid?.doc_num}</span> (Fiscal N°: <span class="text-text-base font-bold font-mono">{invoiceToVoid?.nro_fact}</span>)?
+            Esto anulará el documento en Cuentas por Pagar y restaurará las cantidades pendientes en las recepciones de mercancía origen.
+          </p>
+        </div>
 
-            if (result.type === "success") {
-              showVoidModal = false;
-              toast.success((result as any).data?.message || "Factura de compra anulada con éxito.");
-            } else if (result.type === "failure" && (result as any).data?.message) {
-              toast.error((result as any).data.message);
-            } else {
-              toast.error("Error al anular la factura de compra.");
-            }
-          };
-        }}
-        class="space-y-4 pt-2 text-left"
-      >
-        <input type="hidden" name="doc_num" value={invoiceToVoid?.doc_num} />
-        <input type="hidden" name="branch_id" value={data.selectedBranchId} />
+        <form
+          method="POST"
+          action="?/voidInvoice"
+          use:enhance={() => {
+            isVoiding = true;
+            return async ({ result, update }) => {
+              await update();
+              isVoiding = false;
 
-        <div class="space-y-1.5">
-          <label for="void-pass" class="text-[10px] font-black uppercase tracking-wider text-text-muted">
-            Contraseña de Confirmación
-          </label>
-          <div class="relative">
-            <Lock size={16} class="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted" />
-            <input
-              id="void-pass"
-              type="password"
-              name="password"
-              bind:value={voidPassword}
-              required
-              placeholder="Introduce tu contraseña para confirmar"
-              class="w-full h-12 pl-11 pr-4 bg-surface-soft border border-border-subtle rounded-xl text-xs text-text-base focus:border-red-500 outline-none transition-all"
-            />
+              if (result.type === "success") {
+                showVoidModal = false;
+                toast.success((result as any).data?.message || "Factura de compra anulada con éxito.");
+              } else if (result.type === "failure" && (result as any).data?.message) {
+                toast.error((result as any).data.message);
+              } else {
+                toast.error("Error al anular la factura de compra.");
+              }
+            };
+          }}
+          class="space-y-4 pt-4 text-left"
+        >
+          <input type="hidden" name="doc_num" value={invoiceToVoid?.doc_num} />
+          <input type="hidden" name="branch_id" value={data.selectedBranchId} />
+
+          <div class="space-y-2 text-left">
+            <label for="void-pass" class="text-[10px] font-black uppercase tracking-widest text-text-muted ml-1">
+              Contraseña de Confirmación
+            </label>
+            <div class="relative">
+              <Lock size={18} class="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted opacity-40" />
+              <input
+                id="void-pass"
+                type="password"
+                name="password"
+                bind:value={voidPassword}
+                required
+                placeholder="Introduzca su contraseña"
+                class="w-full h-14 bg-surface-base border border-border-bold rounded-2xl pl-12 pr-5 focus:border-amber-500 outline-none transition-all text-text-base font-medium"
+              />
+            </div>
           </div>
-        </div>
 
-        <div class="flex gap-3 pt-4">
-          <button
-            type="button"
-            onclick={() => (showVoidModal = false)}
-            disabled={isVoiding}
-            class="flex-1 h-12 rounded-xl font-bold bg-surface-soft hover:bg-surface-strong text-text-muted hover:text-text-base border border-border-subtle text-xs transition-all cursor-pointer disabled:opacity-50"
-          >
-            Cancelar
-          </button>
-          <button
-            type="submit"
-            disabled={isVoiding || !voidPassword}
-            class="flex-1 h-12 rounded-xl font-bold bg-red-600 hover:bg-red-500 text-white shadow-lg shadow-red-600/20 text-xs transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
-          >
-            {#if isVoiding}
-              <Loader2 size={16} class="animate-spin" />
-            {:else}
-              <Ban size={16} />
-              Anular Factura
-            {/if}
-          </button>
-        </div>
-      </form>
+          <div class="flex gap-3 pt-4">
+            <button
+              type="button"
+              onclick={() => (showVoidModal = false)}
+              disabled={isVoiding}
+              class="flex-1 h-14 rounded-2xl font-bold bg-surface-soft hover:bg-surface-strong transition-all text-text-muted hover:text-text-base border border-border-subtle cursor-pointer disabled:opacity-50"
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              disabled={isVoiding || !voidPassword}
+              class="flex-1 h-14 rounded-2xl font-bold bg-amber-500 hover:bg-amber-600 text-white shadow-lg shadow-amber-500/20 transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer"
+            >
+              {#if isVoiding}
+                <Loader2 size={18} class="animate-spin" />
+              {:else}
+                <Check size={18} />
+                Anular Factura
+              {/if}
+            </button>
+          </div>
+        </form>
+      </div>
     </div>
   </div>
 {/if}

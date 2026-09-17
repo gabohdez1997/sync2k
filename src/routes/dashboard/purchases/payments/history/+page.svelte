@@ -4,7 +4,7 @@
   import { goto, invalidateAll } from '$app/navigation';
   import { enhance } from '$app/forms';
   import { 
-    Wallet, Search, Plus, Eye, X, Trash2, Edit2,
+    Wallet, Search, Plus, Eye, X, Trash2, Pen,
     AlertCircle, RefreshCw, AlertTriangle, Building, CreditCard, Landmark, CheckCircle,
     FileText, ChevronLeft, ChevronRight, Ban, Store, Lock, Check, Loader2, Clock, Receipt
   } from 'lucide-svelte';
@@ -324,7 +324,7 @@
                         class="p-2 text-text-muted hover:text-blue-500 hover:bg-blue-500/10 rounded-xl transition-all cursor-pointer"
                         title="Editar Pago (Revertir y cargar)"
                       >
-                        <Edit2 size={18} />
+                        <Pen size={18} />
                       </button>
                     {/if}
                     {#if data.canVoid && !p.anulado}
@@ -394,29 +394,49 @@
 <!-- MODAL DE DETALLE DE PAGO -->
 {#if detailModalOpen}
   <div
-    class="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-4 sm:p-6"
+    class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 sm:p-6"
     transition:fade={{ duration: 150 }}
   >
     <div
-      class="glass border border-border-subtle rounded-[32px] w-full max-w-4xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden animate-in zoom-in-95 duration-150"
+      class="fixed inset-0"
+      onclick={() => (detailModalOpen = false)}
+      onkeydown={(e) => e.key === "Escape" && (detailModalOpen = false)}
+      role="button"
+      tabindex="-1"
+    ></div>
+
+    <div
+      class="bg-surface-raised border border-border-bold text-text-base rounded-[32px] w-full max-w-4xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden relative z-10 animate-in zoom-in-95 duration-150"
     >
-      <div class="p-6 border-b border-border-subtle flex items-center justify-between">
+      <div class="p-6 border-b border-border-subtle flex items-center justify-between bg-surface-soft/40">
         <div class="flex items-center gap-3">
-          <div class="h-10 w-10 rounded-xl bg-brand-500/10 flex items-center justify-center text-brand-400">
+          <div class="h-10 w-10 rounded-2xl bg-brand-500/10 flex items-center justify-center text-brand-500">
             <Eye size={20} />
           </div>
           <div>
-            <h3 class="font-black text-lg text-text-base">
-              Detalle de Pago: {detailData?.cob_num || selectedPayment?.cob_num || ''}
-            </h3>
+            <div class="flex items-center gap-2">
+              <h3 class="font-black text-lg text-text-base">
+                Detalle de Pago: {detailData?.cob_num || selectedPayment?.cob_num || ''}
+              </h3>
+              {#if (detailData?.anulado || selectedPayment?.anulado)}
+                <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-500/10 text-red-500 border border-red-500/20">
+                  Anulado
+                </span>
+              {:else if (detailData || selectedPayment)}
+                <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                  Activo
+                </span>
+              {/if}
+            </div>
             <p class="text-xs text-text-muted">
               {detailData?.prov_des || selectedPayment?.prov_des || ''} ({detailData?.co_prov || selectedPayment?.co_prov || ''})
             </p>
           </div>
         </div>
         <button
+          type="button"
           onclick={() => detailModalOpen = false}
-          class="h-10 w-10 rounded-xl bg-white/5 hover:bg-white/10 flex items-center justify-center text-text-muted hover:text-text-base transition-all cursor-pointer"
+          class="h-9 w-9 rounded-xl bg-surface-soft hover:bg-surface-strong text-text-muted hover:text-text-base flex items-center justify-center transition-all cursor-pointer"
         >
           <X size={18} />
         </button>
@@ -437,14 +457,16 @@
             <p class="text-xs text-red-300/80 leading-relaxed">{detailError}</p>
             <div class="pt-2 flex gap-3">
               <button 
+                type="button"
                 onclick={() => openDetail(selectedPayment)}
-                class="px-3.5 py-2 bg-red-500/20 hover:bg-red-500/30 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
+                class="px-3.5 py-2 bg-red-500/20 hover:bg-red-500/30 text-red-400 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
               >
                 <RefreshCw size={14} /> Reintentar
               </button>
               <button 
+                type="button"
                 onclick={() => detailModalOpen = false}
-                class="px-3.5 py-2 bg-white/5 hover:bg-white/10 text-text-muted hover:text-white rounded-xl text-xs font-bold transition-all cursor-pointer"
+                class="px-3.5 py-2 bg-surface-soft hover:bg-surface-strong text-text-base rounded-xl text-xs font-bold transition-all cursor-pointer"
               >
                 Cerrar
               </button>
@@ -452,7 +474,7 @@
           </div>
         {:else if detailData}
           <!-- Resumen de Cabecera -->
-          <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 bg-surface-soft/40 p-4 rounded-2xl border border-border-subtle text-xs">
+          <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 bg-surface-soft p-4 rounded-2xl border border-border-subtle text-xs">
             <div>
               <span class="text-[9px] uppercase font-bold text-text-muted block">Fecha Emisión</span>
               <span class="font-bold text-text-base">{new Date(detailData.fecha || Date.now()).toLocaleDateString('es-VE')}</span>
@@ -463,13 +485,13 @@
             </div>
             <div>
               <span class="text-[9px] uppercase font-bold text-text-muted block">Monto Total</span>
-              <span class="font-bold text-brand-400 font-mono">
+              <span class="font-bold text-brand-500 font-mono">
                 $ {(Number(detailData.monto || 0) / (Number(detailData.tasa || 1) > 0 ? Number(detailData.tasa || 1) : 1)).toFixed(2)}
               </span>
             </div>
             <div>
               <span class="text-[9px] uppercase font-bold text-text-muted block">Estado</span>
-              <span class="font-bold {detailData.anulado ? 'text-red-400' : 'text-green-400'}">
+              <span class="font-bold {detailData.anulado ? 'text-red-500' : 'text-emerald-600 dark:text-emerald-400'}">
                 {detailData.anulado ? 'Anulado' : 'Activo'}
               </span>
             </div>
@@ -481,9 +503,9 @@
               <Receipt size={14} />
               Facturas y Documentos Pagados
             </h4>
-            <div class="bg-surface-soft/20 rounded-2xl border border-border-subtle overflow-hidden">
+            <div class="rounded-2xl border border-border-subtle overflow-hidden">
               <table class="w-full text-left text-xs">
-                <thead class="bg-white/5 text-text-muted uppercase font-bold">
+                <thead class="bg-surface-soft border-b border-border-subtle text-text-muted uppercase font-bold text-[10px]">
                   <tr>
                     <th class="p-3">Doc</th>
                     <th class="p-3">Factura</th>
@@ -492,14 +514,14 @@
                     <th class="p-3 text-right">Reten. ISLR (Bs)</th>
                   </tr>
                 </thead>
-                <tbody class="divide-y divide-white/5">
+                <tbody class="divide-y divide-border-subtle">
                   {#each (detailData.renglones || []) as r}
-                    <tr>
-                      <td class="p-3 font-mono font-bold text-brand-400">{r.co_tipo_doc} {r.nro_doc}</td>
-                      <td class="p-3">{r.nro_fact || '---'}</td>
-                      <td class="p-3 text-right font-mono font-bold">Bs. {Number(r.mont_cob).toLocaleString('de-DE', {minimumFractionDigits: 2})}</td>
-                      <td class="p-3 text-right font-mono text-green-400">Bs. {Number(r.monto_retencion_iva || 0).toLocaleString('de-DE', {minimumFractionDigits: 2})}</td>
-                      <td class="p-3 text-right font-mono text-amber-400">Bs. {Number(r.monto_retencion || 0).toLocaleString('de-DE', {minimumFractionDigits: 2})}</td>
+                    <tr class="hover:bg-surface-soft/40 transition-colors">
+                      <td class="p-3 font-mono font-bold text-brand-500">{r.co_tipo_doc} {r.nro_doc}</td>
+                      <td class="p-3 text-text-base">{r.nro_fact || '---'}</td>
+                      <td class="p-3 text-right font-mono font-bold text-text-base">Bs. {Number(r.mont_cob).toLocaleString('de-DE', {minimumFractionDigits: 2})}</td>
+                      <td class="p-3 text-right font-mono font-semibold text-emerald-600 dark:text-emerald-400">Bs. {Number(r.monto_retencion_iva || 0).toLocaleString('de-DE', {minimumFractionDigits: 2})}</td>
+                      <td class="p-3 text-right font-mono font-semibold text-amber-600 dark:text-amber-400">Bs. {Number(r.monto_retencion || 0).toLocaleString('de-DE', {minimumFractionDigits: 2})}</td>
                     </tr>
                   {/each}
                 </tbody>
@@ -585,21 +607,21 @@
             })()}
             {#if uniqueRetIva.length > 0}
               <div class="space-y-2">
-                <h4 class="text-xs font-black uppercase tracking-wider text-green-400 flex items-center gap-2">
+                <h4 class="text-xs font-black uppercase tracking-wider text-emerald-600 dark:text-emerald-400 flex items-center gap-2">
                   <CheckCircle size={14} />
                   Comprobantes de Retención de IVA
                 </h4>
-                <div class="bg-green-500/5 border border-green-500/20 rounded-2xl p-3 space-y-2 text-xs">
+                <div class="bg-emerald-500/5 border border-emerald-500/20 rounded-2xl p-3 space-y-2 text-xs">
                   {#each uniqueRetIva as ri}
                     {@const factDisplay = ri.resolvedFactura 
                       ? `${ri.resolvedFactura}${ri.resolvedDoc && ri.resolvedDoc !== ri.resolvedFactura ? ` (${ri.resolvedDoc})` : ''}` 
                       : ri.resolvedDoc}
-                    <div class="flex flex-wrap justify-between items-center py-1 border-b border-green-500/10 last:border-0">
+                    <div class="flex flex-wrap justify-between items-center py-1 border-b border-emerald-500/10 last:border-0">
                       <div>
-                        <span class="font-mono font-black text-green-400">Comp: {ri.num_comprobante}</span>
+                        <span class="font-mono font-black text-emerald-600 dark:text-emerald-400">Comp: {ri.num_comprobante}</span>
                         <span class="text-text-muted ml-2">Factura: {factDisplay}</span>
                       </div>
-                      <div class="font-mono font-bold text-green-300">
+                      <div class="font-mono font-bold text-emerald-700 dark:text-emerald-300">
                         Retenido: Bs. {Number(ri.monto_ret_imp).toLocaleString('de-DE', {minimumFractionDigits: 2})} (Base: Bs. {Number(ri.base_imponible).toLocaleString('de-DE', {minimumFractionDigits: 2})})
                       </div>
                     </div>
@@ -667,7 +689,7 @@
             })()}
             {#if uniqueRetIslr.length > 0}
               <div class="space-y-2">
-                <h4 class="text-xs font-black uppercase tracking-wider text-amber-400 flex items-center gap-2">
+                <h4 class="text-xs font-black uppercase tracking-wider text-amber-600 dark:text-amber-400 flex items-center gap-2">
                   <Landmark size={14} />
                   Retenciones de ISLR
                 </h4>
@@ -678,13 +700,13 @@
                       : rn.resolvedDoc}
                     <div class="flex flex-wrap justify-between items-center py-1 border-b border-amber-500/10 last:border-0">
                       <div>
-                        <span class="font-mono font-black text-amber-400">Concepto: {rn.co_islr}</span>
+                        <span class="font-mono font-black text-amber-600 dark:text-amber-400">Concepto: {rn.co_islr}</span>
                         <span class="text-text-muted ml-2">Porc: {rn.porc_retn}%</span>
                         {#if factDisplay}
                           <span class="text-text-muted ml-2">Factura: {factDisplay}</span>
                         {/if}
                       </div>
-                      <div class="font-mono font-bold text-amber-300">
+                      <div class="font-mono font-bold text-amber-700 dark:text-amber-300">
                         Retenido: Bs. {Number(rn.monto_reten).toLocaleString('de-DE', {minimumFractionDigits: 2})} (Base: Bs. {Number(rn.monto_obj).toLocaleString('de-DE', {minimumFractionDigits: 2})})
                       </div>
                     </div>
@@ -701,9 +723,9 @@
                 <CreditCard size={14} />
                 Instrumentos Emitidos
               </h4>
-              <div class="bg-surface-soft/20 rounded-2xl border border-border-subtle overflow-hidden">
+              <div class="rounded-2xl border border-border-subtle overflow-hidden">
                 <table class="w-full text-left text-xs">
-                  <thead class="bg-white/5 text-text-muted uppercase font-bold">
+                  <thead class="bg-surface-soft border-b border-border-subtle text-text-muted uppercase font-bold text-[10px]">
                     <tr>
                       <th class="p-3">Forma</th>
                       <th class="p-3">Caja / Cuenta</th>
@@ -711,13 +733,13 @@
                       <th class="p-3 text-right">Monto (Bs)</th>
                     </tr>
                   </thead>
-                  <tbody class="divide-y divide-white/5">
+                  <tbody class="divide-y divide-border-subtle">
                     {#each detailData.formas_pago as fp}
-                      <tr>
-                        <td class="p-3 font-bold">{fp.forma_pag === 'EF' ? 'Efectivo' : fp.forma_pag === 'TP' ? 'Transferencia' : fp.forma_pag}</td>
-                        <td class="p-3">{fp.caja_des || fp.cta_des || fp.cod_caja || fp.cod_cta || '---'}</td>
-                        <td class="p-3 font-mono">{fp.num_doc || '---'}</td>
-                        <td class="p-3 text-right font-mono font-bold">Bs. {Number(fp.mont_doc).toLocaleString('de-DE', {minimumFractionDigits: 2})}</td>
+                      <tr class="hover:bg-surface-soft/40 transition-colors">
+                        <td class="p-3 font-bold text-text-base">{fp.forma_pag === 'EF' ? 'Efectivo' : fp.forma_pag === 'TP' ? 'Transferencia' : fp.forma_pag}</td>
+                        <td class="p-3 text-text-muted">{fp.caja_des || fp.cta_des || fp.cod_caja || fp.cod_cta || '---'}</td>
+                        <td class="p-3 font-mono text-text-base">{fp.num_doc || '---'}</td>
+                        <td class="p-3 text-right font-mono font-bold text-text-base">Bs. {Number(fp.mont_doc).toLocaleString('de-DE', {minimumFractionDigits: 2})}</td>
                       </tr>
                     {/each}
                   </tbody>
@@ -727,347 +749,315 @@
           {/if}
         {/if}
       </div>
-
-      <!-- MODAL FOOTER CON ACCIONES -->
-      <div class="p-5 border-t border-border-subtle bg-surface-soft/40 flex flex-wrap items-center justify-between gap-4">
-        <div class="flex items-center gap-2">
-          <span class="text-xs text-text-muted">Estado:</span>
-          {#if (detailData?.anulado || selectedPayment?.anulado)}
-            <span class="px-2.5 py-1 rounded-full text-xs font-bold bg-red-500/10 text-red-400 border border-red-500/20">
-              Anulado
-            </span>
-          {:else}
-            <span class="px-2.5 py-1 rounded-full text-xs font-bold bg-green-500/10 text-green-400 border border-green-500/20">
-              Activo
-            </span>
-          {/if}
-        </div>
-
-        <div class="flex items-center gap-2.5">
-          {#if data.canEdit && !(detailData?.anulado || selectedPayment?.anulado)}
-            <button
-              onclick={() => { const p = detailData || selectedPayment; detailModalOpen = false; openEditModal(p); }}
-              class="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 border border-blue-500/30 text-xs font-bold transition-all cursor-pointer"
-            >
-              <Edit2 size={15} />
-              Editar Pago
-            </button>
-          {/if}
-
-          {#if data.canVoid && !(detailData?.anulado || selectedPayment?.anulado)}
-            <button
-              onclick={() => { const p = detailData || selectedPayment; detailModalOpen = false; openVoidModal(p); }}
-              class="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/30 text-xs font-bold transition-all cursor-pointer"
-            >
-              <Ban size={15} />
-              Anular Pago
-            </button>
-          {/if}
-
-          {#if data.canDelete}
-            <button
-              onclick={() => { const p = detailData || selectedPayment; detailModalOpen = false; openDeleteModal(p); }}
-              class="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 text-xs font-bold transition-all cursor-pointer"
-            >
-              <Trash2 size={15} />
-              Eliminar Pago
-            </button>
-          {/if}
-
-          <button
-            onclick={() => detailModalOpen = false}
-            class="px-4 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-text-base text-xs font-bold transition-all cursor-pointer"
-          >
-            Cerrar
-          </button>
-        </div>
-      </div>
     </div>
   </div>
 {/if}
 
 <!-- MODAL PARA CONFIRMAR ANULACIÓN CON CONTRASEÑA -->
 {#if showVoidModal && paymentToVoid}
-  <div
-    class="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-4"
-    transition:fade={{ duration: 150 }}
-  >
+  <div class="fixed inset-0 z-[60] flex items-center justify-center p-4">
     <div
-      class="glass border border-amber-500/30 rounded-[32px] w-full max-w-md p-6 space-y-6 shadow-2xl animate-in zoom-in-95 duration-150"
+      class="absolute inset-0 bg-black/60 backdrop-blur-sm"
+      onclick={() => !isVoiding && (showVoidModal = false)}
+      onkeydown={(e) => e.key === "Escape" && !isVoiding && (showVoidModal = false)}
+      role="button"
+      tabindex="-1"
+    ></div>
+
+    <div
+      class="bg-surface-raised w-full max-w-md rounded-[40px] border border-border-bold shadow-2xl relative z-10 overflow-hidden text-text-base"
+      transition:fade={{ duration: 150 }}
     >
-      <div class="flex items-center gap-3 text-amber-400">
-        <div class="h-12 w-12 rounded-2xl bg-amber-500/10 flex items-center justify-center">
-          <Ban size={24} />
+      <div class="p-8 text-center space-y-6">
+        <div class="h-20 w-20 rounded-3xl bg-amber-500/20 text-amber-500 flex items-center justify-center mx-auto shadow-lg shadow-amber-500/10">
+          <Ban size={40} />
         </div>
-        <div>
-          <h3 class="font-black text-lg text-text-base">Anular Pago</h3>
-          <p class="text-xs text-text-muted font-mono">{paymentToVoid.cob_num}</p>
-        </div>
-      </div>
 
-      <p class="text-xs text-text-muted leading-relaxed">
-        ¿Estás seguro de que deseas anular el pago <span class="font-bold text-text-base">{paymentToVoid.cob_num}</span> del proveedor <span class="font-bold text-text-base">{paymentToVoid.prov_des || paymentToVoid.co_prov}</span>?
-        Esta acción restaurará el saldo pendiente de las facturas de compra y anulará los documentos de retención y movimientos asociados.
-      </p>
+        <div class="space-y-2">
+          <h2 class="text-2xl font-black tracking-tight text-text-base">Confirmar Anulación</h2>
+          <p class="text-text-muted text-sm px-4">
+            ¿Estás seguro de que deseas anular el pago <span class="font-bold text-text-base">{paymentToVoid.cob_num}</span>?
+            Esta acción restaurará el saldo pendiente de las facturas de compra y anulará los documentos de retención y movimientos asociados.
+          </p>
 
-      <form
-        method="POST"
-        action="?/voidPayment"
-        use:enhance={() => {
-          isVoiding = true;
-          return async ({ result }) => {
-            isVoiding = false;
-            if (result.type === 'success') {
-              showVoidModal = false;
-              toast.success('Pago anulado exitosamente.');
-              invalidateAll();
-            } else if (result.type === 'failure') {
-              toast.error(result.data?.message || 'Error al anular el pago.');
-            }
-          };
-        }}
-        class="space-y-4"
-      >
-        <input type="hidden" name="cob_num" value={paymentToVoid.cob_num} />
-        <input type="hidden" name="branch_id" value={selectedBranch} />
-
-        <div>
-          <label for="void-password" class="block text-xs font-black uppercase tracking-wider text-text-muted mb-1.5">
-            Ingresa tu contraseña para confirmar
-          </label>
-          <div class="relative">
-            <input
-              id="void-password"
-              name="password"
-              type="password"
-              required
-              bind:value={voidPassword}
-              placeholder="Contraseña actual"
-              class="w-full h-12 pl-10 pr-4 bg-surface-soft border border-border-subtle rounded-xl text-sm focus:border-amber-500 outline-none text-text-base"
-            />
-            <Lock size={16} class="absolute left-3.5 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none" />
+          <div class="text-left p-4 rounded-2xl bg-surface-soft border border-border-subtle space-y-2 text-xs mt-4">
+            <p class="text-text-muted"><span class="font-bold text-text-base">Proveedor:</span> {paymentToVoid.prov_des || paymentToVoid.co_prov}</p>
+            <p class="text-text-muted"><span class="font-bold text-text-base">Pago N°:</span> {paymentToVoid.cob_num}</p>
+            {#if paymentToVoid.monto}
+              <p class="text-text-muted"><span class="font-bold text-text-base">Monto:</span> {paymentToVoid.co_mone || 'USD'} {Number(paymentToVoid.monto).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+            {/if}
           </div>
         </div>
 
-        <div class="flex gap-3 pt-2">
-          <button
-            type="button"
-            onclick={() => showVoidModal = false}
-            class="flex-1 h-12 rounded-xl bg-white/5 hover:bg-white/10 text-text-base font-bold text-xs transition-all cursor-pointer"
-          >
-            Cancelar
-          </button>
-          <button
-            type="submit"
-            disabled={isVoiding || !voidPassword}
-            class="flex-1 h-12 rounded-xl bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white font-bold text-xs transition-all shadow-lg shadow-amber-500/20 flex items-center justify-center gap-2 cursor-pointer"
-          >
-            {#if isVoiding}
-              <Loader2 size={16} class="animate-spin" />
-              Anulando...
-            {:else}
-              Confirmar Anulación
-            {/if}
-          </button>
-        </div>
-      </form>
+        <form
+          method="POST"
+          action="?/voidPayment"
+          use:enhance={() => {
+            isVoiding = true;
+            return async ({ result }) => {
+              isVoiding = false;
+              if (result.type === 'success') {
+                showVoidModal = false;
+                toast.success('Pago anulado exitosamente.');
+                invalidateAll();
+              } else if (result.type === 'failure') {
+                toast.error(result.data?.message || 'Error al anular el pago.');
+              }
+            };
+          }}
+          class="space-y-4 pt-4 text-left"
+        >
+          <input type="hidden" name="cob_num" value={paymentToVoid.cob_num} />
+          <input type="hidden" name="branch_id" value={selectedBranch} />
+
+          <div class="space-y-2 text-left">
+            <label for="void-password" class="text-[10px] font-black uppercase tracking-widest text-text-muted ml-1">
+              Contraseña de Confirmación
+            </label>
+            <div class="relative">
+              <Lock size={18} class="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted opacity-40" />
+              <input
+                id="void-password"
+                name="password"
+                type="password"
+                required
+                bind:value={voidPassword}
+                placeholder="Introduzca su contraseña"
+                class="w-full h-14 bg-surface-base border border-border-bold rounded-2xl pl-12 pr-5 focus:border-amber-500 outline-none transition-all text-text-base font-medium"
+              />
+            </div>
+          </div>
+
+          <div class="flex gap-3 pt-4">
+            <button
+              type="button"
+              onclick={() => showVoidModal = false}
+              disabled={isVoiding}
+              class="flex-1 h-14 rounded-2xl font-bold bg-surface-soft hover:bg-surface-strong transition-all text-text-muted hover:text-text-base border border-border-subtle cursor-pointer disabled:opacity-50"
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              disabled={isVoiding || !voidPassword}
+              class="flex-1 h-14 rounded-2xl font-bold bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-white shadow-lg shadow-amber-500/20 transition-all active:scale-95 flex items-center justify-center gap-2 cursor-pointer"
+            >
+              {#if isVoiding}
+                <Loader2 size={18} class="animate-spin" />
+              {:else}
+                <Check size={18} />
+                Anular Pago
+              {/if}
+            </button>
+          </div>
+        </form>
+      </div>
     </div>
   </div>
 {/if}
 
 <!-- MODAL PARA CONFIRMAR EDICIÓN CON CONTRASEÑA -->
 {#if showEditModal && paymentToEdit}
-  <div
-    class="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-4"
-    transition:fade={{ duration: 150 }}
-  >
+  <div class="fixed inset-0 z-[60] flex items-center justify-center p-4">
     <div
-      class="glass border border-blue-500/30 rounded-[32px] w-full max-w-md p-6 space-y-6 shadow-2xl animate-in zoom-in-95 duration-150"
+      class="absolute inset-0 bg-black/60 backdrop-blur-sm"
+      onclick={() => !isEditing && (showEditModal = false)}
+      onkeydown={(e) => e.key === "Escape" && !isEditing && (showEditModal = false)}
+      role="button"
+      tabindex="-1"
+    ></div>
+
+    <div
+      class="bg-surface-raised w-full max-w-md rounded-[40px] border border-border-bold shadow-2xl relative z-10 overflow-hidden text-text-base"
+      transition:fade={{ duration: 150 }}
     >
-      <div class="flex items-center gap-3 text-blue-400">
-        <div class="h-12 w-12 rounded-2xl bg-blue-500/10 flex items-center justify-center">
-          <Edit2 size={24} />
+      <div class="p-8 text-center space-y-6">
+        <div class="h-20 w-20 rounded-3xl bg-blue-500/20 text-blue-500 flex items-center justify-center mx-auto shadow-lg shadow-blue-500/10">
+          <Edit2 size={40} />
         </div>
-        <div>
-          <h3 class="font-black text-lg text-text-base">Editar Pago</h3>
-          <p class="text-xs text-text-muted font-mono">{paymentToEdit.cob_num}</p>
-        </div>
-      </div>
 
-      <div class="bg-blue-500/10 border border-blue-500/20 rounded-2xl p-4 text-xs text-blue-300 space-y-2 leading-relaxed">
-        <p class="font-bold text-white flex items-center gap-2">
-          <AlertCircle size={15} class="text-blue-400 shrink-0" />
-          Reversión y Carga en Editor
-        </p>
-        <p>
-          Para editar este pago, se revertirá el pago actual <span class="font-mono font-bold text-white">{paymentToEdit.cob_num}</span> en Profit Plus para liberar los saldos de sus facturas y serás redirigido al editor con el proveedor cargado.
-        </p>
-      </div>
+        <div class="space-y-2">
+          <h2 class="text-2xl font-black tracking-tight text-text-base">Editar Pago</h2>
+          <p class="text-text-muted text-sm px-4">
+            Para editar este pago, se revertirá el pago actual <span class="font-bold text-text-base">{paymentToEdit.cob_num}</span> en Profit Plus para liberar los saldos de sus facturas y serás redirigido al editor con el proveedor cargado.
+          </p>
 
-      <form
-        method="POST"
-        action="?/editPayment"
-        use:enhance={() => {
-          isEditing = true;
-          return async ({ result }) => {
-            isEditing = false;
-            if (result.type === 'success') {
-              showEditModal = false;
-              toast.success(result.data?.message || 'Pago preparado para edición.');
-              if (result.data?.redirectUrl) {
-                goto(result.data.redirectUrl);
-              } else {
-                invalidateAll();
-              }
-            } else if (result.type === 'failure') {
-              toast.error(result.data?.message || 'Error al autorizar edición del pago.');
-            }
-          };
-        }}
-        class="space-y-4"
-      >
-        <input type="hidden" name="cob_num" value={paymentToEdit.cob_num} />
-        <input type="hidden" name="branch_id" value={selectedBranch} />
-        <input type="hidden" name="co_prov" value={paymentToEdit.co_prov} />
-        <input type="hidden" name="anulado" value={paymentToEdit.anulado ? 'true' : 'false'} />
-
-        <div>
-          <label for="edit-password" class="block text-xs font-black uppercase tracking-wider text-text-muted mb-1.5">
-            Ingresa tu contraseña para confirmar
-          </label>
-          <div class="relative">
-            <input
-              id="edit-password"
-              name="password"
-              type="password"
-              required
-              bind:value={editPassword}
-              placeholder="Contraseña actual"
-              class="w-full h-12 pl-10 pr-4 bg-surface-soft border border-border-subtle rounded-xl text-sm focus:border-blue-500 outline-none text-text-base"
-            />
-            <Lock size={16} class="absolute left-3.5 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none" />
+          <div class="text-left p-4 rounded-2xl bg-surface-soft border border-border-subtle space-y-2 text-xs mt-4">
+            <p class="text-text-muted"><span class="font-bold text-text-base">Proveedor:</span> {paymentToEdit.prov_des || paymentToEdit.co_prov}</p>
+            <p class="text-text-muted"><span class="font-bold text-text-base">Pago N°:</span> {paymentToEdit.cob_num}</p>
           </div>
         </div>
 
-        <div class="flex gap-3 pt-2">
-          <button
-            type="button"
-            onclick={() => showEditModal = false}
-            class="flex-1 h-12 rounded-xl bg-white/5 hover:bg-white/10 text-text-base font-bold text-xs transition-all cursor-pointer"
-          >
-            Cancelar
-          </button>
-          <button
-            type="submit"
-            disabled={isEditing || !editPassword}
-            class="flex-1 h-12 rounded-xl bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-bold text-xs transition-all shadow-lg shadow-blue-500/20 flex items-center justify-center gap-2 cursor-pointer"
-          >
-            {#if isEditing}
-              <Loader2 size={16} class="animate-spin" />
-              Procesando...
-            {:else}
-              Confirmar y Editar
-            {/if}
-          </button>
-        </div>
-      </form>
+        <form
+          method="POST"
+          action="?/editPayment"
+          use:enhance={() => {
+            isEditing = true;
+            return async ({ result }) => {
+              isEditing = false;
+              if (result.type === 'success') {
+                showEditModal = false;
+                toast.success(result.data?.message || 'Pago preparado para edición.');
+                if (result.data?.redirectUrl) {
+                  goto(result.data.redirectUrl);
+                } else {
+                  invalidateAll();
+                }
+              } else if (result.type === 'failure') {
+                toast.error(result.data?.message || 'Error al autorizar edición del pago.');
+              }
+            };
+          }}
+          class="space-y-4 pt-4 text-left"
+        >
+          <input type="hidden" name="cob_num" value={paymentToEdit.cob_num} />
+          <input type="hidden" name="branch_id" value={selectedBranch} />
+          <input type="hidden" name="co_prov" value={paymentToEdit.co_prov} />
+          <input type="hidden" name="anulado" value={paymentToEdit.anulado ? 'true' : 'false'} />
+
+          <div class="space-y-2 text-left">
+            <label for="edit-password" class="text-[10px] font-black uppercase tracking-widest text-text-muted ml-1">
+              Contraseña de Confirmación
+            </label>
+            <div class="relative">
+              <Lock size={18} class="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted opacity-40" />
+              <input
+                id="edit-password"
+                name="password"
+                type="password"
+                required
+                bind:value={editPassword}
+                placeholder="Introduzca su contraseña"
+                class="w-full h-14 bg-surface-base border border-border-bold rounded-2xl pl-12 pr-5 focus:border-blue-500 outline-none transition-all text-text-base font-medium"
+              />
+            </div>
+          </div>
+
+          <div class="flex gap-3 pt-4">
+            <button
+              type="button"
+              onclick={() => showEditModal = false}
+              disabled={isEditing}
+              class="flex-1 h-14 rounded-2xl font-bold bg-surface-soft hover:bg-surface-strong transition-all text-text-muted hover:text-text-base border border-border-subtle cursor-pointer disabled:opacity-50"
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              disabled={isEditing || !editPassword}
+              class="flex-1 h-14 rounded-2xl font-bold bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white shadow-lg shadow-blue-500/20 transition-all active:scale-95 flex items-center justify-center gap-2 cursor-pointer"
+            >
+              {#if isEditing}
+                <Loader2 size={18} class="animate-spin" />
+              {:else}
+                <Edit2 size={18} />
+                Confirmar y Editar
+              {/if}
+            </button>
+          </div>
+        </form>
+      </div>
     </div>
   </div>
 {/if}
 
 <!-- MODAL PARA CONFIRMAR ELIMINACIÓN DEFINITIVA CON CONTRASEÑA -->
 {#if showDeleteModal && paymentToDelete}
-  <div
-    class="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-4"
-    transition:fade={{ duration: 150 }}
-  >
+  <div class="fixed inset-0 z-[60] flex items-center justify-center p-4">
     <div
-      class="glass border border-red-500/30 rounded-[32px] w-full max-w-md p-6 space-y-6 shadow-2xl animate-in zoom-in-95 duration-150"
+      class="absolute inset-0 bg-black/60 backdrop-blur-sm"
+      onclick={() => !isDeleting && (showDeleteModal = false)}
+      onkeydown={(e) => e.key === "Escape" && !isDeleting && (showDeleteModal = false)}
+      role="button"
+      tabindex="-1"
+    ></div>
+
+    <div
+      class="bg-surface-raised w-full max-w-md rounded-[40px] border border-border-bold shadow-2xl relative z-10 overflow-hidden text-text-base"
+      transition:fade={{ duration: 150 }}
     >
-      <div class="flex items-center gap-3 text-red-400">
-        <div class="h-12 w-12 rounded-2xl bg-red-500/10 flex items-center justify-center">
-          <Trash2 size={24} />
+      <div class="p-8 text-center space-y-6">
+        <div class="h-20 w-20 rounded-3xl bg-red-500/20 text-red-500 flex items-center justify-center mx-auto shadow-lg shadow-red-500/10">
+          <Trash2 size={40} />
         </div>
-        <div>
-          <h3 class="font-black text-lg text-text-base">Eliminar Pago</h3>
-          <p class="text-xs text-text-muted font-mono">{paymentToDelete.cob_num}</p>
-        </div>
-      </div>
 
-      <div class="bg-red-500/10 border border-red-500/20 rounded-2xl p-4 text-xs text-red-300 space-y-2 leading-relaxed">
-        <p class="font-bold text-red-400 flex items-center gap-2">
-          <AlertTriangle size={15} class="shrink-0" />
-          ¡ADVERTENCIA: ACCIÓN DESTRUCTIVA!
-        </p>
-        <p>
-          ¿Estás seguro de que deseas eliminar permanentemente el pago <span class="font-bold text-white">{paymentToDelete.cob_num}</span> del proveedor <span class="font-bold text-white">{paymentToDelete.prov_des || paymentToDelete.co_prov}</span>?
-        </p>
-        <p class="text-red-400/90 text-[11px]">
-          Esta acción removerá físicamente el registro del pago en Profit Plus, restaurará el saldo de las facturas asociadas y limpiará los comprobantes generados. Esta operación NO se puede deshacer.
-        </p>
-      </div>
+        <div class="space-y-2">
+          <h2 class="text-2xl font-black tracking-tight text-text-base">Confirmar Eliminación</h2>
+          <p class="text-text-muted text-sm px-4">
+            ¿Estás seguro de que deseas eliminar permanentemente el pago <span class="font-bold text-text-base">{paymentToDelete.cob_num}</span>?
+            Esta acción removerá físicamente el registro del pago en Profit Plus, restaurará el saldo de las facturas asociadas y limpiará los comprobantes generados.
+          </p>
 
-      <form
-        method="POST"
-        action="?/deletePayment"
-        use:enhance={() => {
-          isDeleting = true;
-          return async ({ result }) => {
-            isDeleting = false;
-            if (result.type === 'success') {
-              showDeleteModal = false;
-              toast.success(result.data?.message || 'Pago eliminado permanentemente.');
-              invalidateAll();
-            } else if (result.type === 'failure') {
-              toast.error(result.data?.message || 'Error al eliminar el pago.');
-            }
-          };
-        }}
-        class="space-y-4"
-      >
-        <input type="hidden" name="cob_num" value={paymentToDelete.cob_num} />
-        <input type="hidden" name="branch_id" value={selectedBranch} />
-
-        <div>
-          <label for="delete-password" class="block text-xs font-black uppercase tracking-wider text-text-muted mb-1.5">
-            Ingresa tu contraseña para confirmar la eliminación
-          </label>
-          <div class="relative">
-            <input
-              id="delete-password"
-              name="password"
-              type="password"
-              required
-              bind:value={deletePassword}
-              placeholder="Contraseña actual"
-              class="w-full h-12 pl-10 pr-4 bg-surface-soft border border-border-subtle rounded-xl text-sm focus:border-red-500 outline-none text-text-base"
-            />
-            <Lock size={16} class="absolute left-3.5 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none" />
+          <div class="text-left p-4 rounded-2xl bg-surface-soft border border-border-subtle space-y-2 text-xs mt-4">
+            <p class="text-text-muted"><span class="font-bold text-text-base">Proveedor:</span> {paymentToDelete.prov_des || paymentToDelete.co_prov}</p>
+            <p class="text-text-muted"><span class="font-bold text-text-base">Pago N°:</span> {paymentToDelete.cob_num}</p>
+            <p class="text-red-500 font-bold">Esta operación NO se puede deshacer.</p>
           </div>
         </div>
 
-        <div class="flex gap-3 pt-2">
-          <button
-            type="button"
-            onclick={() => showDeleteModal = false}
-            class="flex-1 h-12 rounded-xl bg-white/5 hover:bg-white/10 text-text-base font-bold text-xs transition-all cursor-pointer"
-          >
-            Cancelar
-          </button>
-          <button
-            type="submit"
-            disabled={isDeleting || !deletePassword}
-            class="flex-1 h-12 rounded-xl bg-red-600 hover:bg-red-500 disabled:opacity-50 text-white font-bold text-xs transition-all shadow-lg shadow-red-500/20 flex items-center justify-center gap-2 cursor-pointer"
-          >
-            {#if isDeleting}
-              <Loader2 size={16} class="animate-spin" />
-              Eliminando...
-            {:else}
-              Confirmar Eliminación
-            {/if}
-          </button>
-        </div>
-      </form>
+        <form
+          method="POST"
+          action="?/deletePayment"
+          use:enhance={() => {
+            isDeleting = true;
+            return async ({ result }) => {
+              isDeleting = false;
+              if (result.type === 'success') {
+                showDeleteModal = false;
+                toast.success(result.data?.message || 'Pago eliminado permanentemente.');
+                invalidateAll();
+              } else if (result.type === 'failure') {
+                toast.error(result.data?.message || 'Error al eliminar el pago.');
+              }
+            };
+          }}
+          class="space-y-4 pt-4 text-left"
+        >
+          <input type="hidden" name="cob_num" value={paymentToDelete.cob_num} />
+          <input type="hidden" name="branch_id" value={selectedBranch} />
+
+          <div class="space-y-2 text-left">
+            <label for="delete-password" class="text-[10px] font-black uppercase tracking-widest text-text-muted ml-1">
+              Contraseña de Confirmación
+            </label>
+            <div class="relative">
+              <Lock size={18} class="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted opacity-40" />
+              <input
+                id="delete-password"
+                name="password"
+                type="password"
+                required
+                bind:value={deletePassword}
+                placeholder="Introduzca su contraseña"
+                class="w-full h-14 bg-surface-base border border-border-bold rounded-2xl pl-12 pr-5 focus:border-red-500 outline-none transition-all text-text-base font-medium"
+              />
+            </div>
+          </div>
+
+          <div class="flex gap-3 pt-4">
+            <button
+              type="button"
+              onclick={() => showDeleteModal = false}
+              disabled={isDeleting}
+              class="flex-1 h-14 rounded-2xl font-bold bg-surface-soft hover:bg-surface-strong transition-all text-text-muted hover:text-text-base border border-border-subtle cursor-pointer disabled:opacity-50"
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              disabled={isDeleting || !deletePassword}
+              class="flex-1 h-14 rounded-2xl font-bold bg-red-600 hover:bg-red-500 disabled:opacity-50 text-white shadow-lg shadow-red-500/20 transition-all active:scale-95 flex items-center justify-center gap-2 cursor-pointer"
+            >
+              {#if isDeleting}
+                <Loader2 size={18} class="animate-spin" />
+              {:else}
+                <Check size={18} />
+                Eliminar Pago
+              {/if}
+            </button>
+          </div>
+        </form>
+      </div>
     </div>
   </div>
 {/if}

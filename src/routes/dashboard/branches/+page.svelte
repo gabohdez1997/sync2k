@@ -5,7 +5,7 @@
   import {
     Plus,
     Search,
-    Edit,
+    Pen,
     Trash2,
     X,
     Database,
@@ -297,7 +297,7 @@
                 class="p-2 bg-white/5 hover:bg-white/10 rounded-xl text-text-muted hover:text-brand-400 transition"
                 title="Editar"
               >
-                <Edit size={18} />
+                <Pen size={18} />
               </button>
               <button
                 onclick={() => {

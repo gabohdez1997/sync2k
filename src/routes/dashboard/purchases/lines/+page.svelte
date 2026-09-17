@@ -6,7 +6,7 @@
     Layers,
     Plus,
     Search,
-    Pencil,
+    Pen,
     Save,
     X,
     Loader2,
@@ -143,7 +143,7 @@
                     class="p-2 text-text-muted hover:text-brand-500 hover:bg-brand-500/10 rounded-xl transition-all cursor-pointer inline-flex items-center justify-center"
                     title="Editar"
                   >
-                    <Pencil size={18} />
+                    <Pen size={18} />
                   </button>
                 </td>
               {/if}

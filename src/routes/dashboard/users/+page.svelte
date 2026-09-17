@@ -6,7 +6,7 @@
   import { 
     Users, 
     UserPlus, 
-    Edit2, 
+    Pen, 
     Trash2, 
     Check, 
     X, 
@@ -197,13 +197,13 @@
                 </form>
               </td>
               <td class="px-8 py-5">
-                <div class="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                <div class="flex items-center justify-end gap-2">
                   <button 
                     onclick={() => openEditModal(user)}
-                    class="p-2 text-text-muted hover:text-brand-500 hover:bg-brand-500/10 rounded-xl transition-all"
+                    class="p-2 text-text-muted hover:text-brand-500 hover:bg-brand-500/10 rounded-xl transition-all cursor-pointer"
                     title="Editar"
                   >
-                    <Edit2 size={18} />
+                    <Pen size={18} />
                   </button>
                   <form 
                     method="POST" 
@@ -215,7 +215,7 @@
                   >
                     <input type="hidden" name="userId" value={user.id} />
                     <button 
-                      class="p-2 text-text-muted hover:text-red-500 hover:bg-red-500/10 rounded-xl transition-all"
+                      class="p-2 text-text-muted hover:text-red-500 hover:bg-red-500/10 rounded-xl transition-all cursor-pointer"
                       title="Eliminar"
                     >
                       <Trash2 size={18} />

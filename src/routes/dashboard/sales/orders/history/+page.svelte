@@ -1,7 +1,7 @@
 <script lang="ts">
     import { fade, slide } from 'svelte/transition';
     import { 
-        Hash, DollarSign, Edit2, Trash2, 
+        Hash, DollarSign, Pen, Trash2, 
         FileDown, ChevronLeft, ChevronRight,
         Plus, Clock, MoreVertical, Store,
         Printer, Trash, AlertCircle, FileText, Lock, Loader2, Check, CheckSquare,
@@ -327,33 +327,21 @@
                                 </td>
                                 <td class="px-6 py-5">
                                     <div class="flex items-center justify-center gap-2 whitespace-nowrap">
+                                        <!-- Imprimir / Reporte -->
+                                        <button 
+                                            onclick={() => window.open(`/dashboard/sales/orders/${quote.doc_num}/print?branch_id=${data.selectedBranchId}`, '_blank')}
+                                            class="p-2 text-text-muted hover:text-brand-500 hover:bg-brand-500/10 rounded-xl transition-all cursor-pointer" title="Imprimir Reporte"
+                                        >
+                                            <Printer size={18} />
+                                        </button>
+
                                         <!-- Editar -->
                                         {#if data.canUpdate && canEditOrder(quote)}
                                             <button 
                                                 onclick={() => goto(`/dashboard/sales/orders?doc_num=${quote.doc_num}&branch_id=${data.selectedBranchId}`)}
-                                                class="p-2 text-text-muted hover:text-brand-500 hover:bg-brand-500/10 rounded-xl transition-all" title="Editar"
+                                                class="p-2 text-text-muted hover:text-brand-500 hover:bg-brand-500/10 rounded-xl transition-all cursor-pointer" title="Editar"
                                             >
-                                                <Edit2 size={18} />
-                                            </button>
-                                        {/if}
-
-                                        <!-- Eliminar -->
-                                        {#if data.canDelete && candeleteOrder(quote)}
-                                            <button 
-                                                onclick={() => openDeleteModal(quote)}
-                                                class="p-2 text-text-muted hover:text-red-500 hover:bg-red-500/10 rounded-xl transition-all" title="Eliminar"
-                                            >
-                                                <Trash2 size={18} />
-                                            </button>
-                                        {/if}
-
-                                        <!-- Anular -->
-                                        {#if data.canVoid && !quote.anulado && String(quote.status ?? '').trim() === '0'}
-                                            <button 
-                                                onclick={() => openVoidModal(quote)}
-                                                class="p-2 text-text-muted hover:text-amber-500 hover:bg-amber-500/10 rounded-xl transition-all" title="Anular"
-                                            >
-                                                <Ban size={18} />
+                                                <Pen size={18} />
                                             </button>
                                         {/if}
 
@@ -361,19 +349,31 @@
                                         {#if data.canVoid && !quote.anulado && String(quote.status ?? '').trim() === '1'}
                                             <button 
                                                 onclick={() => openProcessModal(quote)}
-                                                class="p-2 text-text-muted hover:text-green-500 hover:bg-green-500/10 rounded-xl transition-all" title="Liberar Comprometidos / Cerrar Pedido"
+                                                class="p-2 text-text-muted hover:text-green-500 hover:bg-green-500/10 rounded-xl transition-all cursor-pointer" title="Liberar Comprometidos / Cerrar Pedido"
                                             >
                                                 <CheckSquare size={18} />
                                             </button>
                                         {/if}
 
-                                        <!-- PDF/Reporte -->
-                                        <button 
-                                            onclick={() => window.open(`/dashboard/sales/orders/${quote.doc_num}/print?branch_id=${data.selectedBranchId}`, '_blank')}
-                                            class="p-2 text-text-muted hover:text-brand-500 hover:bg-brand-500/10 rounded-xl transition-all" title="Ver Reporte PDF"
-                                        >
-                                            <FileDown size={18} />
-                                        </button>
+                                        <!-- Anular -->
+                                        {#if data.canVoid && !quote.anulado && String(quote.status ?? '').trim() === '0'}
+                                            <button 
+                                                onclick={() => openVoidModal(quote)}
+                                                class="p-2 text-text-muted hover:text-amber-500 hover:bg-amber-500/10 rounded-xl transition-all cursor-pointer" title="Anular"
+                                            >
+                                                <Ban size={18} />
+                                            </button>
+                                        {/if}
+
+                                        <!-- Eliminar -->
+                                        {#if data.canDelete && candeleteOrder(quote)}
+                                            <button 
+                                                onclick={() => openDeleteModal(quote)}
+                                                class="p-2 text-text-muted hover:text-red-500 hover:bg-red-500/10 rounded-xl transition-all cursor-pointer" title="Eliminar"
+                                            >
+                                                <Trash2 size={18} />
+                                            </button>
+                                        {/if}
                                     </div>
                                 </td>
                             </tr>

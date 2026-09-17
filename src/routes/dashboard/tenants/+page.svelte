@@ -7,7 +7,7 @@
     Plus, 
     Search, 
     MoreVertical, 
-    Edit, 
+    Pen, 
     Trash2, 
     X,
     Database,
@@ -139,12 +139,13 @@
               <Building size={24} />
             {/if}
           </div>
-          <div class="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+          <div class="flex gap-2 transition-opacity">
             <button 
               onclick={() => openEditModal(tenant)}
-              class="p-2 hover:bg-surface-soft rounded-xl text-text-muted hover:text-text-base transition"
+              class="p-2 hover:bg-surface-soft rounded-xl text-text-muted hover:text-text-base transition cursor-pointer"
+              title="Editar"
             >
-              <Edit size={18} />
+              <Pen size={18} />
             </button>
             <button 
               onclick={() => {
