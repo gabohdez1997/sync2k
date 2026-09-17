@@ -9,27 +9,38 @@
     let { data }: { data: PageData } = $props();
     const { order, branch, settings } = data;
 
-    const logoUrl = branch.logo_url || settings.app_logo_url;
-    const allItems = order.renglones || [];
+    const logoUrl = branch?.logo_url || settings?.app_logo_url;
+    const allItems = order?.renglones || [];
 
-    const isUSD = (order.co_mone || "").toUpperCase().includes("US");
+    const isUSD =
+        (order?.co_mone || "").toUpperCase().includes("US") ||
+        (order?.co_mone || "").includes("$");
 
     // Si el documento fue editado, tomamos la fecha de modificación (fec_us_mo) para emisión y vencimiento
-    const displayFecEmis = order.fec_us_mo ? order.fec_us_mo : order.fec_emis;
-    const displayFecVenc = order.fec_us_mo ? order.fec_us_mo : order.fec_venc;
+    const displayFecEmis = order?.fec_us_mo ? order.fec_us_mo : order?.fec_emis;
+    const displayFecVenc = order?.fec_us_mo
+        ? order.fec_us_mo
+        : order?.fec_venc || order?.fec_emis;
+
+    const cleanObs = String(order?.comentario || "")
+        .replace(/\s*\|\s*EDITADO V[IÍ]A API/gi, "")
+        .replace(/\s*\|\s*CREADO V[IÍ]A API/gi, "")
+        .replace(/\s*\|\s*EDITADO VIA API/gi, "")
+        .replace(/\s*\|\s*CREADO VIA API/gi, "")
+        .trim();
 
     function formatCurrency(val: number | string) {
-        return Number(val).toLocaleString("de-DE", {
+        return Number(val || 0).toLocaleString("de-DE", {
             minimumFractionDigits: 2,
             maximumFractionDigits: 2,
         });
     }
 
     function getItemUnitPrice(item: any) {
-        if (!isUSD) return Number(item.precio || 0);
-        const tasa = Number(order.tasa || 1);
-        const om = Number(item.prec_vta_om || 0);
-        const bs = Number(item.precio || 0);
+        if (!isUSD) return Number(item?.precio || 0);
+        const tasa = Number(order?.tasa || 1);
+        const om = Number(item?.prec_vta_om || 0);
+        const bs = Number(item?.precio || 0);
         if (om > 0 && Math.abs(om * tasa - bs) <= 2) {
             return om;
         }
@@ -37,15 +48,21 @@
     }
 
     // --- CÁLCULO DE RETENCIÓN DE IVA ---
-    const porcEsp = Number(order.porc_esp || 0);
-    const isContribEspecial = order.contribu_e || porcEsp > 0;
+    const porcEsp = Number(order?.porc_esp || 0);
+    const isContribEspecial = Boolean(order?.contribu_e) || porcEsp > 0;
 
-    const rawBruto = Number(order.total_bruto || 0);
-    const rawImp = Number(order.monto_imp || 0);
-    const rawNeto = Number(order.total_neto || 0);
+    const rawBruto = Number(order?.total_bruto || 0);
+    const rawImp = Number(order?.monto_imp || 0);
+    const rawNeto = Number(order?.total_neto || 0);
+
+    const tasaDoc = Number(order?.tasa) > 0 ? Number(order.tasa) : 1;
+    const tasaRef = Number(
+        order?.tasa_actual && Number(order?.tasa) === 1
+            ? order.tasa_actual
+            : order?.tasa || 1,
+    );
 
     // USD Mode
-    const tasaDoc = Number(order.tasa || 1);
     const subtotalUSD = rawBruto / tasaDoc;
     const ivaUSD = rawImp / tasaDoc;
     const totalFacturaUSD = rawNeto / tasaDoc;
@@ -59,50 +76,93 @@
     const totalFacturaBS = rawNeto;
     const retencionBS = hasRetention ? (ivaBS * porcEsp) / 100 : 0;
     const totalAPagarBS = totalFacturaBS - retencionBS;
-
-    // Tasa referencia para Bs Mode
-    const tasaRef = Number(
-        order.tasa_actual && Number(order.tasa) === 1
-            ? order.tasa_actual
-            : order.tasa || 1,
-    );
     const totalAPagarUSDRef = totalAPagarBS / tasaRef;
 
-    // --- LÓGICA DE PAGINACIÓN MAXIMIZADA ---
-    const LIMIT_WITH_TOTALS = 36;
-    const LIMIT_WITHOUT_TOTALS = 44;
+    // --- LÓGICA DE PAGINACIÓN DINÁMICA CALIBRADA ---
+    // Capacidad óptima calibrada para hoja Letter (27.94cm) idéntica a órdenes de compra
+    const CAPACITY_WITH_TOTALS = 28; // Capacidad holgada en hoja con totales
+    const CAPACITY_WITHOUT_TOTALS = 40; // Capacidad en hojas intermedias sin totales
+
+    function getItemWeight(item: any): number {
+        const desc = String(item?.art_des || "").trim();
+        // A tamaño 8.5px caben más de 50 caracteres por línea en la columna de descripción
+        if (desc.length > 100) return 2.2;
+        if (desc.length > 52) return 1.5;
+        return 1;
+    }
 
     function paginate(items: any[]) {
-        let pages = [];
+        let pages: any[] = [];
         let remaining = [...items];
 
+        // Caso 1: Todo el documento cabe en una sola hoja con totales
+        const totalWeight = remaining.reduce((acc, it) => acc + getItemWeight(it), 0);
+        if (totalWeight <= CAPACITY_WITH_TOTALS) {
+            return [{
+                items: remaining,
+                showTotals: true,
+                emptyRowsCount: Math.max(0, Math.floor(CAPACITY_WITH_TOTALS - totalWeight))
+            }];
+        }
+
+        // Caso 2: Documento multi-página
         while (remaining.length > 0) {
-            if (remaining.length <= LIMIT_WITH_TOTALS) {
+            const remainingWeight = remaining.reduce((acc, it) => acc + getItemWeight(it), 0);
+            
+            // Si lo que queda cabe en la hoja final con totales
+            if (remainingWeight <= CAPACITY_WITH_TOTALS) {
                 pages.push({
                     items: remaining.splice(0, remaining.length),
                     showTotals: true,
-                    expectedRows: LIMIT_WITH_TOTALS,
+                    emptyRowsCount: Math.max(0, Math.floor(CAPACITY_WITH_TOTALS - remainingWeight))
                 });
-            } else {
-                pages.push({
-                    items: remaining.splice(0, LIMIT_WITHOUT_TOTALS),
-                    showTotals: false,
-                    expectedRows: LIMIT_WITHOUT_TOTALS,
-                });
+                break;
             }
+
+            // Llenar página intermedia
+            let pageItems: any[] = [];
+            let currentWeight = 0;
+
+            while (remaining.length > 0) {
+                const nextWeight = getItemWeight(remaining[0]);
+                // Si meter este item deja el resto en un número que cabe con totales, o excede la capacidad sin totales
+                if (pageItems.length > 0 && (currentWeight + nextWeight > CAPACITY_WITHOUT_TOTALS)) {
+                    break;
+                }
+                // Si el remanente después de este item ya cabe perfectamente en una hoja con totales, cortar aquí
+                const futureRemainingWeight = remaining.slice(1).reduce((acc, it) => acc + getItemWeight(it), 0);
+                if (futureRemainingWeight > 0 && futureRemainingWeight <= CAPACITY_WITH_TOTALS && currentWeight + nextWeight >= 15) {
+                    pageItems.push(remaining.shift());
+                    currentWeight += nextWeight;
+                    break;
+                }
+
+                currentWeight += nextWeight;
+                pageItems.push(remaining.shift());
+            }
+
+            pages.push({
+                items: pageItems,
+                showTotals: false,
+                emptyRowsCount: Math.max(0, Math.floor(CAPACITY_WITHOUT_TOTALS - currentWeight))
+            });
         }
 
+        // Asegurar que la última página siempre tenga totales
         if (pages.length > 0 && !pages[pages.length - 1].showTotals) {
-            if (pages[pages.length - 1].items.length > LIMIT_WITH_TOTALS) {
-                pages.push({
-                    items: [],
-                    showTotals: true,
-                    expectedRows: LIMIT_WITH_TOTALS,
-                });
-            } else {
-                pages[pages.length - 1].showTotals = true;
-                pages[pages.length - 1].expectedRows = LIMIT_WITH_TOTALS;
-            }
+            pages.push({
+                items: [],
+                showTotals: true,
+                emptyRowsCount: CAPACITY_WITH_TOTALS
+            });
+        }
+
+        if (pages.length === 0) {
+            pages.push({
+                items: [],
+                showTotals: true,
+                emptyRowsCount: CAPACITY_WITH_TOTALS
+            });
         }
 
         return pages;
@@ -118,7 +178,10 @@
 <svelte:head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Pedido {order.doc_num} - {branch.business_name || branch.name}</title
+    <title
+        >Pedido {order?.doc_num} - {branch?.business_name ||
+            branch?.name ||
+            "Profit Cloud"}</title
     >
 </svelte:head>
 
@@ -172,11 +235,12 @@
                         {/if}
                         <div class="company-details">
                             <h1 class="business-name">
-                                {branch.business_name || branch.name}
+                                {branch?.business_name ||
+                                    branch?.name ||
+                                    "EMPRESA"}
                             </h1>
-                            <p class="fiscal-id">RIF: {branch.rif || "---"}</p>
-                            <p class="address">{branch.address || ""}</p>
-                            <!-- {#if branch.phone}<p class="phone">Tel: {branch.phone}</p>{/if} -->
+                            <p class="fiscal-id">RIF: {branch?.rif || "---"}</p>
+                            <p class="address">{branch?.address || ""}</p>
                         </div>
                     </div>
 
@@ -184,12 +248,12 @@
                         <div class="doc-badge">
                             <span class="label">Pedido N°</span>
                             <span class="number text-red-600"
-                                >{order.doc_num}</span
+                                >{order?.doc_num}</span
                             >
                         </div>
                         <div class="dates mt-2">
                             <p>
-                                Emision: <strong
+                                Emisión: <strong
                                     >{dayjs(displayFecEmis).format(
                                         "DD/MM/YYYY",
                                     )}</strong
@@ -202,11 +266,11 @@
                                     )}</strong
                                 >
                             </p>
-                            <p class="text-[9px] text-slate-400 mt-1 uppercase">
+                            <p class="currency-line uppercase">
                                 Moneda: <strong
                                     >{isUSD
-                                        ? "DOLARES (USD)"
-                                        : "BOLIVARES (BS.)"}</strong
+                                        ? "DÓLARES (USD)"
+                                        : "BOLÍVARES (BS.)"}</strong
                                 >
                             </p>
                         </div>
@@ -217,27 +281,34 @@
                 <div class="info-grid">
                     <div class="client-box">
                         <h3 class="section-title">Datos del Cliente</h3>
-                        <p class="client-name">{order.cli_des}</p>
+                        <p class="client-name">
+                            {order?.cli_des ||
+                                order?.co_cli ||
+                                "CLIENTE GENERAL"}
+                        </p>
                         <p class="client-rif">
-                            RIF: {order.cli_rif || order.co_cli}
+                            RIF: {order?.cli_rif || order?.rif || order?.co_cli}
                         </p>
                         <p class="client-address font-medium">
-                            DIRECCION: {order.cli_dir ||
-                                "Direccion no registrada"}
+                            DIRECCIÓN: {order?.cli_dir ||
+                                order?.direc1 ||
+                                "Dirección no registrada"}
                         </p>
-                        {#if order.cli_tel}<p
+                        {#if order?.cli_tel || order?.telefonos}
+                            <p
                                 class="client-phone font-bold mt-1 text-slate-700"
                             >
-                                TELEFONO: {order.cli_tel}
-                            </p>{/if}
-                        <p class="client-rif mt-1 font-bold text-[8px]">
+                                TELÉFONO: {order?.cli_tel || order?.telefonos}
+                            </p>
+                        {/if}
+                        <p class="client-rif mt-1 font-bold text-[8.5px]">
                             ESTATUS FISCAL:
                             <span
                                 class="text-blue-800 font-extrabold uppercase"
                             >
                                 {#if isContribEspecial}
                                     CONTRIBUYENTE ESPECIAL ({porcEsp}%)
-                                {:else if order.contrib === false || order.contrib === 0}
+                                {:else if order?.contrib === false || order?.contrib === 0}
                                     NO CONTRIBUYENTE
                                 {:else}
                                     CONTRIBUYENTE ORDINARIO
@@ -246,20 +317,37 @@
                         </p>
                     </div>
                     <div class="logistic-box">
+                        <h3 class="section-title">Condiciones y Venta</h3>
                         <div class="info-row">
-                            <span class="label">Vendedor:</span><span
-                                class="val"
-                                >{order.ven_des || order.co_ven}</span
+                            <span class="label">Vendedor:</span>
+                            <span class="val text-blue-900 font-black"
+                                >{order?.ven_des ||
+                                    order?.co_ven ||
+                                    "---"}</span
                             >
                         </div>
                         <div class="info-row">
-                            <span class="label">Cond. Pago:</span><span
-                                class="val"
-                                >{order.cond_des ||
-                                    order.co_cond ||
+                            <span class="label">Cond. Pago:</span>
+                            <span class="val"
+                                >{order?.cond_des ||
+                                    order?.co_cond ||
                                     "CONTADO"}</span
                             >
                         </div>
+                        {#if order?.trans_des || order?.co_tran}
+                            <div class="info-row">
+                                <span class="label">Transporte:</span>
+                                <span class="val"
+                                    >{order?.trans_des || order?.co_tran}</span
+                                >
+                            </div>
+                        {/if}
+                        {#if order?.n_control}
+                            <div class="info-row">
+                                <span class="label">N° Control / Ref:</span>
+                                <span class="val">{order?.n_control}</span>
+                            </div>
+                        {/if}
                     </div>
                 </div>
 
@@ -268,8 +356,8 @@
                     <table class="items-table">
                         <thead>
                             <tr>
-                                <th class="col-code">Codigo</th>
-                                <th class="col-desc">Descripcion</th>
+                                <th class="col-code">Código</th>
+                                <th class="col-desc">Descripción</th>
                                 <th class="col-qty">Cant.</th>
                                 <th class="col-uni">Uni.</th>
                                 <th class="col-price"
@@ -282,11 +370,16 @@
                         </thead>
                         <tbody>
                             {#each page.items as item}
+                                {@const unitPrice = getItemUnitPrice(item)}
+                                {@const lineTotal = isUSD
+                                    ? Number(item.cantidad || 0) * unitPrice
+                                    : Number(item.total_renglon) ||
+                                      Number(item.cantidad || 0) * unitPrice}
                                 <tr>
                                     <td class="font-mono">{item.co_art}</td>
-                                    <td class="font-bold uppercase text-left"
-                                        >{item.art_des}</td
-                                    >
+                                    <td class="font-bold uppercase text-left">
+                                        {item.art_des}
+                                    </td>
                                     <td>{item.cantidad}</td>
                                     <td class="font-black"
                                         >{item.unidad ||
@@ -294,19 +387,15 @@
                                             "UND"}</td
                                     >
                                     <td class="text-right">
-                                        {formatCurrency(getItemUnitPrice(item))}
+                                        {formatCurrency(unitPrice)}
                                     </td>
                                     <td class="text-right font-bold">
-                                        {formatCurrency(
-                                            isUSD
-                                                ? Number(item.cantidad) * getItemUnitPrice(item)
-                                                : item.total_renglon,
-                                        )}
+                                        {formatCurrency(lineTotal)}
                                     </td>
                                 </tr>
                             {/each}
-                            {#if page.items.length < page.expectedRows}
-                                {#each Array(page.expectedRows - page.items.length) as _}
+                            {#if page.emptyRowsCount > 0}
+                                {#each Array(page.emptyRowsCount) as _}
                                     <tr class="empty-row"
                                         ><td colspan="6">&nbsp;</td></tr
                                     >
@@ -326,22 +415,22 @@
                     <div class="footer-block mt-auto">
                         <div class="footer-grid">
                             <div class="remarks">
-                                {#if order.comentario}
+                                {#if cleanObs}
                                     <h4 class="section-title">Observaciones</h4>
                                     <div class="remarks-content">
-                                        {order.comentario}
+                                        {cleanObs}
                                     </div>
                                 {/if}
                                 <div class="disclaimer mt-1">
                                     <p>
                                         * Este pedido es referencial. Sujeto a
-                                        cambios sin previo aviso segun tasa del
-                                        dia.
+                                        cambios sin previo aviso según tasa del
+                                        día.
                                     </p>
                                     <p>
-                                        * Tasa referencial del dia: <strong
+                                        * Tasa referencial del documento: <strong
                                             >Bs. {formatCurrency(
-                                                order.tasa_actual || order.tasa,
+                                                tasaRef,
                                             )}</strong
                                         > por 1 USD.
                                     </p>
@@ -351,20 +440,22 @@
                             <div class="totals-box">
                                 {#if isUSD}
                                     <div class="total-row">
-                                        <span>Subtotal ($)</span><span
+                                        <span>Subtotal ($)</span>
+                                        <span
                                             >{formatCurrency(subtotalUSD)}</span
                                         >
                                     </div>
                                     {#if ivaUSD > 0}
                                         <div class="total-row">
-                                            <span>IVA (16%)</span><span
-                                                >{formatCurrency(ivaUSD)}</span
+                                            <span>IVA (16%)</span>
+                                            <span>{formatCurrency(ivaUSD)}</span
                                             >
                                         </div>
                                     {/if}
                                     {#if hasRetention}
                                         <div class="total-row">
-                                            <span>Total Factura ($)</span><span
+                                            <span>Total Factura ($)</span>
+                                            <span
                                                 >{formatCurrency(
                                                     totalFacturaUSD,
                                                 )}</span
@@ -373,8 +464,8 @@
                                         <div
                                             class="total-row text-amber-600 font-bold"
                                         >
-                                            <span>Retencion ({porcEsp}%)</span
-                                            ><span
+                                            <span>Retención ({porcEsp}%)</span>
+                                            <span
                                                 >- {formatCurrency(
                                                     retencionUSD,
                                                 )}</span
@@ -384,7 +475,8 @@
                                             <div class="bs-total">
                                                 <span class="label"
                                                     >Total a Pagar</span
-                                                ><span class="val"
+                                                >
+                                                <span class="val"
                                                     >$ {formatCurrency(
                                                         totalAPagarUSD,
                                                     )}</span
@@ -396,7 +488,8 @@
                                             <div class="bs-total">
                                                 <span class="label"
                                                     >Total General</span
-                                                ><span class="val"
+                                                >
+                                                <span class="val"
                                                     >$ {formatCurrency(
                                                         totalFacturaUSD,
                                                     )}</span
@@ -406,21 +499,20 @@
                                     {/if}
                                 {:else}
                                     <div class="total-row">
-                                        <span>Subtotal (Bs.)</span><span
-                                            >{formatCurrency(subtotalBS)}</span
+                                        <span>Subtotal (Bs.)</span>
+                                        <span>{formatCurrency(subtotalBS)}</span
                                         >
                                     </div>
                                     {#if ivaBS > 0}
                                         <div class="total-row">
-                                            <span>IVA (16%)</span><span
-                                                >{formatCurrency(ivaBS)}</span
-                                            >
+                                            <span>IVA (16%)</span>
+                                            <span>{formatCurrency(ivaBS)}</span>
                                         </div>
                                     {/if}
                                     {#if hasRetention}
                                         <div class="total-row">
-                                            <span>Total Factura (Bs.)</span
-                                            ><span
+                                            <span>Total Factura (Bs.)</span>
+                                            <span
                                                 >{formatCurrency(
                                                     totalFacturaBS,
                                                 )}</span
@@ -429,8 +521,8 @@
                                         <div
                                             class="total-row text-amber-600 font-bold"
                                         >
-                                            <span>Retencion ({porcEsp}%)</span
-                                            ><span
+                                            <span>Retención ({porcEsp}%)</span>
+                                            <span
                                                 >- {formatCurrency(
                                                     retencionBS,
                                                 )}</span
@@ -440,14 +532,16 @@
                                             <div class="bs-total">
                                                 <span class="label"
                                                     >Total a Pagar</span
-                                                ><span class="val"
+                                                >
+                                                <span class="val"
                                                     >Bs. {formatCurrency(
                                                         totalAPagarBS,
                                                     )}</span
                                                 >
                                             </div>
                                             <div class="usd-reference">
-                                                <span>Referencia</span><strong
+                                                <span>Referencia</span>
+                                                <strong
                                                     >$ {formatCurrency(
                                                         totalAPagarUSDRef,
                                                     )}</strong
@@ -459,14 +553,16 @@
                                             <div class="bs-total">
                                                 <span class="label"
                                                     >Total General</span
-                                                ><span class="val"
+                                                >
+                                                <span class="val"
                                                     >Bs. {formatCurrency(
                                                         totalFacturaBS,
                                                     )}</span
                                                 >
                                             </div>
                                             <div class="usd-reference">
-                                                <span>Referencia</span><strong
+                                                <span>Referencia</span>
+                                                <strong
                                                     >$ {formatCurrency(
                                                         totalFacturaBS /
                                                             tasaRef,
@@ -483,7 +579,7 @@
 
                 <!-- PAGE INDICATOR -->
                 <div class="page-footer">
-                    <span>Pagina {i + 1} de {pages.length}</span>
+                    <span>Página {i + 1} de {pages.length}</span>
                 </div>
             </div>
         </div>
@@ -516,13 +612,15 @@
         background: #fff;
         width: 21.59cm;
         height: 27.94cm;
-        padding: 0.6cm 0.8cm 1cm 0.8cm; /* Aumentado margen inferior para evitar solapamientos con pie de página */
+        max-height: 27.94cm;
+        padding: 0.6cm 0.8cm 0.8cm 0.8cm;
         box-sizing: border-box;
         box-shadow: 0 15px 50px rgba(0, 0, 0, 0.3);
         display: flex;
         flex-direction: column;
         position: relative;
         flex-shrink: 0;
+        overflow: hidden;
     }
 
     .print-container {
@@ -534,33 +632,46 @@
     .header-section {
         display: flex;
         justify-content: space-between;
+        align-items: flex-start;
         border-bottom: 2px solid #000;
-        padding-bottom: 6px;
-        margin-bottom: 10px;
+        padding-bottom: 0;
+        margin-bottom: 5px;
     }
 
     .brand-info {
         display: flex;
-        gap: 10px;
+        gap: 12px;
         max-width: 65%;
+        align-items: center;
     }
     .logo-img {
-        height: 50px;
+        max-width: 100px;
         width: auto;
         object-fit: contain;
     }
-    .business-name {
-        font-size: 12px;
-        font-weight: 900;
-        margin: 0;
-        text-transform: uppercase;
+    .company-details {
+        display: flex;
+        flex-direction: column;
     }
-    .fiscal-id,
-    .address,
-    .phone {
-        font-size: 8px;
+    .business-name {
+        font-size: 15px;
+        font-weight: 900;
+        margin: 0 0 2px 0;
+        text-transform: uppercase;
+        color: #000;
+        line-height: 1.15;
+    }
+    .fiscal-id {
+        font-size: 12px;
+        font-weight: 700;
+        margin: 0;
+        color: #1e293b;
+    }
+    .address {
+        font-size: 12px;
         margin: 1px 0;
-        color: #333;
+        color: #334155;
+        line-height: 1.25;
     }
 
     .doc-info {
@@ -568,81 +679,124 @@
     }
     .doc-badge {
         border: 2px solid #000;
-        padding: 4px 8px;
+        padding: 4px 10px;
         border-radius: 6px;
         display: flex;
         flex-direction: column;
         align-items: center;
+        background: #fff;
     }
     .doc-badge .label {
-        font-size: 7px;
-        font-weight: bold;
+        font-size: 8.5px;
+        font-weight: 800;
         text-transform: uppercase;
-        color: #555;
+        color: #475569;
+        letter-spacing: 0.5px;
     }
     .doc-badge .number {
-        font-size: 16px;
+        font-size: 18px;
         font-weight: 900;
         color: #dc2626 !important;
+        letter-spacing: 0.5px;
+        line-height: 1.1;
     }
     .dates {
-        font-size: 8px;
-        color: #555;
-        line-height: 1.1;
+        font-size: 10px;
+        color: #334155;
+        line-height: 1.3;
+        margin-top: 4px;
+    }
+    .dates p {
+        margin: 1px 0;
+    }
+    .currency-line {
+        font-size: 10px;
+        color: #1e293b;
+        margin-top: 0px;
     }
 
     .info-grid {
         display: grid;
-        grid-template-columns: 1fr 1fr;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
         gap: 10px;
-        margin-bottom: 10px;
+        margin-bottom: 5px;
+        width: 100%;
+        box-sizing: border-box;
     }
     .section-title {
-        font-size: 8px;
+        font-size: 10px;
         font-weight: 900;
         text-transform: uppercase;
-        border-bottom: 1px solid #ddd;
-        padding-bottom: 2px;
-        margin-bottom: 3px;
+        border-bottom: 1.5px solid #cbd5e1;
+        padding-bottom: 3px;
+        margin-bottom: 4px;
+        color: #0f172a;
+        letter-spacing: 0.3px;
     }
     .client-box,
     .logistic-box {
-        background: #f9fafb;
-        padding: 5px;
-        border-radius: 4px;
-        border: 1px solid #eee;
+        background: #f8fafc;
+        padding: 7px 10px;
+        border-radius: 5px;
+        border: 1px solid #cbd5e1;
+        min-width: 0;
+        overflow: hidden;
+        word-break: break-word;
     }
     .client-name {
-        font-size: 10px;
+        font-size: 11.5px;
         font-weight: 900;
-        margin: 0;
+        margin: 0 0 2px 0;
         text-transform: uppercase;
+        color: #000;
+        word-break: break-word;
+        line-height: 1.2;
     }
     .client-rif,
     .client-address,
     .client-phone {
-        font-size: 8px;
-        margin: 1px 0;
+        font-size: 9.5px;
+        margin: 1.5px 0;
+        line-height: 1.3;
+        word-break: break-word;
+    }
+    .client-rif {
+        font-weight: 700;
+        color: #1e293b;
+    }
+    .client-address {
+        color: #334155;
+    }
+    .client-phone {
+        font-weight: 800;
+        color: #0f172a;
     }
     .info-row {
         display: flex;
-        gap: 5px;
-        font-size: 8px;
-        margin-bottom: 1px;
+        gap: 6px;
+        font-size: 9.5px;
+        margin-bottom: 3px;
+        align-items: flex-start;
+        line-height: 1.3;
     }
     .info-row .label {
-        font-weight: bold;
-        color: #666;
-        width: 60px;
+        font-weight: 700;
+        color: #475569;
+        width: 78px;
+        flex-shrink: 0;
     }
     .info-row .val {
-        font-weight: 700;
+        font-weight: 800;
         text-transform: uppercase;
+        color: #000;
+        flex: 1;
+        min-width: 0;
+        word-break: break-word;
     }
 
     .table-container {
         flex: 1;
-        margin-bottom: 5px;
+        margin-bottom: 6px;
     }
     .items-table {
         width: 100%;
@@ -650,21 +804,24 @@
         font-size: 8.5px;
     }
     .items-table th {
-        background: #f3f4f6;
+        background: #f1f5f9;
         border: 1px solid #000;
-        padding: 3px;
+        padding: 3.5px 4px;
         text-transform: uppercase;
         font-weight: 900;
+        font-size: 9px;
+        color: #0f172a;
     }
     .items-table td {
-        border: 1px solid #ddd;
-        padding: 2px 5px;
+        border: 1px solid #cbd5e1;
+        padding: 2.5px 5px;
         text-align: center;
-        height: 14.5px;
+        height: 15px;
+        color: #000;
     }
     .items-table .empty-row td {
-        border-left: 1px solid #ddd;
-        border-right: 1px solid #ddd;
+        border-left: 1px solid #cbd5e1;
+        border-right: 1px solid #cbd5e1;
         border-bottom: none;
         border-top: none;
     }
@@ -677,33 +834,60 @@
     .font-mono {
         font-family: monospace;
     }
+    .col-code {
+        width: 15%;
+    }
+    .col-desc {
+        width: 43%;
+    }
+    .col-qty {
+        width: 7%;
+    }
+    .col-uni {
+        width: 7%;
+    }
+    .col-price {
+        width: 14%;
+    }
+    .col-total {
+        width: 14%;
+    }
 
     .continue-msg {
-        font-size: 7px;
+        font-size: 8px;
         font-weight: bold;
         text-align: right;
-        color: #999;
-        margin-top: 2px;
+        color: #64748b;
+        margin-top: 3px;
         font-style: italic;
     }
 
     .footer-grid {
         display: grid;
-        grid-template-columns: 1fr 200px;
-        gap: 12px;
+        grid-template-columns: 1fr 220px;
+        gap: 14px;
+        align-items: start;
     }
     .remarks-content {
-        font-size: 7.5px;
-        background: #f9fafb;
-        padding: 4px;
-        border: 1px solid #ddd;
-        min-height: 18px;
+        font-size: 10px;
+        font-weight: 600;
+        background: #f8fafc;
+        padding: 6px 8px;
+        border: 1px solid #cbd5e1;
+        border-radius: 4px;
+        min-height: 24px;
         text-transform: uppercase;
+        color: #0f172a;
+        line-height: 1.35;
     }
     .disclaimer {
-        font-size: 6.5px;
-        color: #666;
-        line-height: 1;
+        font-size: 9px;
+        color: #475569;
+        line-height: 1.4;
+        margin-top: 4px;
+    }
+    .disclaimer p {
+        margin: 1px 0;
     }
 
     .totals-box {
@@ -715,35 +899,40 @@
     .total-row {
         display: flex;
         justify-content: space-between;
-        padding: 2px 8px;
-        border-bottom: 1px solid #eee;
-        font-size: 9px;
-        font-weight: 600;
+        padding: 3px 8px;
+        border-bottom: 1px solid #e2e8f0;
+        font-size: 10px;
+        font-weight: 700;
+        color: #1e293b;
     }
     .grand-total-outline {
-        padding: 3px 8px;
+        padding: 4px 8px;
         text-align: right;
         border-top: 2px solid #000;
-        background: #fdfdfd;
+        background: #f8fafc;
     }
     .bs-total .label {
-        font-size: 8px;
+        font-size: 9px;
         font-weight: 900;
         text-transform: uppercase;
-        color: #555;
+        color: #475569;
+        letter-spacing: 0.5px;
     }
     .bs-total .val {
-        font-size: 16px;
+        font-size: 17px;
         font-weight: 900;
+        color: #000;
+        line-height: 1.1;
     }
     .usd-reference {
-        margin-top: 2px;
-        padding-top: 2px;
-        border-top: 1px dashed #ddd;
+        margin-top: 3px;
+        padding-top: 3px;
+        border-top: 1px dashed #cbd5e1;
         display: flex;
         justify-content: space-between;
-        font-size: 8.5px;
-        font-weight: bold;
+        font-size: 9.5px;
+        font-weight: 800;
+        color: #0f172a;
     }
 
     .page-footer {
@@ -752,9 +941,9 @@
         left: 0;
         right: 0;
         text-align: center;
-        font-size: 8px;
-        font-weight: bold;
-        color: #777;
+        font-size: 9px;
+        font-weight: 800;
+        color: #64748b;
         margin: 0 0.8cm;
     }
 
@@ -777,7 +966,7 @@
             display: none !important;
         }
         @page {
-            size: letter;
+            size: letter portrait;
             margin: 0;
         }
     }
