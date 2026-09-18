@@ -79,7 +79,7 @@ export class AgentClient {
 				if (!fetchToUse) throw new Error("Fetch method not available");
 
 				const controller = new AbortController();
-				const timeoutMs = 12000; // 12s timeout por intento
+				const timeoutMs = (options as any)?.timeout || 45000;
 				const timeoutId = setTimeout(() => controller.abort(new Error(`Timeout tras ${timeoutMs}ms`)), timeoutMs);
 
 				if (options.signal) {

@@ -1213,6 +1213,16 @@
                     summary: []
                   };
                   toast.error(result.data?.message || "Error al sincronizar");
+                } else if (result.type === "error") {
+                  const errorMsg = (result as any)?.error?.message || (result as any)?.message || "Tiempo de espera agotado (Timeout) o error en la sincronización.";
+                  syncResult = {
+                    success: false,
+                    entity,
+                    message: errorMsg,
+                    total_synced: 0,
+                    summary: []
+                  };
+                  toast.error(errorMsg);
                 } else {
                   toast.error("Error inesperado en la sincronización.");
                 }

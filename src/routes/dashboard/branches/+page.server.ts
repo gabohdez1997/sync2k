@@ -619,7 +619,16 @@ export const actions: Actions = {
 
             try {
               const res = await client.exportAll('articulos/precios', branch.id);
-              const items = (res && res.success && Array.isArray(res.data)) ? res.data : [];
+              if (!res || !res.success) {
+                return {
+                  branch,
+                  client,
+                  items: [],
+                  priceMap: new Map<string, any>(),
+                  error: res?.message || 'Error al exportar precios del agente'
+                };
+              }
+              const items = Array.isArray(res.data) ? res.data : [];
               const priceMap = new Map<string, any>();
               for (const it of items) {
                 const k = String(it.co_art || '').trim().toUpperCase();
@@ -713,7 +722,7 @@ export const actions: Actions = {
               return;
             }
 
-            const chunkSize = 150;
+            const chunkSize = 50;
             let branchMigrated = 0;
             const branchErrors: string[] = [];
 
@@ -725,6 +734,9 @@ export const actions: Actions = {
                 branchMigrated += count;
                 if (importRes?.errors && importRes.errors.length > 0) {
                   branchErrors.push(...importRes.errors);
+                }
+                if (importRes && !importRes.success && importRes.message) {
+                  branchErrors.push(importRes.message);
                 }
               } catch (chunkErr: any) {
                 branchErrors.push(`Lote ${Math.floor(i / chunkSize) + 1}: ${chunkErr.message}`);
