@@ -685,16 +685,26 @@ export const actions: Actions = {
 
             for (const [co_art, masterItem] of masterPrices.entries()) {
               const branchItem = b.priceMap.get(co_art);
+              const isCode09 = co_art.startsWith('09');
+              const maxPrices = isCode09 ? 10 : 2;
 
               if (!branchItem) {
                 // La sede no tiene precios para este artículo
-                if ((Number(masterItem.precio_1) || 0) > 0 || (Number(masterItem.margen_1) || 0) > 0) {
+                let hasAnyPrice = false;
+                for (let i = 1; i <= maxPrices; i++) {
+                  if ((Number(masterItem[`precio_${i}`]) || 0) > 0 || (Number(masterItem[`margen_${i}`]) || 0) > 0) {
+                    hasAnyPrice = true;
+                    break;
+                  }
+                }
+                if (hasAnyPrice) {
                   toUpdate.push(masterItem);
                 }
               } else {
-                // Comparar precios 1 al 5 y márgenes 1 al 5
+                // Comparar precios y márgenes según la regla:
+                // Precios 1 y 2 para inventario general, y 1 al 10 para código 09
                 let differs = false;
-                for (let i = 1; i <= 5; i++) {
+                for (let i = 1; i <= maxPrices; i++) {
                   const mPrice = Number(masterItem[`precio_${i}`]) || 0;
                   const bPrice = Number(branchItem[`precio_${i}`]) || 0;
                   const mMargin = Number(masterItem[`margen_${i}`]) || 0;

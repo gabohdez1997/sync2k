@@ -1329,7 +1329,7 @@
                 <div>
                   <h5 class="text-sm font-black sync-title">Precios y Márgenes</h5>
                   <p class="text-[11px] sync-subtitle mt-0.5 leading-snug">
-                    Precios de venta 1 al 5 y márgenes de utilidad en todas las sedes.
+                    Precios 1 y 2 (y hasta 10 en código 09) con sus márgenes en todas las sedes.
                   </p>
                 </div>
               </div>
