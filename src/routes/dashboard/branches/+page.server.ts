@@ -602,6 +602,188 @@ export const actions: Actions = {
       }
     }
 
+    if (entity === 'prices' || entity === 'article_prices' || entity === 'precios') {
+      try {
+        // 1. Exportar precios y márgenes de todas las sedes activas en paralelo
+        const branchExports = await Promise.all(
+          activeBranches.map(async (branch) => {
+            const client = new AgentClient(
+              {
+                slug:          branch.id,
+                agent_url:     branch.agent_url!,
+                agent_api_key: branch.agent_token
+              },
+              locals.profile || undefined,
+              fetch
+            );
+
+            try {
+              const res = await client.exportAll('articulos/precios', branch.id);
+              const items = (res && res.success && Array.isArray(res.data)) ? res.data : [];
+              const priceMap = new Map<string, any>();
+              for (const it of items) {
+                const k = String(it.co_art || '').trim().toUpperCase();
+                if (k) priceMap.set(k, it);
+              }
+              return { branch, client, items, priceMap, error: null };
+            } catch (err: any) {
+              return { branch, client, items: [], priceMap: new Map<string, any>(), error: err.message };
+            }
+          })
+        );
+
+        const validBranches = branchExports.filter(b => !b.error);
+        if (validBranches.length < 2) {
+          const errorDetails = branchExports.filter(b => b.error).map(b => `${b.branch.name}: ${b.error}`).join(' | ');
+          return fail(500, { message: `No se pudo conectar con suficientes sedes activas para sincronizar precios. ${errorDetails}` });
+        }
+
+        // 2. Unificar los precios maestros por artículo:
+        // Para cada co_art, elegimos el registro con la fecha de modificación más reciente (fe_us_mo)
+        // o con los precios válidos más actualizados.
+        const masterPrices = new Map<string, any>();
+
+        for (const exp of validBranches) {
+          for (const item of exp.items) {
+            const key = String(item.co_art || '').trim().toUpperCase();
+            if (!key) continue;
+
+            const existing = masterPrices.get(key);
+            if (!existing) {
+              masterPrices.set(key, item);
+            } else {
+              const exDate = existing.fe_us_mo ? new Date(existing.fe_us_mo).getTime() : 0;
+              const curDate = item.fe_us_mo ? new Date(item.fe_us_mo).getTime() : 0;
+
+              if (curDate > exDate) {
+                masterPrices.set(key, item);
+              } else if (curDate === exDate) {
+                if ((Number(item.precio_1) || 0) > (Number(existing.precio_1) || 0)) {
+                  masterPrices.set(key, item);
+                }
+              }
+            }
+          }
+        }
+
+        // 3. Comparar cada sede con el maestro y enviar los artículos con precios o márgenes desactualizados
+        let totalUpdated = 0;
+        const summary: Array<{ sede_id: string; sede_nombre: string; migrated: number; errors: string[] }> = [];
+
+        await Promise.all(
+          validBranches.map(async (b) => {
+            const toUpdate: any[] = [];
+
+            for (const [co_art, masterItem] of masterPrices.entries()) {
+              const branchItem = b.priceMap.get(co_art);
+
+              if (!branchItem) {
+                // La sede no tiene precios para este artículo
+                if ((Number(masterItem.precio_1) || 0) > 0 || (Number(masterItem.margen_1) || 0) > 0) {
+                  toUpdate.push(masterItem);
+                }
+              } else {
+                // Comparar precios 1 al 5 y márgenes 1 al 5
+                let differs = false;
+                for (let i = 1; i <= 5; i++) {
+                  const mPrice = Number(masterItem[`precio_${i}`]) || 0;
+                  const bPrice = Number(branchItem[`precio_${i}`]) || 0;
+                  const mMargin = Number(masterItem[`margen_${i}`]) || 0;
+                  const bMargin = Number(branchItem[`margen_${i}`]) || 0;
+
+                  if (Math.abs(mPrice - bPrice) > 0.0001 || Math.abs(mMargin - bMargin) > 0.0001) {
+                    differs = true;
+                    break;
+                  }
+                }
+
+                if (differs) {
+                  toUpdate.push(masterItem);
+                }
+              }
+            }
+
+            if (toUpdate.length === 0) {
+              summary.push({
+                sede_id: b.branch.id,
+                sede_nombre: b.branch.name,
+                migrated: 0,
+                errors: []
+              });
+              return;
+            }
+
+            const chunkSize = 150;
+            let branchMigrated = 0;
+            const branchErrors: string[] = [];
+
+            for (let i = 0; i < toUpdate.length; i += chunkSize) {
+              const chunk = toUpdate.slice(i, i + chunkSize);
+              try {
+                const importRes = await b.client.importBatch('articulos/precios', chunk, b.branch.id);
+                const count = importRes?.migrated || 0;
+                branchMigrated += count;
+                if (importRes?.errors && importRes.errors.length > 0) {
+                  branchErrors.push(...importRes.errors);
+                }
+              } catch (chunkErr: any) {
+                branchErrors.push(`Lote ${Math.floor(i / chunkSize) + 1}: ${chunkErr.message}`);
+              }
+            }
+
+            totalUpdated += branchMigrated;
+            summary.push({
+              sede_id: b.branch.id,
+              sede_nombre: b.branch.name,
+              migrated: branchMigrated,
+              errors: branchErrors
+            });
+          })
+        );
+
+        // Agregar sedes con error de conexión al resumen si las hubiera
+        for (const b of branchExports) {
+          if (b.error) {
+            summary.push({
+              sede_id: b.branch.id,
+              sede_nombre: b.branch.name,
+              migrated: 0,
+              errors: [`Error de conexión: ${b.error}`]
+            });
+          }
+        }
+
+        // 4. Registrar en Auditoría Supabase
+        await supabaseAdmin.rpc('log_action', {
+          p_user_id: locals.profile?.id ?? null,
+          p_user_email: locals.profile?.email ?? 'system',
+          p_action: 'SYNC_ARTICLE_PRICES',
+          p_module: 'sec_branches',
+          p_record_id: 'PRECIOS_Y_MARGENES',
+          p_branch_id: validBranches[0]?.branch.id || null,
+          p_new_data: JSON.stringify({
+            total_updated: totalUpdated,
+            master_articles_count: masterPrices.size,
+            summary,
+            timestamp: new Date().toISOString()
+          })
+        });
+
+        return {
+          success: true,
+          entity: 'prices',
+          message: totalUpdated > 0
+            ? `Sincronización de precios completada con éxito. Se actualizaron ${totalUpdated} artículos en las sucursales.`
+            : 'Todos los precios y márgenes de venta ya se encuentran sincronizados e igualados entre las sedes.',
+          total_synced: totalUpdated,
+          summary
+        };
+      } catch (err: any) {
+        console.error('[SYNC ARTICLE PRICES FATAL ERROR]:', err);
+        return fail(500, { message: `Error al sincronizar precios y márgenes de artículos: ${err.message}` });
+      }
+    }
+
     let moduleName = 'PROVEEDORES';
     let endpoint = 'proveedores';
     let keyField = 'co_prov';

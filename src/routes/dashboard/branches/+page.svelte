@@ -32,6 +32,7 @@
     ArrowRight,
     CreditCard,
     ShieldCheck,
+    BadgeDollarSign,
   } from "lucide-svelte";
   import type { PageData, ActionData } from "./$types";
 
@@ -1309,8 +1310,38 @@
               </button>
             </div>
 
-            <!-- 4. Usuarios y Mapas Profit -->
+            <!-- 4. Precios y Márgenes de Venta -->
             <div class="sync-entity-card p-4.5 rounded-2xl flex flex-col justify-between gap-3.5 transition-all">
+              <div class="flex items-start gap-3">
+                <div class="p-2.5 rounded-xl bg-purple-500/10 text-purple-500 shrink-0">
+                  <BadgeDollarSign size={20} />
+                </div>
+                <div>
+                  <h5 class="text-sm font-black sync-title">Precios y Márgenes</h5>
+                  <p class="text-[11px] sync-subtitle mt-0.5 leading-snug">
+                    Precios de venta 1 al 5 y márgenes de utilidad en todas las sedes.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="submit"
+                name="entity"
+                value="prices"
+                disabled={syncingEntity !== null}
+                class="btn-sync-purple w-full flex items-center justify-center gap-2 px-3.5 py-2.5 rounded-xl text-xs font-bold transition active:scale-95 disabled:opacity-40"
+              >
+                {#if syncingEntity === "prices"}
+                  <Loader2 size={14} class="animate-spin" />
+                  <span>Sincronizando...</span>
+                {:else}
+                  <RefreshCw size={14} />
+                  <span>Sincronizar Precios y Márgenes</span>
+                {/if}
+              </button>
+            </div>
+
+            <!-- 5. Usuarios y Mapas Profit -->
+            <div class="sync-entity-card p-4.5 rounded-2xl flex flex-col md:flex-row md:items-center justify-between gap-3.5 transition-all md:col-span-2">
               <div class="flex items-start gap-3">
                 <div class="p-2.5 rounded-xl bg-cyan-500/10 text-cyan-500 shrink-0">
                   <ShieldCheck size={20} />
@@ -1327,7 +1358,7 @@
                 name="entity"
                 value="profit_users"
                 disabled={syncingEntity !== null}
-                class="btn-sync-cyan w-full flex items-center justify-center gap-2 px-3.5 py-2.5 rounded-xl text-xs font-bold transition active:scale-95 disabled:opacity-40"
+                class="btn-sync-cyan md:w-auto w-full flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold transition active:scale-95 disabled:opacity-40 whitespace-nowrap"
               >
                 {#if syncingEntity === "profit_users"}
                   <Loader2 size={14} class="animate-spin" />
@@ -1361,13 +1392,13 @@
                   <CheckCircle2 size={20} class="text-emerald-500" />
                   <span class="text-sm font-black text-emerald-600 dark:text-emerald-400">
                     Sincronización Exitosa
-                    {#if syncResult.entity === "suppliers"}(Proveedores y Cond. Pago){:else if syncResult.entity === "customers"}(Clientes){:else if syncResult.entity === "articles"}(Artículos){:else if syncResult.entity === "profit_users" || syncResult.entity === "users"}(Usuarios y Mapas Profit){/if}
+                    {#if syncResult.entity === "suppliers"}(Proveedores y Cond. Pago){:else if syncResult.entity === "customers"}(Clientes){:else if syncResult.entity === "articles"}(Artículos){:else if syncResult.entity === "prices"}(Precios y Márgenes){:else if syncResult.entity === "profit_users" || syncResult.entity === "users"}(Usuarios y Mapas Profit){/if}
                   </span>
                 {:else}
                   <CheckCircle2 size={20} class="text-brand-500" />
                   <span class="text-sm font-black sync-title">
                     Todo al día
-                    {#if syncResult.entity === "suppliers"}(Proveedores y Cond. Pago){:else if syncResult.entity === "customers"}(Clientes){:else if syncResult.entity === "articles"}(Artículos){:else if syncResult.entity === "profit_users" || syncResult.entity === "users"}(Usuarios y Mapas Profit){/if}
+                    {#if syncResult.entity === "suppliers"}(Proveedores y Cond. Pago){:else if syncResult.entity === "customers"}(Clientes){:else if syncResult.entity === "articles"}(Artículos){:else if syncResult.entity === "prices"}(Precios y Márgenes){:else if syncResult.entity === "profit_users" || syncResult.entity === "users"}(Usuarios y Mapas Profit){/if}
                   </span>
                 {/if}
               </div>
@@ -1384,7 +1415,13 @@
                     <span class="font-bold sync-title">{item.sede_nombre || item.sede_id}</span>
                     {#if item.migrated > 0 || item.migrated_mapas > 0}
                       <span class="px-2 py-0.5 rounded-lg bg-emerald-500/20 text-emerald-700 dark:text-emerald-400 font-mono font-bold">
-                        +{item.migrated} usuarios {item.migrated_mapas ? `(+${item.migrated_mapas} mapas)` : ''}
+                        {#if syncResult.entity === 'prices'}
+                          +{item.migrated} precios act.
+                        {:else if syncResult.entity === 'profit_users' || syncResult.entity === 'users'}
+                          +{item.migrated} usuarios {item.migrated_mapas ? `(+${item.migrated_mapas} mapas)` : ''}
+                        {:else}
+                          +{item.migrated} registros
+                        {/if}
                       </span>
                     {:else if item.errors && item.errors.length > 0}
                       <span class="px-2 py-0.5 rounded-lg bg-red-500/20 text-red-700 dark:text-red-400 font-mono font-bold">
@@ -1643,5 +1680,22 @@
   }
   :global(.light) .btn-sync-cyan:hover {
     background-color: #a5f3fc;
+  }
+
+  .btn-sync-purple {
+    background-color: rgba(168, 85, 247, 0.15);
+    border: 1px solid rgba(168, 85, 247, 0.3);
+    color: #d8b4fe;
+  }
+  .btn-sync-purple:hover {
+    background-color: rgba(168, 85, 247, 0.25);
+  }
+  :global(.light) .btn-sync-purple {
+    background-color: #f3e8ff;
+    border: 1px solid #a855f7;
+    color: #6b21a8;
+  }
+  :global(.light) .btn-sync-purple:hover {
+    background-color: #e9d5ff;
   }
 </style>
