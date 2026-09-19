@@ -15,7 +15,12 @@
     Shield, 
     Database,
     Key,
-    Search
+    Search,
+    Building2,
+    Filter,
+    ChevronDown,
+    ChevronLeft,
+    ChevronRight
   } from "lucide-svelte";
   import type { PageData, ActionData } from "./$types";
 
@@ -23,6 +28,9 @@
 
   // ── States ─────────────────────────────────────────────────────────────────
   let searchQuery = $state("");
+  let selectedRole = $state("all");
+  let currentPage = $state(1);
+  const pageSize = 20;
   let showModal = $state(false);
   let isEditing = $state(false);
   let loading = $state(false);
@@ -39,11 +47,38 @@
 
   // Computed / Filtered
   let filteredUsers = $derived(
-    data.users.filter((u: any) => 
-      u.full_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      u.email?.toLowerCase().includes(searchQuery.toLowerCase())
-    )
+    data.users.filter((u: any) => {
+      // Filtro por rol
+      const matchesRole = 
+        selectedRole === "all" || 
+        (u.globalRoles && u.globalRoles.includes(selectedRole));
+
+      if (!matchesRole) return false;
+
+      // Filtro de búsqueda por texto (nombre, correo o usuario Profit)
+      const query = searchQuery.trim().toLowerCase();
+      if (!query) return true;
+
+      const matchesName = u.full_name?.toLowerCase().includes(query) ?? false;
+      const matchesEmail = u.email?.toLowerCase().includes(query) ?? false;
+      const matchesProfitUser = u.profit_user?.toLowerCase().includes(query) ?? false;
+
+      return matchesName || matchesEmail || matchesProfitUser;
+    })
   );
+
+  let totalPages = $derived(Math.max(1, Math.ceil(filteredUsers.length / pageSize)));
+
+  let paginatedUsers = $derived(
+    filteredUsers.slice((currentPage - 1) * pageSize, currentPage * pageSize)
+  );
+
+  // Resetear paginación al cambiar búsqueda o rol seleccionado
+  $effect(() => {
+    searchQuery;
+    selectedRole;
+    currentPage = 1;
+  });
 
   // ── Functions ──────────────────────────────────────────────────────────────
   function openCreateModal() {
@@ -106,7 +141,7 @@
     {#if data.canCreate}
       <button 
         onclick={openCreateModal}
-        class="flex items-center justify-center gap-2 bg-brand-600 hover:bg-brand-500 text-white px-6 py-3 rounded-2xl font-bold hover:shadow-lg hover:shadow-brand-500/30 transition-all active:scale-95"
+        class="flex items-center justify-center gap-2 bg-brand-600 hover:bg-brand-500 text-white px-6 py-3 rounded-2xl font-bold hover:shadow-lg hover:shadow-brand-500/30 transition-all active:scale-95 cursor-pointer"
       >
         <UserPlus size={20} />
         Nuevo Usuario
@@ -115,14 +150,50 @@
   </div>
 
   <!-- Search & Filters -->
-  <div class="relative max-w-md">
-    <Search size={18} class="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted" />
-    <input 
-      type="text" 
-      bind:value={searchQuery}
-      placeholder="Buscar por nombre o correo..."
-      class="w-full bg-surface-raised border border-border-subtle rounded-2xl pl-12 pr-4 py-3 text-text-base focus:outline-none focus:ring-2 focus:ring-brand-500/50 transition-all"
-    />
+  <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-4">
+    <div class="relative flex-1 max-w-md">
+      <Search size={18} class="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none" />
+      <input 
+        type="text" 
+        bind:value={searchQuery}
+        placeholder="Buscar por nombre, correo o usuario Profit..."
+        class="w-full bg-surface-raised border border-border-subtle rounded-2xl pl-12 pr-10 py-3 text-text-base focus:outline-none focus:ring-2 focus:ring-brand-500/50 transition-all text-sm placeholder:text-text-muted/50"
+      />
+      {#if searchQuery}
+        <button 
+          type="button"
+          onclick={() => (searchQuery = "")}
+          class="absolute right-3.5 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-base p-1 rounded-lg transition-colors cursor-pointer"
+          title="Limpiar búsqueda"
+        >
+          <X size={15} />
+        </button>
+      {/if}
+    </div>
+
+    <div class="relative min-w-[200px] sm:w-64">
+      <Filter size={16} class="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none" />
+      <select 
+        bind:value={selectedRole}
+        class="w-full bg-surface-raised border border-border-subtle rounded-2xl pl-11 pr-10 py-3 text-text-base focus:outline-none focus:ring-2 focus:ring-brand-500/50 transition-all appearance-none cursor-pointer text-sm"
+      >
+        <option value="all">Todos los roles</option>
+        {#each data.availableRoles as role}
+          <option value={role.id}>{role.name}</option>
+        {/each}
+      </select>
+      <ChevronDown size={16} class="absolute right-4 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none" />
+    </div>
+
+    {#if selectedRole !== 'all' || searchQuery}
+      <button 
+        type="button"
+        onclick={() => { searchQuery = ''; selectedRole = 'all'; }}
+        class="text-xs font-bold text-brand-500 hover:text-brand-400 self-center sm:self-auto px-2 py-1 transition-colors cursor-pointer"
+      >
+        Limpiar filtros
+      </button>
+    {/if}
   </div>
 
   <!-- Users Table Card -->
@@ -131,18 +202,19 @@
       <table class="w-full text-left border-collapse">
         <thead>
           <tr class="bg-surface-base/50">
-            <th class="px-8 py-5 text-xs font-bold uppercase tracking-widest text-text-muted border-b border-border-subtle">Usuario</th>
-            <th class="px-8 py-5 text-xs font-bold uppercase tracking-widest text-text-muted border-b border-border-subtle">Roles</th>
-            <th class="px-8 py-5 text-xs font-bold uppercase tracking-widest text-text-muted border-b border-border-subtle text-center">Estado</th>
-            <th class="px-8 py-5 text-xs font-bold uppercase tracking-widest text-text-muted border-b border-border-subtle text-right">Acciones</th>
+            <th class="px-6 py-5 text-xs font-bold uppercase tracking-widest text-text-muted border-b border-border-subtle">Usuario</th>
+            <th class="px-6 py-5 text-xs font-bold uppercase tracking-widest text-text-muted border-b border-border-subtle">Roles</th>
+            <th class="px-6 py-5 text-xs font-bold uppercase tracking-widest text-text-muted border-b border-border-subtle">Sedes Asignadas</th>
+            <th class="px-6 py-5 text-xs font-bold uppercase tracking-widest text-text-muted border-b border-border-subtle text-center">Estado</th>
+            <th class="px-6 py-5 text-xs font-bold uppercase tracking-widest text-text-muted border-b border-border-subtle text-right">Acciones</th>
           </tr>
         </thead>
         <tbody class="divide-y divide-border-subtle">
-          {#each filteredUsers as user (user.id)}
+          {#each paginatedUsers as user (user.id)}
             <tr class="hover:bg-brand-500/5 transition-colors group">
-              <td class="px-8 py-5">
+              <td class="px-6 py-5">
                 <div class="flex items-center gap-4">
-                  <div class="h-12 w-12 rounded-2xl bg-linear-to-tr from-brand-600 to-blue-400 flex items-center justify-center text-white font-black text-lg shadow-lg">
+                  <div class="h-12 w-12 rounded-2xl bg-linear-to-tr from-brand-600 to-blue-400 flex items-center justify-center text-white font-black text-lg shadow-lg shrink-0">
                     {user.full_name?.[0]?.toUpperCase() ?? '?'}
                   </div>
                   <div>
@@ -154,7 +226,7 @@
                   </div>
                 </div>
               </td>
-              <td class="px-8 py-5">
+              <td class="px-6 py-5">
                 <div class="flex flex-col gap-2">
                   {#if user.globalRoles && user.globalRoles.length > 0}
                     <div class="flex flex-wrap gap-1 items-center">
@@ -181,14 +253,36 @@
                   {/if}
                 </div>
               </td>
-              <td class="px-8 py-5 text-center">
+              <td class="px-6 py-5">
+                {#if user.hasAllBranches}
+                  <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-brand-500/10 text-brand-400 border border-brand-500/20 text-xs font-bold w-max">
+                    <Building2 size={12} />
+                    Todas las sedes
+                  </span>
+                {:else if user.branches && user.branches.length > 0}
+                  <div class="flex flex-wrap gap-1.5 max-w-xs">
+                    {#each user.branches as branch}
+                      <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-surface-soft text-text-base border border-border-subtle text-xs font-medium">
+                        <Building2 size={11} class="text-text-muted" />
+                        {branch.name}
+                      </span>
+                    {/each}
+                  </div>
+                {:else}
+                  <span class="text-xs text-text-muted/50 italic flex items-center gap-1">
+                    <Building2 size={12} class="opacity-40" />
+                    Sin sedes asignadas
+                  </span>
+                {/if}
+              </td>
+              <td class="px-6 py-5 text-center">
                 <form method="POST" action="?/toggleStatus" use:enhance={() => {
                   return async ({ update }) => { await update(); };
                 }}>
                   <input type="hidden" name="userId" value={user.id} />
                   <input type="hidden" name="active" value={user.is_active} />
                   <button 
-                    class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest transition-all
+                    class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest transition-all cursor-pointer
                     {user.is_active ? 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20' : 'bg-red-500/10 text-red-500 border border-red-500/20 hover:bg-emerald-500/5'}"
                   >
                     <div class="h-1.5 w-1.5 rounded-full {user.is_active ? 'bg-emerald-500 animate-pulse' : 'bg-red-500'}"></div>
@@ -196,7 +290,7 @@
                   </button>
                 </form>
               </td>
-              <td class="px-8 py-5">
+              <td class="px-6 py-5">
                 <div class="flex items-center justify-end gap-2">
                   <button 
                     onclick={() => openEditModal(user)}
@@ -226,14 +320,69 @@
             </tr>
           {:else}
             <tr>
-              <td colspan="4" class="px-8 py-20 text-center text-text-muted opacity-50 italic">
-                No se encontraron usuarios que coincidan con la búsqueda.
+              <td colspan="5" class="px-8 py-32 text-center bg-white/2">
+                <div class="flex flex-col items-center gap-6 max-w-md mx-auto">
+                  <div class="h-24 w-24 rounded-full bg-white/5 flex items-center justify-center text-text-muted/20">
+                    <Search size={48} />
+                  </div>
+                  <div>
+                    <h3 class="text-2xl font-black text-text-base mb-2">
+                      No se encontraron usuarios
+                    </h3>
+                    <p class="text-text-muted font-medium text-sm leading-relaxed">
+                      Pruebe con otros términos de búsqueda o verifique el filtro de rol seleccionado.
+                    </p>
+                  </div>
+                </div>
               </td>
             </tr>
           {/each}
         </tbody>
       </table>
     </div>
+
+    <!-- Pagination Footer (Igual a Clientes) -->
+    {#if totalPages > 1}
+      <div
+        class="px-8 py-6 bg-white/1 border-t border-border-subtle flex items-center justify-between"
+      >
+        <p
+          class="text-xs font-bold text-text-muted uppercase tracking-widest"
+        >
+          Página <span class="text-text-base">{currentPage}</span>
+          de <span class="text-text-base">{totalPages}</span>
+          (Total: {filteredUsers.length})
+        </p>
+
+        <div class="flex gap-2">
+          <button
+            type="button"
+            onclick={() => {
+              if (currentPage > 1) {
+                currentPage -= 1;
+              }
+            }}
+            disabled={currentPage <= 1}
+            class="h-10 w-10 flex items-center justify-center rounded-xl bg-white/5 hover:bg-white/10 disabled:opacity-30 transition-all border border-border-subtle text-text-muted cursor-pointer"
+          >
+            <ChevronLeft size={20} />
+          </button>
+
+          <button
+            type="button"
+            onclick={() => {
+              if (currentPage < totalPages) {
+                currentPage += 1;
+              }
+            }}
+            disabled={currentPage >= totalPages}
+            class="h-10 w-10 flex items-center justify-center rounded-xl bg-white/5 hover:bg-white/10 disabled:opacity-30 transition-all border border-border-subtle text-text-muted cursor-pointer"
+          >
+            <ChevronRight size={20} />
+          </button>
+        </div>
+      </div>
+    {/if}
   </div>
 </div>
 

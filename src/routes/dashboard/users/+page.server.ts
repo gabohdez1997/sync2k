@@ -28,7 +28,7 @@ export const load: PageServerLoad = protectLoad('sec_users', async ({ locals }) 
 
     supabaseAdmin
       .from('roles')
-      .select('id, name')
+      .select('id, name, branch_ids')
       .order('name'),
 
     supabaseAdmin
@@ -38,16 +38,57 @@ export const load: PageServerLoad = protectLoad('sec_users', async ({ locals }) 
       .order('name')
   ]);
 
-  const usersMapped = (users ?? []).map((u: any) => ({
-    id: u.id,
-    full_name: u.full_name,
-    email: u.email,
-    is_active: u.active,
-    profit_user: u.profit_user,
-    globalRoles: u.user_roles?.map((ur: any) => ur.role_id) || [],
-    tenantRoles: [], // Deprecated
-    updated_at: u.updated_at
-  }));
+  const allActiveBranches = branches ?? [];
+  const rolesMap = new Map((roles ?? []).map((r: any) => [r.id, r]));
+  const branchesMap = new Map(allActiveBranches.map((b: any) => [b.id, b]));
+
+  const usersMapped = (users ?? []).map((u: any) => {
+    const roleIds: string[] = u.user_roles?.map((ur: any) => ur.role_id) || [];
+    let userBranches: Array<{ id: string; name: string }> = [];
+    let hasAllBranches = false;
+
+    if (roleIds.length > 0) {
+      const userBranchMap = new Map<string, { id: string; name: string }>();
+
+      for (const rId of roleIds) {
+        const roleObj = rolesMap.get(rId);
+        if (!roleObj) continue;
+
+        const bIds = roleObj.branch_ids || [];
+        if (bIds.length === 0) {
+          hasAllBranches = true;
+          break;
+        }
+
+        for (const bId of bIds) {
+          const branch = branchesMap.get(bId);
+          if (branch) {
+            userBranchMap.set(branch.id, { id: branch.id, name: branch.name });
+          }
+        }
+      }
+
+      if (hasAllBranches || (userBranchMap.size >= allActiveBranches.length && allActiveBranches.length > 0)) {
+        userBranches = allActiveBranches.map((b: any) => ({ id: b.id, name: b.name }));
+        hasAllBranches = true;
+      } else {
+        userBranches = Array.from(userBranchMap.values());
+      }
+    }
+
+    return {
+      id: u.id,
+      full_name: u.full_name,
+      email: u.email,
+      is_active: u.active,
+      profit_user: u.profit_user,
+      globalRoles: roleIds,
+      tenantRoles: [], // Deprecated
+      updated_at: u.updated_at,
+      branches: userBranches,
+      hasAllBranches
+    };
+  });
 
   return {
     users:          usersMapped,
