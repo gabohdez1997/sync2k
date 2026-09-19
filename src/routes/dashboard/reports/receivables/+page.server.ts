@@ -53,7 +53,10 @@ export const load: PageServerLoad = protectLoad('reports_receivables', async ({ 
 		if (search) query.set('search', search);
 		if (tipo_doc) query.set('tipo_doc', tipo_doc);
 		if (status) query.set('status', status);
-		if (coVenFilter) query.set('co_ven', coVenFilter);
+		if (coVenFilter) {
+			query.set('co_ven', coVenFilter);
+			query.set('co_us_in', coVenFilter);
+		}
 
 		console.log(`[CXC REPORT SERVER] Solicitando CxC a agente sucursal ${selectedBranch.name || selectedBranch.id}...`);
 		const response = await agentClient.request<any>(`/reportes/cxc?${query.toString()}`);

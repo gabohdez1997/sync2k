@@ -9,6 +9,7 @@ export const load: PageServerLoad = protectLoad('inv_transfers', async ({ url, l
 	const canCreate = hasPermission(profile, 'inv_transfers', 'create');
 	const canEdit = hasPermission(profile, 'inv_transfers', 'edit');
 	const canVoid = hasPermission(profile, 'inv_transfers', 'delete');
+	const canSeeOthers = hasPermission(profile, 'inv_transfers', 'others');
 
 	// Cargar sedes activas
 	const { data: dbBranches, error: bErr } = await supabaseAdmin
@@ -48,6 +49,25 @@ export const load: PageServerLoad = protectLoad('inv_transfers', async ({ url, l
 		query = query.or(`source_branch_id.eq.${selectedBranchId},target_branch_id.eq.${selectedBranchId}`);
 	}
 
+	if (!canSeeOthers) {
+		const userCodes = [profile?.profit_user?.trim(), profile?.email?.trim()].filter(Boolean);
+		if (userCodes.length > 0) {
+			query = query.in('created_by', userCodes);
+		} else {
+			return {
+				title: 'Traslados entre Sedes',
+				branches,
+				selectedBranchId,
+				transfers: [],
+				canCreate,
+				canEdit,
+				canVoid,
+				canSeeOthers,
+				userBranchId: profile?.branch_id || null
+			};
+		}
+	}
+
 	const { data: transfers, error: tErr } = await query;
 
 	if (tErr) {
@@ -62,6 +82,7 @@ export const load: PageServerLoad = protectLoad('inv_transfers', async ({ url, l
 		canCreate,
 		canEdit,
 		canVoid,
+		canSeeOthers,
 		userBranchId: profile?.branch_id || null
 	};
 });

@@ -49,6 +49,10 @@ export const load: PageServerLoad = protectLoad('reports_payables', async ({ url
 		if (search) query.set('search', search);
 		if (tipo_doc) query.set('tipo_doc', tipo_doc);
 		if (status) query.set('status', status);
+		if (!hasOthers) {
+			const userCode = (profile.profit_user || '').trim().toUpperCase();
+			if (userCode) query.set('co_us_in', userCode);
+		}
 
 		console.log(`[CXP REPORT SERVER] Solicitando CxP a agente sucursal ${selectedBranch.name || selectedBranch.id}...`);
 		const response = await agentClient.request<any>(`/reportes/cxp?${query.toString()}`);

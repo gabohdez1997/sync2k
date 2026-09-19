@@ -18,7 +18,8 @@
     Building2,
     Calendar,
     X,
-    Receipt
+    Receipt,
+    Trash2
   } from "lucide-svelte";
   import { goto } from "$app/navigation";
   import { page } from "$app/stores";
@@ -38,6 +39,12 @@
   let invoiceToVoid = $state<any>(null);
   let voidPassword = $state("");
   let isVoiding = $state(false);
+
+  // Delete Modal State
+  let showDeleteModal = $state(false);
+  let invoiceToDelete = $state<any>(null);
+  let deletePassword = $state("");
+  let isDeleting = $state(false);
 
   // Detail Modal State
   let showDetailModal = $state(false);
@@ -80,6 +87,12 @@
     invoiceToVoid = invoice;
     voidPassword = "";
     showVoidModal = true;
+  }
+
+  function openDeleteModal(invoice: any) {
+    invoiceToDelete = invoice;
+    deletePassword = "";
+    showDeleteModal = true;
   }
 
   async function openDetailModal(invoice: any) {
@@ -370,6 +383,18 @@
                         <Ban size={18} />
                       </button>
                     {/if}
+
+                    <!-- Eliminar -->
+                    {#if data.canDelete}
+                      <button
+                        type="button"
+                        onclick={() => openDeleteModal(invoice)}
+                        class="p-2 text-text-muted hover:text-red-500 hover:bg-red-500/10 rounded-xl transition-all cursor-pointer flex items-center justify-center"
+                        title="Eliminar Factura de Compra"
+                      >
+                        <Trash2 size={18} />
+                      </button>
+                    {/if}
                   </div>
                 </td>
               </tr>
@@ -430,13 +455,26 @@
             </p>
           {/if}
         </div>
-        <button
-          type="button"
-          onclick={() => (showDetailModal = false)}
-          class="h-9 w-9 rounded-xl bg-surface-soft hover:bg-surface-strong text-text-muted hover:text-text-base flex items-center justify-center transition-colors cursor-pointer"
-        >
-          <X size={18} />
-        </button>
+        <div class="flex items-center gap-2">
+          {#if data.canDelete && selectedInvoiceDetail}
+            <button
+              type="button"
+              onclick={() => openDeleteModal(selectedInvoiceDetail)}
+              class="h-9 px-3 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-400 flex items-center gap-1.5 transition-colors cursor-pointer text-xs font-bold"
+              title="Eliminar esta Factura de Compra"
+            >
+              <Trash2 size={14} />
+              <span>Eliminar</span>
+            </button>
+          {/if}
+          <button
+            type="button"
+            onclick={() => (showDetailModal = false)}
+            class="h-9 w-9 rounded-xl bg-surface-soft hover:bg-surface-strong text-text-muted hover:text-text-base flex items-center justify-center transition-colors cursor-pointer"
+          >
+            <X size={18} />
+          </button>
+        </div>
       </div>
 
       <!-- Modal Body -->
@@ -637,6 +675,106 @@
               {:else}
                 <Check size={18} />
                 Anular Factura
+              {/if}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+{/if}
+
+<!-- DELETE CONFIRMATION MODAL -->
+{#if showDeleteModal}
+  <div class="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div
+      class="absolute inset-0 bg-black/60 backdrop-blur-sm"
+      onclick={() => !isDeleting && (showDeleteModal = false)}
+      onkeydown={(e) => e.key === "Escape" && !isDeleting && (showDeleteModal = false)}
+      role="button"
+      tabindex="-1"
+    ></div>
+
+    <div
+      class="bg-surface-raised w-full max-w-md rounded-[40px] border border-red-500/20 shadow-2xl relative z-10 overflow-hidden text-text-base"
+      transition:slide
+    >
+      <div class="p-8 text-center space-y-6">
+        <div class="h-20 w-20 rounded-3xl bg-red-500/20 text-red-500 mx-auto flex items-center justify-center shadow-lg shadow-red-500/10">
+          <Trash2 size={40} />
+        </div>
+
+        <div class="space-y-2">
+          <h2 class="text-2xl font-black tracking-tight text-text-base">Confirmar Eliminación</h2>
+          <p class="text-text-muted text-sm px-4">
+            ¿Estás seguro de que deseas eliminar permanentemente la factura de compra
+            <span class="text-text-base font-bold font-mono">{invoiceToDelete?.doc_num}</span> (Fiscal N°: <span class="text-text-base font-bold font-mono">{invoiceToDelete?.nro_fact}</span>)?
+            Esta acción eliminará el registro en Profit Plus, el documento en Cuentas por Pagar y restaurará las cantidades en las recepciones asociadas.
+          </p>
+        </div>
+
+        <form
+          method="POST"
+          action="?/deleteInvoice"
+          use:enhance={() => {
+            isDeleting = true;
+            return async ({ result, update }) => {
+              await update();
+              isDeleting = false;
+
+              if (result.type === "success") {
+                showDeleteModal = false;
+                if (showDetailModal) showDetailModal = false;
+                toast.success((result as any).data?.message || "Factura de compra eliminada con éxito.");
+              } else if (result.type === "failure" && (result as any).data?.message) {
+                toast.error((result as any).data.message);
+              } else {
+                toast.error("Error al eliminar la factura de compra.");
+              }
+            };
+          }}
+          class="space-y-4 pt-4 text-left"
+        >
+          <input type="hidden" name="doc_num" value={invoiceToDelete?.doc_num} />
+          <input type="hidden" name="branch_id" value={data.selectedBranchId} />
+
+          <div class="space-y-2 text-left">
+            <label for="del-pass" class="text-[10px] font-black uppercase tracking-widest text-text-muted ml-1">
+              Contraseña de Confirmación
+            </label>
+            <div class="relative">
+              <Lock size={18} class="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted opacity-40" />
+              <input
+                id="del-pass"
+                type="password"
+                name="password"
+                bind:value={deletePassword}
+                required
+                placeholder="Introduzca su contraseña"
+                class="w-full h-14 bg-surface-base border border-border-bold rounded-2xl pl-12 pr-5 focus:border-red-500 outline-none transition-all text-text-base font-medium"
+              />
+            </div>
+          </div>
+
+          <div class="flex gap-3 pt-4">
+            <button
+              type="button"
+              onclick={() => (showDeleteModal = false)}
+              disabled={isDeleting}
+              class="flex-1 h-14 rounded-2xl font-bold bg-surface-soft hover:bg-surface-strong transition-all text-text-muted hover:text-text-base border border-border-subtle cursor-pointer disabled:opacity-50"
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              disabled={isDeleting || !deletePassword}
+              class="flex-1 h-14 rounded-2xl font-bold bg-red-600 hover:bg-red-500 text-white shadow-lg shadow-red-500/20 transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer"
+            >
+              {#if isDeleting}
+                <Loader2 size={18} class="animate-spin" />
+              {:else}
+                <Trash2 size={18} />
+                Eliminar
               {/if}
             </button>
           </div>

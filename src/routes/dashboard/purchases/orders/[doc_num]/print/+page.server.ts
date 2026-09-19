@@ -1,4 +1,4 @@
-import { protectLoad } from '$lib/server/permissions';
+import { protectLoad, hasPermission } from '$lib/server/permissions';
 import { AgentClient } from '$lib/server/agent';
 import { supabaseAdmin } from '$lib/server/supabase';
 import { error } from '@sveltejs/kit';
@@ -33,6 +33,15 @@ export const load: PageServerLoad = protectLoad('pur_orders', async ({ params, u
         }
 
         const order = Array.isArray(res.data) ? res.data[0] : res.data;
+
+        const canSeeOthers = hasPermission(locals.profile, 'pur_orders', 'others');
+        if (!canSeeOthers) {
+            const userCode = (locals.profile?.profit_user || '').trim().toUpperCase();
+            const orderUser = (order?.co_us_in || '').trim().toUpperCase();
+            if (!userCode || (orderUser && orderUser !== userCode)) {
+                throw error(403, 'No tienes permiso para ver órdenes de compra de terceros.');
+            }
+        }
 
         // 3. Enriquecer con datos del proveedor
         if (order && order.co_prov) {

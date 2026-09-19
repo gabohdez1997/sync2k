@@ -23,6 +23,7 @@
   import { page } from "$app/stores";
   import dayjs from "dayjs";
   import ImportItemCard from "$lib/components/ui/ImportItemCard.svelte";
+  import PriceChangeConfirmModal from "$lib/components/ui/PriceChangeConfirmModal.svelte";
 
   let { data } = $props();
 
@@ -31,6 +32,11 @@
   let showUSD = $state(true);
   let activeTasa = $state(data.activeRate || 1);
   let taxRateOption = $state(16); // 16 o 0 (Cargar 16% o Exento 0%)
+
+  // Price change detection modal state
+  let showPriceModal = $state(false);
+  let detectedPriceChanges = $state<any[]>([]);
+  let isCheckingPrices = $state(false);
 
   // Sucursal Resolution (idéntico a /dashboard/billing)
   const selectedBranchConfig = $derived(
@@ -433,6 +439,51 @@
       }
     }
 
+    // 1. Pre-verificar cambios de precio antes de asentar la factura
+    isCheckingPrices = true;
+    try {
+      const checkRes = await fetch("/api/agent/articles/preview-price-changes", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          branch_id: filterSede,
+          items: activeLines.map((l) => ({
+            co_art: l.co_art,
+            art_des: l.art_des,
+            nuevo_costo_usd: Number(l.costo_usd)
+          }))
+        })
+      });
+
+      const checkData = await checkRes.json();
+      if (checkData.success && checkData.hasChanges && checkData.changes?.length > 0) {
+        detectedPriceChanges = checkData.changes;
+        showPriceModal = true;
+        isCheckingPrices = false;
+        return;
+      }
+    } catch (checkErr) {
+      console.warn("No se pudo verificar preview de precios, continuando:", checkErr);
+    } finally {
+      isCheckingPrices = false;
+    }
+
+    // Si no hubo cambios de precio, guardar directamente
+    await executeSaveInvoice({ updatePrices: true, broadcast: true, changes: [] });
+  }
+
+  async function executeSaveInvoice({
+    updatePrices = true,
+    broadcast = true,
+    changes = []
+  }: {
+    updatePrices?: boolean;
+    broadcast?: boolean;
+    changes?: any[];
+  } = {}) {
+    const activeLines = invoiceLines.filter((l) => l.checked);
+    const nroFactClean = (invoiceMetadata.nro_fact || "").trim();
+
     isSavingInvoice = true;
 
     try {
@@ -450,6 +501,9 @@
         co_sucu: activeBranchCode,
         force_sucu: activeBranchCode,
         monto_desc_glob: Number(invoiceMetadata.descuento_global || 0),
+        update_prices: updatePrices,
+        broadcast_prices: broadcast,
+        price_updates: updatePrices ? changes : [],
         renglones: activeLines.map((l) => ({
           co_art: l.co_art,
           art_des: l.art_des,
@@ -1139,3 +1193,18 @@
     </div>
   </div>
 {/if}
+
+<!-- MODAL DE CONFIRMACIÓN DE CAMBIO DE PRECIOS -->
+<PriceChangeConfirmModal
+  bind:open={showPriceModal}
+  changes={detectedPriceChanges}
+  loading={isSavingInvoice}
+  documentType="Factura de Compra"
+  onconfirm={({ updatePrices, broadcast, changes }) => {
+    showPriceModal = false;
+    executeSaveInvoice({ updatePrices, broadcast, changes });
+  }}
+  oncancel={() => {
+    showPriceModal = false;
+  }}
+/>

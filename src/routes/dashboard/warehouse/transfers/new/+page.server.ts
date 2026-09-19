@@ -247,7 +247,7 @@ export const actions: Actions = {
 						source_ajue_num: sourceAjueNum,
 						status: 'TRANSITO',
 						motivo,
-						created_by: profile.email
+						created_by: profile.profit_user || profile.email
 					})
 					.select()
 					.single();

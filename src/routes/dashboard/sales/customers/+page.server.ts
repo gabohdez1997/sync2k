@@ -144,8 +144,11 @@ export const load: PageServerLoad = protectLoad('sales_customers', async ({ loca
                     filters.q = cleanSearch; // Parámetro universal de búsqueda
                 }
 
-                // Inyectamos el filtro de vendedor si existe restricción
-                if (co_ven_filter) filters.co_ven = co_ven_filter;
+                // Inyectamos el filtro de usuario/vendedor si existe restricción
+                if (co_ven_filter) {
+                    filters.co_ven = co_ven_filter;
+                    filters.co_us_in = co_ven_filter;
+                }
 
                 const res = await agentClient.searchCustomers(filters, page, 20).catch(() => null);
                 if (res && res.success) {
@@ -154,7 +157,10 @@ export const load: PageServerLoad = protectLoad('sales_customers', async ({ loca
                 }
             } else {
                 let filters: any = {};
-                if (co_ven_filter) filters.co_ven = co_ven_filter;
+                if (co_ven_filter) {
+                    filters.co_ven = co_ven_filter;
+                    filters.co_us_in = co_ven_filter;
+                }
 
                 // getCustomers no soporta filtros directo en el nombre, usamos searchCustomers con co_ven si hay restricción
                 const res = co_ven_filter

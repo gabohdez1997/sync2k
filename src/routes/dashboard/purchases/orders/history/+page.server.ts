@@ -38,6 +38,13 @@ export const load: PageServerLoad = protectLoad('pur_orders', async ({ url, loca
     const canUpdate = hasPermission(profile, 'pur_orders', 'update');
     const canDelete = hasPermission(profile, 'pur_orders', 'delete');
     const canVoid   = hasPermission(profile, 'pur_orders', 'void');
+    const canSeeOthers = hasPermission(profile, 'pur_orders', 'others');
+
+    let co_us_in = '';
+    if (!canSeeOthers) {
+        const userCode = (profile.profit_user || '').trim().toUpperCase();
+        co_us_in = userCode || '__NO_USER__';
+    }
 
     const queryParams = new URLSearchParams({
         page,
@@ -49,6 +56,7 @@ export const load: PageServerLoad = protectLoad('pur_orders', async ({ url, loca
         fec_d,
         fec_h
     });
+    if (co_us_in) queryParams.set('co_us_in', co_us_in);
 
     try {
         const res = await agentClient.getPurchaseOrders(Object.fromEntries(queryParams), parseInt(page), parseInt(limit));
@@ -81,6 +89,7 @@ export const load: PageServerLoad = protectLoad('pur_orders', async ({ url, loca
             canUpdate,
             canDelete,
             canVoid,
+            canSeeOthers,
             filters: { doc_num, co_prov, search, status, fec_d, fec_h }
         };
     } catch (e: any) {
@@ -134,6 +143,14 @@ export const actions = {
             const detailRaw = Array.isArray(detailRes?.data) ? detailRes.data[0] : detailRes?.data;
             const order = detailRaw && Array.isArray(detailRaw) ? detailRaw[0] : detailRaw;
             if (order) {
+                if (!hasPermission(profile, 'pur_orders', 'others')) {
+                    const userCode = (profile.profit_user || '').trim().toUpperCase();
+                    const orderUser = (order.co_us_in || '').trim().toUpperCase();
+                    if (!userCode || (orderUser && orderUser !== userCode)) {
+                        return fail(403, { success: false, message: 'No tienes permiso para eliminar órdenes de compra de otros usuarios.' });
+                    }
+                }
+
                 const rawStatus = String(order?.status ?? '').trim();
                 const isAnulada = Boolean(order?.anulado);
 
@@ -219,6 +236,14 @@ export const actions = {
             const detailRaw = Array.isArray(detailRes?.data) ? detailRes.data[0] : detailRes?.data;
             const order = detailRaw && Array.isArray(detailRaw) ? detailRaw[0] : detailRaw;
             if (order) {
+                if (!hasPermission(profile, 'pur_orders', 'others')) {
+                    const userCode = (profile.profit_user || '').trim().toUpperCase();
+                    const orderUser = (order.co_us_in || '').trim().toUpperCase();
+                    if (!userCode || (orderUser && orderUser !== userCode)) {
+                        return fail(403, { success: false, message: 'No tienes permiso para anular órdenes de compra de otros usuarios.' });
+                    }
+                }
+
                 const rawStatus = String(order?.status ?? '').trim();
                 const isAnulada = Boolean(order?.anulado);
 

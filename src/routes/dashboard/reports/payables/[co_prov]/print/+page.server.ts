@@ -33,9 +33,13 @@ export const load: PageServerLoad = protectLoad('reports_payables', async ({ par
             agent_api_key: branch.agent_token
         }, profile, fetch);
 
+        const hasOthers = hasPermission(profile, 'reports_payables', 'others');
         const query = new URLSearchParams();
         query.set('search', co_prov.trim());
         query.set('limit', '1000');
+        if (!hasOthers && profile.profit_user) {
+            query.set('co_us_in', profile.profit_user.trim().toUpperCase());
+        }
 
         const res = await agentClient.request<any>(`/reportes/cxp?${query.toString()}`);
 

@@ -66,6 +66,7 @@ export const load: PageServerLoad = protectLoad('sales_orders', async ({ url, lo
         co_cli,
         search,
         co_ven: co_ven || '',
+        co_us_in: co_ven || '',
         fec_d,
         fec_h
     });

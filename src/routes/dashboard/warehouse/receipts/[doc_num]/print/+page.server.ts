@@ -1,5 +1,5 @@
 // src/routes/dashboard/warehouse/receipts/[doc_num]/print/+page.server.ts
-import { protectLoad } from '$lib/server/permissions';
+import { protectLoad, hasPermission } from '$lib/server/permissions';
 import { AgentClient } from '$lib/server/agent';
 import { supabaseAdmin } from '$lib/server/supabase';
 import { error } from '@sveltejs/kit';
@@ -34,6 +34,15 @@ export const load: PageServerLoad = protectLoad('inv_receipts', async ({ params,
         }
 
         const receipt = Array.isArray(res.data) ? res.data[0] : res.data;
+
+        const canSeeOthers = hasPermission(locals.profile, 'inv_receipts', 'others');
+        if (!canSeeOthers) {
+            const userCode = (locals.profile?.profit_user || '').trim().toUpperCase();
+            const receiptUser = (receipt?.co_us_in || '').trim().toUpperCase();
+            if (!userCode || (receiptUser && receiptUser !== userCode)) {
+                throw error(403, 'No tienes permiso para ver notas de recepción de terceros.');
+            }
+        }
 
         // 3. Enriquecer con datos del proveedor
         if (receipt && receipt.co_prov) {

@@ -56,6 +56,11 @@ export const load: PageServerLoad = protectLoad('inv_dispatches', async ({ url, 
         if (fec_d) filters.fec_d = fec_d;
         if (fec_h) filters.fec_h = fec_h;
         if (status) filters.status = status;
+        const canSeeOthers = hasPermission(profile, 'inv_dispatches', 'others');
+        if (!canSeeOthers) {
+            const userCode = (profile.profit_user || '').trim().toUpperCase();
+            filters.co_us_in = userCode || '__NO_USER__';
+        }
 
         const res = await agentClient.getDispatches(filters, page, limit);
 
@@ -75,6 +80,7 @@ export const load: PageServerLoad = protectLoad('inv_dispatches', async ({ url, 
     const canUpdate = hasPermission(profile, 'inv_dispatches', 'update');
     const canDelete = hasPermission(profile, 'inv_dispatches', 'delete');
     const canVoid   = hasPermission(profile, 'inv_dispatches', 'void');
+    const canSeeOthers = hasPermission(profile, 'inv_dispatches', 'others');
 
     return {
         title: 'Historial de Despachos',
@@ -90,7 +96,8 @@ export const load: PageServerLoad = protectLoad('inv_dispatches', async ({ url, 
         canCreate,
         canUpdate,
         canDelete,
-        canVoid
+        canVoid,
+        canSeeOthers
     };
 });
 
@@ -223,7 +230,16 @@ export const actions: Actions = {
 
         try {
             const res = await agentClient.getDispatch(docNum, branch.id);
-            return { success: true, dispatch: res?.data || null };
+            const dispatch = res?.data || null;
+            const canSeeOthers = hasPermission(profile, 'inv_dispatches', 'others');
+            if (dispatch && !canSeeOthers) {
+                const userCode = (profile.profit_user || '').trim().toUpperCase();
+                const dispatchUser = (dispatch.co_us_in || '').trim().toUpperCase();
+                if (!userCode || (dispatchUser && dispatchUser !== userCode)) {
+                    return fail(403, { message: 'No tienes permiso para ver notas de despacho de terceros.' });
+                }
+            }
+            return { success: true, dispatch };
         } catch (err: any) {
             return fail(500, { message: err.message || 'Error consultando detalle de despacho.' });
         }

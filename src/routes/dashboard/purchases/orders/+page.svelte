@@ -57,6 +57,7 @@
   import SearchBar from "$lib/components/ui/SearchBar.svelte";
   import BarcodeScanner from "$lib/components/ui/BarcodeScanner.svelte";
   import ImageViewer from "$lib/components/ui/ImageViewer.svelte";
+  import PriceChangeConfirmModal from "$lib/components/ui/PriceChangeConfirmModal.svelte";
   import dayjs from "dayjs";
   import "dayjs/locale/es";
   import type { PageData } from "./$types";
@@ -65,6 +66,12 @@
   dayjs.locale("es");
 
   let { data }: { data: PageData } = $props();
+
+  // Price change detection modal state
+  let showPriceModal = $state(false);
+  let detectedPriceChanges = $state<any[]>([]);
+  let isCheckingPrices = $state(false);
+  let confirmedPriceUpdates = $state<{ updatePrices: boolean; broadcast: boolean; changes: any[] } | null>(null);
 
   // --- ESTADO GLOBAL ---
   let activeTab = $state(0); // 0: Proveedor, 1: Artículos, 2: Confirmación
@@ -1106,6 +1113,58 @@
     } finally {
       isImportingToCart = false;
     }
+  }
+
+  // --- Price Change Confirmation Handlers for Orders ---
+  async function handleConfirmSaveOrder() {
+    if (!validateCart()) {
+      showSaveConfirmationModal = false;
+      return;
+    }
+
+    if (!confirmedPriceUpdates) {
+      isCheckingPrices = true;
+      try {
+        const itemsPayload = cart.map((c) => ({
+          co_art: c.co_art || c.codigo,
+          art_des: c.art_des || c.descripcion,
+          nuevo_costo_usd: showUSD
+            ? Number(c.price_selected?.precio || c.precio_usd || 0)
+            : (Number(c.price_selected?.precio_ves || c.precio_ves || 0) / (Number(data.activeRate || 1) > 1 ? Number(data.activeRate) : 1))
+        }));
+
+        const pRes = await fetch("/api/agent/articles/preview-price-changes", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            branch_id: selectedBranch,
+            items: itemsPayload
+          })
+        });
+
+        const pData = await pRes.json();
+        if (pData.success && pData.hasChanges && pData.changes?.length > 0) {
+          detectedPriceChanges = pData.changes;
+          showPriceModal = true;
+          isCheckingPrices = false;
+          return;
+        }
+      } catch (err) {
+        console.warn("Error verificando preview de precios en orden:", err);
+      } finally {
+        isCheckingPrices = false;
+      }
+    }
+
+    const formEl = document.getElementById('saveOrderForm') as HTMLFormElement;
+    if (formEl) formEl.requestSubmit();
+  }
+
+  function onConfirmPriceModalOrder(result: { updatePrices: boolean; broadcast: boolean; changes: any[] }) {
+    showPriceModal = false;
+    confirmedPriceUpdates = result;
+    const formEl = document.getElementById('saveOrderForm') as HTMLFormElement;
+    if (formEl) formEl.requestSubmit();
   }
 </script>
 
@@ -2515,9 +2574,27 @@
                       savingOrder = false;
                       showSaveConfirmationModal = false;
                       if (result.type === "success") {
+                        if (confirmedPriceUpdates?.updatePrices && confirmedPriceUpdates.changes?.length > 0) {
+                          try {
+                            await fetch("/api/agent/articles/batch-update-prices", {
+                              method: "POST",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({
+                                branch_id: selectedBranch,
+                                broadcast: confirmedPriceUpdates.broadcast !== false,
+                                items: confirmedPriceUpdates.changes
+                              })
+                            });
+                            toast.success("Precios de venta actualizados exitosamente.");
+                          } catch (pErr) {
+                            console.warn("Error actualizando precios post-orden:", pErr);
+                          }
+                        }
+                        confirmedPriceUpdates = null;
                         toast.success("¡Orden de compra procesada exitosamente!");
                         goto(`/dashboard/purchases/orders/history?branch_id=${selectedBranch}`);
                       } else if (result.type === "failure") {
+                        confirmedPriceUpdates = null;
                         const data = (result as any).data;
                         const mainMsg = data?.message || "Error al procesar la orden.";
                         const technicalDetails = data?.details ? `\nDetalles: ${data.details}` : "";
@@ -2865,18 +2942,14 @@
 
         <button
           type="button"
-          onclick={() => {
-            if (!validateCart()) {
-              showSaveConfirmationModal = false;
-              return;
-            }
-            const formEl = document.getElementById('saveOrderForm') as HTMLFormElement;
-            if (formEl) formEl.requestSubmit();
-          }}
-          disabled={savingOrder}
+          onclick={handleConfirmSaveOrder}
+          disabled={savingOrder || isCheckingPrices}
           class="flex-1 h-14 rounded-2xl font-black bg-brand-600 hover:bg-brand-500 text-white shadow-lg shadow-brand-500/25 transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-3 cursor-pointer"
         >
-          {#if savingOrder}
+          {#if isCheckingPrices}
+            <Loader2 size={20} class="animate-spin" />
+            <span>Verificando precios...</span>
+          {:else if savingOrder}
             <Loader2 size={20} class="animate-spin" />
             <span>Guardando...</span>
           {:else}
@@ -3214,3 +3287,16 @@
 {/if}
 
 <ImageViewer bind:isOpen={viewerOpen} imageUrl={viewerUrl} />
+
+<!-- MODAL DE CONFIRMACIÓN DE CAMBIO DE PRECIOS -->
+<PriceChangeConfirmModal
+  bind:open={showPriceModal}
+  changes={detectedPriceChanges}
+  loading={savingOrder || isCheckingPrices}
+  documentType="Orden de Compra"
+  onconfirm={onConfirmPriceModalOrder}
+  oncancel={() => {
+    showPriceModal = false;
+  }}
+/>
+

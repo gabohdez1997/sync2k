@@ -32,15 +32,11 @@ export const load: PageServerLoad = protectLoad('pur_payments', async ({ url, lo
 	let pagination = { total: 0, page: 1, limit: 12, totalPages: 0 };
 	let errorMsg = '';
 
-	const isAdmin = profile.roles?.some((r: any) => 
-		(typeof r === 'string' && (r.toLowerCase().includes('admin') || r.toLowerCase().includes('administrador'))) || 
-		(typeof r === 'object' && (r.name?.toLowerCase().includes('admin') || r.name?.toLowerCase().includes('administrador')))
-	);
-	const canVoid = isAdmin || hasPermission(profile, 'pur_payments', 'void') || hasPermission(profile, 'pur_payments', 'delete');
-	const canSeeOthers = isAdmin || hasPermission(profile, 'pur_payments', 'others');
-	const canEdit = isAdmin || hasPermission(profile, 'pur_payments', 'update');
-	const canDelete = isAdmin || hasPermission(profile, 'pur_payments', 'delete');
-	const canCreate = isAdmin || hasPermission(profile, 'pur_payments', 'create');
+	const canVoid = hasPermission(profile, 'pur_payments', 'void');
+	const canSeeOthers = hasPermission(profile, 'pur_payments', 'others');
+	const canEdit = hasPermission(profile, 'pur_payments', 'update');
+	const canDelete = hasPermission(profile, 'pur_payments', 'delete');
+	const canCreate = hasPermission(profile, 'pur_payments', 'create');
 
 	let co_us_in = url.searchParams.get('co_us_in') || '';
 
@@ -148,11 +144,7 @@ export const actions = {
 		const password = String(formData.get('password') || '');
 		const profile = (locals as any).profile;
 
-		const isAdmin = profile.roles?.some((r: any) => 
-			(typeof r === 'string' && (r.toLowerCase().includes('admin') || r.toLowerCase().includes('administrador'))) || 
-			(typeof r === 'object' && (r.name?.toLowerCase().includes('admin') || r.name?.toLowerCase().includes('administrador')))
-		);
-		if (!isAdmin && !hasPermission(profile, 'pur_payments', 'void') && !hasPermission(profile, 'pur_payments', 'delete')) {
+		if (!hasPermission(profile, 'pur_payments', 'void')) {
 			return fail(403, { success: false, message: 'No tienes permiso para anular pagos a proveedores.' });
 		}
 
@@ -173,6 +165,21 @@ export const actions = {
 		if (!branch) return fail(403, { success: false, message: 'Sucursal no autorizada.' });
 
 		const agentClient = new AgentClient(branch, profile, fetch);
+
+		const canSeeOthers = hasPermission(profile, 'pur_payments', 'others');
+		if (!canSeeOthers) {
+			try {
+				const checkRes: any = await agentClient.request(`/pagos/${encodeURIComponent(cob_num)}?sede=${encodeURIComponent(branch.id)}`);
+				const pData = checkRes?.data && (Array.isArray(checkRes.data) ? checkRes.data[0] : checkRes.data);
+				const userCode = (profile.profit_user || '').trim().toUpperCase();
+				const paymentUser = (pData?.co_us_in || '').trim().toUpperCase();
+				if (!userCode || (paymentUser && paymentUser !== userCode)) {
+					return fail(403, { success: false, message: 'No tienes permiso para anular pagos de otros usuarios.' });
+				}
+			} catch (eCheck) {
+				console.warn('[VOID PAYMENT] Error checking ownership:', eCheck);
+			}
+		}
 
 		try {
 			const res: any = await agentClient.request(`/pagos/${encodeURIComponent(cob_num)}/anular?sede=${encodeURIComponent(branch.id)}`, { method: 'POST' });
@@ -207,11 +214,7 @@ export const actions = {
 		const isAnulado = formData.get('anulado') === 'true' || formData.get('anulado') === '1';
 		const profile = (locals as any).profile;
 
-		const isAdmin = profile.roles?.some((r: any) => 
-			(typeof r === 'string' && (r.toLowerCase().includes('admin') || r.toLowerCase().includes('administrador'))) || 
-			(typeof r === 'object' && (r.name?.toLowerCase().includes('admin') || r.name?.toLowerCase().includes('administrador')))
-		);
-		if (!isAdmin && !hasPermission(profile, 'pur_payments', 'update')) {
+		if (!hasPermission(profile, 'pur_payments', 'update')) {
 			return fail(403, { success: false, message: 'No tienes permiso para editar pagos a proveedores.' });
 		}
 
@@ -232,6 +235,21 @@ export const actions = {
 		if (!branch) return fail(403, { success: false, message: 'Sucursal no autorizada.' });
 
 		const agentClient = new AgentClient(branch, profile, fetch);
+
+		const canSeeOthers = hasPermission(profile, 'pur_payments', 'others');
+		if (!canSeeOthers) {
+			try {
+				const checkRes: any = await agentClient.request(`/pagos/${encodeURIComponent(cob_num)}?sede=${encodeURIComponent(branch.id)}`);
+				const pData = checkRes?.data && (Array.isArray(checkRes.data) ? checkRes.data[0] : checkRes.data);
+				const userCode = (profile.profit_user || '').trim().toUpperCase();
+				const paymentUser = (pData?.co_us_in || '').trim().toUpperCase();
+				if (!userCode || (paymentUser && paymentUser !== userCode)) {
+					return fail(403, { success: false, message: 'No tienes permiso para editar pagos de otros usuarios.' });
+				}
+			} catch (eCheck) {
+				console.warn('[EDIT PAYMENT] Error checking ownership:', eCheck);
+			}
+		}
 
 		try {
 			// Si el pago está activo, anularlo primero para liberar sus facturas y permitir re-emisión
@@ -273,11 +291,7 @@ export const actions = {
 		const password = String(formData.get('password') || '');
 		const profile = (locals as any).profile;
 
-		const isAdmin = profile.roles?.some((r: any) => 
-			(typeof r === 'string' && (r.toLowerCase().includes('admin') || r.toLowerCase().includes('administrador'))) || 
-			(typeof r === 'object' && (r.name?.toLowerCase().includes('admin') || r.name?.toLowerCase().includes('administrador')))
-		);
-		if (!isAdmin && !hasPermission(profile, 'pur_payments', 'delete')) {
+		if (!hasPermission(profile, 'pur_payments', 'delete')) {
 			return fail(403, { success: false, message: 'No tienes permiso para eliminar pagos a proveedores.' });
 		}
 
@@ -298,6 +312,21 @@ export const actions = {
 		if (!branch) return fail(403, { success: false, message: 'Sucursal no autorizada.' });
 
 		const agentClient = new AgentClient(branch, profile, fetch);
+
+		const canSeeOthers = hasPermission(profile, 'pur_payments', 'others');
+		if (!canSeeOthers) {
+			try {
+				const checkRes: any = await agentClient.request(`/pagos/${encodeURIComponent(cob_num)}?sede=${encodeURIComponent(branch.id)}`);
+				const pData = checkRes?.data && (Array.isArray(checkRes.data) ? checkRes.data[0] : checkRes.data);
+				const userCode = (profile.profit_user || '').trim().toUpperCase();
+				const paymentUser = (pData?.co_us_in || '').trim().toUpperCase();
+				if (!userCode || (paymentUser && paymentUser !== userCode)) {
+					return fail(403, { success: false, message: 'No tienes permiso para eliminar pagos de otros usuarios.' });
+				}
+			} catch (eCheck) {
+				console.warn('[DELETE PAYMENT] Error checking ownership:', eCheck);
+			}
+		}
 
 		try {
 			const res: any = await agentClient.request(`/pagos/${encodeURIComponent(cob_num)}/eliminar?sede=${encodeURIComponent(branch.id)}`, { method: 'POST' });

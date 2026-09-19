@@ -45,6 +45,7 @@ export const load: PageServerLoad = protectLoad('reports_receivables', async ({ 
         query.set('limit', '1000');
         if (coVenFilter) {
             query.set('co_ven', coVenFilter);
+            query.set('co_us_in', coVenFilter);
         }
 
         const res = await agentClient.request<any>(`/reportes/cxc?${query.toString()}`);

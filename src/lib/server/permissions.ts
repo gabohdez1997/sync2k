@@ -20,6 +20,8 @@
 import { error, redirect, type RequestEvent } from '@sveltejs/kit';
 import { hasPermission, type Profile, type CRUD } from './auth';
 
+export { hasPermission, type Profile, type CRUD } from './auth';
+
 // ─── Tipos auxiliares ────────────────────────────────────────
 type ActionHandler<T = unknown> = (event: RequestEvent) => Promise<T> | T;
 type LoadHandler<T = unknown> = (event: RequestEvent) => Promise<T> | T;

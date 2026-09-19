@@ -51,7 +51,10 @@ export const load: PageServerLoad = protectLoad('reports_detailed_account', asyn
 		query.set('limit', limit);
 		if (search) query.set('search', search);
 		if (status) query.set('status', status);
-		if (coVenFilter) query.set('co_ven', coVenFilter);
+		if (coVenFilter) {
+			query.set('co_ven', coVenFilter);
+			query.set('co_us_in', coVenFilter);
+		}
 
 		console.log(`[DETAILED ACCOUNT SERVER] Solicitando Cuenta Detallada a agente sucursal ${selectedBranch.name || selectedBranch.id}...`);
 		const response = await agentClient.request<any>(`/reportes/cuenta-detallada?${query.toString()}`);

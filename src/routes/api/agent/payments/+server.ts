@@ -26,6 +26,7 @@ export const GET: RequestHandler = async ({ url, locals, fetch }) => {
 		const limit = parseInt(url.searchParams.get('limit') || '12');
 		const search = url.searchParams.get('search') || '';
 		const co_cli = url.searchParams.get('co_cli') || '';
+		const co_us_in = url.searchParams.get('co_us_in') || '';
 		const fec_d = url.searchParams.get('fec_d') || '';
 		const fec_h = url.searchParams.get('fec_h') || '';
 
@@ -34,6 +35,7 @@ export const GET: RequestHandler = async ({ url, locals, fetch }) => {
 		params.set('limit', String(limit));
 		if (search) params.set('search', search);
 		if (co_cli) params.set('co_cli', co_cli);
+		if (co_us_in) params.set('co_us_in', co_us_in);
 		if (fec_d) params.set('fec_d', fec_d);
 		if (fec_h) params.set('fec_h', fec_h);
 

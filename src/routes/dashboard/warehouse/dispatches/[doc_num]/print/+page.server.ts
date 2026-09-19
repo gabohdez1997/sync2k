@@ -1,5 +1,5 @@
 // src/routes/dashboard/warehouse/dispatches/[doc_num]/print/+page.server.ts
-import { protectLoad } from '$lib/server/permissions';
+import { protectLoad, hasPermission } from '$lib/server/permissions';
 import { AgentClient } from '$lib/server/agent';
 import { supabaseAdmin } from '$lib/server/supabase';
 import { error } from '@sveltejs/kit';
@@ -34,6 +34,15 @@ export const load: PageServerLoad = protectLoad('inv_dispatches', async ({ param
         }
 
         const dispatch = Array.isArray(res.data) ? res.data[0] : res.data;
+
+        const canSeeOthers = hasPermission(locals.profile, 'inv_dispatches', 'others');
+        if (!canSeeOthers) {
+            const userCode = (locals.profile?.profit_user || '').trim().toUpperCase();
+            const dispatchUser = (dispatch?.co_us_in || '').trim().toUpperCase();
+            if (!userCode || (dispatchUser && dispatchUser !== userCode)) {
+                throw error(403, 'No tienes permiso para ver notas de despacho de terceros.');
+            }
+        }
 
         // 3. Enriquecer con datos del cliente si falta algo
         if (dispatch && dispatch.co_cli) {

@@ -65,7 +65,7 @@
       options: [
         {
           id: "cash_billing",
-          label: "Facturas / NE",
+          label: "Factura de Venta",
           hasOthers: true,
           hasVoid: true,
           excludeUpdate: true,
@@ -89,8 +89,8 @@
         { id: "sec_articles", label: "Ubicaciones" },
         { id: "sec_article_images", label: "Imágenes de Artículos" },
         { id: "inv_transfers", label: "Traslados entre Sedes", hasOthers: true },
-        { id: "inv_receipts", label: "Notas de Recepción", hasVoid: true },
-        { id: "inv_dispatches", label: "Despachos", hasVoid: true },
+        { id: "inv_receipts", label: "Notas de Recepción", hasVoid: true, hasOthers: true },
+        { id: "inv_dispatches", label: "Despachos", hasVoid: true, hasOthers: true },
       ],
     },
     {
@@ -103,21 +103,19 @@
         { id: "pur_lines", label: "Líneas" },
         { id: "pur_sublines", label: "Sub-Líneas" },
         { id: "pur_categories", label: "Categorías" },
-        { id: "pur_orders", label: "Órdenes de Compra", hasVoid: true },
+        { id: "pur_orders", label: "Órdenes de Compra", hasVoid: true, hasOthers: true },
         {
           id: "pur_invoices",
           label: "Facturas de Compra",
           hasOthers: true,
           hasVoid: true,
           excludeUpdate: true,
-          excludeDelete: true,
         },
         {
           id: "pur_payments",
           label: "Pagos a Proveedores",
           hasOthers: true,
           hasVoid: true,
-          excludeDelete: true,
         },
       ],
     },

@@ -78,7 +78,18 @@ export const load: PageServerLoad = protectLoad('inv_receipts', async ({ url, lo
         try {
             const res = await agentClient.getReceivingNote(docNum, selectedBranch.id);
             preloadedReceipt = res?.data || null;
-        } catch (e) {
+            if (preloadedReceipt) {
+                const canSeeOthers = hasPermission(profile, 'inv_receipts', 'others');
+                if (!canSeeOthers) {
+                    const userCode = (profile.profit_user || '').trim().toUpperCase();
+                    const receiptUser = (preloadedReceipt.co_us_in || '').trim().toUpperCase();
+                    if (!userCode || (receiptUser && receiptUser !== userCode)) {
+                        throw redirect(303, '/dashboard/warehouse/receipts/history');
+                    }
+                }
+            }
+        } catch (e: any) {
+            if (e?.status === 303) throw e;
             console.error('[RECEIPTS LOAD] Error precargando nota de recepción:', e);
         }
     }

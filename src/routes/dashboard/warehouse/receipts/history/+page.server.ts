@@ -44,6 +44,12 @@ export const load: PageServerLoad = protectLoad('inv_receipts', async ({ url, lo
     if (orden_compra) filters.orden_compra = orden_compra;
     if (selectedBranch) filters.sede = selectedBranch.id;
 
+    const canSeeOthers = hasPermission(profile, 'inv_receipts', 'others');
+    if (!canSeeOthers) {
+        const userCode = (profile.profit_user || '').trim().toUpperCase();
+        filters.co_us_in = userCode || '__NO_USER__';
+    }
+
     let receipts: any[] = [];
     let total = 0;
     let totalPages = 1;
@@ -109,6 +115,7 @@ export const load: PageServerLoad = protectLoad('inv_receipts', async ({ url, lo
         canUpdate,
         canDelete,
         canVoid,
+        canSeeOthers,
         filters: { search, status, desde: fec_d, hasta: fec_h, orden_compra }
     };
 });
@@ -264,6 +271,15 @@ export const actions: Actions = {
             const receipt = res?.data || null;
 
             if (receipt) {
+                const canSeeOthers = hasPermission(profile, 'inv_receipts', 'others');
+                if (!canSeeOthers) {
+                    const userCode = (profile.profit_user || '').trim().toUpperCase();
+                    const receiptUser = (receipt.co_us_in || '').trim().toUpperCase();
+                    if (!userCode || (receiptUser && receiptUser !== userCode)) {
+                        return fail(403, { success: false, message: 'No tienes permiso para ver notas de recepción de terceros.' });
+                    }
+                }
+
                 const creatorUser = (receipt.co_us_in || '').trim();
                 const editorUser = (receipt.co_us_mo || '').trim();
                 const buyerUser = (receipt.oc_co_us_in || '').trim();

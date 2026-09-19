@@ -1,4 +1,4 @@
-import { protectLoad } from '$lib/server/permissions';
+import { protectLoad, hasPermission } from '$lib/server/permissions';
 import { AgentClient } from '$lib/server/agent';
 import { supabaseAdmin } from '$lib/server/supabase';
 import { error } from '@sveltejs/kit';
@@ -32,9 +32,14 @@ export const load: PageServerLoad = protectLoad('reports_detailed_account', asyn
             agent_api_key: branch.agent_token
         }, profile, fetch);
 
+        const hasOthers = hasPermission(profile, 'reports_detailed_account', 'others');
         const query = new URLSearchParams();
         query.set('search', co_cli.trim());
         query.set('limit', '1000');
+        if (!hasOthers && profile.profit_user) {
+            query.set('co_ven', profile.profit_user.trim().toUpperCase());
+            query.set('co_us_in', profile.profit_user.trim().toUpperCase());
+        }
 
         const res = await agentClient.request<any>(`/reportes/cuenta-detallada?${query.toString()}`);
 

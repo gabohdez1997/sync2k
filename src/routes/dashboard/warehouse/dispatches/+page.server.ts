@@ -69,7 +69,18 @@ export const load: PageServerLoad = protectLoad('inv_dispatches', async ({ url, 
         try {
             const res = await agentClient.getDispatch(docNum, selectedBranch.id);
             preloadedDispatch = res?.data || null;
-        } catch (e) {
+            if (preloadedDispatch) {
+                const canSeeOthers = hasPermission(profile, 'inv_dispatches', 'others');
+                if (!canSeeOthers) {
+                    const userCode = (profile.profit_user || '').trim().toUpperCase();
+                    const dispatchUser = (preloadedDispatch.co_us_in || '').trim().toUpperCase();
+                    if (!userCode || (dispatchUser && dispatchUser !== userCode)) {
+                        throw redirect(303, '/dashboard/warehouse/dispatches/history');
+                    }
+                }
+            }
+        } catch (e: any) {
+            if (e?.status === 303) throw e;
             console.error('[DISPATCHES LOAD] Error precargando nota de despacho:', e);
         }
     }

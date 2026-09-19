@@ -100,9 +100,22 @@ export const load: PageServerLoad = protectLoad('pur_orders', async ({ url, loca
 				const oRes = await agentClient.getPurchaseOrder(doc_num);
 				if (oRes.success && oRes.data) {
 					const o = Array.isArray(oRes.data) ? oRes.data[0] : oRes.data;
-					if (!o?.anulado && String(o?.status ?? '').trim() === '0') preloadedOrder = o;
+					if (!o?.anulado && String(o?.status ?? '').trim() === '0') {
+						const canSeeOthers = hasPermission(profile, 'pur_orders', 'others');
+						if (!canSeeOthers) {
+							const userCode = (profile.profit_user || '').trim().toUpperCase();
+							const orderUser = (o.co_us_in || '').trim().toUpperCase();
+							if (!userCode || (orderUser && orderUser !== userCode)) {
+								throw redirect(303, '/dashboard/purchases/orders/history');
+							}
+						}
+						preloadedOrder = o;
+					}
 				}
-			} catch (e) { console.error('[PUR_ORDERS] Error loading order for edit:', e); }
+			} catch (e: any) {
+				if (e?.status === 303) throw e;
+				console.error('[PUR_ORDERS] Error loading order for edit:', e);
+			}
 		}
 
 		return {
