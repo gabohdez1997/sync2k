@@ -25,6 +25,17 @@
     showVoidModal = true;
   }
 
+  let showDeleteModal = $state(false);
+  let paymentToDelete = $state<any>(null);
+  let deletePassword = $state('');
+  let isDeleting = $state(false);
+
+  function openDeleteModal(payment: any) {
+    paymentToDelete = payment;
+    deletePassword = '';
+    showDeleteModal = true;
+  }
+
   let searchInput = $state('');
   let selectedBranch = $state(data.selectedBranchId);
   let filterFecD = $state('');
@@ -874,6 +885,17 @@
                         title="Anular Cobro"
                       >
                         <Ban size={18} />
+                      </button>
+                    {/if}
+
+                    <!-- Eliminar -->
+                    {#if data.canDelete}
+                      <button 
+                        onclick={() => openDeleteModal(p)}
+                        class="p-2 text-text-muted hover:text-red-500 hover:bg-red-500/10 rounded-xl transition-all cursor-pointer"
+                        title="Eliminar Cobro Permanentemente"
+                      >
+                        <Trash2 size={18} />
                       </button>
                     {/if}
                   </div>
@@ -1806,6 +1828,111 @@
               {:else}
                 <Check size={18} />
                 Confirmar
+              {/if}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+{/if}
+
+<!-- MODAL DE CONFIRMACIÓN DE ELIMINACIÓN -->
+{#if showDeleteModal && paymentToDelete}
+  <div class="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div 
+      class="absolute inset-0 bg-black/60 backdrop-blur-sm"
+      onclick={() => !isDeleting && (showDeleteModal = false)}
+      onkeydown={(e) => e.key === 'Escape' && !isDeleting && (showDeleteModal = false)}
+      role="button"
+      tabindex="-1"
+    ></div>
+
+    <div class="bg-surface-raised w-full max-w-md rounded-[40px] border border-red-500/20 shadow-2xl relative z-10 overflow-hidden text-text-base">
+      <div class="p-8 text-center space-y-6">
+        <div class="h-20 w-20 rounded-3xl bg-red-500/20 text-red-500 flex items-center justify-center mx-auto shadow-lg shadow-red-500/10">
+          <Trash2 size={40} />
+        </div>
+
+        <div class="space-y-2">
+          <h2 class="text-2xl font-black tracking-tight text-text-base">Confirmar Eliminación</h2>
+          <p class="text-text-muted text-sm px-4">
+            ¿Estás seguro de que deseas eliminar permanentemente el cobro 
+            <span class="text-text-base font-bold font-mono">{paymentToDelete.cob_num}</span>?
+            Esta acción eliminará el registro en Profit Plus y restaurará el saldo de las facturas asociadas.
+          </p>
+        </div>
+
+        <div class="bg-surface-soft/60 rounded-2xl p-4 text-xs text-left space-y-1.5 border border-border-subtle">
+          <p><span class="font-bold text-text-base">Cliente:</span> {paymentToDelete.cli_des}</p>
+          <p><span class="font-bold text-text-base">Fecha:</span> {new Date(paymentToDelete.fecha).toLocaleDateString('es-VE')}</p>
+          <p>
+            <span class="font-bold text-text-base">Monto:</span> USD {Number(paymentToDelete.monto / (paymentToDelete.tasa > 0 ? paymentToDelete.tasa : 1)).toLocaleString('de-DE', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+            (Bs. {Number(paymentToDelete.monto).toLocaleString('de-DE', {minimumFractionDigits: 2, maximumFractionDigits: 2})})
+          </p>
+        </div>
+
+        <form 
+          method="POST" 
+          action="?/deletePayment" 
+          class="space-y-4 pt-2"
+          use:enhance={() => {
+            isDeleting = true;
+            return async ({ result, update }) => {
+              isDeleting = false;
+              if (result.type === 'success') {
+                showDeleteModal = false;
+                toast.success((result as any).data?.message || 'Cobro eliminado exitosamente');
+                await update();
+              } else if (result.type === 'failure') {
+                toast.error(result.data?.message || 'Error al eliminar el cobro');
+              }
+            };
+          }}
+        >
+          <input type="hidden" name="cob_num" value={paymentToDelete.cob_num} />
+          <input type="hidden" name="branch_id" value={data.selectedBranchId} />
+
+          <div class="space-y-2 text-left">
+            <label for="delete-pass" class="text-[10px] font-black uppercase tracking-widest text-text-muted ml-1">
+              Contraseña de Confirmación
+            </label>
+            <div class="relative">
+              <Lock
+                size={18}
+                class="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted opacity-40"
+              />
+              <input 
+                type="password" 
+                id="delete-pass" 
+                name="password"
+                required
+                bind:value={deletePassword}
+                placeholder="Introduzca su contraseña"
+                class="w-full h-14 bg-surface-base border border-border-bold rounded-2xl pl-12 pr-5 focus:border-red-500 outline-none transition-all text-text-base"
+              />
+            </div>
+          </div>
+
+          <div class="flex gap-3 pt-4">
+            <button 
+              type="button"
+              onclick={() => (showDeleteModal = false)}
+              disabled={isDeleting}
+              class="flex-1 h-14 rounded-2xl font-bold bg-surface-soft hover:bg-surface-strong transition-all text-text-muted hover:text-text-base border border-border-subtle cursor-pointer disabled:opacity-50"
+            >
+              Cancelar
+            </button>
+            <button 
+              type="submit"
+              disabled={isDeleting || !deletePassword}
+              class="flex-1 h-14 rounded-2xl font-bold bg-red-500 hover:bg-red-600 text-white shadow-lg shadow-red-500/20 transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer"
+            >
+              {#if isDeleting}
+                <Loader2 size={18} class="animate-spin" />
+              {:else}
+                <Trash2 size={18} />
+                Eliminar Cobro
               {/if}
             </button>
           </div>

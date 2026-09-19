@@ -33,6 +33,7 @@ export const load: PageServerLoad = protectLoad('cash_payments', async ({ url, l
 	let errorMsg = '';
 
 	const canVoid = hasPermission(profile, 'cash_payments', 'void');
+	const canDelete = hasPermission(profile, 'cash_payments', 'delete');
 	const canSeeOthers = hasPermission(profile, 'cash_payments', 'others');
 	const canEdit = hasPermission(profile, 'cash_payments', 'update');
 	const canCreate = hasPermission(profile, 'cash_payments', 'create');
@@ -48,6 +49,7 @@ export const load: PageServerLoad = protectLoad('cash_payments', async ({ url, l
 				selectedBranchId,
 				pagination: { total: 0, page: 1, limit: 12, totalPages: 0 },
 				canVoid,
+				canDelete,
 				canSeeOthers,
 				canEdit,
 				canCreate,
@@ -119,6 +121,7 @@ export const load: PageServerLoad = protectLoad('cash_payments', async ({ url, l
 		payments,
 		pagination,
 		canVoid,
+		canDelete,
 		canSeeOthers,
 		canEdit,
 		canCreate,
@@ -167,5 +170,82 @@ export const actions = {
 		} catch (err: any) {
 			return fail(500, { success: false, message: `Error de red con el Agente: ${err.message}` });
 		}
-	})
+	}),
+
+	deletePayment: protectAction('cash_payments', async ({ request, locals, fetch }) => {
+		const formData = await request.formData();
+		const cob_num = String(formData.get('cob_num') || '').trim();
+		const branch_id = String(formData.get('branch_id') || '').trim();
+		const password = String(formData.get('password') || '');
+		const profile = (locals as any).profile;
+
+		if (!hasPermission(profile, 'cash_payments', 'delete')) {
+			return fail(403, { success: false, message: 'No tienes permiso para eliminar cobros.' });
+		}
+
+		if (!cob_num) return fail(400, { success: false, message: 'Número de cobro no válido.' });
+		if (!branch_id) return fail(400, { success: false, message: 'Sucursal no válida.' });
+		if (!password) {
+			return fail(400, { success: false, message: 'La contraseña es requerida para confirmar la eliminación.' });
+		}
+
+		const email = locals.session?.user?.email;
+		if (!email) return fail(401, { success: false, message: 'Sesión no válida.' });
+
+		// Confirmación de seguridad con contraseña
+		const { error: authErr } = await locals.supabase.auth.signInWithPassword({ email, password });
+		if (authErr) return fail(401, { success: false, message: 'Contraseña de confirmación incorrecta.' });
+
+		const branch = profile.allowed_branches?.find((b: any) => b.id === branch_id);
+		if (!branch) return fail(403, { success: false, message: 'Sucursal no autorizada.' });
+
+		const agentClient = new AgentClient(branch, profile, fetch);
+
+		// Si el usuario no tiene permiso de ver otros, verificar pertenencia
+		const canSeeOthers = hasPermission(profile, 'cash_payments', 'others');
+		if (!canSeeOthers) {
+			try {
+				const getRes = await agentClient.request<any>(`/cobros/${encodeURIComponent(cob_num)}`);
+				const cob = Array.isArray(getRes?.data) ? getRes.data[0] : getRes?.data;
+				const userCode = (profile.profit_user || '').trim().toUpperCase();
+				const cobUser = (cob?.co_us_in || '').trim().toUpperCase();
+				if (cobUser && userCode && cobUser !== userCode) {
+					return fail(403, { success: false, message: 'No tienes permiso para eliminar cobros registrados por otros usuarios.' });
+				}
+			} catch (e) {
+				console.warn('[DELETE PAYMENT] No se pudo verificar pertenencia previa:', e);
+			}
+		}
+
+		try {
+			const res: any = await agentClient.request(`/cobros/${encodeURIComponent(cob_num)}?sede=${encodeURIComponent(branch.id)}`, {
+				method: 'DELETE'
+			});
+
+			if (!res?.success) {
+				return fail(500, { success: false, message: res?.message || 'No se pudo eliminar el cobro en Profit Plus.' });
+			}
+
+			// Auditoría
+			try {
+				await locals.supabase.from('audit_log').insert({
+					action: 'DELETE',
+					module: 'cash_payments',
+					record_id: cob_num,
+					user_email: email,
+					branch_id: branch.id,
+					metadata: {
+						message: `Cobro ${cob_num} eliminado permanentemente`,
+						cob_num: cob_num
+					}
+				});
+			} catch (auditError) {
+				console.error('Error al guardar log de auditoría de eliminación de cobro:', auditError);
+			}
+
+			return { success: true, message: res?.message || `Cobro ${cob_num} eliminado exitosamente.` };
+		} catch (err: any) {
+			return fail(500, { success: false, message: `Error de red al eliminar cobro: ${err.message}` });
+		}
+	}, 'delete')
 };
