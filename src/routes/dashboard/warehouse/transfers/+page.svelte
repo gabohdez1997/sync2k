@@ -24,6 +24,7 @@
     Loader2,
     ChevronLeft,
     ChevronRight,
+    Pencil,
     Pen,
     Ban,
     Undo2,
