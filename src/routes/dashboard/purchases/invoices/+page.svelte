@@ -542,6 +542,24 @@
       savedSucu = `${activeBranchCode} (${invoiceTotals.totalTaxUSD > 0 ? 'Fiscal / Defecto' : 'Exenta / Otra'})`;
       saveSuccess = true;
 
+      // Si el usuario aceptó actualizar precios de venta, llamar al endpoint centralizado de broadcast
+      if (updatePrices && changes && changes.length > 0) {
+        try {
+          await fetch("/api/agent/articles/batch-update-prices", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              branch_id: filterSede,
+              broadcast: broadcast !== false,
+              items: changes
+            })
+          });
+          toast.success("Precios de venta actualizados exitosamente en las sedes.");
+        } catch (pErr) {
+          console.warn("Error actualizando precios post-factura:", pErr);
+        }
+      }
+
       toast.success(`Factura de Compra ${docNumGenerated} (Fiscal N°: ${nroFactClean}) registrada exitosamente.`);
     } catch (err: any) {
       console.error("[SAVE PURCHASE INVOICE ERROR]:", err);
