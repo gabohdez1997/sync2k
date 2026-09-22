@@ -67,6 +67,14 @@
         showIslrDetails: boolean;
         manual_override_iva?: boolean;
         manual_override_islr?: boolean;
+        yaTieneRetIva?: boolean;
+        nro_comp_iva_previo?: string;
+        monto_ret_iva_previo_bs?: number;
+        monto_ret_iva_previo_usd?: number;
+        yaTieneRetIslr?: boolean;
+        nro_comp_islr_previo?: string;
+        monto_ret_islr_previo_bs?: number;
+        monto_ret_islr_previo_usd?: number;
       }
     >
   >({});
@@ -116,11 +124,11 @@
         inp.mont_cob_bs = -doc.saldo;
         inp.mont_cob = -saldoUsd;
       } else {
-        const retIvaBs = Number(inp.reten_iva_bs) || 0;
-        const retIslrBs = Number(inp.reten_islr_bs) || 0;
+        const retIvaBs = (!inp.yaTieneRetIva && inp.showIvaDetails) ? (Number(inp.reten_iva_bs) || 0) : 0;
+        const retIslrBs = (!inp.yaTieneRetIslr && inp.showIslrDetails) ? (Number(inp.reten_islr_bs) || 0) : 0;
         
-        const retIvaUsd = Number(inp.reten_iva) || 0;
-        const retIslrUsd = Number(inp.reten_islr) || 0;
+        const retIvaUsd = (!inp.yaTieneRetIva && inp.showIvaDetails) ? (Number(inp.reten_iva) || 0) : 0;
+        const retIslrUsd = (!inp.yaTieneRetIslr && inp.showIslrDetails) ? (Number(inp.reten_islr) || 0) : 0;
 
         const maxAbonoBs = Math.max(0, Math.round((doc.saldo - retIvaBs - retIslrBs) * 100) / 100);
         const maxAbonoUsd = Math.max(0, Math.round(((doc.saldo / docTasa) - retIvaUsd - retIslrUsd) * 100) / 100);
@@ -149,10 +157,8 @@
           if (isNC) return acc - doc.saldo;
           const inp = docInputs[doc.nro_doc.trim()];
           if (inp) {
-            const porcIva = (selectedSupplier && selectedSupplier.contribu_e) ? (Number(selectedSupplier.porc_esp) || 75) : 75;
-            const theoreticalRetIvaBs = Math.round((doc.monto_imp || 0) * (porcIva / 100) * 100) / 100;
-            const appliedRetIvaBs = inp.showIvaDetails ? Math.max(inp.reten_iva_bs || 0, theoreticalRetIvaBs) : 0;
-            const appliedRetIslrBs = inp.showIslrDetails ? (inp.reten_islr_bs || 0) : 0;
+            const appliedRetIvaBs = (!inp.yaTieneRetIva && inp.showIvaDetails) ? (Number(inp.reten_iva_bs) || 0) : 0;
+            const appliedRetIslrBs = (!inp.yaTieneRetIslr && inp.showIslrDetails) ? (Number(inp.reten_islr_bs) || 0) : 0;
             return acc + Math.max(0, doc.saldo - appliedRetIvaBs - appliedRetIslrBs);
           }
         }
@@ -162,9 +168,22 @@
   );
 
   let expectedNetPayUsd = $derived(
-    currentExchangeRate > 0
-      ? Math.round((expectedNetPayBs / currentExchangeRate) * 100) / 100
-      : 0
+    Math.round(
+      documentos.reduce((acc, doc) => {
+        if (checkedDocs[doc.nro_doc.trim()]) {
+          const isNC = doc.co_tipo_doc.trim() === "N/CR";
+          const docTasa = doc.tasa > 0 ? doc.tasa : (currentExchangeRate > 0 ? currentExchangeRate : 1);
+          if (isNC) return acc - (doc.saldo / docTasa);
+          const inp = docInputs[doc.nro_doc.trim()];
+          if (inp) {
+            const appliedRetIvaUsd = (!inp.yaTieneRetIva && inp.showIvaDetails) ? (Number(inp.reten_iva) || 0) : 0;
+            const appliedRetIslrUsd = (!inp.yaTieneRetIslr && inp.showIslrDetails) ? (Number(inp.reten_islr) || 0) : 0;
+            return acc + Math.max(0, (doc.saldo / docTasa) - appliedRetIvaUsd - appliedRetIslrUsd);
+          }
+        }
+        return acc;
+      }, 0) * 100
+    ) / 100
   );
 
   // Totales de Abonos en USD y Bs
@@ -198,7 +217,7 @@
       documentos.reduce((acc, doc) => {
         if (checkedDocs[doc.nro_doc.trim()]) {
           const inp = docInputs[doc.nro_doc.trim()];
-          return acc + (inp?.showIvaDetails ? inp.reten_iva || 0 : 0);
+          return acc + (!inp?.yaTieneRetIva && inp?.showIvaDetails ? inp.reten_iva || 0 : 0);
         }
         return acc;
       }, 0) * 100,
@@ -210,7 +229,7 @@
       documentos.reduce((acc, doc) => {
         if (checkedDocs[doc.nro_doc.trim()]) {
           const inp = docInputs[doc.nro_doc.trim()];
-          return acc + (inp?.showIvaDetails ? inp.reten_iva_bs || 0 : 0);
+          return acc + (!inp?.yaTieneRetIva && inp?.showIvaDetails ? inp.reten_iva_bs || 0 : 0);
         }
         return acc;
       }, 0) * 100,
@@ -222,7 +241,9 @@
       documentos.reduce((acc, doc) => {
         if (checkedDocs[doc.nro_doc.trim()]) {
           const inp = docInputs[doc.nro_doc.trim()];
-          if (inp?.showIvaDetails) {
+          if (inp?.yaTieneRetIva) {
+            return acc + (inp.monto_ret_iva_previo_usd || 0);
+          } else if (inp?.showIvaDetails) {
             return acc + (inp.reten_iva || 0);
           } else {
             const porcIva = (selectedSupplier && selectedSupplier.contribu_e) ? (Number(selectedSupplier.porc_esp) || 75) : 75;
@@ -242,7 +263,7 @@
       documentos.reduce((acc, doc) => {
         if (checkedDocs[doc.nro_doc.trim()]) {
           const inp = docInputs[doc.nro_doc.trim()];
-          return acc + (inp?.showIslrDetails ? inp.reten_islr || 0 : 0);
+          return acc + (!inp?.yaTieneRetIslr && inp?.showIslrDetails ? inp.reten_islr || 0 : 0);
         }
         return acc;
       }, 0) * 100,
@@ -254,7 +275,7 @@
       documentos.reduce((acc, doc) => {
         if (checkedDocs[doc.nro_doc.trim()]) {
           const inp = docInputs[doc.nro_doc.trim()];
-          return acc + (inp?.showIslrDetails ? inp.reten_islr_bs || 0 : 0);
+          return acc + (!inp?.yaTieneRetIslr && inp?.showIslrDetails ? inp.reten_islr_bs || 0 : 0);
         }
         return acc;
       }, 0) * 100,
@@ -347,6 +368,7 @@
       if (res.ok) {
         const json = await res.json();
         currentExchangeRate = Number(json.tasa || json.data?.tasa || 1);
+        syncSinglePaymentInstrument();
       }
     } catch (e) {
       console.error("Error fetching exchange rate:", e);
@@ -465,13 +487,21 @@
           const docTasa = doc.tasa > 0 ? doc.tasa : 1;
           const isNC = doc.co_tipo_doc.trim() === "N/CR";
 
+          // Verificar si ya tiene retención de IVA o ISLR aplicada
+          const yaTieneRetIva = (Number(doc.ya_reten_iva_bs) > 0) || Boolean(doc.nro_comp_iva);
+          const yaTieneRetIslr = (Number(doc.ya_reten_islr_bs) > 0) || Boolean(doc.nro_comp_islr);
+          const montoRetIvaPrevioBs = Number(doc.ya_reten_iva_bs) || 0;
+          const montoRetIvaPrevioUsd = Math.round((montoRetIvaPrevioBs / docTasa) * 100) / 100;
+          const montoRetIslrPrevioBs = Number(doc.ya_reten_islr_bs) || 0;
+          const montoRetIslrPrevioUsd = Math.round((montoRetIslrPrevioBs / docTasa) * 100) / 100;
+
           // Base imponible del documento
           const baseImpBs = doc.base_imponible > 0 ? doc.base_imponible : (doc.total_neto - doc.monto_imp);
           const baseImpUsd = Math.round((baseImpBs / docTasa) * 100) / 100;
 
-          // Retención de IVA por defecto (75% / 100%)
+          // Retención de IVA por defecto (75% / 100%) - Solo si NO tiene retención previa
           const porcRetIva = (selectedSupplier && selectedSupplier.contribu_e) ? (Number(selectedSupplier.porc_esp) || 75) : 75;
-          const retIvaBs = !isNC && (doc.monto_imp > 0)
+          const retIvaBs = !isNC && !yaTieneRetIva && (doc.monto_imp > 0)
             ? Math.round(doc.monto_imp * (porcRetIva / 100) * 100) / 100
             : 0;
           const retIvaUsd = Math.round((retIvaBs / docTasa) * 100) / 100;
@@ -501,8 +531,16 @@
             porc_islr: porcIslr,
             base_imponible_islr: Math.round((baseIslrBs / docTasa) * 100) / 100,
             base_imponible_islr_bs: baseIslrBs,
-            showIvaDetails: retIvaBs > 0,
+            showIvaDetails: !yaTieneRetIva && retIvaBs > 0,
             showIslrDetails: false,
+            yaTieneRetIva,
+            nro_comp_iva_previo: doc.nro_comp_iva ? doc.nro_comp_iva.trim() : "",
+            monto_ret_iva_previo_bs: montoRetIvaPrevioBs,
+            monto_ret_iva_previo_usd: montoRetIvaPrevioUsd,
+            yaTieneRetIslr,
+            nro_comp_islr_previo: doc.nro_comp_islr ? doc.nro_comp_islr.trim() : "",
+            monto_ret_islr_previo_bs: montoRetIslrPrevioBs,
+            monto_ret_islr_previo_usd: montoRetIslrPrevioUsd,
           };
 
           if (specificDocToSelect && nro === specificDocToSelect) {
@@ -516,6 +554,12 @@
         }
 
         recalculateAllDocAmounts();
+
+        if (formasPago.length === 0 && documentos.length > 0) {
+          addFormaPago();
+        } else {
+          syncSinglePaymentInstrument();
+        }
       }
     } catch (e) {
       console.error("Error loading supplier documents:", e);
@@ -536,10 +580,10 @@
 
   function toggleDocSelection(docNo: string, doc: any, isChecked: boolean) {
     checkedDocs[docNo] = isChecked;
-    recalculateDocAmounts(docNo, doc);
+    recalculateDocAmounts(docNo, doc, true);
   }
 
-  function recalculateDocAmounts(docNo: string, doc: any) {
+  function recalculateDocAmounts(docNo: string, doc: any, syncInstrument = true) {
     const inp = docInputs[docNo];
     if (!inp) return;
 
@@ -547,7 +591,11 @@
     const isNC = doc.co_tipo_doc.trim() === "N/CR";
 
     // Manejo de Retención de IVA
-    if (!inp.manual_override_iva) {
+    if (inp.yaTieneRetIva) {
+      inp.showIvaDetails = false;
+      inp.reten_iva_bs = 0;
+      inp.reten_iva = 0;
+    } else if (!inp.manual_override_iva) {
       if (inp.showIvaDetails) {
         const porcIva = (selectedSupplier && selectedSupplier.contribu_e) ? (Number(selectedSupplier.porc_esp) || 75) : 75;
         const theoreticalRetIvaBs = Math.round((doc.monto_imp || 0) * (porcIva / 100) * 100) / 100;
@@ -562,7 +610,11 @@
     }
 
     // Manejo de Retención de ISLR
-    if (!inp.manual_override_islr) {
+    if (inp.yaTieneRetIslr) {
+      inp.showIslrDetails = false;
+      inp.reten_islr_bs = 0;
+      inp.reten_islr = 0;
+    } else if (!inp.manual_override_islr) {
       if (inp.showIslrDetails) {
         const baseBs = inp.base_imponible_islr_bs || (doc.total_neto - doc.monto_imp);
         const retBs = Math.round(baseBs * ((inp.porc_islr || 2) / 100) * 100) / 100;
@@ -575,34 +627,117 @@
     } else {
       inp.reten_islr_bs = Math.round(Number(inp.reten_islr || 0) * docTasa * 100) / 100;
     }
+
+    if (syncInstrument) {
+      syncSinglePaymentInstrument();
+    }
   }
 
   function recalculateAllDocAmounts() {
     documentos.forEach((doc) => {
-      recalculateDocAmounts(doc.nro_doc.trim(), doc);
+      recalculateDocAmounts(doc.nro_doc.trim(), doc, false);
     });
+    syncSinglePaymentInstrument();
+  }
+
+  // Helper para calcular el monto neto pendiente que deja el saldo del documento en 0
+  function getRemainingPendingBalance(excludeIndex: number = -1) {
+    let creditFromNCsBs = 0;
+    let creditFromNCsUsd = 0;
+
+    for (const doc of documentos) {
+      const nro = doc.nro_doc.trim();
+      if (!checkedDocs[nro]) continue;
+      if (doc.co_tipo_doc.trim() === "N/CR") {
+        const docTasa = doc.tasa > 0 ? doc.tasa : (currentExchangeRate > 0 ? currentExchangeRate : 1);
+        creditFromNCsBs += doc.saldo;
+        creditFromNCsUsd += Math.round((doc.saldo / docTasa) * 100) / 100;
+      }
+    }
+
+    let totalNeededBs = 0;
+    let totalNeededUsd = 0;
+
+    for (const doc of documentos) {
+      const nro = doc.nro_doc.trim();
+      if (!checkedDocs[nro]) continue;
+      if (doc.co_tipo_doc.trim() === "N/CR") continue;
+
+      const inp = docInputs[nro];
+      const docTasa = doc.tasa > 0 ? doc.tasa : (currentExchangeRate > 0 ? currentExchangeRate : 1);
+      const retIvaBs = (!inp?.yaTieneRetIva && inp?.showIvaDetails) ? (Number(inp.reten_iva_bs) || 0) : 0;
+      const retIslrBs = (!inp?.yaTieneRetIslr && inp?.showIslrDetails) ? (Number(inp.reten_islr_bs) || 0) : 0;
+      const retIvaUsd = (!inp?.yaTieneRetIva && inp?.showIvaDetails) ? (Number(inp.reten_iva) || 0) : 0;
+      const retIslrUsd = (!inp?.yaTieneRetIslr && inp?.showIslrDetails) ? (Number(inp.reten_islr) || 0) : 0;
+
+      const maxBs = Math.max(0, doc.saldo - retIvaBs - retIslrBs);
+      const maxUsd = Math.max(0, (doc.saldo / docTasa) - retIvaUsd - retIslrUsd);
+
+      totalNeededBs += maxBs;
+      totalNeededUsd += maxUsd;
+    }
+
+    let otherInstrumentsBs = 0;
+    let otherInstrumentsUsd = 0;
+
+    formasPago.forEach((fp, i) => {
+      if (i !== excludeIndex) {
+        otherInstrumentsBs += Math.abs(Number(fp.mont_doc_bs) || 0);
+        otherInstrumentsUsd += Math.abs(Number(fp.mont_doc) || 0);
+      }
+    });
+
+    const pendingBs = Math.max(0, Math.round((totalNeededBs - creditFromNCsBs - otherInstrumentsBs) * 100) / 100);
+    const pendingUsd = Math.max(0, Math.round((totalNeededUsd - creditFromNCsUsd - otherInstrumentsUsd) * 100) / 100);
+
+    return { pendingBs, pendingUsd };
+  }
+
+  function applyExactPendingAmount(index: number) {
+    if (!formasPago[index]) return;
+    const fp = formasPago[index];
+    const curr = getRowCurrency(fp);
+    const rate = currentExchangeRate > 0 ? currentExchangeRate : 1;
+    const { pendingBs, pendingUsd } = getRemainingPendingBalance(index);
+
+    if (curr === "BS") {
+      fp.mont_doc_bs = pendingBs;
+      fp.mont_doc = Math.round((pendingBs / rate) * 100) / 100;
+    } else {
+      fp.mont_doc = pendingUsd;
+      // Para USD, fijar exactamente el equivalente en Bs pendiente para garantizar saldo 0 Bs en Profit Plus
+      fp.mont_doc_bs = pendingBs;
+    }
+  }
+
+  function syncSinglePaymentInstrument() {
+    if (formasPago.length === 1 && !formasPago[0].manual_override) {
+      applyExactPendingAmount(0);
+    }
   }
 
   // Manejo de Formas de Pago
   function addFormaPago() {
     const defaultCaja = data.cajas?.[0]?.cod_caja || "02";
-    formasPago = [
-      ...formasPago,
-      {
-        forma_pag: "EF",
-        cod_caja: defaultCaja,
-        cod_cta: "",
-        co_ban: "",
-        num_doc: "",
-        mont_doc: 0,
-        mont_doc_bs: 0,
-        fecha_che: null,
-      },
-    ];
+    const newFp = {
+      forma_pag: "EF",
+      cod_caja: defaultCaja,
+      cod_cta: "",
+      co_ban: "",
+      num_doc: "",
+      mont_doc: 0,
+      mont_doc_bs: 0,
+      fecha_che: null,
+      manual_override: false,
+    };
+    const newIndex = formasPago.length;
+    formasPago = [...formasPago, newFp];
+    applyExactPendingAmount(newIndex);
   }
 
   function removeFormaPago(index: number) {
     formasPago = formasPago.filter((_, i) => i !== index);
+    syncSinglePaymentInstrument();
   }
 
   function getRowCurrency(fp: any): "BS" | "USD" {
@@ -624,6 +759,8 @@
 
   function handleFormaPagChange(index: number) {
     const fp = formasPago[index];
+    if (!fp) return;
+    fp.manual_override = false;
     if (fp.forma_pag === "EF") {
       fp.cod_cta = "";
       fp.co_ban = "";
@@ -633,16 +770,19 @@
       fp.cod_cta = data.cuentasBancarias?.[0]?.cod_cta || "";
       fp.co_ban = data.bancos?.[0]?.co_ban || "";
     }
-    handleAmountChange(index, fp.mont_doc || 0);
+    applyExactPendingAmount(index);
   }
 
   function handleCajaCtaChange(index: number) {
     const fp = formasPago[index];
-    handleAmountChange(index, fp.mont_doc || 0);
+    if (!fp) return;
+    fp.manual_override = false;
+    applyExactPendingAmount(index);
   }
 
   function handleAmountChange(index: number, val: number) {
     const fp = formasPago[index];
+    if (!fp) return;
     const curr = getRowCurrency(fp);
     const rate = currentExchangeRate > 0 ? currentExchangeRate : 1;
 
@@ -699,8 +839,8 @@
         const inp = docInputs[doc.nro_doc.trim()];
         const isParent = ["FACT", "NDEB", "N/DB", "GIRO", "AJPA"].includes(doc.co_tipo_doc.trim());
         const montCobBs = inp.mont_cob_bs || 0;
-        const retIvaBs = inp.showIvaDetails ? (inp.reten_iva_bs || 0) : 0;
-        const retIslrBs = inp.showIslrDetails ? (inp.reten_islr_bs || 0) : 0;
+        const retIvaBs = (!inp.yaTieneRetIva && inp.showIvaDetails) ? (inp.reten_iva_bs || 0) : 0;
+        const retIslrBs = (!inp.yaTieneRetIslr && inp.showIslrDetails) ? (inp.reten_islr_bs || 0) : 0;
 
         totalDocBs += montCobBs;
 
@@ -715,11 +855,11 @@
         };
       });
 
-      // Retenciones de IVA
+      // Retenciones de IVA (solo nuevas)
       const retenciones_iva = selectedDocsList
         .filter((doc) => {
           const inp = docInputs[doc.nro_doc.trim()];
-          return inp && inp.showIvaDetails && inp.reten_iva_bs > 0;
+          return inp && !inp.yaTieneRetIva && inp.showIvaDetails && inp.reten_iva_bs > 0;
         })
         .map((doc) => {
           const inp = docInputs[doc.nro_doc.trim()];
@@ -737,11 +877,11 @@
           };
         });
 
-      // Retenciones de ISLR
+      // Retenciones de ISLR (solo nuevas)
       const retenciones_islr = selectedDocsList
         .filter((doc) => {
           const inp = docInputs[doc.nro_doc.trim()];
-          return inp && inp.showIslrDetails && inp.reten_islr_bs > 0;
+          return inp && !inp.yaTieneRetIslr && inp.showIslrDetails && inp.reten_islr_bs > 0;
         })
         .map((doc) => {
           const inp = docInputs[doc.nro_doc.trim()];
@@ -1188,38 +1328,50 @@
                                 class="block text-xs font-black text-text-muted uppercase"
                                 >Reten. IVA ($)</label
                               >
-                              <button
-                                onclick={() => {
-                                  input.showIvaDetails = !input.showIvaDetails;
-                                  if (!input.showIvaDetails) {
-                                    input.reten_iva_bs = 0;
-                                    input.reten_iva = 0;
-                                    input.manual_override_iva = true;
-                                  } else {
-                                    input.manual_override_iva = false;
-                                  }
-                                  recalculateDocAmounts(doc.nro_doc.trim(), doc);
-                                }}
-                                class="text-xs text-brand-500 font-bold hover:underline cursor-pointer"
-                              >
-                                {input.showIvaDetails ? "Cerrar" : "Aplicar"}
-                              </button>
+                              {#if input.yaTieneRetIva}
+                                <span
+                                  class="text-[10px] text-emerald-400 bg-emerald-500/10 border border-emerald-500/30 px-1.5 py-0.5 rounded font-black tracking-wide"
+                                  title={input.nro_comp_iva_previo ? `Comprobante: ${input.nro_comp_iva_previo}` : 'Ya aplicada en pago previo'}
+                                >
+                                  Ya Aplicada
+                                </span>
+                              {:else}
+                                <button
+                                  onclick={() => {
+                                    input.showIvaDetails = !input.showIvaDetails;
+                                    if (!input.showIvaDetails) {
+                                      input.reten_iva_bs = 0;
+                                      input.reten_iva = 0;
+                                      input.manual_override_iva = true;
+                                    } else {
+                                      input.manual_override_iva = false;
+                                    }
+                                    recalculateDocAmounts(doc.nro_doc.trim(), doc);
+                                  }}
+                                  class="text-xs text-brand-500 font-bold hover:underline cursor-pointer"
+                                >
+                                  {input.showIvaDetails ? "Cerrar" : "Aplicar"}
+                                </button>
+                              {/if}
                             </div>
                             <input
                               type="number"
                               step="0.01"
-                              value={input.showIvaDetails ? input.reten_iva : 0}
+                              value={input.yaTieneRetIva ? input.monto_ret_iva_previo_usd : (input.showIvaDetails ? input.reten_iva : 0)}
                               readonly
-                              class="w-full bg-surface-soft border border-border-subtle px-3 py-2 rounded-xl text-sm font-bold text-green-400 text-right cursor-not-allowed opacity-90"
+                              class="w-full bg-surface-soft border border-border-subtle px-3 py-2 rounded-xl text-sm font-bold {input.yaTieneRetIva ? 'text-emerald-400' : 'text-green-400'} text-right cursor-not-allowed opacity-90"
                             />
                             <span
-                              class="block text-xs text-green-500 font-black text-right mt-1.5"
+                              class="block text-xs {input.yaTieneRetIva ? 'text-emerald-500/80' : 'text-green-500'} font-black text-right mt-1.5"
                             >
                               Bs. {(
-                                input.showIvaDetails ? (input.reten_iva_bs || 0) : 0
+                                input.yaTieneRetIva ? (input.monto_ret_iva_previo_bs || 0) : (input.showIvaDetails ? (input.reten_iva_bs || 0) : 0)
                               ).toLocaleString("de-DE", {
                                 minimumFractionDigits: 2,
                               })}
+                              {#if input.yaTieneRetIva && input.nro_comp_iva_previo}
+                                <span class="block text-[10px] font-normal text-text-muted mt-0.5">Comp: {input.nro_comp_iva_previo}</span>
+                              {/if}
                             </span>
                           </div>
 
@@ -1230,27 +1382,36 @@
                                 class="block text-xs font-black text-text-muted uppercase"
                                 >Reten. ISLR ($)</label
                               >
-                              <button
-                                onclick={() => {
-                                  input.showIslrDetails = !input.showIslrDetails;
-                                  if (!input.showIslrDetails) {
-                                    input.reten_islr_bs = 0;
-                                    input.reten_islr = 0;
-                                    input.manual_override_islr = true;
-                                  } else {
-                                    input.manual_override_islr = false;
-                                  }
-                                  recalculateDocAmounts(doc.nro_doc.trim(), doc);
-                                }}
-                                class="text-xs text-brand-500 font-bold hover:underline cursor-pointer"
-                              >
-                                {input.showIslrDetails ? "Cerrar" : "Aplicar"}
-                              </button>
+                              {#if input.yaTieneRetIslr}
+                                <span
+                                  class="text-[10px] text-amber-400 bg-amber-500/10 border border-amber-500/30 px-1.5 py-0.5 rounded font-black tracking-wide"
+                                  title={input.nro_comp_islr_previo ? `Comprobante: ${input.nro_comp_islr_previo}` : 'Ya aplicada en pago previo'}
+                                >
+                                  Ya Aplicada
+                                </span>
+                              {:else}
+                                <button
+                                  onclick={() => {
+                                    input.showIslrDetails = !input.showIslrDetails;
+                                    if (!input.showIslrDetails) {
+                                      input.reten_islr_bs = 0;
+                                      input.reten_islr = 0;
+                                      input.manual_override_islr = true;
+                                    } else {
+                                      input.manual_override_islr = false;
+                                    }
+                                    recalculateDocAmounts(doc.nro_doc.trim(), doc);
+                                  }}
+                                  class="text-xs text-brand-500 font-bold hover:underline cursor-pointer"
+                                >
+                                  {input.showIslrDetails ? "Cerrar" : "Aplicar"}
+                                </button>
+                              {/if}
                             </div>
                             <input
                               type="number"
                               step="0.01"
-                              value={input.showIslrDetails ? input.reten_islr : 0}
+                              value={input.yaTieneRetIslr ? input.monto_ret_islr_previo_usd : (input.showIslrDetails ? input.reten_islr : 0)}
                               readonly
                               class="w-full bg-surface-soft border border-border-subtle px-3 py-2 rounded-xl text-sm font-bold text-amber-400 text-right cursor-not-allowed opacity-90"
                             />
@@ -1258,16 +1419,19 @@
                               class="block text-xs text-amber-400 font-black text-right mt-1.5"
                             >
                               Bs. {(
-                                input.showIslrDetails ? (input.reten_islr_bs || 0) : 0
+                                input.yaTieneRetIslr ? (input.monto_ret_islr_previo_bs || 0) : (input.showIslrDetails ? (input.reten_islr_bs || 0) : 0)
                               ).toLocaleString("de-DE", {
                                 minimumFractionDigits: 2,
                               })}
+                              {#if input.yaTieneRetIslr && input.nro_comp_islr_previo}
+                                <span class="block text-[10px] font-normal text-text-muted mt-0.5">Comp: {input.nro_comp_islr_previo}</span>
+                              {/if}
                             </span>
                           </div>
                         </div>
 
                         <!-- Detalles Retención IVA -->
-                        {#if input.showIvaDetails}
+                        {#if input.showIvaDetails && !input.yaTieneRetIva}
                           <div
                             class="bg-green-500/5 border border-green-500/20 p-4 rounded-2xl space-y-3 text-xs animate-in slide-in-from-top-2 duration-150"
                           >
@@ -1349,7 +1513,7 @@
                         {/if}
 
                         <!-- Detalles Retención ISLR -->
-                        {#if input.showIslrDetails}
+                        {#if input.showIslrDetails && !input.yaTieneRetIslr}
                           <div
                             class="bg-amber-500/5 border border-amber-500/20 p-4 rounded-2xl space-y-3 text-xs animate-in slide-in-from-top-2 duration-150"
                           >
@@ -1702,7 +1866,7 @@
                             class="w-full h-12 px-2 bg-surface-soft border border-border-subtle rounded-xl focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none transition-all font-medium text-[10px] cursor-pointer text-text-base"
                           >
                             {#each data.bancos as b}
-                              <option value={b.co_ban}>{b.des_ban}</option>
+                              <option value={b.co_ban}>{b.ban_des || b.des_ban}</option>
                             {/each}
                           </select>
                         </div>
@@ -1729,16 +1893,32 @@
                           class="text-[9px] text-text-muted font-bold uppercase"
                           >Monto {getRowCurrency(fp) === 'BS' ? 'en Bolívares (Bs.)' : 'en Dólares ($)'}</span
                         >
-                        <span class="text-[10px] text-brand-400 font-bold">
-                          {getRowCurrency(fp) === 'BS' ? `Equiv: $ ${fp.mont_doc || 0}` : `Equiv: Bs. ${fp.mont_doc_bs || 0}`}
-                        </span>
+                        <div class="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onclick={() => {
+                              fp.manual_override = false;
+                              applyExactPendingAmount(index);
+                            }}
+                            class="text-[9px] text-brand-400 hover:text-brand-300 font-bold underline cursor-pointer"
+                            title="Ajustar automáticamente para saldar el documento en 0"
+                          >
+                            Saldar pendiente
+                          </button>
+                          <span class="text-[10px] text-brand-400 font-bold">
+                            {getRowCurrency(fp) === 'BS' ? `Equiv: $ ${fp.mont_doc || 0}` : `Equiv: Bs. ${fp.mont_doc_bs || 0}`}
+                          </span>
+                        </div>
                       </div>
                       <input
                         type="number"
                         step="0.01"
                         placeholder="0.00"
                         value={getRowCurrency(fp) === 'BS' ? fp.mont_doc_bs : fp.mont_doc}
-                        oninput={(e) => handleAmountChange(index, Number(e.currentTarget.value))}
+                        oninput={(e) => {
+                          fp.manual_override = true;
+                          handleAmountChange(index, Number(e.currentTarget.value));
+                        }}
                         class="w-full h-12 px-4 bg-surface-soft border border-border-subtle rounded-xl focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none transition-all font-black text-sm text-text-base text-right font-mono"
                       />
                     </div>

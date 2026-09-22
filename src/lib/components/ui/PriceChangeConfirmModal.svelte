@@ -50,13 +50,41 @@
   } = $props();
 
   let broadcast = $state(true);
+  let selectedCodes = $state<string[]>([]);
+
+  $effect(() => {
+    if (open && changes.length > 0) {
+      // Por defecto seleccionar todos los artículos detectados
+      selectedCodes = changes.map((c) => c.co_art);
+    }
+  });
+
+  const allSelected = $derived(changes.length > 0 && selectedCodes.length === changes.length);
+  const selectedCount = $derived(selectedCodes.length);
+
+  function toggleAll() {
+    if (allSelected) {
+      selectedCodes = [];
+    } else {
+      selectedCodes = changes.map((c) => c.co_art);
+    }
+  }
+
+  function toggleArticle(coArt: string) {
+    if (selectedCodes.includes(coArt)) {
+      selectedCodes = selectedCodes.filter((c) => c !== coArt);
+    } else {
+      selectedCodes = [...selectedCodes, coArt];
+    }
+  }
 
   function handleConfirm(update: boolean) {
     if (loading) return;
+    const itemsToUpdate = update ? changes.filter((c) => selectedCodes.includes(c.co_art)) : [];
     onconfirm({
-      updatePrices: update,
+      updatePrices: update && itemsToUpdate.length > 0,
       broadcast,
-      changes
+      changes: itemsToUpdate
     });
   }
 
@@ -106,7 +134,7 @@
               </span>
             </div>
             <p class="text-text-muted text-xs md:text-sm mt-0.5">
-              Al procesar esta {documentType.toLowerCase()}, se detectaron variaciones en los costos de compra. Decide si deseas actualizar los precios de venta.
+              Al procesar esta {documentType.toLowerCase()}, se detectaron variaciones en los costos. Selecciona qué artículos deseas actualizar.
             </p>
           </div>
         </div>
@@ -124,34 +152,73 @@
         </button>
       </div>
 
-      <!-- Info Banner -->
-      <div class="bg-amber-500/5 border-b border-amber-500/15 px-6 py-3 flex items-start gap-3">
-        <AlertCircle size={18} class="text-amber-400 shrink-0 mt-0.5" />
-        <p class="text-xs text-text-muted leading-relaxed">
-          <strong class="text-text-base font-semibold">Nota:</strong> Si eliges <span class="text-brand-400 font-bold">"Actualizar Precios"</span>, se aplicarán los nuevos precios calculados con el margen de ganancia. Si eliges <span class="text-text-base font-bold">"Mantener Precios"</span>, se conservarán los precios de venta actuales (se efectuará rollback a los precios originales).
-        </p>
+      <!-- Selection & Info Toolbar -->
+      <div class="bg-surface-soft/40 border-b border-border-subtle/80 px-6 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div class="flex items-center gap-2 text-xs text-text-muted">
+          <AlertCircle size={15} class="text-amber-400 shrink-0" />
+          <span>Marca las casillas de los artículos que deseas actualizar. Los no marcados conservarán sus precios.</span>
+        </div>
+
+        <div class="flex items-center gap-3 shrink-0 self-end sm:self-auto">
+          <span class="text-xs font-bold text-text-muted">
+            <strong class="text-brand-400">{selectedCount}</strong> de {changes.length} seleccionados
+          </span>
+          <button
+            type="button"
+            onclick={toggleAll}
+            class="text-xs font-black text-brand-400 hover:text-brand-300 underline underline-offset-4 cursor-pointer transition-colors"
+          >
+            {allSelected ? "Deseleccionar todos" : "Seleccionar todos"}
+          </button>
+        </div>
       </div>
 
       <!-- Scrollable Content -->
       <div class="flex-1 overflow-y-auto p-6 space-y-4 no-scrollbar custom-scrollbar">
         {#each changes as item (item.co_art)}
           {@const isUp = item.costo_nuevo_usd >= item.costo_anterior_usd}
-          <div class="bg-surface-soft border border-border-subtle rounded-2xl p-5 space-y-4 hover:border-border-strong transition-all">
+          {@const isSelected = selectedCodes.includes(item.co_art)}
+          <div
+            class="rounded-2xl p-5 space-y-4 transition-all border {isSelected
+              ? 'bg-surface-soft border-brand-500/40 shadow-md shadow-brand-500/5'
+              : 'bg-surface-soft/40 border-border-subtle opacity-60 hover:opacity-85'}"
+          >
             <!-- Article Header & Cost Row -->
             <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-border-subtle/60">
-              <div class="space-y-1">
-                <div class="flex items-center gap-2">
-                  <span class="px-2 py-0.5 rounded-md font-mono text-xs font-black bg-surface-strong text-text-base border border-border-subtle">
-                    {item.co_art}
-                  </span>
-                  <h3 class="font-bold text-sm md:text-base text-text-base line-clamp-1">
-                    {item.art_des}
-                  </h3>
+              <div class="flex items-center gap-3">
+                <!-- Checkbox Seleccionar Renglón -->
+                <button
+                  type="button"
+                  onclick={() => toggleArticle(item.co_art)}
+                  class="h-6 w-6 rounded-lg flex items-center justify-center transition-all cursor-pointer shrink-0 border {isSelected
+                    ? 'bg-brand-500 border-brand-400 text-white shadow-sm shadow-brand-500/30'
+                    : 'bg-surface-base border-border-subtle hover:border-brand-400/50 text-transparent'}"
+                  title={isSelected ? "Desmarcar para NO actualizar precios" : "Marcar para actualizar precios"}
+                >
+                  <Check size={14} strokeWidth={3} class={isSelected ? 'opacity-100' : 'opacity-0'} />
+                </button>
+
+                <div class="space-y-1">
+                  <div class="flex items-center gap-2 flex-wrap">
+                    <span class="px-2 py-0.5 rounded-md font-mono text-xs font-black bg-surface-strong text-text-base border border-border-subtle">
+                      {item.co_art}
+                    </span>
+                    <h3 class="font-bold text-sm md:text-base text-text-base line-clamp-1">
+                      {item.art_des}
+                    </h3>
+                  </div>
+                  <div class="text-[11px] font-bold">
+                    {#if isSelected}
+                      <span class="text-emerald-400">✓ Se actualizarán {item.precios.length} precios de venta</span>
+                    {:else}
+                      <span class="text-text-muted">✕ Se mantendrán los precios de venta actuales</span>
+                    {/if}
+                  </div>
                 </div>
               </div>
 
               <!-- Cost comparison -->
-              <div class="flex items-center gap-3 bg-surface-base px-3.5 py-2 rounded-xl border border-border-subtle shrink-0">
+              <div class="flex items-center gap-3 bg-surface-base px-3.5 py-2 rounded-xl border border-border-subtle shrink-0 self-start sm:self-auto">
                 <span class="text-xs text-text-muted font-medium">Costo USD:</span>
                 <span class="text-xs font-bold text-text-muted line-through">
                   ${formatMoney(item.costo_anterior_usd)}
@@ -176,7 +243,7 @@
               <p class="text-[11px] font-black uppercase tracking-wider text-text-muted mb-2.5">
                 Proyección de Precios de Venta ({item.precios.length} tipos):
               </p>
-              <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5">
+              <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5 {isSelected ? '' : 'opacity-60'}">
                 {#each item.precios as p}
                   {@const pUp = p.precio_nuevo >= p.precio_anterior}
                   <div class="bg-surface-base p-3 rounded-xl border border-border-subtle/80 flex flex-col justify-between gap-1.5 hover:border-brand-500/30 transition-all">
@@ -242,16 +309,20 @@
 
           <button
             type="button"
-            disabled={loading}
+            disabled={loading || selectedCount === 0}
             onclick={() => handleConfirm(true)}
-            class="flex-1 sm:flex-none px-6 py-3 rounded-2xl font-black text-xs md:text-sm bg-brand-600 hover:bg-brand-500 text-white shadow-lg shadow-brand-500/25 transition-all active:scale-95 cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2"
+            class="flex-1 sm:flex-none px-6 py-3 rounded-2xl font-black text-xs md:text-sm bg-brand-600 hover:bg-brand-500 text-white shadow-lg shadow-brand-500/25 transition-all active:scale-95 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
           >
             {#if loading}
               <Loader2 size={16} class="animate-spin" />
               <span>Guardando...</span>
             {:else}
               <Check size={16} />
-              <span>Sí, Actualizar Precios</span>
+              <span>
+                {selectedCount === 0
+                  ? 'Ningún artículo seleccionado'
+                  : (selectedCount === changes.length ? 'Sí, Actualizar Precios' : `Sí, Actualizar (${selectedCount} de ${changes.length})`)}
+              </span>
             {/if}
           </button>
         </div>

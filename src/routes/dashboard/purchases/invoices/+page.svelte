@@ -513,7 +513,7 @@
           costo: Number(l.costo_usd), // En USD
           cost_unit_om: Number(l.costo_usd), // En USD explícito
           porc_imp: taxRateOption === 0 ? 0 : Number(l.porc_imp),
-          tipo_imp: taxRateOption === 0 ? "7" : (l.tipo_imp || "1"), // '7' = Exento in Profit Plus
+          tipo_imp: taxRateOption === 0 ? "6" : (l.tipo_imp === "5" ? "6" : (l.tipo_imp || "1")), // '6' = Compra Exenta en Profit Plus
           tipo_doc: "NREC",
           num_doc: l.doc_num_reception,
           reng_doc: l.reng_num_reception,

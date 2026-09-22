@@ -50,9 +50,12 @@
       string,
       {
         mont_cob: number;
+        mont_cob_bs?: number;
         reten_iva: number;
+        reten_iva_bs?: number;
         num_comprobante_iva: string;
         base_imponible_iva: number;
+        base_imponible_iva_bs?: number;
         alicuota_iva: number;
         reten_islr: number;
         reten_islr_bs: number;
@@ -62,6 +65,17 @@
         base_imponible_islr_bs: number;
         showIvaDetails: boolean;
         showIslrDetails: boolean;
+        manual_override_iva?: boolean;
+        manual_override_islr?: boolean;
+        manual_override_abono?: boolean;
+        yaTieneRetIva?: boolean;
+        nro_comp_iva_previo?: string;
+        monto_ret_iva_previo_bs?: number;
+        monto_ret_iva_previo_usd?: number;
+        yaTieneRetIslr?: boolean;
+        nro_comp_islr_previo?: string;
+        monto_ret_islr_previo_bs?: number;
+        monto_ret_islr_previo_usd?: number;
       }
     >
   >({});
@@ -113,11 +127,11 @@
         inp.mont_cob = -saldoUsd;
       } else {
         // Documentos normales (Facturas, etc.)
-        const retIvaBs = Number(inp.reten_iva_bs) || 0;
-        const retIslrBs = Number(inp.reten_islr_bs) || 0;
+        const retIvaBs = (!inp.yaTieneRetIva && inp.showIvaDetails) ? (Number(inp.reten_iva_bs) || 0) : 0;
+        const retIslrBs = (!inp.yaTieneRetIslr && inp.showIslrDetails) ? (Number(inp.reten_islr_bs) || 0) : 0;
         
-        const retIvaUsd = Number(inp.reten_iva) || 0;
-        const retIslrUsd = Number(inp.reten_islr) || 0;
+        const retIvaUsd = (!inp.yaTieneRetIva && inp.showIvaDetails) ? (Number(inp.reten_iva) || 0) : 0;
+        const retIslrUsd = (!inp.yaTieneRetIslr && inp.showIslrDetails) ? (Number(inp.reten_islr) || 0) : 0;
 
         const maxAbonoBs = Math.max(0, Math.round((doc.saldo - retIvaBs - retIslrBs) * 100) / 100);
         const maxAbonoUsd = Math.max(0, Math.round(((doc.saldo / docTasa) - retIvaUsd - retIslrUsd) * 100) / 100);
@@ -147,10 +161,8 @@
           if (isNC) return acc - doc.saldo;
           const inp = docInputs[doc.nro_doc.trim()];
           if (inp) {
-            const porcIva = (selectedClient && selectedClient.contribu_e) ? (Number(selectedClient.porc_esp) || 0) : 0;
-            const theoreticalRetIvaBs = Math.round((doc.monto_imp || 0) * (porcIva / 100) * 100) / 100;
-            const appliedRetIvaBs = inp.showIvaDetails ? Math.max(inp.reten_iva_bs || 0, theoreticalRetIvaBs) : 0;
-            const appliedRetIslrBs = inp.showIslrDetails ? (inp.reten_islr_bs || 0) : 0;
+            const appliedRetIvaBs = (!inp.yaTieneRetIva && inp.showIvaDetails) ? (Number(inp.reten_iva_bs) || 0) : 0;
+            const appliedRetIslrBs = (!inp.yaTieneRetIslr && inp.showIslrDetails) ? (Number(inp.reten_islr_bs) || 0) : 0;
 
             // Cálculo del diferencial cambiario N/DB si la factura es de una fecha anterior
             const docFecEmisStr = doc.fec_emis ? new Date(doc.fec_emis).toISOString().split('T')[0] : '';
@@ -174,25 +186,24 @@
   );
 
   let expectedNetPayUsd = $derived(
-    documentos.reduce((acc, doc) => {
-      if (checkedDocs[doc.nro_doc.trim()]) {
-        const docTasa = doc.tasa > 0 ? doc.tasa : 1;
-        const isNC = doc.co_tipo_doc.trim() === "N/CR";
-        if (isNC) return acc - Math.round((doc.saldo / docTasa) * 100) / 100;
-        const inp = docInputs[doc.nro_doc.trim()];
-        if (inp) {
-          const porcIva = (selectedClient && selectedClient.contribu_e) ? (Number(selectedClient.porc_esp) || 0) : 0;
-          const theoreticalRetIvaBs = Math.round((doc.monto_imp || 0) * (porcIva / 100) * 100) / 100;
-          const theoreticalRetIvaUsd = Math.round((theoreticalRetIvaBs / docTasa) * 100) / 100;
-          const appliedRetIva = inp.showIvaDetails ? Math.max(inp.reten_iva || 0, theoreticalRetIvaUsd) : 0;
-          const appliedRetIslr = inp.showIslrDetails ? (inp.reten_islr || 0) : 0;
-          const saldoUsd = Math.round((doc.saldo / docTasa) * 100) / 100;
-          return acc + saldoUsd - appliedRetIva - appliedRetIslr;
+    Math.round(
+      documentos.reduce((acc, doc) => {
+        if (checkedDocs[doc.nro_doc.trim()]) {
+          const docTasa = doc.tasa > 0 ? doc.tasa : 1;
+          const isNC = doc.co_tipo_doc.trim() === "N/CR";
+          if (isNC) return acc - (doc.saldo / docTasa);
+          const inp = docInputs[doc.nro_doc.trim()];
+          if (inp) {
+            const appliedRetIva = (!inp.yaTieneRetIva && inp.showIvaDetails) ? (Number(inp.reten_iva) || 0) : 0;
+            const appliedRetIslr = (!inp.yaTieneRetIslr && inp.showIslrDetails) ? (Number(inp.reten_islr) || 0) : 0;
+            const saldoUsd = doc.saldo / docTasa;
+            return acc + Math.max(0, saldoUsd - appliedRetIva - appliedRetIslr);
+          }
+          return acc + (doc.saldo / docTasa);
         }
-        return acc + Math.round((doc.saldo / docTasa) * 100) / 100;
-      }
-      return acc;
-    }, 0)
+        return acc;
+      }, 0) * 100
+    ) / 100
   );
 
   // Totales derivativos
@@ -205,59 +216,72 @@
   );
 
   let totalRetenidoIvaBs = $derived(
-    Object.values(docInputs).reduce(
-      (acc, curr) => acc + (Number(curr.reten_iva_bs) || 0),
-      0,
-    ),
+    Math.round(
+      Object.values(docInputs).reduce(
+        (acc, curr) => acc + (!curr.yaTieneRetIva && curr.showIvaDetails ? (Number(curr.reten_iva_bs) || 0) : 0),
+        0,
+      ) * 100
+    ) / 100
   );
 
   let totalRetenidoIva = $derived(
-    Object.values(docInputs).reduce(
-      (acc, curr) => acc + (Number(curr.reten_iva) || 0),
-      0,
-    ),
+    Math.round(
+      Object.values(docInputs).reduce(
+        (acc, curr) => acc + (!curr.yaTieneRetIva && curr.showIvaDetails ? (Number(curr.reten_iva) || 0) : 0),
+        0,
+      ) * 100
+    ) / 100
   );
 
   let totalRetenidoIslrBs = $derived(
-    Object.values(docInputs).reduce(
-      (acc, curr) => acc + (Number(curr.reten_islr_bs) || 0),
-      0,
-    ),
+    Math.round(
+      Object.values(docInputs).reduce(
+        (acc, curr) => acc + (!curr.yaTieneRetIslr && curr.showIslrDetails ? (Number(curr.reten_islr_bs) || 0) : 0),
+        0,
+      ) * 100
+    ) / 100
   );
 
   let totalRetenidoIslr = $derived(
-    Object.values(docInputs).reduce(
-      (acc, curr) => acc + (Number(curr.reten_islr) || 0),
-      0,
-    ),
+    Math.round(
+      Object.values(docInputs).reduce(
+        (acc, curr) => acc + (!curr.yaTieneRetIslr && curr.showIslrDetails ? (Number(curr.reten_islr) || 0) : 0),
+        0,
+      ) * 100
+    ) / 100
   );
 
   let totalRetenidoIvaVista = $derived(
-    documentos.reduce((acc, doc) => {
-      if (checkedDocs[doc.nro_doc.trim()]) {
-        const docTasa = doc.tasa > 0 ? doc.tasa : 1;
-        const inp = docInputs[doc.nro_doc.trim()];
-        if (inp && inp.showIvaDetails) {
-          const porcIva = (selectedClient && selectedClient.contribu_e) ? (Number(selectedClient.porc_esp) || 0) : 0;
-          const theoreticalRetIvaBs = Math.round((doc.monto_imp || 0) * (porcIva / 100) * 100) / 100;
-          const theoreticalRetIvaUsd = Math.round((theoreticalRetIvaBs / docTasa) * 100) / 100;
-          return acc + Math.max(inp.reten_iva || 0, theoreticalRetIvaUsd);
+    Math.round(
+      documentos.reduce((acc, doc) => {
+        if (checkedDocs[doc.nro_doc.trim()]) {
+          const docTasa = doc.tasa > 0 ? doc.tasa : 1;
+          const inp = docInputs[doc.nro_doc.trim()];
+          if (inp?.yaTieneRetIva) {
+            return acc + (inp.monto_ret_iva_previo_usd || 0);
+          } else if (inp && inp.showIvaDetails) {
+            return acc + (inp.reten_iva || 0);
+          }
         }
-      }
-      return acc;
-    }, 0)
+        return acc;
+      }, 0) * 100
+    ) / 100
   );
 
   let totalRetenidoIslrVista = $derived(
-    documentos.reduce((acc, doc) => {
-      if (checkedDocs[doc.nro_doc.trim()]) {
-        const inp = docInputs[doc.nro_doc.trim()];
-        if (inp && inp.showIslrDetails) {
-          return acc + (inp.reten_islr || 0);
+    Math.round(
+      documentos.reduce((acc, doc) => {
+        if (checkedDocs[doc.nro_doc.trim()]) {
+          const inp = docInputs[doc.nro_doc.trim()];
+          if (inp?.yaTieneRetIslr) {
+            return acc + (inp.monto_ret_islr_previo_usd || 0);
+          } else if (inp && inp.showIslrDetails) {
+            return acc + (inp.reten_islr || 0);
+          }
         }
-      }
-      return acc;
-    }, 0)
+        return acc;
+      }, 0) * 100
+    ) / 100
   );
 
   let totalIgtfBs = $derived(
@@ -498,6 +522,14 @@
           const baseImpUsd =
             Math.round((totalNetoUsd - montoImpUsd - otros1Usd) * 100) / 100;
 
+          // Verificar si ya tiene retención de IVA o ISLR aplicada
+          const yaTieneRetIva = (Number(doc.ya_reten_iva_bs) > 0) || Boolean(doc.nro_comp_iva);
+          const yaTieneRetIslr = (Number(doc.ya_reten_islr_bs) > 0) || Boolean(doc.nro_comp_islr);
+          const montoRetIvaPrevioBs = Number(doc.ya_reten_iva_bs) || 0;
+          const montoRetIvaPrevioUsd = Math.round((montoRetIvaPrevioBs / docTasa) * 100) / 100;
+          const montoRetIslrPrevioBs = Number(doc.ya_reten_islr_bs) || 0;
+          const montoRetIslrPrevioUsd = Math.round((montoRetIslrPrevioBs / docTasa) * 100) / 100;
+
           checkedDocs[doc.nro_doc.trim()] = isTargetDoc;
 
           const baseImpBs = doc.total_neto - doc.monto_imp - (doc.otros1 || 0);
@@ -514,19 +546,33 @@
             reten_islr_bs: 0,
             co_islr: "072",
             porc_islr: 3,
-            base_imponible_islr: Math.round(( (doc.base_islr_default || 0) / (doc.tasa > 0 ? doc.tasa : 1) ) * 100) / 100,
+            base_imponible_islr: Math.round(((doc.base_islr_default || 0) / (doc.tasa > 0 ? doc.tasa : 1)) * 100) / 100,
             base_imponible_islr_bs: doc.base_islr_default || 0,
             showIvaDetails: false,
             showIslrDetails: false,
             manual_override_iva: false,
             manual_override_islr: false,
             manual_override_abono: false,
+            yaTieneRetIva,
+            nro_comp_iva_previo: doc.nro_comp_iva ? doc.nro_comp_iva.trim() : "",
+            monto_ret_iva_previo_bs: montoRetIvaPrevioBs,
+            monto_ret_iva_previo_usd: montoRetIvaPrevioUsd,
+            yaTieneRetIslr,
+            nro_comp_islr_previo: doc.nro_comp_islr ? doc.nro_comp_islr.trim() : "",
+            monto_ret_islr_previo_bs: montoRetIslrPrevioBs,
+            monto_ret_islr_previo_usd: montoRetIslrPrevioUsd,
           };
 
           if (isTargetDoc) {
-            recalculateDocAmounts(doc.nro_doc.trim(), doc);
+            recalculateDocAmounts(doc.nro_doc.trim(), doc, false);
           }
         });
+
+        if (formasPago.length === 0 && documentos.length > 0) {
+          addFormaPago();
+        } else {
+          syncSinglePaymentInstrument();
+        }
       }
     } catch (e) {
       console.error(e);
@@ -538,20 +584,21 @@
 
   function toggleDocSelection(nroDoc: string, doc: any, checked: boolean) {
     checkedDocs[nroDoc] = checked;
-    recalculateDocAmounts(nroDoc, doc);
+    recalculateDocAmounts(nroDoc, doc, true);
   }
 
-  function recalculateDocAmounts(nroDoc: string, doc: any) {
+  function recalculateDocAmounts(nroDoc: string, doc: any, syncInstrument = true) {
     const input = docInputs[nroDoc];
     if (!input) return;
 
     const docTasa = doc.tasa > 0 ? doc.tasa : 1;
 
     if (checkedDocs[nroDoc]) {
-      // Auto-enable retenciones si es contribuyente especial y tiene IVA
+      // Auto-enable retenciones si es contribuyente especial y tiene IVA (SOLO si no tiene retención previa)
       if (
         selectedClient?.contribu_e &&
         doc.monto_imp > 0 &&
+        !input.yaTieneRetIva &&
         !input.manual_override_iva &&
         !input.showIvaDetails
       ) {
@@ -559,7 +606,11 @@
       }
 
       // Retención de IVA
-      if (input.showIvaDetails) {
+      if (input.yaTieneRetIva) {
+        input.showIvaDetails = false;
+        input.reten_iva_bs = 0;
+        input.reten_iva = 0;
+      } else if (input.showIvaDetails) {
         if (!input.manual_override_iva && input.reten_iva === 0) {
           const porc = (selectedClient && selectedClient.contribu_e) ? (Number(selectedClient.porc_esp) || 75) : 0;
           input.reten_iva_bs = Math.round(doc.monto_imp * (porc / 100) * 100) / 100;
@@ -579,7 +630,11 @@
       }
 
       // Retención de ISLR
-      if (input.showIslrDetails) {
+      if (input.yaTieneRetIslr) {
+        input.showIslrDetails = false;
+        input.reten_islr_bs = 0;
+        input.reten_islr = 0;
+      } else if (input.showIslrDetails) {
         if (!input.manual_override_islr && input.reten_islr === 0) {
           const baseImpBs = input.base_imponible_islr_bs > 0 ? input.base_imponible_islr_bs : (doc.total_neto - doc.monto_imp);
           input.reten_islr_bs = Math.round(baseImpBs * (input.porc_islr / 100) * 100) / 100;
@@ -602,6 +657,10 @@
       input.showIvaDetails = false;
       input.showIslrDetails = false;
     }
+
+    if (syncInstrument) {
+      syncSinglePaymentInstrument();
+    }
   }
 
   function clearClient() {
@@ -612,10 +671,94 @@
     formasPago = [];
   }
 
+  // Helper para calcular el monto neto pendiente que deja el saldo del documento en 0
+  function getRemainingPendingBalance(excludeIndex: number = -1) {
+    let creditFromNCsBs = 0;
+    let creditFromNCsUsd = 0;
+
+    for (const doc of documentos) {
+      const nro = doc.nro_doc.trim();
+      if (!checkedDocs[nro]) continue;
+      if (doc.co_tipo_doc.trim() === "N/CR") {
+        const docTasa = doc.tasa > 0 ? doc.tasa : (currentExchangeRate > 0 ? currentExchangeRate : 1);
+        creditFromNCsBs += doc.saldo;
+        creditFromNCsUsd += Math.round((doc.saldo / docTasa) * 100) / 100;
+      }
+    }
+
+    let totalNeededBs = 0;
+    let totalNeededUsd = 0;
+
+    for (const doc of documentos) {
+      const nro = doc.nro_doc.trim();
+      if (!checkedDocs[nro]) continue;
+      if (doc.co_tipo_doc.trim() === "N/CR") continue;
+
+      const inp = docInputs[nro];
+      const docTasa = doc.tasa > 0 ? doc.tasa : (currentExchangeRate > 0 ? currentExchangeRate : 1);
+      const retIvaBs = (!inp?.yaTieneRetIva && inp?.showIvaDetails) ? (Number(inp.reten_iva_bs) || 0) : 0;
+      const retIslrBs = (!inp?.yaTieneRetIslr && inp?.showIslrDetails) ? (Number(inp.reten_islr_bs) || 0) : 0;
+      const retIvaUsd = (!inp?.yaTieneRetIva && inp?.showIvaDetails) ? (Number(inp.reten_iva) || 0) : 0;
+      const retIslrUsd = (!inp?.yaTieneRetIslr && inp?.showIslrDetails) ? (Number(inp.reten_islr) || 0) : 0;
+
+      // Cálculo del diferencial cambiario N/DB si la factura es de una fecha anterior
+      const docFecEmisStr = doc.fec_emis ? new Date(doc.fec_emis).toISOString().split('T')[0] : '';
+      const todayStr = new Date().toISOString().split('T')[0];
+      const isPreviousDateDoc = docFecEmisStr && docFecEmisStr < todayStr;
+      let diffBs = 0;
+      if (isPreviousDateDoc && doc.saldo > 0 && currentExchangeRate > docTasa) {
+        const saldoUsd = doc.saldo / docTasa;
+        const montoBsActual = Math.round((saldoUsd * currentExchangeRate) * 100) / 100;
+        diffBs = Math.max(0, Math.round((montoBsActual - doc.saldo) * 100) / 100);
+      }
+
+      const maxBs = Math.max(0, doc.saldo - retIvaBs - retIslrBs + diffBs);
+      const maxUsd = Math.max(0, (doc.saldo / docTasa) - retIvaUsd - retIslrUsd);
+
+      totalNeededBs += maxBs;
+      totalNeededUsd += maxUsd;
+    }
+
+    let otherInstrumentsBs = 0;
+    let otherInstrumentsUsd = 0;
+
+    formasPago.forEach((fp, i) => {
+      if (i !== excludeIndex) {
+        otherInstrumentsBs += Math.abs(Number(fp.mont_doc_bs) || 0);
+        otherInstrumentsUsd += Math.abs(Number(fp.mont_doc) || 0);
+      }
+    });
+
+    const pendingBs = Math.max(0, Math.round((totalNeededBs - creditFromNCsBs - otherInstrumentsBs) * 100) / 100);
+    const pendingUsd = Math.max(0, Math.round((totalNeededUsd - creditFromNCsUsd - otherInstrumentsUsd) * 100) / 100);
+
+    return { pendingBs, pendingUsd };
+  }
+
+  function applyExactPendingAmount(index: number) {
+    if (!formasPago[index]) return;
+    const fp = formasPago[index];
+    const curr = getRowCurrency(fp);
+    const rate = currentExchangeRate > 0 ? currentExchangeRate : 1;
+    const { pendingBs, pendingUsd } = getRemainingPendingBalance(index);
+
+    if (curr === "BS") {
+      fp.mont_doc_bs = pendingBs;
+      fp.mont_doc = Math.round((pendingBs / rate) * 100) / 100;
+    } else {
+      fp.mont_doc = pendingUsd;
+      // Para USD, fijar exactamente el equivalente en Bs pendiente para garantizar saldo 0 Bs en Profit Plus
+      fp.mont_doc_bs = pendingBs;
+    }
+  }
+
+  function syncSinglePaymentInstrument() {
+    if (formasPago.length === 1 && !formasPago[0].manual_override) {
+      applyExactPendingAmount(0);
+    }
+  }
+
   function addFormaPago() {
-    // Calcular el monto pendiente = neto esperado - instrumentos ya agregados
-    const pendingBs = Math.max(0, Math.round((expectedNetPayBs - totalInstrumentosPagoBs) * 100) / 100);
-    const pendingUsd = Math.max(0, Math.round((expectedNetPayUsd - totalInstrumentosPago) * 100) / 100);
     const initialFp = {
       forma_pag: "EF",
       cod_caja: data.cajas[0]?.cod_caja || "",
@@ -626,24 +769,22 @@
       mont_doc: 0,
       mont_doc_bs: 0,
       fecha_che: new Date().toISOString().substring(0, 10),
+      manual_override: false,
     };
-    const isBs = getRowCurrency(initialFp) === 'BS';
-    if (isBs) {
-      initialFp.mont_doc_bs = pendingBs;
-      initialFp.mont_doc = Math.round((initialFp.mont_doc_bs / (currentExchangeRate > 0 ? currentExchangeRate : 1)) * 100) / 100;
-    } else {
-      initialFp.mont_doc = pendingUsd;
-      initialFp.mont_doc_bs = Math.round(initialFp.mont_doc * currentExchangeRate * 100) / 100;
-    }
-    formasPago.push(initialFp);
+    const newIndex = formasPago.length;
+    formasPago = [...formasPago, initialFp];
+    applyExactPendingAmount(newIndex);
   }
 
   function removeFormaPago(index: number) {
     formasPago = formasPago.filter((_, i) => i !== index);
+    syncSinglePaymentInstrument();
   }
 
   function handleFormaPagChange(index: number) {
     const fp = formasPago[index];
+    if (!fp) return;
+    fp.manual_override = false;
     if (fp.forma_pag === "EF") {
       fp.cod_caja = data.cajas[0]?.cod_caja || "";
       fp.cod_cta = "";
@@ -666,30 +807,28 @@
       fp.co_ban = data.bancos[0]?.co_ban || "";
       fp.co_tar = "";
     }
-    handleCajaCtaChange(index);
+    applyExactPendingAmount(index);
   }
 
   function handleCajaCtaChange(index: number) {
     const fp = formasPago[index];
-    const isBs = getRowCurrency(fp) === 'BS';
+    if (!fp) return;
+    fp.manual_override = false;
+    applyExactPendingAmount(index);
+  }
+
+  function handleAmountChange(index: number, val: number) {
+    const fp = formasPago[index];
+    if (!fp) return;
+    const curr = getRowCurrency(fp);
     const rate = currentExchangeRate > 0 ? currentExchangeRate : 1;
 
-    if (formasPago.length === 1) {
-      if (isBs) {
-        fp.mont_doc_bs = Math.round(expectedNetPayBs * 100) / 100;
-        fp.mont_doc = Math.round((fp.mont_doc_bs / rate) * 100) / 100;
-      } else {
-        fp.mont_doc = Math.round(expectedNetPayUsd * 100) / 100;
-        fp.mont_doc_bs = Math.round(fp.mont_doc * rate * 100) / 100;
-      }
+    if (curr === "BS") {
+      fp.mont_doc_bs = Number(val) || 0;
+      fp.mont_doc = Math.round((fp.mont_doc_bs / rate) * 100) / 100;
     } else {
-      if (isBs) {
-        fp.mont_doc_bs = Math.round(fp.mont_doc * rate * 100) / 100;
-        fp.mont_doc = Math.round((fp.mont_doc_bs / rate) * 100) / 100;
-      } else {
-        fp.mont_doc = Math.round((fp.mont_doc_bs / rate) * 100) / 100;
-        fp.mont_doc_bs = Math.round(fp.mont_doc * rate * 100) / 100;
-      }
+      fp.mont_doc = Number(val) || 0;
+      fp.mont_doc_bs = Math.round(fp.mont_doc * rate * 100) / 100;
     }
   }
 
@@ -773,15 +912,18 @@
         const docTasa = doc.tasa > 0 ? doc.tasa : 1;
         const saldoUsd = Math.round((doc.saldo / docTasa) * 100) / 100;
         
-        const retIvaBs = inp.reten_iva_bs || 0;
-        const retIslrBs = inp.reten_islr_bs || 0;
+        const retIvaBs = (!inp.yaTieneRetIva && inp.showIvaDetails) ? (inp.reten_iva_bs || 0) : 0;
+        const retIslrBs = (!inp.yaTieneRetIslr && inp.showIslrDetails) ? (inp.reten_islr_bs || 0) : 0;
+        const retIvaUsd = (!inp.yaTieneRetIva && inp.showIvaDetails) ? (inp.reten_iva || 0) : 0;
+        const retIslrUsd = (!inp.yaTieneRetIslr && inp.showIslrDetails) ? (inp.reten_islr || 0) : 0;
         
-        // Calcular el abono total teorico en USD para pagar la factura completa
-        const fullAbonoUsd = Math.round((saldoUsd - (inp.reten_iva || 0) - (inp.reten_islr || 0)) * 100) / 100;
+        // Calcular el abono total teórico en USD para liquidar la factura completa
+        const fullAbonoUsd = Math.round((saldoUsd - retIvaUsd - retIslrUsd) * 100) / 100;
         
         let montCobBs;
-        if (Math.abs(Math.abs(inp.mont_cob) - fullAbonoUsd) < 0.005) {
-          // Si es pago completo, mont_cob en Bs es exactamente el saldo restante del documento menos retenciones
+        if (Math.abs(Math.abs(inp.mont_cob) - fullAbonoUsd) < 0.01) {
+          // Si el cliente paga la totalidad de la deuda en divisa (diferencia menor a 0,01 USD),
+          // amortizar automáticamente el 100% del saldo en Bs del documento para dejar saldo 0 Bs
           montCobBs = Math.round((doc.saldo - retIvaBs - retIslrBs) * 100) / 100;
           if (inp.mont_cob < 0) {
             montCobBs = -montCobBs;
@@ -819,10 +961,11 @@
       return;
     }
 
-
-
     const retenciones_iva = documentos
-      .filter((doc) => checkedDocs[doc.nro_doc] && docInputs[doc.nro_doc].reten_iva_bs > 0)
+      .filter((doc) => {
+        const inp = docInputs[doc.nro_doc];
+        return checkedDocs[doc.nro_doc] && inp && !inp.yaTieneRetIva && inp.showIvaDetails && inp.reten_iva_bs > 0;
+      })
       .map((doc) => {
         const inp = docInputs[doc.nro_doc];
         const today = new Date();
@@ -848,7 +991,10 @@
       });
 
     const retenciones_islr = documentos
-      .filter((doc) => checkedDocs[doc.nro_doc] && docInputs[doc.nro_doc].reten_islr_bs > 0)
+      .filter((doc) => {
+        const inp = docInputs[doc.nro_doc];
+        return checkedDocs[doc.nro_doc] && inp && !inp.yaTieneRetIslr && inp.showIslrDetails && inp.reten_islr_bs > 0;
+      })
       .map((doc) => {
         const inp = docInputs[doc.nro_doc];
         return {
@@ -877,7 +1023,7 @@
     let totalFpBs = 0;
     const formas_pago_cleaned = formasPago.map((fp) => {
       const isBs = getRowCurrency(fp) === 'BS';
-      const montDocBs = isBs ? (fp.mont_doc_bs || 0) : Math.round(fp.mont_doc * tasaCobro * 100) / 100;
+      const montDocBs = isBs ? (fp.mont_doc_bs || 0) : (fp.mont_doc_bs || Math.round(fp.mont_doc * tasaCobro * 100) / 100);
       totalFpBs += montDocBs;
       return {
         forma_pag: fp.forma_pag,
@@ -1341,45 +1487,50 @@
                                 class="block text-xs font-black text-text-muted uppercase"
                                 >Reten. IVA ($)</label
                               >
-                              <button
-                                onclick={() => {
-                                  input.showIvaDetails = !input.showIvaDetails;
-                                  if (!input.showIvaDetails) {
-                                    input.reten_iva_bs = 0;
-                                    input.reten_iva = 0;
-                                    input.manual_override_iva = true;
-                                  } else {
-                                    input.manual_override_iva = false;
-                                  }
-                                  recalculateDocAmounts(doc.nro_doc.trim(), doc);
-                                }}
-                                class="text-xs text-brand-500 font-bold hover:underline"
-                              >
-                                {input.showIvaDetails ? "Cerrar" : "Editar"}
-                              </button>
+                              {#if input.yaTieneRetIva}
+                                <span
+                                  class="text-[10px] text-emerald-400 bg-emerald-500/10 border border-emerald-500/30 px-1.5 py-0.5 rounded font-black tracking-wide"
+                                  title={input.nro_comp_iva_previo ? `Comprobante: ${input.nro_comp_iva_previo}` : 'Ya aplicada en cobro previo'}
+                                >
+                                  Ya Aplicada
+                                </span>
+                              {:else}
+                                <button
+                                  onclick={() => {
+                                    input.showIvaDetails = !input.showIvaDetails;
+                                    if (!input.showIvaDetails) {
+                                      input.reten_iva_bs = 0;
+                                      input.reten_iva = 0;
+                                      input.manual_override_iva = true;
+                                    } else {
+                                      input.manual_override_iva = false;
+                                    }
+                                    recalculateDocAmounts(doc.nro_doc.trim(), doc);
+                                  }}
+                                  class="text-xs text-brand-500 font-bold hover:underline cursor-pointer"
+                                >
+                                  {input.showIvaDetails ? "Cerrar" : "Aplicar"}
+                                </button>
+                              {/if}
                             </div>
                             <input
                               type="number"
                               step="0.01"
-                              value={input.showIvaDetails ? input.reten_iva : (() => {
-                                const porcIva = (selectedClient && selectedClient.contribu_e) ? (Number(selectedClient.porc_esp) || 0) : 0;
-                                const theoreticalRetIvaBs = Math.round((doc.monto_imp || 0) * (porcIva / 100) * 100) / 100;
-                                return Math.round((theoreticalRetIvaBs / (doc.tasa > 0 ? doc.tasa : 1)) * 100) / 100;
-                              })()}
+                              value={input.yaTieneRetIva ? input.monto_ret_iva_previo_usd : (input.showIvaDetails ? input.reten_iva : 0)}
                               readonly
-                              class="w-full bg-surface-soft border border-border-subtle px-3 py-2 rounded-xl text-sm font-bold text-green-400 text-right cursor-not-allowed opacity-90"
+                              class="w-full bg-surface-soft border border-border-subtle px-3 py-2 rounded-xl text-sm font-bold {input.yaTieneRetIva ? 'text-emerald-400' : 'text-green-400'} text-right cursor-not-allowed opacity-90"
                             />
                             <span
-                              class="block text-xs text-green-500 font-black text-right mt-1.5"
+                              class="block text-xs {input.yaTieneRetIva ? 'text-emerald-500/80' : 'text-green-500'} font-black text-right mt-1.5"
                             >
                               Bs. {(
-                                input.showIvaDetails ? (input.reten_iva_bs || 0) : (() => {
-                                  const porcIva = (selectedClient && selectedClient.contribu_e) ? (Number(selectedClient.porc_esp) || 0) : 0;
-                                  return Math.round((doc.monto_imp || 0) * (porcIva / 100) * 100) / 100;
-                                })()
+                                input.yaTieneRetIva ? (input.monto_ret_iva_previo_bs || 0) : (input.showIvaDetails ? (input.reten_iva_bs || 0) : 0)
                               ).toLocaleString("de-DE", {
                                 minimumFractionDigits: 2,
                               })}
+                              {#if input.yaTieneRetIva && input.nro_comp_iva_previo}
+                                <span class="block text-[10px] font-normal text-text-muted mt-0.5">Comp: {input.nro_comp_iva_previo}</span>
+                              {/if}
                             </span>
                           </div>
                           {/if}
@@ -1391,44 +1542,56 @@
                                 class="block text-xs font-black text-text-muted uppercase"
                                 >Reten. ISLR ($)</label
                               >
-                              <button
-                                onclick={() => {
-                                  input.showIslrDetails = !input.showIslrDetails;
-                                  if (!input.showIslrDetails) {
-                                    input.reten_islr_bs = 0;
-                                    input.reten_islr = 0;
-                                    input.manual_override_islr = true;
-                                  } else {
-                                    input.manual_override_islr = false;
-                                  }
-                                  recalculateDocAmounts(doc.nro_doc.trim(), doc);
-                                }}
-                                class="text-xs text-brand-500 font-bold hover:underline"
-                              >
-                                {input.showIslrDetails ? "Cerrar" : "Editar"}
-                              </button>
+                              {#if input.yaTieneRetIslr}
+                                <span
+                                  class="text-[10px] text-amber-400 bg-amber-500/10 border border-amber-500/30 px-1.5 py-0.5 rounded font-black tracking-wide"
+                                  title={input.nro_comp_islr_previo ? `Comprobante: ${input.nro_comp_islr_previo}` : 'Ya aplicada en cobro previo'}
+                                >
+                                  Ya Aplicada
+                                </span>
+                              {:else}
+                                <button
+                                  onclick={() => {
+                                    input.showIslrDetails = !input.showIslrDetails;
+                                    if (!input.showIslrDetails) {
+                                      input.reten_islr_bs = 0;
+                                      input.reten_islr = 0;
+                                      input.manual_override_islr = true;
+                                    } else {
+                                      input.manual_override_islr = false;
+                                    }
+                                    recalculateDocAmounts(doc.nro_doc.trim(), doc);
+                                  }}
+                                  class="text-xs text-brand-500 font-bold hover:underline cursor-pointer"
+                                >
+                                  {input.showIslrDetails ? "Cerrar" : "Aplicar"}
+                                </button>
+                              {/if}
                             </div>
                             <input
                               type="number"
                               step="0.01"
-                              bind:value={input.reten_islr}
+                              value={input.yaTieneRetIslr ? input.monto_ret_islr_previo_usd : (input.showIslrDetails ? input.reten_islr : 0)}
                               readonly
                               class="w-full bg-surface-soft border border-border-subtle px-3 py-2 rounded-xl text-sm font-bold text-amber-400 text-right cursor-not-allowed opacity-90"
                             />
                             <span
-                              class="block text-xs text-amber-400 font-black text-right mt-1.5"
+                              class="block text-xs {input.yaTieneRetIslr ? 'text-amber-500/80' : 'text-amber-400'} font-black text-right mt-1.5"
                             >
                               Bs. {(
-                                input.reten_islr_bs || 0
+                                input.yaTieneRetIslr ? (input.monto_ret_islr_previo_bs || 0) : (input.showIslrDetails ? (input.reten_islr_bs || 0) : 0)
                               ).toLocaleString("de-DE", {
                                 minimumFractionDigits: 2,
                               })}
+                              {#if input.yaTieneRetIslr && input.nro_comp_islr_previo}
+                                <span class="block text-[10px] font-normal text-text-muted mt-0.5">Comp: {input.nro_comp_islr_previo}</span>
+                              {/if}
                             </span>
                           </div>
                         </div>
 
                         <!-- Detalles Retención IVA (Inputs manuales) -->
-                        {#if input.showIvaDetails && Number(selectedClient?.porc_esp) > 0}
+                        {#if input.showIvaDetails && !input.yaTieneRetIva && Number(selectedClient?.porc_esp) > 0}
                           <div
                             class="bg-green-500/5 border border-green-500/20 p-4 rounded-2xl space-y-3 text-xs animate-in slide-in-from-top-2 duration-150"
                           >
@@ -1510,7 +1673,7 @@
                         {/if}
 
                         <!-- Detalles Retención ISLR (Inputs manuales) -->
-                        {#if input.showIslrDetails}
+                        {#if input.showIslrDetails && !input.yaTieneRetIslr}
                           <div
                             class="bg-amber-500/5 border border-amber-500/20 p-4 rounded-2xl space-y-3 text-xs animate-in slide-in-from-top-2 duration-150"
                           >
@@ -2004,36 +2167,39 @@
 
                     <!-- Monto -->
                     <div>
-                      <span
-                        class="text-[9px] text-text-muted font-bold block mb-1 uppercase"
-                        >Monto Instrumento ({getRowCurrency(fp) === 'BS' ? 'Bs.' : 'USD'})</span
-                      >
+                      <div class="flex justify-between items-center mb-1">
+                        <span
+                          class="text-[9px] text-text-muted font-bold block uppercase"
+                          >Monto {getRowCurrency(fp) === 'BS' ? 'en Bolívares (Bs.)' : 'en Dólares ($)'}</span
+                        >
+                        <div class="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onclick={() => {
+                              fp.manual_override = false;
+                              applyExactPendingAmount(index);
+                            }}
+                            class="text-[9px] text-brand-400 hover:text-brand-300 font-bold underline cursor-pointer"
+                            title="Ajustar automáticamente para saldar el documento en 0"
+                          >
+                            Saldar pendiente
+                          </button>
+                          <span class="text-[10px] text-brand-400 font-bold">
+                            {getRowCurrency(fp) === 'BS' ? `Equiv: $ ${fp.mont_doc || 0}` : `Equiv: Bs. ${fp.mont_doc_bs || 0}`}
+                          </span>
+                        </div>
+                      </div>
                       <input
                         type="number"
                         step="0.01"
                         placeholder="0.00"
                         value={getRowCurrency(fp) === 'BS' ? (Math.round((fp.mont_doc_bs || 0) * 100) / 100) : (Math.round((fp.mont_doc || 0) * 100) / 100)}
                         oninput={(e) => {
-                          const val = Number(e.currentTarget.value) || 0;
-                          if (getRowCurrency(fp) === 'BS') {
-                            fp.mont_doc_bs = val;
-                            fp.mont_doc = Math.round((val / (currentExchangeRate > 0 ? currentExchangeRate : 1)) * 100) / 100;
-                          } else {
-                            fp.mont_doc = val;
-                            fp.mont_doc_bs = Math.round(val * currentExchangeRate * 100) / 100;
-                          }
+                          fp.manual_override = true;
+                          handleAmountChange(index, Number(e.currentTarget.value));
                         }}
-                        class="w-full h-12 px-4 bg-surface-soft border border-border-subtle rounded-xl focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none transition-all font-black text-xs text-text-base text-right"
+                        class="w-full h-12 px-4 bg-surface-soft border border-border-subtle rounded-xl focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none transition-all font-black text-sm text-text-base text-right font-mono"
                       />
-                      <span
-                        class="block text-[9px] text-text-muted/60 text-right mt-1 font-bold"
-                      >
-                        {getRowCurrency(fp) === 'BS' ? 'Equivalente USD:' : 'Equivalente Bs.:'} {(
-                          getRowCurrency(fp) === 'BS'
-                            ? (fp.mont_doc || 0)
-                            : (fp.mont_doc_bs || 0)
-                        ).toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                      </span>
                     </div>
 
                   </div>

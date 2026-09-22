@@ -38,6 +38,45 @@ export const GET: RequestHandler = async ({ url, locals, fetch }) => {
 		let enrichedData = resData.data || [];
 
 		if (enrichedData.length > 0) {
+			// Enriquecer con información de retenciones previas si profit-agente aún no las tiene cargadas en memoria
+			if (enrichedData[0].ya_reten_iva_bs === undefined) {
+				try {
+					const docNums = enrichedData.map((d: any) => `'${d.nro_doc.trim()}'`).join(',');
+					const sqlQuery = `
+						SELECT RTRIM(pdr.nro_doc) AS nro_doc,
+						       SUM(ISNULL(pdr.monto_retencion_iva, 0)) AS ya_reten_iva_bs,
+						       SUM(ISNULL(pdr.monto_retencion, 0)) AS ya_reten_islr_bs,
+						       MAX(CASE WHEN UPPER(RTRIM(dc.co_tipo_doc)) = 'IVAN' THEN RTRIM(dc.nro_doc) ELSE '' END) AS nro_comp_iva,
+						       MAX(CASE WHEN UPPER(RTRIM(dc.co_tipo_doc)) = 'ISLR' THEN RTRIM(dc.nro_doc) ELSE '' END) AS nro_comp_islr
+						FROM saPagoDocReng pdr
+						INNER JOIN saPago p ON pdr.cob_num = p.cob_num
+						LEFT JOIN saDocumentoCompra dc ON dc.doc_orig = 'PAGO' AND LTRIM(RTRIM(dc.nro_orig)) = LTRIM(RTRIM(p.cob_num))
+						WHERE p.anulado = 0 AND LTRIM(RTRIM(pdr.nro_doc)) IN (${docNums})
+						GROUP BY pdr.nro_doc
+					`;
+					const retRes = await agentClient.request<any>('/query', {
+						method: 'POST',
+						body: { query: sqlQuery }
+					});
+					const retList = retRes.data || [];
+					const retMap = new Map();
+					retList.forEach((r: any) => retMap.set(r.nro_doc?.trim(), r));
+
+					enrichedData = enrichedData.map((inv: any) => {
+						const ret = retMap.get(inv.nro_doc.trim());
+						return {
+							...inv,
+							ya_reten_iva_bs: ret ? Number(ret.ya_reten_iva_bs) : 0,
+							ya_reten_islr_bs: ret ? Number(ret.ya_reten_islr_bs) : 0,
+							nro_comp_iva: ret ? (ret.nro_comp_iva || '') : '',
+							nro_comp_islr: ret ? (ret.nro_comp_islr || '') : ''
+						};
+					});
+				} catch (errQuery: any) {
+					console.error('[API PAYABLES PENDING DOCUMENTS] Error querying retentions:', errQuery.message);
+				}
+			}
+
 			const { data: profiles } = await supabaseAdmin
 				.from('profiles')
 				.select('profit_user_id, full_name');

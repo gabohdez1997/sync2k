@@ -360,7 +360,8 @@
             disponibilidad: validDispo,
             precios: fresh.precios && fresh.precios.length > 0 ? fresh.precios : cart[i].precios,
             unidad: fresh.unidad || cart[i].unidad,
-            porc_imp: fresh.tipo_imp === "7" ? 0 : (fresh.porc_imp ?? cart[i].porc_imp),
+            tipo_imp: (fresh.tipo_imp === "6" || fresh.tipo_imp === "7") ? "6" : (fresh.tipo_imp || "1"),
+            porc_imp: (fresh.tipo_imp === "6" || fresh.tipo_imp === "7") ? 0 : (fresh.porc_imp ?? cart[i].porc_imp),
           };
         }
       } catch (e) {
@@ -542,6 +543,7 @@
       cart[existingIndex].qty += qty;
       cart[existingIndex].precio_usd = costUSD;
       cart[existingIndex].precio_ves = costVES;
+      cart[existingIndex].costo_usd = costUSD;
       cart[existingIndex].price_selected = {
         precio: costUSD,
         precio_ves: costVES,
@@ -556,6 +558,7 @@
         qty,
         precio_usd: costUSD,
         precio_ves: costVES,
+        costo_usd: costUSD,
         price_selected: {
           precio: costUSD,
           precio_ves: costVES,
@@ -564,7 +567,8 @@
         co_alma_selected: warehouse,
         co_uni: article.unidad || article.co_uni || "UND",
         unidad: article.unidad || article.co_uni || "UND",
-        porc_imp: article.tipo_imp === "7" ? 0 : 16,
+        tipo_imp: (article.tipo_imp === "6" || article.tipo_imp === "7") ? "6" : (article.tipo_imp || "1"),
+        porc_imp: (article.tipo_imp === "6" || article.tipo_imp === "7") ? 0 : 16,
         disponibilidad: article.disponibilidad || [],
         precios: article.precios || []
       });
@@ -602,6 +606,7 @@
 
     item.precio_usd = costUSD;
     item.precio_ves = costVES;
+    item.costo_usd = costUSD;
     item.price_selected = {
       precio: costUSD,
       precio_ves: costVES,
@@ -617,8 +622,12 @@
 
     cart.forEach((item) => {
       const isStrictlyExempt =
-        (item.co_subl || "").trim() === "0901" ||
-        (item.co_art || "").startsWith("0901");
+        (item.co_subl || item.article?.co_subl || "").trim() === "0901" ||
+        (item.co_art || "").startsWith("0901") ||
+        item.tipo_imp === "6" ||
+        item.tipo_imp === "7" ||
+        item.article?.tipo_imp === "6" ||
+        item.article?.tipo_imp === "7";
 
       const rate = isStrictlyExempt ? 0 : orderTaxRate;
 
@@ -1083,7 +1092,8 @@
             co_alma_selected: warehouse,
             co_uni: art.unidad || art.co_uni || "UND",
             unidad: art.unidad || art.co_uni || "UND",
-            porc_imp: art.tipo_imp === "7" ? 0 : 16,
+            tipo_imp: (art.tipo_imp === "6" || art.tipo_imp === "7") ? "6" : (art.tipo_imp || "1"),
+            porc_imp: (art.tipo_imp === "6" || art.tipo_imp === "7") ? 0 : 16,
             disponibilidad: art.disponibilidad || [],
             precios: art.precios || []
           });
@@ -1129,7 +1139,7 @@
           co_art: c.co_art || c.codigo,
           art_des: c.art_des || c.descripcion,
           nuevo_costo_usd: showUSD
-            ? Number(c.price_selected?.precio || c.precio_usd || 0)
+            ? Number(c.price_selected?.precio || c.precio_usd || c.costo_usd || 0)
             : (Number(c.price_selected?.precio_ves || c.precio_ves || 0) / (Number(data.activeRate || 1) > 1 ? Number(data.activeRate) : 1))
         }));
 
@@ -1145,9 +1155,13 @@
         const pData = await pRes.json();
         if (pData.success && pData.hasChanges && pData.changes?.length > 0) {
           detectedPriceChanges = pData.changes;
+          showSaveConfirmationModal = false;
           showPriceModal = true;
           isCheckingPrices = false;
           return;
+        } else if (!pData.success) {
+          console.warn("Aviso al verificar cambios de precios:", pData.message);
+          toast.warning("Aviso al verificar actualización de precios: " + (pData.message || "Error en el servidor"));
         }
       } catch (err) {
         console.warn("Error verificando preview de precios en orden:", err);
@@ -2620,10 +2634,14 @@
                       co_mone: showUSD ? 'USD' : 'BS',
                       renglones: cart.map((c, i) => {
                         const isStrictlyExempt =
-                          (c.co_subl || "").trim() === "0901" ||
-                          (c.co_art || "").startsWith("0901");
+                          (c.co_subl || c.article?.co_subl || "").trim() === "0901" ||
+                          (c.co_art || "").startsWith("0901") ||
+                          c.tipo_imp === "6" ||
+                          c.tipo_imp === "7" ||
+                          c.article?.tipo_imp === "6" ||
+                          c.article?.tipo_imp === "7";
                         const rate = isStrictlyExempt ? 0 : orderTaxRate;
-                        const taxType = rate === 16 ? "1" : "5";
+                        const taxType = rate > 0 ? "1" : "6"; // '1' = Tasa General (16%), '6' = Compra Exenta (0%)
                         const branchDefaultAlma = data.context?.warehouses?.[0]?.co_alma || selectedWarehouse || '01';
                         return {
                           reng_num: i + 1,

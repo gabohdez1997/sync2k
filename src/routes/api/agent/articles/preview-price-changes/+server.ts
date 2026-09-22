@@ -1,5 +1,5 @@
 import { json } from '@sveltejs/kit';
-import { supabaseAdmin } from '$lib/server/supabase';
+import { getActiveBranches } from '$lib/server/branches';
 import { AgentClient } from '$lib/server/agent';
 import type { RequestHandler } from './$types';
 
@@ -13,7 +13,14 @@ export const POST: RequestHandler = async ({ request, locals, fetch: svelteFetch
         const body = await request.json();
         const { branch_id, items } = body;
 
-        const allowedBranches = profile.allowed_branches || [];
+        const allBranches = await getActiveBranches(svelteFetch);
+        const profileAllowed = profile?.allowed_branches || [];
+        const profileBranchIds: string[] = Array.isArray(profileAllowed) 
+            ? profileAllowed.map((b: any) => (typeof b === 'object' ? b.id : b))
+            : [];
+        const isAdmin = profileBranchIds.length === 0;
+        const allowedBranches = isAdmin ? allBranches : allBranches.filter(b => profileBranchIds.includes(b.id));
+
         const branch = allowedBranches.find((b: any) => b.id === branch_id) || allowedBranches[0];
 
         if (!branch || !branch.agent_url) {

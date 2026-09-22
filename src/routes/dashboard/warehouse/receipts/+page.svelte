@@ -571,21 +571,31 @@
         nro_fact: nroFacturaProveedor.trim() || undefined,
         comentario: observations.trim() ? `${observations.trim()} | OC: ${ocDisplay}` : `Recepción de OC: ${ocDisplay}`,
         co_alma_defecto: data.defaultWarehouse || "01",
-        renglones: linesToProcess.map((l, i) => ({
-          reng_num: i + 1,
-          reng_num_oc: l.reng_num_oc || l.reng_num,
-          rowguid_doc: l.rowguid_doc,
-          num_doc: l.doc_num || primaryOrder.doc_num,
-          co_art: l.co_art,
-          art_des: l.art_des,
-          co_uni: l.co_uni || "UNI",
-          co_alma: l.co_alma || data.defaultWarehouse || data.warehouses?.[0]?.co_alma || "01",
-          cantidad: Number(l.cant_recibida),
-          cost_unit_om: Number(l.cost_unit_om || l.cost_unit || 0),
-          cost_unit: Number(l.cost_unit || 0),
-          porc_imp: Number(l.porc_imp != null ? l.porc_imp : 0),
-          tipo_imp: l.tipo_imp || "1"
-        }))
+        renglones: linesToProcess.map((l, i) => {
+          const pImp = Number(l.porc_imp != null ? l.porc_imp : 0);
+          // Profit Plus Compras: '1' = Tasa General (16%), '6' = Compra Exenta (0%). '5' es solo Ventas.
+          let finalTipoImp = l.tipo_imp ? String(l.tipo_imp).trim() : (pImp > 0 ? "1" : "6");
+          if (finalTipoImp === "5" || finalTipoImp === "7" || pImp === 0) {
+            finalTipoImp = pImp > 0 ? "1" : "6";
+          } else if (pImp > 0 && finalTipoImp !== "2" && finalTipoImp !== "3") {
+            finalTipoImp = "1";
+          }
+          return {
+            reng_num: i + 1,
+            reng_num_oc: l.reng_num_oc || l.reng_num,
+            rowguid_doc: l.rowguid_doc,
+            num_doc: l.doc_num || primaryOrder.doc_num,
+            co_art: l.co_art,
+            art_des: l.art_des,
+            co_uni: l.co_uni || "UNI",
+            co_alma: l.co_alma || data.defaultWarehouse || data.warehouses?.[0]?.co_alma || "01",
+            cantidad: Number(l.cant_recibida),
+            cost_unit_om: Number(l.cost_unit_om || l.cost_unit || 0),
+            cost_unit: Number(l.cost_unit || 0),
+            porc_imp: pImp,
+            tipo_imp: finalTipoImp
+          };
+        })
       };
 
       const formData = new FormData();
