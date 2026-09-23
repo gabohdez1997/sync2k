@@ -90,7 +90,7 @@
     fec_venc: dayjs().format("YYYY-MM-DD"),
     descrip: "",
     comentario: "",
-    descuento_global: 0
+    descuento_global_porc: 0
   });
 
   // Invoice Lines
@@ -107,6 +107,7 @@
     pendiente_original: number;
     costo_usd: number;
     costo_bs?: number;
+    porc_desc?: number;
     porc_imp: number;
     tipo_imp: string;
     doc_num_reception: string;
@@ -149,9 +150,12 @@
       if (line.checked) {
         const qty = Number(line.cantidad || 0);
         const cost = Number(line.costo_usd || 0);
-        const pImp = taxRateOption === 0 ? 0 : Number(line.porc_imp || 16);
+        const descRowPorc = Math.max(0, Math.min(100, Number(line.porc_desc || 0)));
+        const grossLine = qty * cost;
+        const descLine = grossLine * (descRowPorc / 100);
+        const lineNet = grossLine - descLine;
 
-        const lineNet = qty * cost;
+        const pImp = taxRateOption === 0 ? 0 : Number(line.porc_imp || 0);
         const lineTax = lineNet * (pImp / 100);
 
         subtotalUSD += lineNet;
@@ -159,7 +163,8 @@
       }
     }
 
-    const descGlobUSD = Number(invoiceMetadata.descuento_global || 0);
+    const descGlobPorc = Math.max(0, Math.min(100, Number(invoiceMetadata.descuento_global_porc || 0)));
+    const descGlobUSD = subtotalUSD * (descGlobPorc / 100);
     const subtotalAfterDescUSD = Math.max(0, subtotalUSD - descGlobUSD);
     const totalUSD = subtotalAfterDescUSD + totalTaxUSD;
 
@@ -167,6 +172,7 @@
 
     return {
       subtotalUSD,
+      descGlobPorc,
       descGlobUSD,
       totalTaxUSD,
       totalUSD,
@@ -300,8 +306,9 @@
         pendiente_original: pendingQty,
         costo_usd: unitCostUSD,
         costo_bs: unitCostBS,
-        porc_imp: Number(r.porc_imp || 0),
-        tipo_imp: (r.tipo_imp || "1").trim(),
+        porc_desc: Number(r.porc_desc || 0),
+        porc_imp: Number(r.porc_imp != null ? r.porc_imp : (r.tipo_imp === "6" ? 0 : 16)),
+        tipo_imp: (r.tipo_imp || (Number(r.porc_imp) === 0 ? "6" : "1")).trim(),
         doc_num_reception: receptionDocNum,
         reng_num_reception: Number(r.reng_num),
         rowguid_reception: r.rowguid,
@@ -540,7 +547,8 @@
         co_cond: selectedSupplier.co_cond || "01",
         co_sucu: activeBranchCode,
         force_sucu: activeBranchCode,
-        monto_desc_glob: Number(invoiceMetadata.descuento_global || 0),
+        porc_desc_glob: Number(invoiceMetadata.descuento_global_porc || 0),
+        monto_desc_glob: Number(invoiceTotals.descGlobBS || 0),
         update_prices: updatePrices,
         broadcast_prices: broadcast,
         price_updates: updatePrices ? changes : [],
@@ -553,8 +561,9 @@
           costo: Number(l.costo_usd), // En USD
           cost_unit_om: Number(l.costo_usd), // En USD explícito
           cost_unit: Number(l.costo_bs != null ? l.costo_bs : Math.round((Number(l.costo_usd) * Number(activeTasa || 1)) * 100000) / 100000),
-          porc_imp: taxRateOption === 0 ? 0 : Number(l.porc_imp),
-          tipo_imp: taxRateOption === 0 ? "6" : (l.tipo_imp === "5" ? "6" : (l.tipo_imp || "1")), // '6' = Compra Exenta en Profit Plus
+          porc_desc: Number(l.porc_desc || 0),
+          porc_imp: taxRateOption === 0 ? 0 : Number(l.porc_imp || 0),
+          tipo_imp: taxRateOption === 0 ? "6" : (Number(l.porc_imp) === 0 ? "6" : (l.tipo_imp === "5" ? "6" : (l.tipo_imp || "1"))),
           tipo_doc: "NREC",
           num_doc: l.doc_num_reception,
           reng_doc: l.reng_num_reception,
@@ -921,7 +930,7 @@
               <table class="w-full text-left border-collapse">
                 <thead>
                   <tr class="bg-surface-strong border-b border-border-subtle text-xs font-black uppercase tracking-wider text-text-muted">
-                    <th class="px-6 py-4 w-12 text-center">
+                    <th class="px-4 py-4 w-12 text-center">
                       <input
                         type="checkbox"
                         checked={invoiceLines.every((l) => l.checked)}
@@ -932,12 +941,14 @@
                         class="rounded border-border-subtle text-brand-500 focus:ring-0 cursor-pointer"
                       />
                     </th>
-                    <th class="px-6 py-4">Artículo</th>
-                    <th class="px-6 py-4 text-center">Recepción</th>
-                    <th class="px-6 py-4 text-center">Cantidad</th>
-                    <th class="px-6 py-4 text-right">Costo Unit {showUSD ? 'USD' : 'Bs'}</th>
-                    <th class="px-6 py-4 text-right">Total {showUSD ? 'USD' : 'Bs'}</th>
-                    <th class="px-6 py-4 w-10 text-center"></th>
+                    <th class="px-4 py-4">Artículo</th>
+                    <th class="px-3 py-4 text-center">Recepción</th>
+                    <th class="px-3 py-4 text-center">Cantidad</th>
+                    <th class="px-3 py-4 text-right">Costo Unit {showUSD ? 'USD' : 'Bs'}</th>
+                    <th class="px-3 py-4 text-center w-24">% Desc</th>
+                    <th class="px-3 py-4 text-center w-28">IVA</th>
+                    <th class="px-4 py-4 text-right">Total {showUSD ? 'USD' : 'Bs'}</th>
+                    <th class="px-3 py-4 w-10 text-center"></th>
                   </tr>
                 </thead>
                 <tbody class="divide-y divide-border-subtle text-xs">
@@ -973,7 +984,7 @@
                         {Number(line.cantidad).toLocaleString("de-DE", { minimumFractionDigits: 0, maximumFractionDigits: 2 })} {line.unidad?.trim() || line.co_uni?.trim()}
                       </td>
 
-                      <td class="px-6 py-4 text-right font-bold text-text-muted">
+                      <td class="px-3 py-4 text-right font-bold text-text-muted">
                         <div class="flex items-center justify-end gap-1">
                           {#if showUSD}
                             <input
@@ -984,7 +995,7 @@
                               oninput={() => {
                                 line.costo_bs = Math.round((Number(line.costo_usd || 0) * Number(activeTasa || 1)) * 100000) / 100000;
                               }}
-                              class="w-28 h-8 text-right px-2 bg-surface-soft border border-border-subtle rounded-lg font-mono font-bold text-text-base focus:border-brand-500 outline-none text-xs"
+                              class="w-24 h-8 text-right px-2 bg-surface-soft border border-border-subtle rounded-lg font-mono font-bold text-text-base focus:border-brand-500 outline-none text-xs"
                             />
                           {:else}
                             <input
@@ -995,14 +1006,44 @@
                               oninput={() => {
                                 line.costo_usd = activeTasa > 0 ? (Math.round((Number(line.costo_bs || 0) / Number(activeTasa)) * 100000) / 100000) : 0;
                               }}
-                              class="w-32 h-8 text-right px-2 bg-surface-soft border border-border-subtle rounded-lg font-mono font-bold text-text-base focus:border-brand-500 outline-none text-xs"
+                              class="w-28 h-8 text-right px-2 bg-surface-soft border border-border-subtle rounded-lg font-mono font-bold text-text-base focus:border-brand-500 outline-none text-xs"
                             />
                           {/if}
                         </div>
                       </td>
 
-                      <td class="px-6 py-4 text-right font-black text-brand-500 font-mono">
-                        {showUSD ? "$" : "Bs."} {((Number(line.cantidad) || 0) * (showUSD ? (Number(line.costo_usd) || 0) : (Number(line.costo_bs) || (Number(line.costo_usd) || 0) * Number(activeTasa || 1)))).toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      <!-- % Descuento Renglón -->
+                      <td class="px-3 py-4 text-center">
+                        <div class="flex items-center justify-center gap-1">
+                          <input
+                            type="number"
+                            min="0"
+                            max="100"
+                            step="any"
+                            bind:value={line.porc_desc}
+                            placeholder="0"
+                            class="w-16 h-8 text-center px-1 bg-surface-soft border border-border-subtle rounded-lg font-mono font-bold text-text-base focus:border-brand-500 outline-none text-xs"
+                          />
+                          <span class="text-[10px] font-bold text-text-muted">%</span>
+                        </div>
+                      </td>
+
+                      <!-- Tipo IVA Renglón -->
+                      <td class="px-3 py-4 text-center">
+                        <select
+                          bind:value={line.porc_imp}
+                          onchange={() => {
+                            line.tipo_imp = Number(line.porc_imp) === 0 ? "6" : "1";
+                          }}
+                          class="h-8 px-2 bg-surface-soft border border-border-subtle rounded-lg text-xs font-bold text-text-base focus:border-brand-500 outline-none cursor-pointer"
+                        >
+                          <option value={16}>16% (Gen)</option>
+                          <option value={0}>0% (Exento)</option>
+                        </select>
+                      </td>
+
+                      <td class="px-4 py-4 text-right font-black text-brand-500 font-mono">
+                        {showUSD ? "$" : "Bs."} {(((Number(line.cantidad) || 0) * (showUSD ? (Number(line.costo_usd) || 0) : (Number(line.costo_bs) || (Number(line.costo_usd) || 0) * Number(activeTasa || 1)))) * (1 - (Number(line.porc_desc) || 0) / 100)).toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </td>
 
                       <td class="px-6 py-4 text-center">
@@ -1072,18 +1113,27 @@
               </span>
             </div>
 
-            <!-- Descuento Global -->
+            <!-- Descuento Global (%) -->
             <div class="flex justify-between items-center text-base font-bold text-text-muted">
               <span>Descuento Global</span>
-              <div class="flex items-center gap-1">
-                <span class="text-xs font-bold text-text-muted">{showUSD ? "$" : "Bs."}</span>
-                <input
-                  type="number"
-                  min="0"
-                  step="any"
-                  bind:value={invoiceMetadata.descuento_global}
-                  class="w-24 h-7 text-right px-2 bg-surface-soft border border-border-subtle rounded text-xs font-mono font-bold text-text-base outline-none focus:border-brand-500"
-                />
+              <div class="flex items-center gap-2">
+                <div class="flex items-center gap-1">
+                  <input
+                    type="number"
+                    min="0"
+                    max="100"
+                    step="any"
+                    bind:value={invoiceMetadata.descuento_global_porc}
+                    placeholder="0"
+                    class="w-16 h-7 text-right px-2 bg-surface-soft border border-border-subtle rounded text-xs font-mono font-bold text-text-base outline-none focus:border-brand-500"
+                  />
+                  <span class="text-xs font-bold text-text-muted">%</span>
+                </div>
+                {#if invoiceTotals.descGlobUSD > 0}
+                  <span class="text-[11px] font-mono font-bold text-emerald-400">
+                    -{showUSD ? "$" : "Bs."} {(showUSD ? invoiceTotals.descGlobUSD : invoiceTotals.descGlobBS).toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </span>
+                {/if}
               </div>
             </div>
 
@@ -1093,6 +1143,19 @@
                 <span>I.V.A</span>
                 <select
                   bind:value={taxRateOption}
+                  onchange={() => {
+                    if (taxRateOption === 0) {
+                      invoiceLines.forEach((l) => {
+                        l.porc_imp = 0;
+                        l.tipo_imp = "6";
+                      });
+                    } else {
+                      invoiceLines.forEach((l) => {
+                        l.porc_imp = 16;
+                        l.tipo_imp = "1";
+                      });
+                    }
+                  }}
                   class="bg-surface-strong border border-border-bold text-[10px] font-black text-brand-400 cursor-pointer outline-none hover:bg-surface-soft rounded-lg px-2.5 py-1 transition-all shadow-sm"
                 >
                   <option value={16} class="bg-surface-base font-sans text-xs">Cargar 16%</option>
