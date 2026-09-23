@@ -34,6 +34,16 @@
 
   dayjs.locale("es");
 
+  function formatDate(d: any) {
+    if (!d) return "---";
+    const str = String(d).trim().split("T")[0];
+    const parts = str.split("-");
+    if (parts.length === 3) {
+      return `${parts[2]}/${parts[1]}/${parts[0]}`;
+    }
+    return dayjs(d).format("DD/MM/YYYY");
+  }
+
   let isSearching = $state(false);
   let showVoidModal = $state(false);
   let invoiceToVoid = $state<any>(null);
@@ -269,10 +279,10 @@
                 <!-- Fecha Emisión -->
                 <td class="px-6 py-5">
                   <div class="font-bold text-text-base">
-                    {dayjs(invoice.fec_emis).format("DD/MM/YYYY")}
+                    {formatDate(invoice.fec_emis)}
                   </div>
                   <div class="text-[10px] text-text-muted/60 mt-0.5">
-                    Vence: {dayjs(invoice.fec_venc).format("DD/MM/YYYY")}
+                    Vence: {formatDate(invoice.fec_venc)}
                   </div>
                 </td>
 
@@ -494,8 +504,8 @@
             </div>
             <div class="bg-surface-soft p-4 rounded-2xl border border-border-subtle space-y-1">
               <span class="text-[9px] font-black uppercase text-text-muted">Fechas</span>
-              <p class="font-bold text-text-base">Emisión: {dayjs(selectedInvoiceDetail.fec_emis).format("DD/MM/YYYY")}</p>
-              <p class="text-text-muted">Vence: {dayjs(selectedInvoiceDetail.fec_venc).format("DD/MM/YYYY")}</p>
+              <p class="font-bold text-text-base">Emisión: {formatDate(selectedInvoiceDetail.fec_emis)}</p>
+              <p class="text-text-muted">Vence: {formatDate(selectedInvoiceDetail.fec_venc)}</p>
             </div>
             <div class="bg-surface-soft p-4 rounded-2xl border border-border-subtle space-y-1">
               <span class="text-[9px] font-black uppercase text-text-muted">Condición & Tasa</span>

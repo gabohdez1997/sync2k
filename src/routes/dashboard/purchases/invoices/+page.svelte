@@ -106,6 +106,7 @@
     cantidad: number;
     pendiente_original: number;
     costo_usd: number;
+    costo_bs?: number;
     porc_imp: number;
     tipo_imp: string;
     doc_num_reception: string;
@@ -183,6 +184,41 @@
     goto(`?${params.toString()}`);
   }
 
+  function parseSafeDate(d: any) {
+    if (!d) return "";
+    const str = String(d).trim();
+    if (str.includes("T")) return str.split("T")[0];
+    if (str.includes(" ")) return str.split(" ")[0];
+    return dayjs(d).format("YYYY-MM-DD");
+  }
+
+  function switchCurrency(toUSD: boolean) {
+    showUSD = toUSD;
+    const rate = Number(activeTasa || 1);
+    for (const line of invoiceLines) {
+      if (toUSD) {
+        if (line.costo_bs != null && line.costo_bs > 0 && (!line.costo_usd || line.costo_usd === 0)) {
+          line.costo_usd = rate > 0 ? (Math.round((Number(line.costo_bs) / rate) * 100000) / 100000) : 0;
+        }
+      } else {
+        if (line.costo_usd != null && (!line.costo_bs || line.costo_bs === 0)) {
+          line.costo_bs = Math.round((Number(line.costo_usd) * rate) * 100000) / 100000;
+        }
+      }
+    }
+  }
+
+  function handleTasaChange() {
+    const rate = Number(activeTasa || 1);
+    for (const line of invoiceLines) {
+      if (showUSD) {
+        line.costo_bs = Math.round((Number(line.costo_usd || 0) * rate) * 100000) / 100000;
+      } else {
+        line.costo_usd = rate > 0 ? (Math.round((Number(line.costo_bs || 0) / rate) * 100000) / 100000) : 0;
+      }
+    }
+  }
+
   // --- SEARCH & IMPORT RECEPTIONS FLOW ---
   async function openImportModal() {
     if (!filterSede) {
@@ -240,12 +276,15 @@
     const mappedLines: InvoiceLine[] = pendingItems.map((r: any) => {
       const pendingQty = Number(r.pendiente || r.cant_facturar || r.total_art);
       
-      // Compute USD unit cost
+      // Compute USD & BS unit cost (hasta 5 decimales)
       let unitCostUSD = 0;
+      let unitCostBS = 0;
       if (Number(r.cost_unit_om) > 0) {
-        unitCostUSD = Number(r.cost_unit_om);
+        unitCostUSD = Math.round(Number(r.cost_unit_om) * 100000) / 100000;
+        unitCostBS = Math.round((unitCostUSD * tasaToUse) * 100000) / 100000;
       } else if (Number(r.cost_unit) > 0) {
-        unitCostUSD = tasaToUse > 1 ? Number(r.cost_unit) / tasaToUse : Number(r.cost_unit);
+        unitCostBS = Math.round(Number(r.cost_unit) * 100000) / 100000;
+        unitCostUSD = tasaToUse > 0 ? (Math.round((unitCostBS / tasaToUse) * 100000) / 100000) : unitCostBS;
       }
 
       return {
@@ -260,6 +299,7 @@
         cantidad: pendingQty,
         pendiente_original: pendingQty,
         costo_usd: unitCostUSD,
+        costo_bs: unitCostBS,
         porc_imp: Number(r.porc_imp || 0),
         tipo_imp: (r.tipo_imp || "1").trim(),
         doc_num_reception: receptionDocNum,
@@ -298,10 +338,10 @@
       invoiceMetadata.n_control = reception.n_control ? reception.n_control.trim() : "";
       invoiceMetadata.descrip = reception.descrip ? reception.descrip.trim() : "";
       if (reception.fec_emis) {
-        invoiceMetadata.fec_emis = dayjs(reception.fec_emis).format("YYYY-MM-DD");
+        invoiceMetadata.fec_emis = parseSafeDate(reception.fec_emis);
       }
       if (reception.fec_venc) {
-        invoiceMetadata.fec_venc = dayjs(reception.fec_venc).format("YYYY-MM-DD");
+        invoiceMetadata.fec_venc = parseSafeDate(reception.fec_venc);
       }
 
       toast.warning(`Se sustituyó la recepción anterior por cambio de proveedor: ${reception.prov_des} (Recepción ${receptionDocNum}).`);
@@ -321,10 +361,10 @@
         invoiceMetadata.n_control = reception.n_control ? reception.n_control.trim() : "";
         invoiceMetadata.descrip = reception.descrip ? reception.descrip.trim() : "";
         if (reception.fec_emis) {
-          invoiceMetadata.fec_emis = dayjs(reception.fec_emis).format("YYYY-MM-DD");
+          invoiceMetadata.fec_emis = parseSafeDate(reception.fec_emis);
         }
         if (reception.fec_venc) {
-          invoiceMetadata.fec_venc = dayjs(reception.fec_venc).format("YYYY-MM-DD");
+          invoiceMetadata.fec_venc = parseSafeDate(reception.fec_venc);
         }
 
         toast.success(`Recepción ${receptionDocNum} importada (${mappedLines.length} artículos).`);
@@ -512,6 +552,7 @@
           co_alma: l.co_alma,
           costo: Number(l.costo_usd), // En USD
           cost_unit_om: Number(l.costo_usd), // En USD explícito
+          cost_unit: Number(l.costo_bs != null ? l.costo_bs : Math.round((Number(l.costo_usd) * Number(activeTasa || 1)) * 100000) / 100000),
           porc_imp: taxRateOption === 0 ? 0 : Number(l.porc_imp),
           tipo_imp: taxRateOption === 0 ? "6" : (l.tipo_imp === "5" ? "6" : (l.tipo_imp || "1")), // '6' = Compra Exenta en Profit Plus
           tipo_doc: "NREC",
@@ -940,18 +981,28 @@
                               min="0"
                               step="any"
                               bind:value={line.costo_usd}
-                              class="w-24 h-8 text-right px-2 bg-surface-soft border border-border-subtle rounded-lg font-mono font-bold text-text-base focus:border-brand-500 outline-none text-xs"
+                              oninput={() => {
+                                line.costo_bs = Math.round((Number(line.costo_usd || 0) * Number(activeTasa || 1)) * 100000) / 100000;
+                              }}
+                              class="w-28 h-8 text-right px-2 bg-surface-soft border border-border-subtle rounded-lg font-mono font-bold text-text-base focus:border-brand-500 outline-none text-xs"
                             />
                           {:else}
-                            <span class="font-mono">
-                              {(Number(line.costo_usd || 0) * Number(activeTasa || 1)).toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                            </span>
+                            <input
+                              type="number"
+                              min="0"
+                              step="any"
+                              bind:value={line.costo_bs}
+                              oninput={() => {
+                                line.costo_usd = activeTasa > 0 ? (Math.round((Number(line.costo_bs || 0) / Number(activeTasa)) * 100000) / 100000) : 0;
+                              }}
+                              class="w-32 h-8 text-right px-2 bg-surface-soft border border-border-subtle rounded-lg font-mono font-bold text-text-base focus:border-brand-500 outline-none text-xs"
+                            />
                           {/if}
                         </div>
                       </td>
 
                       <td class="px-6 py-4 text-right font-black text-brand-500 font-mono">
-                        {showUSD ? "$" : "Bs."} {((Number(line.cantidad) || 0) * (Number(line.costo_usd) || 0) * (showUSD ? 1 : Number(activeTasa || 1))).toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        {showUSD ? "$" : "Bs."} {((Number(line.cantidad) || 0) * (showUSD ? (Number(line.costo_usd) || 0) : (Number(line.costo_bs) || (Number(line.costo_usd) || 0) * Number(activeTasa || 1)))).toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </td>
 
                       <td class="px-6 py-4 text-center">
@@ -987,6 +1038,7 @@
                   type="number"
                   step="any"
                   bind:value={activeTasa}
+                  oninput={handleTasaChange}
                   class="w-28 h-8 px-2 bg-surface-soft border border-border-subtle rounded-xl text-sm font-mono font-black text-brand-400 text-center outline-none focus:border-brand-500 transition-all"
                 />
                 <span class="text-xs font-bold text-text-muted">Bs/$</span>
@@ -996,14 +1048,14 @@
             <div class="flex bg-surface-base p-1 rounded-xl border border-border-bold shadow-lg">
               <button
                 type="button"
-                onclick={() => (showUSD = true)}
+                onclick={() => switchCurrency(true)}
                 class={`px-5 py-2 rounded-lg text-xs font-black transition-all duration-300 ${showUSD ? "bg-brand-600 text-white shadow-lg scale-105" : "text-text-muted hover:text-text-base"}`}
               >
                 USD
               </button>
               <button
                 type="button"
-                onclick={() => (showUSD = false)}
+                onclick={() => switchCurrency(false)}
                 class={`px-5 py-2 rounded-lg text-xs font-black transition-all duration-300 ${!showUSD ? "bg-brand-600 text-white shadow-lg scale-105" : "text-text-muted hover:text-text-base"}`}
               >
                 BS
