@@ -18,7 +18,8 @@
     Cpu,
     X,
     Radio,
-    HardDrive
+    HardDrive,
+    PackageCheck
   } from "lucide-svelte";
   import { toast } from "svelte-sonner";
   import { invalidateAll } from "$app/navigation";
@@ -34,6 +35,7 @@
 
   // Form State
   let printerType = $state<"fiscal" | "matrix_network" | "thermal">("thermal");
+  let docType = $state<"pre_despacho" | "nota_entrega" | "factura_fiscal">("pre_despacho");
   let name = $state("");
   let ipAddress = $state("");
   let port = $state("9100");
@@ -65,6 +67,7 @@
   function getPrinterMeta(p: any) {
     const rawSubs: string[] = p.sublines || [];
     let type: "fiscal" | "matrix_network" | "thermal" = "thermal";
+    let docType: "pre_despacho" | "nota_entrega" | "factura_fiscal" = "pre_despacho";
     let com = "COM4";
     let mdl = "TALLY_DASCOM_1140";
     let share = "LX350";
@@ -76,19 +79,32 @@
         if (t === "fiscal" || t === "matrix_network" || t === "thermal") {
           type = t as any;
         }
+      } else if (s.startsWith("DOC:")) {
+        const d = s.replace("DOC:", "").toLowerCase();
+        if (d === "pre_despacho" || d === "nota_entrega" || d === "factura_fiscal") {
+          docType = d as any;
+        }
       } else if (s.startsWith("COM:")) {
         com = s.replace("COM:", "");
       } else if (s.startsWith("MODEL:")) {
         mdl = s.replace("MODEL:", "");
       } else if (s.startsWith("SHARE:")) {
         share = s.replace("SHARE:", "");
-      } else if (!s.startsWith("DOC:")) {
+      } else {
         cleanSubs.push(s);
       }
     }
 
+    // Inferir docType si es un registro previo sin etiqueta DOC:
+    if (!rawSubs.some(s => s.startsWith("DOC:"))) {
+      if (type === "fiscal") docType = "factura_fiscal";
+      else if (type === "matrix_network") docType = "nota_entrega";
+      else docType = "pre_despacho";
+    }
+
     return {
       type,
+      docType,
       serialPort: com,
       model: mdl,
       shareName: share,
@@ -111,6 +127,7 @@
 
   function resetForm() {
     printerType = "thermal";
+    docType = "pre_despacho";
     name = "";
     ipAddress = "";
     port = "9100";
@@ -141,6 +158,7 @@
     const meta = p.meta || getPrinterMeta(p);
     editingId = p.id;
     printerType = meta.type;
+    docType = meta.docType;
     name = p.name;
     ipAddress = p.ip_address;
     port = String(p.port);
@@ -159,14 +177,39 @@
     printerType = newType;
     if (newType === "fiscal") {
       if (port === "9100" || port === "445") port = "8088";
-      if (!name) name = "Caja Principal - Tally Fiscal";
+      docType = "factura_fiscal";
+      if (!name || name.includes("Térmica") || name.includes("Epson") || name.includes("Matricial")) name = "Caja Principal - Tally Fiscal";
     } else if (newType === "matrix_network") {
       if (port === "8088" || port === "9100") port = "445";
-      if (!name) name = "Epson LX-350 - Notas de Entrega";
+      docType = "nota_entrega";
+      if (!name || name.includes("Térmica") || name.includes("Tally")) name = "Epson LX-350 - Notas de Entrega";
       if (!shareName) shareName = "LX350";
     } else {
+      // Térmica
       if (port === "8088" || port === "445") port = "9100";
-      if (!name) name = "Impresora Térmica Pre-despacho";
+      if (docType === "factura_fiscal") docType = "pre_despacho";
+      if (!name || name.includes("Epson") || name.includes("Tally")) {
+        name = docType === "nota_entrega" ? "Térmica Caja - Notas de Entrega" : "Impresora Térmica Pre-despacho";
+      }
+    }
+  }
+
+  function onDocTypeChange(newDoc: "pre_despacho" | "nota_entrega" | "factura_fiscal") {
+    docType = newDoc;
+    if (newDoc === "pre_despacho" && printerType !== "thermal") {
+      printerType = "thermal";
+      port = "9100";
+    }
+    if (newDoc === "nota_entrega") {
+      if (printerType === "thermal" && (!name || name.includes("Pre-despacho"))) {
+        name = "Térmica Caja - Notas de Entrega";
+      } else if (printerType === "matrix_network" && (!name || name.includes("Pre-despacho"))) {
+        name = "Epson LX-350 - Notas de Entrega";
+      }
+    } else if (newDoc === "pre_despacho") {
+      if (!name || name.includes("Notas de Entrega")) {
+        name = "Impresora Térmica Pre-despacho";
+      }
     }
   }
 
@@ -194,14 +237,26 @@
     formData.set("branch_id", branchId);
     formData.set("is_active", String(isActive));
 
-    // Encode metadata in sublines for backward compatibility
+    // Encode metadata in sublines
     let finalSublines: string[] = [];
     if (printerType === "fiscal") {
-      finalSublines = ["TYPE:FISCAL", `COM:${serialPort.toUpperCase()}`, `MODEL:${model}`, "DOC:FACTURA_FISCAL"];
+      finalSublines.push("TYPE:FISCAL", `COM:${serialPort.toUpperCase()}`, `MODEL:${model}`);
     } else if (printerType === "matrix_network") {
-      finalSublines = ["TYPE:MATRIX_NETWORK", "DOC:NOTA_ENTREGA", `SHARE:${shareName.trim().toUpperCase()}`];
+      finalSublines.push("TYPE:MATRIX_NETWORK");
+      if (shareName) finalSublines.push(`SHARE:${shareName.trim().toUpperCase()}`);
     } else {
-      finalSublines = ["TYPE:THERMAL", "DOC:PRE_DESPACHO", ...selectedSublines];
+      finalSublines.push("TYPE:THERMAL");
+    }
+
+    if (docType === "nota_entrega") {
+      finalSublines.push("DOC:NOTA_ENTREGA");
+    } else if (docType === "factura_fiscal") {
+      finalSublines.push("DOC:FACTURA_FISCAL");
+    } else {
+      finalSublines.push("DOC:PRE_DESPACHO");
+      if (printerType === "thermal") {
+        finalSublines.push(...selectedSublines);
+      }
     }
     formData.set("sublines", JSON.stringify(finalSublines));
 
@@ -532,25 +587,33 @@
 
                   <!-- DOCUMENTO / SUBLINEAS -->
                   <td class="px-6 py-4 text-xs font-bold text-text-muted max-w-[240px]">
-                    {#if p.meta.type === 'fiscal'}
-                      <span class="text-cyan-400/90 font-bold flex items-center gap-1">
-                        <ShieldCheck size={13} />
-                        Facturas Fiscales (con IVA)
-                      </span>
-                    {:else if p.meta.type === 'matrix_network'}
-                      <span class="text-amber-400/90 font-bold flex items-center gap-1">
-                        <FileText size={13} />
-                        Notas de Entrega (Forma Libre)
-                      </span>
-                    {:else}
-                      {#if !p.meta.cleanSublines || p.meta.cleanSublines.length === 0}
-                        <span class="text-emerald-400/80 italic">Todas las sublíneas (Pre-despacho)</span>
-                      {:else}
-                        <span class="truncate block" title={p.meta.cleanSublines.join(", ")}>
-                          {p.meta.cleanSublines.join(", ")}
+                    <div class="space-y-1">
+                      {#if p.meta.docType === 'factura_fiscal'}
+                        <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 text-[10px] font-black uppercase tracking-wider">
+                          <ShieldCheck size={12} />
+                          Factura Fiscal (IVA)
                         </span>
+                      {:else if p.meta.docType === 'nota_entrega'}
+                        <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-500/10 text-amber-400 border border-amber-500/20 text-[10px] font-black uppercase tracking-wider">
+                          <FileText size={12} />
+                          Nota de Entrega / Caja
+                        </span>
+                      {:else}
+                        <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[10px] font-black uppercase tracking-wider">
+                          <PackageCheck size={12} />
+                          Pre-despacho (Almacén)
+                        </span>
+                        <div>
+                          {#if !p.meta.cleanSublines || p.meta.cleanSublines.length === 0}
+                            <span class="text-emerald-400/80 italic text-[11px]">Todas las sublíneas</span>
+                          {:else}
+                            <span class="truncate block text-[11px] text-text-base font-normal" title={p.meta.cleanSublines.join(", ")}>
+                              {p.meta.cleanSublines.join(", ")}
+                            </span>
+                          {/if}
+                        </div>
                       {/if}
-                    {/if}
+                    </div>
                   </td>
 
                   <!-- ESTADO -->
@@ -634,6 +697,8 @@
 <!-- MODAL: REGISTRAR / EDITAR IMPRESORA EXTENDIDO                             -->
 <!-- ========================================================================= -->
 {#if isModalOpen}
+  <!-- svelte-ignore a11y_click_events_have_key_events -->
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div
     class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-md"
     in:fade={{ duration: 150 }}
@@ -672,12 +737,48 @@
       </div>
 
       <form onsubmit={handleSave} class="space-y-6">
-        <!-- 1. SELECTOR DE TIPO DE IMPRESORA -->
+        <!-- 1. SELECTOR DE TIPO DE IMPRESORA (HARDWARE) -->
         <div class="space-y-2">
           <span class="text-[10px] font-black uppercase tracking-widest text-text-muted block">
-            Tipo de Impresora & Documento <span class="text-red-500">*</span>
+            1. Tipo de Impresora (Hardware / Conexión) <span class="text-red-500">*</span>
           </span>
           <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <!-- TÉRMICA -->
+            <button
+              type="button"
+              onclick={() => onTypeChange("thermal")}
+              class="p-4 rounded-2xl border text-left transition-all cursor-pointer flex flex-col justify-between gap-3 {printerType === 'thermal' ? 'bg-emerald-500/10 border-emerald-500/50 shadow-lg shadow-emerald-500/10 text-emerald-400' : 'bg-surface-soft/60 border-border-subtle text-text-muted hover:border-border-strong hover:text-text-base'}"
+            >
+              <div class="flex items-center justify-between w-full">
+                <Flame size={22} class={printerType === 'thermal' ? 'text-emerald-400' : 'text-text-muted'} />
+                {#if printerType === 'thermal'}
+                  <CheckCircle2 size={16} class="text-emerald-400" />
+                {/if}
+              </div>
+              <div>
+                <p class="text-xs font-black text-text-base">Térmica de Red</p>
+                <p class="text-[10px] text-text-muted leading-tight mt-0.5">Tickets ESC/POS (Puerto 9100)</p>
+              </div>
+            </button>
+
+            <!-- MATRICIAL -->
+            <button
+              type="button"
+              onclick={() => onTypeChange("matrix_network")}
+              class="p-4 rounded-2xl border text-left transition-all cursor-pointer flex flex-col justify-between gap-3 {printerType === 'matrix_network' ? 'bg-amber-500/10 border-amber-500/50 shadow-lg shadow-amber-500/10 text-amber-400' : 'bg-surface-soft/60 border-border-subtle text-text-muted hover:border-border-strong hover:text-text-base'}"
+            >
+              <div class="flex items-center justify-between w-full">
+                <FileText size={22} class={printerType === 'matrix_network' ? 'text-amber-400' : 'text-text-muted'} />
+                {#if printerType === 'matrix_network'}
+                  <CheckCircle2 size={16} class="text-amber-400" />
+                {/if}
+              </div>
+              <div>
+                <p class="text-xs font-black text-text-base">Matricial de Red</p>
+                <p class="text-[10px] text-text-muted leading-tight mt-0.5">Epson LX / ESC-P (SMB o RAW)</p>
+              </div>
+            </button>
+
             <!-- FISCAL -->
             <button
               type="button"
@@ -692,43 +793,69 @@
               </div>
               <div>
                 <p class="text-xs font-black text-text-base">Fiscal SENIAT</p>
-                <p class="text-[10px] text-text-muted leading-tight mt-0.5">Tally Dascom / Facturas con IVA</p>
+                <p class="text-[10px] text-text-muted leading-tight mt-0.5">Tally Dascom / Serial Local</p>
               </div>
             </button>
+          </div>
+        </div>
 
-            <!-- MATRICIAL / RED -->
+        <!-- 2. SELECTOR DE DOCUMENTO / FUNCIÓN -->
+        <div class="space-y-2">
+          <span class="text-[10px] font-black uppercase tracking-widest text-text-muted block">
+            2. Documento que Emite la Impresora <span class="text-red-500">*</span>
+          </span>
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <!-- PRE-DESPACHO / ALMACÉN -->
             <button
               type="button"
-              onclick={() => onTypeChange("matrix_network")}
-              class="p-4 rounded-2xl border text-left transition-all cursor-pointer flex flex-col justify-between gap-3 {printerType === 'matrix_network' ? 'bg-amber-500/10 border-amber-500/50 shadow-lg shadow-amber-500/10 text-amber-400' : 'bg-surface-soft/60 border-border-subtle text-text-muted hover:border-border-strong hover:text-text-base'}"
+              onclick={() => onDocTypeChange("pre_despacho")}
+              class="p-4 rounded-2xl border text-left transition-all cursor-pointer flex flex-col justify-between gap-3 {docType === 'pre_despacho' ? 'bg-emerald-500/10 border-emerald-500/50 shadow-lg shadow-emerald-500/10 text-emerald-400' : 'bg-surface-soft/60 border-border-subtle text-text-muted hover:border-border-strong hover:text-text-base'}"
             >
               <div class="flex items-center justify-between w-full">
-                <FileText size={22} class={printerType === 'matrix_network' ? 'text-amber-400' : 'text-text-muted'} />
-                {#if printerType === 'matrix_network'}
-                  <CheckCircle2 size={16} class="text-amber-400" />
-                {/if}
-              </div>
-              <div>
-                <p class="text-xs font-black text-text-base">Matricial de Red</p>
-                <p class="text-[10px] text-text-muted leading-tight mt-0.5">Epson LX-350 / Notas de Entrega</p>
-              </div>
-            </button>
-
-            <!-- TERMICA PRE-DESPACHO -->
-            <button
-              type="button"
-              onclick={() => onTypeChange("thermal")}
-              class="p-4 rounded-2xl border text-left transition-all cursor-pointer flex flex-col justify-between gap-3 {printerType === 'thermal' ? 'bg-emerald-500/10 border-emerald-500/50 shadow-lg shadow-emerald-500/10 text-emerald-400' : 'bg-surface-soft/60 border-border-subtle text-text-muted hover:border-border-strong hover:text-text-base'}"
-            >
-              <div class="flex items-center justify-between w-full">
-                <Flame size={22} class={printerType === 'thermal' ? 'text-emerald-400' : 'text-text-muted'} />
-                {#if printerType === 'thermal'}
+                <PackageCheck size={20} class={docType === 'pre_despacho' ? 'text-emerald-400' : 'text-text-muted'} />
+                {#if docType === 'pre_despacho'}
                   <CheckCircle2 size={16} class="text-emerald-400" />
                 {/if}
               </div>
               <div>
-                <p class="text-xs font-black text-text-base">Térmica Pre-despacho</p>
-                <p class="text-[10px] text-text-muted leading-tight mt-0.5">Tickets por Sublínea (80mm)</p>
+                <p class="text-xs font-black text-text-base">Pre-despacho / Almacén</p>
+                <p class="text-[10px] text-text-muted leading-tight mt-0.5">Tickets de despacho y notificaciones</p>
+              </div>
+            </button>
+
+            <!-- NOTA DE ENTREGA / CAJA -->
+            <button
+              type="button"
+              onclick={() => onDocTypeChange("nota_entrega")}
+              class="p-4 rounded-2xl border text-left transition-all cursor-pointer flex flex-col justify-between gap-3 {docType === 'nota_entrega' ? 'bg-amber-500/10 border-amber-500/50 shadow-lg shadow-amber-500/10 text-amber-400' : 'bg-surface-soft/60 border-border-subtle text-text-muted hover:border-border-strong hover:text-text-base'}"
+            >
+              <div class="flex items-center justify-between w-full">
+                <FileText size={20} class={docType === 'nota_entrega' ? 'text-amber-400' : 'text-text-muted'} />
+                {#if docType === 'nota_entrega'}
+                  <CheckCircle2 size={16} class="text-amber-400" />
+                {/if}
+              </div>
+              <div>
+                <p class="text-xs font-black text-text-base">Nota de Entrega / Caja</p>
+                <p class="text-[10px] text-text-muted leading-tight mt-0.5">Comprobante de entrega al cliente</p>
+              </div>
+            </button>
+
+            <!-- FACTURA FISCAL -->
+            <button
+              type="button"
+              onclick={() => onDocTypeChange("factura_fiscal")}
+              class="p-4 rounded-2xl border text-left transition-all cursor-pointer flex flex-col justify-between gap-3 {docType === 'factura_fiscal' ? 'bg-cyan-500/10 border-cyan-500/50 shadow-lg shadow-cyan-500/10 text-cyan-400' : 'bg-surface-soft/60 border-border-subtle text-text-muted hover:border-border-strong hover:text-text-base'}"
+            >
+              <div class="flex items-center justify-between w-full">
+                <ShieldCheck size={20} class={docType === 'factura_fiscal' ? 'text-cyan-400' : 'text-text-muted'} />
+                {#if docType === 'factura_fiscal'}
+                  <CheckCircle2 size={16} class="text-cyan-400" />
+                {/if}
+              </div>
+              <div>
+                <p class="text-xs font-black text-text-base">Factura Fiscal (IVA)</p>
+                <p class="text-[10px] text-text-muted leading-tight mt-0.5">Emisión legal SENIAT</p>
               </div>
             </button>
           </div>
@@ -880,12 +1007,12 @@
             </div>
           {/if}
 
-          <!-- PARÁMETROS ESPECÍFICOS TÉRMICA (SUBLINEAS) -->
-          {#if printerType === 'thermal'}
+          <!-- PARÁMETROS ESPECÍFICOS PRE-DESPACHO (SUBLINEAS) -->
+          {#if docType === 'pre_despacho'}
             <div class="space-y-1.5" in:slide>
-              <label class="text-[10px] font-black uppercase tracking-widest text-text-muted">
+              <span class="text-[10px] font-black uppercase tracking-widest text-text-muted block">
                 Sub-Líneas Permitidas para Pre-despacho
-              </label>
+              </span>
               <div class="border border-border-subtle rounded-xl bg-surface-soft p-3 space-y-3">
                 <input
                   type="text"

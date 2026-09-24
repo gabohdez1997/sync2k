@@ -4,6 +4,7 @@ import { hasPermission } from '$lib/server/auth';
 import { supabaseAdmin } from '$lib/server/supabase';
 import { fail } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
+import { sendCancellationNotificationTicket } from '$lib/server/billing-printer';
 
 export const load: PageServerLoad = protectLoad('cash_billing', async ({ url, locals, fetch }) => {
     const profile = (locals as any).profile;
@@ -160,10 +161,40 @@ export const actions = {
 
         const agentClient = new AgentClient(branch, profile, fetch);
 
+        // Obtener previamente el detalle de la factura con renglones para respetar sublíneas en el ticket
+        let invData: any = null;
+        try {
+            const getRes = await agentClient.request<any>(`/facturas/${doc_num}?sede=${branch.id}`);
+            invData = Array.isArray(getRes?.data) ? getRes.data[0] : getRes?.data;
+        } catch (e) {
+            console.warn('[VOID INVOICE] No se pudo obtener detalle previo de la factura:', e);
+        }
+
         const res: any = await agentClient.request(`/facturas/${doc_num}/anular`, { method: 'POST' });
 
         if (!res?.success) {
             return fail(500, { success: false, message: res?.message || 'No se pudo anular la factura.' });
+        }
+
+        // Enviar ticket compacto de notificación de anulación a las impresoras de despacho correspondientes
+        let printMsg = '';
+        if (invData) {
+            try {
+                const printRes = await sendCancellationNotificationTicket({
+                    branch_id: branch.id,
+                    invoice: invData,
+                    action_type: 'ANULACION',
+                    user_email: email,
+                    profile,
+                    agentClient,
+                    fetchFn: fetch
+                });
+                if (printRes.message) {
+                    printMsg = ` (${printRes.message})`;
+                }
+            } catch (printErr: any) {
+                console.error('[VOID PRINT NOTIFICATION ERROR]:', printErr);
+            }
         }
 
         // Auditoría
@@ -183,7 +214,7 @@ export const actions = {
             console.error('Error al guardar log de auditoría de anulación:', auditError);
         }
 
-        return { success: true, message: res?.message || 'Factura anulada correctamente.' };
+        return { success: true, message: (res?.message || 'Factura anulada correctamente.') + printMsg };
     }),
 
     deleteInvoice: protectAction('cash_billing', async ({ request, locals, fetch }) => {
@@ -215,19 +246,22 @@ export const actions = {
 
         const agentClient = new AgentClient(branch, profile, fetch);
 
+        // Obtener SIEMPRE el detalle completo con renglones ANTES de eliminar permanentemente de Profit Plus
+        let inv: any = null;
+        try {
+            const getRes = await agentClient.request<any>(`/facturas/${doc_num}?sede=${branch.id}`);
+            inv = Array.isArray(getRes?.data) ? getRes.data[0] : getRes?.data;
+        } catch (e) {
+            console.warn('[DELETE INVOICE] No se pudo verificar detalle previo:', e);
+        }
+
         // Si el usuario no tiene permiso de ver otros, verificar que la factura le pertenezca
         const canSeeOthers = hasPermission(profile, 'cash_billing', 'others');
-        if (!canSeeOthers) {
-            try {
-                const getRes = await agentClient.request<any>(`/facturas/${doc_num}`);
-                const inv = Array.isArray(getRes?.data) ? getRes.data[0] : getRes?.data;
-                const userCode = (profile.profit_user || '').trim().toUpperCase();
-                const invUser = (inv?.co_us_in || '').trim().toUpperCase();
-                if (invUser && userCode && invUser !== userCode) {
-                    return fail(403, { success: false, message: 'No tienes permiso para eliminar facturas emitidas por otros usuarios.' });
-                }
-            } catch (e) {
-                console.warn('[DELETE INVOICE] No se pudo verificar pertenencia previa:', e);
+        if (!canSeeOthers && inv) {
+            const userCode = (profile.profit_user || '').trim().toUpperCase();
+            const invUser = (inv?.co_us_in || '').trim().toUpperCase();
+            if (invUser && userCode && invUser !== userCode) {
+                return fail(403, { success: false, message: 'No tienes permiso para eliminar facturas emitidas por otros usuarios.' });
             }
         }
 
@@ -235,6 +269,27 @@ export const actions = {
 
         if (!res?.success) {
             return fail(500, { success: false, message: res?.message || 'No se pudo eliminar la factura en Profit Plus.' });
+        }
+
+        // Enviar ticket compacto de notificación de eliminación a las impresoras de despacho correspondientes
+        let printMsg = '';
+        if (inv) {
+            try {
+                const printRes = await sendCancellationNotificationTicket({
+                    branch_id: branch.id,
+                    invoice: inv,
+                    action_type: 'ELIMINACION',
+                    user_email: email,
+                    profile,
+                    agentClient,
+                    fetchFn: fetch
+                });
+                if (printRes.message) {
+                    printMsg = ` (${printRes.message})`;
+                }
+            } catch (printErr: any) {
+                console.error('[DELETE PRINT NOTIFICATION ERROR]:', printErr);
+            }
         }
 
         // Auditoría
@@ -254,6 +309,6 @@ export const actions = {
             console.error('Error al guardar log de auditoría de eliminación:', auditError);
         }
 
-        return { success: true, message: res?.message || `Factura ${doc_num} eliminada permanentemente.` };
+        return { success: true, message: (res?.message || `Factura ${doc_num} eliminada permanentemente.`) + printMsg };
     }, 'delete')
 };

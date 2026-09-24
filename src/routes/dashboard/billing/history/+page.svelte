@@ -14,6 +14,7 @@
     AlertCircle,
     Plus,
     Trash2,
+    BellRing,
   } from "lucide-svelte";
   import { goto } from "$app/navigation";
   import { page } from "$app/stores";
@@ -38,6 +39,38 @@
   let invoiceToDelete = $state<any>(null);
   let deletePassword = $state("");
   let isDeleting = $state(false);
+
+  let printingCancelDoc = $state<string | null>(null);
+
+  async function printCancellationTicket(invoice: any) {
+    if (printingCancelDoc) return;
+    printingCancelDoc = invoice.doc_num;
+    toast.info(`Enviando notificación de anulación de ${invoice.doc_num} a almacén...`);
+
+    try {
+      const response = await fetch('/api/agent/billing/print-cancel', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          branch_id: data.selectedBranchId,
+          doc_num: invoice.doc_num,
+          action_type: 'ANULACION',
+          invoice: invoice
+        })
+      });
+      const res = await response.json();
+      if (res.success) {
+        toast.success(res.message || 'Ticket de notificación enviado a almacén.');
+      } else {
+        toast.error(res.message || 'Error al enviar ticket a almacén.');
+      }
+    } catch (err: any) {
+      console.error('Error al reimprimir notificación:', err);
+      toast.error('Error al conectar con el servicio de impresión.');
+    } finally {
+      printingCancelDoc = null;
+    }
+  }
 
   function openDeleteModal(inv: any) {
     invoiceToDelete = inv;
@@ -394,6 +427,22 @@
                     >
                       <Printer size={18} />
                     </a>
+
+                    <!-- Notificación de Anulación en Despacho -->
+                    {#if invoice.anulado}
+                      <button
+                        onclick={() => printCancellationTicket(invoice)}
+                        disabled={printingCancelDoc === invoice.doc_num}
+                        class="p-2 text-text-muted hover:text-amber-500 hover:bg-amber-500/10 rounded-xl transition-all cursor-pointer disabled:opacity-50"
+                        title="Reimprimir Notificación de Anulación en Despacho"
+                      >
+                        {#if printingCancelDoc === invoice.doc_num}
+                          <Loader2 size={18} class="animate-spin text-amber-500" />
+                        {:else}
+                          <BellRing size={18} />
+                        {/if}
+                      </button>
+                    {/if}
 
                     <!-- Anular -->
                     {#if data.canVoid && !invoice.anulado}

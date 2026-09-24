@@ -32,7 +32,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
         }
 
         // Fetch active printers for this branch
-        const { data: printers, error: pErr } = await supabaseAdmin
+        const { data: rawPrinters, error: pErr } = await supabaseAdmin
             .from('printers')
             .select('id, name, ip_address, port, sublines')
             .eq('branch_id', branch_id)
@@ -42,8 +42,19 @@ export const POST: RequestHandler = async ({ request, locals }) => {
             return json({ success: false, message: 'Error al consultar impresoras: ' + pErr.message }, { status: 500 });
         }
 
-        if (!printers || printers.length === 0) {
-            return json({ success: false, message: 'No hay impresoras activas configuradas para esta sucursal.' }, { status: 400 });
+        // AISLAMIENTO ESTRICTO: Solo impresoras TYPE:THERMAL con DOC:PRE_DESPACHO activas en la sede
+        const printers = (rawPrinters || []).filter((p: any) => {
+            const subs = (p.sublines || []).map((s: any) => String(s).trim().toUpperCase());
+            const isThermal = subs.includes('TYPE:THERMAL') || (!subs.some((s: string) => s.startsWith('TYPE:')) && String(p.port || '') === '9100');
+            const isPreDespacho = subs.includes('DOC:PRE_DESPACHO') || 
+                (!subs.some((s: string) => s.startsWith('DOC:')) && !subs.some((s: string) => s.includes('NOTA_ENTREGA') || s.includes('FISCAL')));
+            const isExcluded = subs.includes('DOC:NOTA_ENTREGA') || subs.includes('DOC:FACTURA_FISCAL') || subs.includes('TYPE:MATRIX_NETWORK') || subs.includes('TYPE:FISCAL');
+
+            return isThermal && isPreDespacho && !isExcluded;
+        });
+
+        if (printers.length === 0) {
+            return json({ success: false, message: 'No hay impresoras térmicas de pre-despacho (TYPE:THERMAL con DOC:PRE_DESPACHO) activas en esta sucursal.' }, { status: 400 });
         }
 
         // 1. Get all unique subline codes from the invoice items
@@ -51,8 +62,8 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 
         // 2. Normalize printer sublines and build set of all defined sublines in this branch
         const allDefinedSublines = new Set<string>();
-        const printersNormalized = printers.map(p => {
-            const subs = (p.sublines || []).map((s: string) => s.trim().toUpperCase());
+        const printersNormalized = printers.map((p: any) => {
+            const subs = (p.sublines || []).map((s: any) => s.trim().toUpperCase());
             subs.forEach((s: string) => allDefinedSublines.add(s));
             return {
                 ...p,
@@ -89,7 +100,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
         }
 
         // 4. Select printers that have at least one item to print
-        const targetPrintersArray = printersNormalized.filter(p => {
+        const targetPrintersArray = printersNormalized.filter((p: any) => {
             const items = printerItemsMap.get(p.id);
             return items && items.length > 0;
         });
@@ -113,7 +124,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
         };
 
         // Send print job to each target printer with its specific filtered items list!
-        const printPromises = printersToPrint.map(async (printer) => {
+        const printPromises = printersToPrint.map(async (printer: any) => {
             const filteredLines = printerItemsMap.get(printer.id) || invoiceLines;
             const decoratedInvoice = {
                 ...baseDecoratedInvoice,

@@ -24,7 +24,7 @@ export const load: PageServerLoad = protectLoad('sec_printers', async ({ locals,
   // Cargar sublineas desde el primer agente disponible
   let sublines: any[] = [];
   if (branches && branches.length > 0) {
-    const firstBranch = branches.find(b => b.agent_url);
+    const firstBranch = branches.find((b: any) => b.agent_url);
     if (firstBranch) {
       const userProfile = (locals as any).profile;
       const agent = new AgentClient({
