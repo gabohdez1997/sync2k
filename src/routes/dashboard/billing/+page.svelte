@@ -409,9 +409,11 @@
     }
   }
 
-  // Modal de Previsualización y Envío a Matricial
+  // Modal de Previsualización y Envío a Impresoras
   let showPreviewModal = $state(false);
   let isPrintingNote = $state(false);
+  let previewFormat = $state<'thermal' | 'matrix'>('thermal');
+  let selectedPrinterId = $state<string>('');
   let previewDocData = $state<any>(null);
 
   function openPreviewModal() {
@@ -426,6 +428,25 @@
     }
 
     const branchObj = data.branches?.find((b: any) => String(b.id) === String(filterSede));
+    const isParaparal = branchObj?.name?.toLowerCase().includes('paraparal');
+    const branchPrefix = isParaparal ? 'G4' : 'G3';
+
+    let rawDoc = originOrderNum || "9";
+    let formattedDocNum = rawDoc;
+    if (!rawDoc.toUpperCase().startsWith('G')) {
+      const numOnly = rawDoc.replace(/\D/g, '') || '9';
+      formattedDocNum = `${branchPrefix}${numOnly.padStart(8, '0')}`;
+    }
+
+    let branchAddr = branchObj?.address;
+    if (!branchAddr) {
+      if (isParaparal) {
+        branchAddr = 'CTRA NACIONAL LOS GUAYOS-GUACARA CRUCE CON CALLE 940-A Y CALLE PARAPARAL LOCAL GALPON NRO 20-21 SECTOR LOS GUAYOS LOS GUAYOS CARABOBO;';
+      } else {
+        branchAddr = 'Av. 92 Pedro melean (via La Isabelica), Valencia, Carabobo';
+      }
+    }
+
     const multiplier = showUSD ? 1 : Number(activeTasa || 1);
     const totalBruto = activeLines.reduce((sum, l) => sum + (Number(l.cantidad) * (Number(l.precio) * multiplier)), 0);
     const montoImp = activeLines.reduce((sum, l) => {
@@ -435,22 +456,24 @@
     const totalNeto = totalBruto + montoImp;
 
     previewDocData = {
-      doc_num: originOrderNum || "NE-" + dayjs().format("YYYYMMDDHHmmss").slice(-8),
+      doc_num: formattedDocNum,
       pedido_num: originOrderNum || "0000015724",
-      fecha: dayjs().format("DD/MM/YYYY hh:mm A"),
+      fecha: dayjs().format("DD/MM/YYYY"),
+      fecha_hora: dayjs().format("DD/MM/YYYY hh:mm A"),
       fecha_emision: dayjs().format("DD/MM/YYYY"),
       branch_id: filterSede,
-      branch_name: "Inversiones Galpe 2021 C.A.",
+      branch_name: branchObj?.business_name || branchObj?.name || "inversiones Galpe 2021 C.A.",
       branch_rif: branchObj?.rif || "J-401750354",
-      branch_desc: branchObj?.name || "Boca de Rio",
-      branch_address: "CTRA NACIONAL LOS GUAYOS GUACARA CRUCE CON CLL LISBOA Y CALLE PAMPERO LOCAL GALPON NRO 13-01 SECTOR LOS GUAYOS LOS GUAYOS CARABOBO",
+      branch_desc: branchObj?.name || (isParaparal ? "Paraparal" : "Boca de Rio"),
+      branch_address: branchAddr,
       cli_des: selectedClient.cli_des,
       rif: selectedClient.rif,
-      telefonos: selectedClient.telefonos,
-      direc1: selectedClient.direc1,
-      dir_entrega: selectedClient.dir_ent || selectedClient.direc1,
+      telefonos: selectedClient.telefonos || '---',
+      direc1: selectedClient.direc1 || '---',
+      dir_entrega: selectedClient.dir_ent || selectedClient.direc1 || 'CARABOBO',
       transporte: "INTERNO",
-      vendedor: activeVenDes || activeCoVen || "GABRIEL HERNANDEZ",
+      vendedor: activeVenDes || activeCoVen || "FRANKLIN GONZALEZ",
+      cajero: data.userProfile?.full_name || data.userProfile?.name || "DARIANNA GUEVARA",
       co_cond: selectedClient.co_cond || "CONTADO",
       cond_des: selectedClient.cond_des || "CONTADO",
       renglones: activeLines.map((l: any) => {
@@ -620,21 +643,26 @@
     }
   }
 
-  async function handlePrintFromModal() {
+  async function handlePrintFromModal(forcedFormat?: 'thermal' | 'matrix') {
     if (!previewDocData) return;
     isPrintingNote = true;
+    const formatToUse = forcedFormat || previewFormat;
     try {
       const res = await fetch("/api/agent/printers/print-note", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           branch_id: filterSede,
+          format: formatToUse,
+          printer_id: selectedPrinterId || undefined,
           doc: previewDocData
         })
       });
       const result = await res.json();
       if (result.success) {
-        toast.success(result.message || "Nota de Entrega enviada a la impresora.");
+        const typeLabel = formatToUse === 'thermal' ? 'térmica' : 'matricial';
+        const printerName = result.printer_used?.name ? ` [${result.printer_used.name}]` : '';
+        toast.success(result.message || `Nota de Entrega enviada a la impresora ${typeLabel}${printerName}.`);
       } else {
         toast.error(result.message || "Error al enviar a la impresora.");
       }
@@ -644,6 +672,11 @@
       isPrintingNote = false;
     }
   }
+
+  function handleBrowserPrint() {
+    window.print();
+  }
+
 
   function getBranchName(id: string) {
     const b = data.branches?.find((br: any) => br.id === id);
@@ -1391,7 +1424,7 @@
   </div>
 {/if}
 
-<!-- MODAL PREVISUALIZACION NOTA DE ENTREGA / FORMATO MEDIA PAGINA -->
+<!-- MODAL PREVISUALIZACION NOTA DE ENTREGA / FORMATO TERMICO Y MEDIA PAGINA -->
 {#if showPreviewModal && previewDocData}
   <div
     class="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm overflow-y-auto"
@@ -1402,181 +1435,346 @@
     <div class="fixed inset-0" onclick={() => (showPreviewModal = false)}></div>
 
     <div
-      class="w-full max-w-3xl bg-surface-base border border-border-subtle rounded-[32px] shadow-2xl overflow-hidden flex flex-col max-h-[85vh] relative z-10"
+      class="w-full max-w-3xl bg-surface-base border border-border-subtle rounded-[32px] shadow-2xl overflow-hidden flex flex-col max-h-[90vh] relative z-10"
       in:scale={{ duration: 200, start: 0.95 }}
     >
-      <!-- MODAL HEADER -->
-      <div class="p-6 md:p-8 border-b border-border-subtle flex justify-between items-center bg-surface-soft/50">
+      <!-- MODAL HEADER CON TABS DE FORMATO -->
+      <div class="p-6 md:p-7 border-b border-border-subtle flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-surface-soft/60">
         <div class="flex items-center gap-3">
           <div class="p-3 bg-brand-500/10 text-brand-400 rounded-2xl">
-            <FileText size={24} />
+            {#if previewFormat === 'thermal'}
+              <Receipt size={24} />
+            {:else}
+              <FileText size={24} />
+            {/if}
           </div>
           <div>
-            <h2 class="text-2xl font-black tracking-tight text-text-base">Previsualización de Documento</h2>
-            <p class="text-text-muted text-sm font-medium">Nota de Entrega Continua Media Página (5.5" ESC/P)</p>
+            <div class="flex items-center gap-2">
+              <h2 class="text-2xl font-black tracking-tight text-text-base">Previsualización de Documento</h2>
+              <span class="px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-brand-500/20 text-brand-400 border border-brand-500/30">
+                {previewDocData.branch_desc}
+              </span>
+            </div>
+            <p class="text-text-muted text-xs font-medium">Nota de Entrega N° <span class="font-bold text-text-base">{previewDocData.doc_num}</span></p>
           </div>
         </div>
-        <button
-          type="button"
-          onclick={() => (showPreviewModal = false)}
-          class="p-2.5 hover:bg-surface-strong text-text-muted hover:text-text-base rounded-full transition-colors cursor-pointer"
-        >
-          <X size={22} />
-        </button>
-      </div>
 
-      <!-- RECEIPT / CONTINUOUS FORM PREVIEW (ALWAYS WHITE PAPER SHEET) -->
-      <div class="flex-1 overflow-y-auto p-6 bg-surface-soft/30 flex justify-center items-start custom-scrollbar select-none">
-        
-        <!-- CONTINUOUS FORM CONTAINER WITH TRACTOR FEED PERFORATIONS -->
-        <div class="w-full max-w-2xl bg-white text-black p-6 rounded-md shadow-2xl font-mono text-[11px] leading-tight border border-slate-300 relative">
-          
-          <!-- TRACTOR FEED HOLES (LEFT & RIGHT) -->
-          <div class="absolute left-1.5 top-0 bottom-0 flex flex-col justify-between py-4 pointer-events-none opacity-25 text-[8px] text-slate-400">
-            {#each Array(14) as _}
-              <div class="w-2.5 h-2.5 rounded-full border border-slate-400 bg-slate-200"></div>
-            {/each}
-          </div>
-          <div class="absolute right-1.5 top-0 bottom-0 flex flex-col justify-between py-4 pointer-events-none opacity-25 text-[8px] text-slate-400">
-            {#each Array(14) as _}
-              <div class="w-2.5 h-2.5 rounded-full border border-slate-400 bg-slate-200"></div>
-            {/each}
+        <div class="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-end">
+          <!-- SELECTOR DE FORMATO (TÉRMICA 80MM VS MATRICIAL) -->
+          <div class="flex items-center bg-surface-base p-1 rounded-2xl border border-border-subtle shadow-inner">
+            <button
+              type="button"
+              onclick={() => (previewFormat = 'thermal')}
+              class="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer {previewFormat === 'thermal' ? 'bg-brand-600 text-white shadow-md' : 'text-text-muted hover:text-text-base'}"
+            >
+              <Receipt size={14} />
+              <span>Térmica 80mm</span>
+            </button>
+            <button
+              type="button"
+              onclick={() => (previewFormat = 'matrix')}
+              class="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer {previewFormat === 'matrix' ? 'bg-brand-600 text-white shadow-md' : 'text-text-muted hover:text-text-base'}"
+            >
+              <FileText size={14} />
+              <span>Matricial 5.5"</span>
+            </button>
           </div>
 
-          <!-- PAPER INNER CONTENT -->
-          <div class="px-3 space-y-2">
-            
-            <!-- TOP ENCLOSED BOX (Header & Client/Doc block) -->
-            <div class="border border-black rounded-sm p-2.5 space-y-1.5">
-              
-              <!-- HEADER LINE 1 -->
-              <div class="flex justify-between items-baseline font-bold text-xs">
-                <span class="text-sm font-black tracking-tight">{previewDocData.branch_name || 'Inversiones Galpe 2021 C.A.'}</span>
-                <span class="text-[11px]">R.I.F.: {previewDocData.branch_rif || 'J-401750354'}</span>
-                <span class="text-[11px]">PEDIDO: {previewDocData.origin_doc || previewDocData.doc_num || '0000015724'}</span>
-              </div>
-
-              <!-- HEADER LINE 2: FISCAL ADDRESS -->
-              <div class="text-[8.5px] text-slate-700 leading-tight">
-                {previewDocData.branch_address || 'CTRA NACIONAL LOS GUAYOS GUACARA CRUCE CON CLL LISBOA Y CALLE PAMPERO LOCAL GALPON NRO 13-01 SECTOR LOS GUAYOS LOS GUAYOS CARABOBO'}
-              </div>
-
-              <!-- CLIENT INFO (LEFT) & DOCUMENT DATA (RIGHT) -->
-              <div class="grid grid-cols-12 gap-2 pt-1.5 border-t border-black">
-                <!-- CLIENT INFO (7 COLS) -->
-                <div class="col-span-7 space-y-1 text-[10px]">
-                  <div class="flex"><span class="w-20 font-bold shrink-0">Cliente :</span> <span class="font-bold uppercase truncate">{previewDocData.cli_des}</span></div>
-                  <div class="flex"><span class="w-20 font-bold shrink-0">R.I.F.:</span> <span class="uppercase">{previewDocData.rif}</span></div>
-                  <div class="flex"><span class="w-20 font-bold shrink-0">Teléfonos:</span> <span>{previewDocData.telefonos || '---'}</span></div>
-                  <div class="flex"><span class="w-20 font-bold shrink-0">Dirección:</span> <span class="line-clamp-2 uppercase text-[9.5px]">{previewDocData.direc1 || '---'}</span></div>
-                  <div class="flex"><span class="w-20 font-bold shrink-0">Dir. Ent.:</span> <span class="uppercase">{previewDocData.dir_entrega || 'CARABOBO'}</span></div>
-                  <div class="flex"><span class="w-20 font-bold shrink-0">Transporte:</span> <span class="uppercase">{previewDocData.transporte || 'INTERNO'}</span></div>
-                </div>
-
-                <!-- DOCUMENT DATA (5 COLS) -->
-                <div class="col-span-5 text-right space-y-0.5 text-[10px] pl-2 border-l border-slate-300">
-                  <div class="text-sm font-black tracking-wider text-black">NOTA DE ENTREGA</div>
-                  <div class="text-base font-black tracking-widest text-black">{previewDocData.doc_num}</div>
-                  <div class="font-bold uppercase text-[10.5px]">{previewDocData.cond_des || 'CONTADO'}</div>
-                  <div class="text-[9.5px] text-slate-800">Fecha Emisión: {previewDocData.fecha}</div>
-                  <div class="text-[9.5px] text-slate-800 truncate">Vendedor: {previewDocData.vendedor}</div>
-                  <div class="text-[9.5px] font-bold">Moneda: {previewDocData.is_usd ? 'DOLAR' : 'BOLIVARES'}</div>
-                </div>
-              </div>
-
-            </div>
-
-            <!-- ITEMS TABLE (WITH CLEAN BORDER AND COLUMNS) -->
-            <div class="border border-black rounded-sm overflow-hidden">
-              <table class="w-full text-left text-[10px] border-collapse">
-                <thead class="bg-slate-100 border-b border-black text-black font-bold">
-                  <tr>
-                    <th class="p-1.5 w-24 border-r border-slate-300">Código</th>
-                    <th class="p-1.5 border-r border-slate-300">Descripción</th>
-                    <th class="p-1.5 text-right w-16 border-r border-slate-300">Cantidad</th>
-                    <th class="p-1.5 text-right w-20 border-r border-slate-300">Precio</th>
-                    <th class="p-1.5 text-right w-20">Neto</th>
-                  </tr>
-                </thead>
-                <tbody class="divide-y divide-slate-200 text-black">
-                  {#each previewDocData.renglones as r}
-                    <tr class="hover:bg-slate-50">
-                      <td class="p-1.5 font-mono border-r border-slate-300">{r.co_art}</td>
-                      <td class="p-1.5 font-medium uppercase border-r border-slate-300">{r.art_des}</td>
-                      <td class="p-1.5 text-right font-bold border-r border-slate-300">{r.cantidad.toFixed(2).replace('.', ',')}</td>
-                      <td class="p-1.5 text-right border-r border-slate-300">
-                        {r.precio.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                      </td>
-                      <td class="p-1.5 text-right font-bold">
-                        {r.total.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                      </td>
-                    </tr>
-                  {/each}
-                </tbody>
-              </table>
-            </div>
-
-            <!-- FOOTER BOX -->
-            <div class="border border-black rounded-sm p-2 flex justify-between items-end text-[10px]">
-              <div class="space-y-1">
-                <div class="font-bold text-black uppercase">
-                  {String(previewDocData.cond_des || '').toUpperCase().includes('CREDITO') ? 'NOTA A CREDITO (Creado por API)' : 'NOTA A CONTADO'}
-                </div>
-                <div class="text-[9px] text-slate-600">Página 1 de 1</div>
-              </div>
-
-              <div class="text-right space-y-0.5">
-                <div class="flex justify-end gap-3 text-sm font-black text-black">
-                  <span>Neto:</span>
-                  <span class="w-24 text-right">
-                    {previewDocData.total_neto.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                  </span>
-                </div>
-                <div class="text-[9.5px] font-bold text-black uppercase tracking-tight">
-                  SIN DERECHO A CREDITO FISCAL
-                </div>
-                {#if !previewDocData.is_usd && previewDocData.tasa > 1}
-                  <div class="text-[9px] text-slate-700 font-bold">
-                    REF. USD: $ {(previewDocData.total_neto / previewDocData.tasa).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                  </div>
-                {:else if previewDocData.is_usd && previewDocData.tasa > 1}
-                  <div class="text-[9px] text-slate-700 font-bold">
-                    REF. BCV: Bs. {(previewDocData.total_neto * previewDocData.tasa).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                  </div>
-                {/if}
-              </div>
-            </div>
-
-          </div>
-        </div>
-      </div>
-
-      <!-- MODAL FOOTER ACTIONS -->
-      <div class="p-6 border-t border-border-subtle bg-surface-soft/50 flex flex-col sm:flex-row items-center justify-between gap-4">
-        <div class="flex items-center gap-2 text-text-muted text-xs font-mono">
-          <Printer size={16} class="text-brand-500" />
-          <span>Salida: Impresora Matricial de Red (ESC/P)</span>
-        </div>
-        <div class="flex items-center gap-3 w-full sm:w-auto">
           <button
             type="button"
             onclick={() => (showPreviewModal = false)}
-            class="px-6 py-3 rounded-2xl bg-surface-soft hover:bg-surface-strong text-text-base font-bold text-sm transition-all cursor-pointer border border-border-subtle"
+            class="p-2.5 hover:bg-surface-strong text-text-muted hover:text-text-base rounded-full transition-colors cursor-pointer"
+          >
+            <X size={22} />
+          </button>
+        </div>
+      </div>
+
+      <!-- PREVIEW BODY -->
+      <div class="flex-1 overflow-y-auto p-6 bg-surface-soft/30 flex justify-center items-start custom-scrollbar select-none">
+        
+        {#if previewFormat === 'thermal'}
+          <!-- TICKET TÉRMICO 80MM (RÉPLICA EXACTA PROFIT ESCRITORIO) -->
+          <div
+            id="thermal-receipt-printable"
+            class="w-full max-w-[340px] bg-white text-black p-5 rounded-sm shadow-2xl font-mono text-[11px] leading-tight border border-slate-300 relative select-text"
+          >
+            <!-- 1. ENCABEZADO CENTRADO: LOGO/EMPRESA + RIF + DIRECCIÓN FISCAL DE LA SEDE -->
+            <div class="text-center space-y-1 mb-4">
+              <div class="font-black text-sm tracking-tight">{previewDocData.branch_name || 'inversiones Galpe 2021 C.A.'}</div>
+              <div class="text-[10.5px] font-bold">{previewDocData.branch_rif || 'J-401750354'}</div>
+              <div class="text-[9px] uppercase font-medium leading-tight text-slate-800 pt-1 px-1">
+                {previewDocData.branch_address}
+              </div>
+            </div>
+
+            <!-- 2. DATOS DE CLIENTE Y DOCUMENTO -->
+            <div class="space-y-1 text-[10.5px] border-b border-black/10 pb-3 mb-3">
+              <div>
+                <span class="font-bold">Cliente :</span>
+                <span class="font-bold uppercase pl-1">{previewDocData.cli_des}</span>
+              </div>
+
+              <!-- Fila C.I./RIF a la izq | FECHA a la der -->
+              <div class="flex justify-between items-baseline">
+                <div>
+                  <span class="font-bold">C.I./ RIF:</span>
+                  <span class="pl-1 uppercase">{previewDocData.rif}</span>
+                </div>
+                <div class="text-right">
+                  <span class="font-bold">FECHA:</span>
+                </div>
+              </div>
+
+              <!-- Fila Fecha valor a la derecha -->
+              <div class="flex justify-end">
+                <span class="text-[10px]">{previewDocData.fecha_emision}</span>
+              </div>
+
+              <!-- Fila Teléfonos a la izq | NOTA DE ENTREGA a la der -->
+              <div class="flex justify-between items-baseline">
+                <div>
+                  <span class="font-bold">Teléfonos:</span>
+                  <span class="pl-1">{previewDocData.telefonos || '---'}</span>
+                </div>
+                <div class="text-right">
+                  <span class="font-black text-[11px] tracking-tight">NOTA DE ENTREGA</span>
+                </div>
+              </div>
+
+              <!-- Fila Número de Documento a la derecha -->
+              <div class="flex justify-end">
+                <span class="font-black text-xs tracking-wider">{previewDocData.doc_num}</span>
+              </div>
+
+              <!-- Dirección del Cliente -->
+              <div class="pt-0.5">
+                <span class="font-bold">Dirección:</span>
+                <span class="pl-1 uppercase text-[10px]">{previewDocData.direc1 || '---'}</span>
+              </div>
+
+              <!-- Vendedor -->
+              <div>
+                <span class="font-bold">Vendedor:</span>
+                <span class="pl-1 uppercase">{previewDocData.vendedor}</span>
+              </div>
+
+              <!-- Cajero -->
+              <div>
+                <span class="font-bold">Cajero:</span>
+                <span class="pl-1 uppercase">{previewDocData.cajero}</span>
+              </div>
+            </div>
+
+            <!-- 3. TABLA DE ARTÍCULOS: Descripción | Cant. | Precio | Total -->
+            <div class="mb-3">
+              <div class="flex justify-between font-bold text-[10.5px] border-b border-black/20 pb-1 mb-2 px-0.5">
+                <span class="w-[42%] text-left">Descripción</span>
+                <span class="w-[16%] text-right">Cant.</span>
+                <span class="w-[20%] text-right">Precio</span>
+                <span class="w-[22%] text-right">Total</span>
+              </div>
+
+              <div class="space-y-2 text-[10px]">
+                {#each previewDocData.renglones as r}
+                  <div class="space-y-0.5">
+                    <!-- Código de artículo -->
+                    <div class="pl-1 text-[9.5px] font-mono text-slate-700 font-bold">{r.co_art}</div>
+                    
+                    <!-- Fila con Descripción, Cantidad, Precio y Total -->
+                    <div class="flex justify-between items-baseline">
+                      <span class="w-[42%] uppercase font-medium truncate">{r.art_des.slice(0, 18)}</span>
+                      <span class="w-[16%] text-right font-medium">{r.cantidad.toFixed(2).replace('.', ',')}</span>
+                      <span class="w-[20%] text-right font-medium">{r.precio.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                      <span class="w-[22%] text-right font-bold">{r.total.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                    </div>
+
+                    <!-- Si el nombre excede 18 car, envolver identado abajo -->
+                    {#if r.art_des.length > 18}
+                      <div class="pl-1 text-[9px] uppercase text-slate-600 leading-tight">
+                        {r.art_des.slice(18)}
+                      </div>
+                    {/if}
+                  </div>
+                {/each}
+              </div>
+            </div>
+
+            <!-- 4. TOTAL -->
+            <div class="border-t border-black/20 pt-2 flex justify-between items-baseline font-bold text-xs mt-3 px-1">
+              <div class="text-[11px] font-black tracking-tight text-slate-700">
+                Galpe
+              </div>
+              <div class="flex items-baseline gap-4">
+                <span class="text-xs font-bold">Total</span>
+                <span class="text-sm font-black tracking-tight">{previewDocData.total_neto.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+              </div>
+            </div>
+
+            <!-- 5. PIE LEGAL CENTRADO -->
+            <div class="text-center font-bold text-[10px] tracking-tight mt-5 pt-1 uppercase border-t border-dashed border-slate-300">
+              SIN DERECHO A CREDITO FISCAL
+            </div>
+
+            <!-- BORDE DENTADO DE PAPEL TÉRMICO -->
+            <div class="mt-4 pt-2 border-t-2 border-dotted border-slate-300 flex justify-center text-[9px] text-slate-400">
+              - - - - CORTE DE PAPEL - - - -
+            </div>
+          </div>
+        {:else}
+          <!-- FORMATO MATRICIAL CONTINUO MEDIA PÁGINA (5.5" ESC/P) -->
+          <div class="w-full max-w-2xl bg-white text-black p-6 rounded-md shadow-2xl font-mono text-[11px] leading-tight border border-slate-300 relative select-text">
+            
+            <!-- TRACTOR FEED HOLES (LEFT & RIGHT) -->
+            <div class="absolute left-1.5 top-0 bottom-0 flex flex-col justify-between py-4 pointer-events-none opacity-25 text-[8px] text-slate-400">
+              {#each Array(14) as _}
+                <div class="w-2.5 h-2.5 rounded-full border border-slate-400 bg-slate-200"></div>
+              {/each}
+            </div>
+            <div class="absolute right-1.5 top-0 bottom-0 flex flex-col justify-between py-4 pointer-events-none opacity-25 text-[8px] text-slate-400">
+              {#each Array(14) as _}
+                <div class="w-2.5 h-2.5 rounded-full border border-slate-400 bg-slate-200"></div>
+              {/each}
+            </div>
+
+            <!-- PAPER INNER CONTENT -->
+            <div class="px-3 space-y-2">
+              
+              <!-- TOP ENCLOSED BOX -->
+              <div class="border border-black rounded-sm p-2.5 space-y-1.5">
+                <div class="flex justify-between items-baseline font-bold text-xs">
+                  <span class="text-sm font-black tracking-tight">{previewDocData.branch_name || 'inversiones Galpe 2021 C.A.'}</span>
+                  <span class="text-[11px]">R.I.F.: {previewDocData.branch_rif || 'J-401750354'}</span>
+                  <span class="text-[11px]">PEDIDO: {previewDocData.origin_doc || previewDocData.doc_num}</span>
+                </div>
+
+                <div class="text-[8.5px] text-slate-700 leading-tight">
+                  {previewDocData.branch_address}
+                </div>
+
+                <div class="grid grid-cols-12 gap-2 pt-1.5 border-t border-black">
+                  <div class="col-span-7 space-y-1 text-[10px]">
+                    <div class="flex"><span class="w-20 font-bold shrink-0">Cliente :</span> <span class="font-bold uppercase truncate">{previewDocData.cli_des}</span></div>
+                    <div class="flex"><span class="w-20 font-bold shrink-0">R.I.F.:</span> <span class="uppercase">{previewDocData.rif}</span></div>
+                    <div class="flex"><span class="w-20 font-bold shrink-0">Teléfonos:</span> <span>{previewDocData.telefonos || '---'}</span></div>
+                    <div class="flex"><span class="w-20 font-bold shrink-0">Dirección:</span> <span class="line-clamp-2 uppercase text-[9.5px]">{previewDocData.direc1 || '---'}</span></div>
+                    <div class="flex"><span class="w-20 font-bold shrink-0">Dir. Ent.:</span> <span class="uppercase">{previewDocData.dir_entrega || 'CARABOBO'}</span></div>
+                    <div class="flex"><span class="w-20 font-bold shrink-0">Transporte:</span> <span class="uppercase">{previewDocData.transporte || 'INTERNO'}</span></div>
+                  </div>
+
+                  <div class="col-span-5 text-right space-y-0.5 text-[10px] pl-2 border-l border-slate-300">
+                    <div class="text-sm font-black tracking-wider text-black">NOTA DE ENTREGA</div>
+                    <div class="text-base font-black tracking-widest text-black">{previewDocData.doc_num}</div>
+                    <div class="font-bold uppercase text-[10.5px]">{previewDocData.cond_des || 'CONTADO'}</div>
+                    <div class="text-[9.5px] text-slate-800">Fecha Emisión: {previewDocData.fecha}</div>
+                    <div class="text-[9.5px] text-slate-800 truncate">Vendedor: {previewDocData.vendedor}</div>
+                    <div class="text-[9.5px] font-bold">Moneda: {previewDocData.is_usd ? 'DOLAR' : 'BOLIVARES'}</div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- ITEMS TABLE -->
+              <div class="border border-black rounded-sm overflow-hidden">
+                <table class="w-full text-left text-[10px] border-collapse">
+                  <thead class="bg-slate-100 border-b border-black text-black font-bold">
+                    <tr>
+                      <th class="p-1.5 w-24 border-r border-slate-300">Código</th>
+                      <th class="p-1.5 border-r border-slate-300">Descripción</th>
+                      <th class="p-1.5 text-right w-16 border-r border-slate-300">Cantidad</th>
+                      <th class="p-1.5 text-right w-20 border-r border-slate-300">Precio</th>
+                      <th class="p-1.5 text-right w-20">Neto</th>
+                    </tr>
+                  </thead>
+                  <tbody class="divide-y divide-slate-200 text-black">
+                    {#each previewDocData.renglones as r}
+                      <tr class="hover:bg-slate-50">
+                        <td class="p-1.5 font-mono border-r border-slate-300">{r.co_art}</td>
+                        <td class="p-1.5 font-medium uppercase border-r border-slate-300">{r.art_des}</td>
+                        <td class="p-1.5 text-right font-bold border-r border-slate-300">{r.cantidad.toFixed(2).replace('.', ',')}</td>
+                        <td class="p-1.5 text-right border-r border-slate-300">
+                          {r.precio.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </td>
+                        <td class="p-1.5 text-right font-bold">
+                          {r.total.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </td>
+                      </tr>
+                    {/each}
+                  </tbody>
+                </table>
+              </div>
+
+              <!-- FOOTER BOX -->
+              <div class="border border-black rounded-sm p-2 flex justify-between items-end text-[10px]">
+                <div class="space-y-1">
+                  <div class="font-bold text-black uppercase">
+                    {String(previewDocData.cond_des || '').toUpperCase().includes('CREDITO') ? 'NOTA A CREDITO' : 'NOTA A CONTADO'}
+                  </div>
+                  <div class="text-[9px] text-slate-600">Página 1 de 1</div>
+                </div>
+
+                <div class="text-right space-y-0.5">
+                  <div class="flex justify-end gap-3 text-sm font-black text-black">
+                    <span>Neto:</span>
+                    <span class="w-24 text-right">
+                      {previewDocData.total_neto.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </span>
+                  </div>
+                  <div class="text-[9.5px] font-bold text-black uppercase tracking-tight">
+                    SIN DERECHO A CREDITO FISCAL
+                  </div>
+                </div>
+              </div>
+
+            </div>
+          </div>
+        {/if}
+      </div>
+
+      <!-- MODAL FOOTER ACTIONS -->
+      <div class="p-6 border-t border-border-subtle bg-surface-soft/60 flex flex-col md:flex-row items-center justify-between gap-4">
+        <div class="flex items-center gap-2 text-text-muted text-xs font-mono">
+          <Store size={16} class="text-brand-500 shrink-0" />
+          <span>Sede: <strong class="text-text-base">{previewDocData.branch_desc}</strong> ({previewFormat === 'thermal' ? 'Térmica 80mm ESC/POS' : 'Matricial ESC/P'})</span>
+        </div>
+
+        <div class="flex flex-wrap items-center gap-3 w-full md:w-auto justify-end">
+          <button
+            type="button"
+            onclick={() => (showPreviewModal = false)}
+            class="px-5 py-3 rounded-2xl bg-surface-soft hover:bg-surface-strong text-text-base font-bold text-sm transition-all cursor-pointer border border-border-subtle"
           >
             Cerrar
           </button>
+
+          <!-- BOTÓN IMPRESIÓN DIRECTA NAVEGADOR -->
           <button
             type="button"
-            onclick={handlePrintFromModal}
+            onclick={handleBrowserPrint}
+            class="px-5 py-3 rounded-2xl bg-surface-base hover:bg-surface-strong text-text-base font-bold text-sm transition-all cursor-pointer border border-border-subtle flex items-center gap-2 shadow-sm"
+          >
+            <Printer size={16} class="text-brand-500" />
+            <span>Navegador (Local)</span>
+          </button>
+
+          <!-- BOTÓN IMPRESIÓN POR RED AGENTE -->
+          <button
+            type="button"
+            onclick={() => handlePrintFromModal()}
             disabled={isPrintingNote}
-            class="px-8 py-3.5 rounded-2xl bg-brand-600 hover:bg-brand-500 disabled:opacity-50 text-white font-black text-sm flex items-center justify-center gap-2 shadow-lg shadow-brand-500/20 transition-all cursor-pointer border-none active:scale-[0.98]"
+            class="px-7 py-3 rounded-2xl bg-brand-600 hover:bg-brand-500 disabled:opacity-50 text-white font-black text-sm flex items-center justify-center gap-2 shadow-lg shadow-brand-500/20 transition-all cursor-pointer border-none active:scale-[0.98]"
           >
             {#if isPrintingNote}
               <RefreshCw size={18} class="animate-spin" />
               <span>Imprimiendo...</span>
             {:else}
               <Printer size={18} />
-              <span>Imprimir en Matricial (Epson LX-350)</span>
+              <span>
+                {#if previewFormat === 'thermal'}
+                  Enviar a Térmica Red
+                {:else}
+                  Enviar a Matricial (LX-350)
+                {/if}
+              </span>
             {/if}
           </button>
         </div>
@@ -1584,4 +1782,34 @@
     </div>
   </div>
 {/if}
+
+<style>
+  @media print {
+    :global(body) {
+      background: white !important;
+      color: black !important;
+      margin: 0 !important;
+      padding: 0 !important;
+    }
+    :global(body *) {
+      visibility: hidden;
+    }
+    :global(#thermal-receipt-printable),
+    :global(#thermal-receipt-printable *) {
+      visibility: visible;
+    }
+    :global(#thermal-receipt-printable) {
+      position: absolute;
+      left: 0;
+      top: 0;
+      width: 76mm !important;
+      max-width: 76mm !important;
+      margin: 0 !important;
+      padding: 2mm !important;
+      box-shadow: none !important;
+      border: none !important;
+    }
+  }
+</style>
+
 

@@ -32,7 +32,7 @@ export const load: PageServerLoad = protectLoad('cash_billing', async ({ url, lo
     if (selectedBranch) {
         const { data: pData, error: pErr } = await supabaseAdmin
             .from('printers')
-            .select('id, name, ip_address, port, is_active')
+            .select('id, name, ip_address, port, is_active, sublines')
             .eq('branch_id', selectedBranch.id)
             .eq('is_active', true);
         
@@ -45,6 +45,8 @@ export const load: PageServerLoad = protectLoad('cash_billing', async ({ url, lo
         title: 'Facturación / Nota de Entrega',
         branches: allowedBranches,
         printers,
+        userProfile: profile,
         selectedBranchId: selectedBranch ? selectedBranch.id : ''
     };
 });
+
