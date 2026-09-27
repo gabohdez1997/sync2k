@@ -27,13 +27,14 @@ export const load: PageServerLoad = protectLoad('cash_billing', async ({ url, lo
     const urlBranchId = url.searchParams.get('branch_id');
     const selectedBranch = urlBranchId ? allowedBranches.find((b: any) => b.id === urlBranchId) : allowedBranches[0];
 
-    // Consultar impresoras activas para esta sucursal desde Supabase
+    // Consultar todas las impresoras activas de las sucursales permitidas
+    const branchIds = allowedBranches.map((b: any) => b.id);
     let printers: any[] = [];
-    if (selectedBranch) {
+    if (branchIds.length > 0) {
         const { data: pData, error: pErr } = await supabaseAdmin
             .from('printers')
-            .select('id, name, ip_address, port, is_active, sublines')
-            .eq('branch_id', selectedBranch.id)
+            .select('id, name, ip_address, port, is_active, sublines, branch_id')
+            .in('branch_id', branchIds)
             .eq('is_active', true);
         
         if (!pErr && pData) {

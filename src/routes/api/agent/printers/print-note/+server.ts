@@ -87,7 +87,7 @@ export const POST: RequestHandler = async ({ request, fetch, locals }) => {
         }
 
         // Metadatos de la impresora resuelta
-        const defaultIp = branch.name?.toLowerCase().includes('paraparal') ? '192.168.90.207' : '192.168.90.10';
+        const defaultIp = branch.name?.toLowerCase().includes('paraparal') ? '192.168.10.12' : '192.168.90.10';
         let printerMeta = {
             id: targetPrinter?.id || null,
             name: targetPrinter?.name || (isThermal ? 'Impresora Térmica 80mm' : 'Impresora Matricial'),

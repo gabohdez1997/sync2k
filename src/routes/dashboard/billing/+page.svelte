@@ -26,6 +26,7 @@
     Check,
     Loader2,
     Clock,
+    PackageCheck,
   } from "lucide-svelte";
   import { toast } from "svelte-sonner";
   import { goto } from "$app/navigation";
@@ -416,6 +417,46 @@
   let selectedPrinterId = $state<string>('');
   let previewDocData = $state<any>(null);
 
+  // Impresoras activas para la sede actual (filterSede)
+  const branchPrinters = $derived.by(() => {
+    return (data.printers || []).filter((p: any) => 
+      String(p.branch_id) === String(filterSede) && p.is_active
+    );
+  });
+
+  // Impresora térmica para emisión de Nota de Entrega (Factura sin IVA)
+  const thermalNotePrinter = $derived.by(() => {
+    return branchPrinters.find((p: any) => {
+      const subs = (p.sublines || []).map((s: any) => String(s).trim().toUpperCase());
+      const isThermal = subs.includes('TYPE:THERMAL') || String(p.port || '') === '9100';
+      const isNote = subs.includes('DOC:NOTA_ENTREGA');
+      return isThermal && isNote;
+    }) || branchPrinters.find((p: any) => {
+      const subs = (p.sublines || []).map((s: any) => String(s).trim().toUpperCase());
+      const isNote = subs.includes('DOC:NOTA_ENTREGA');
+      const isNotOther = !subs.includes('TYPE:MATRIX_NETWORK') && !subs.includes('TYPE:FISCAL') && String(p.port || '') !== '445' && String(p.port || '') !== '8088';
+      return isNote && isNotOther;
+    }) || branchPrinters.find((p: any) => {
+      const subs = (p.sublines || []).map((s: any) => String(s).trim().toUpperCase());
+      const isThermal = subs.includes('TYPE:THERMAL') || String(p.port || '') === '9100';
+      const isExcluded = subs.includes('DOC:PRE_DESPACHO') || subs.includes('DOC:FACTURA_FISCAL') || subs.includes('TYPE:MATRIX_NETWORK') || subs.includes('TYPE:FISCAL');
+      return isThermal && !isExcluded;
+    });
+  });
+
+  // Impresoras térmicas de pre-despacho para almacén
+  const preDespachoPrinters = $derived.by(() => {
+    return branchPrinters.filter((p: any) => {
+      const subs = (p.sublines || []).map((s: any) => String(s).trim().toUpperCase());
+      const isThermal = subs.includes('TYPE:THERMAL') || (!subs.some((s: string) => s.startsWith('TYPE:')) && String(p.port || '') === '9100');
+      const isPreDespacho = subs.includes('DOC:PRE_DESPACHO') || 
+        (!subs.some((s: string) => s.startsWith('DOC:')) && !subs.some((s: string) => s.includes('NOTA_ENTREGA') || s.includes('FISCAL')));
+      const isExcluded = subs.includes('DOC:NOTA_ENTREGA') || subs.includes('DOC:FACTURA_FISCAL') || subs.includes('TYPE:MATRIX_NETWORK') || subs.includes('TYPE:FISCAL');
+
+      return isThermal && isPreDespacho && !isExcluded;
+    });
+  });
+
   function openPreviewModal() {
     const activeLines = billingLines.filter((l) => l.checked);
     if (activeLines.length === 0) {
@@ -584,8 +625,106 @@
 
       toast.success(`Factura Nro. ${realDocNum} guardada exitosamente en la base de datos.`);
 
-      // 2. Si existen impresoras activas, proceder a imprimir el ticket de predespacho para almacén
-      if (data.printers && data.printers.length > 0) {
+      // 2. Imprimir Nota de Entrega (Factura sin IVA) en formato térmico 80mm si hay impresora térmica activa
+      if (thermalNotePrinter) {
+        toast.info(`Imprimiendo Nota de Entrega en ${thermalNotePrinter.name}...`);
+        try {
+          const branchObj = data.branches?.find((b: any) => String(b.id) === String(filterSede));
+          const isParaparal = branchObj?.name?.toLowerCase().includes('paraparal');
+          const branchPrefix = isParaparal ? 'G4' : 'G3';
+
+          let formattedDocNum = String(realDocNum || '').trim();
+          if (formattedDocNum && !formattedDocNum.toUpperCase().startsWith('G')) {
+            const numOnly = formattedDocNum.replace(/\D/g, '') || formattedDocNum;
+            formattedDocNum = `${branchPrefix}${numOnly.padStart(8, '0')}`;
+          }
+
+          let branchAddr = branchObj?.address;
+          if (!branchAddr) {
+            if (isParaparal) {
+              branchAddr = 'CTRA NACIONAL LOS GUAYOS-GUACARA CRUCE CON CALLE 940-A Y CALLE PARAPARAL LOCAL GALPON NRO 20-21 SECTOR LOS GUAYOS LOS GUAYOS CARABOBO;';
+            } else {
+              branchAddr = 'Av. 92 Pedro melean (via La Isabelica), Valencia, Carabobo';
+            }
+          }
+
+          const multiplier = showUSD ? 1 : Number(activeTasa || 1);
+          const totalBruto = activeLines.reduce((sum, l) => sum + (Number(l.cantidad) * (Number(l.precio) * multiplier)), 0);
+          const montoImp = activeLines.reduce((sum, l) => {
+            const isExento = l.tipo_imp === '0' || Number(l.porc_imp) === 0;
+            return sum + (isExento ? 0 : (Number(l.cantidad) * (Number(l.precio) * multiplier) * (Number(l.porc_imp) / 100)));
+          }, 0);
+          const totalNeto = totalBruto + montoImp;
+
+          const noteDocData = {
+            doc_num: formattedDocNum,
+            factura_num: realDocNum,
+            pedido_num: originOrderNum || realDocNum,
+            fecha: dayjs().format("DD/MM/YYYY"),
+            fecha_hora: dayjs().format("DD/MM/YYYY hh:mm A"),
+            fecha_emision: dayjs().format("DD/MM/YYYY"),
+            branch_id: filterSede,
+            branch_name: branchObj?.business_name || branchObj?.name || "inversiones Galpe 2021 C.A.",
+            branch_rif: branchObj?.rif || "J-401750354",
+            branch_desc: branchObj?.name || (isParaparal ? "Paraparal" : "Boca de Rio"),
+            branch_address: branchAddr,
+            cli_des: selectedClient.cli_des,
+            rif: selectedClient.rif,
+            telefonos: selectedClient.telefonos || '---',
+            direc1: selectedClient.direc1 || '---',
+            dir_entrega: selectedClient.dir_ent || selectedClient.direc1 || 'CARABOBO',
+            transporte: "INTERNO",
+            vendedor: activeVenDes || activeCoVen || "---",
+            cajero: data.userProfile?.full_name || data.userProfile?.name || "---",
+            co_cond: selectedClient.co_cond || "CONTADO",
+            cond_des: selectedClient.cond_des || "CONTADO",
+            renglones: activeLines.map((l: any) => {
+              const itemPrice = Number(l.precio) * multiplier;
+              return {
+                co_art: l.co_art,
+                art_des: l.art_des,
+                cantidad: Number(l.cantidad),
+                co_uni: l.co_uni || "UND",
+                precio: itemPrice,
+                total: Number(l.cantidad) * itemPrice,
+                porc_imp: Number(l.porc_imp),
+                tipo_imp: l.tipo_imp
+              };
+            }),
+            total_bruto: totalBruto,
+            monto_imp: montoImp,
+            total_neto: totalNeto,
+            is_usd: showUSD,
+            tasa: activeTasa,
+            comentario: originOrderNum ? `ORIGEN: PEDIDO N° ${originOrderNum}` : ""
+          };
+
+          const noteRes = await fetch("/api/agent/printers/print-note", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              branch_id: filterSede,
+              format: "thermal",
+              printer_id: thermalNotePrinter.id,
+              doc: noteDocData
+            })
+          });
+          const noteResult = await noteRes.json();
+          if (noteResult.success) {
+            toast.success(noteResult.message || `Nota de Entrega impresa en [${thermalNotePrinter.name}].`);
+          } else {
+            toast.warning(`La factura se guardó pero falló la Nota de Entrega: ${noteResult.message}`);
+          }
+        } catch (noteErr: any) {
+          console.error("Error al imprimir Nota de Entrega:", noteErr);
+          toast.warning(`La factura se guardó pero ocurrió un error en Nota de Entrega: ${noteErr.message}`);
+        }
+      } else {
+        toast.info("No hay impresora térmica configurada para Notas de Entrega en esta sede.");
+      }
+
+      // 3. Imprimir Pre-despacho de almacén si hay impresoras de pre-despacho activas en esta sede
+      if (preDespachoPrinters.length > 0) {
         toast.info("Enviando ticket de predespacho a almacén...");
         try {
           const printResponse = await fetch(`/api/agent/billing/print`, {
@@ -609,11 +748,11 @@
           if (printResult.success) {
             toast.success(printResult.message || "Ticket de predespacho enviado.");
           } else {
-            toast.warning(`La factura se guardó pero falló la impresión: ${printResult.message}`);
+            toast.warning(`Pre-despacho no impreso: ${printResult.message}`);
           }
         } catch (printErr: any) {
           console.error("Error al imprimir ticket:", printErr);
-          toast.warning(`La factura se guardó pero ocurrió un error al imprimir: ${printErr.message}`);
+          toast.warning(`La factura se guardó pero ocurrió un error al imprimir pre-despacho: ${printErr.message}`);
         }
       }
 
@@ -1151,20 +1290,62 @@
           </div>
         </div>
 
-        <!-- PRINTER SETTINGS -->
-        {#if data.printers.length === 0}
-          <div
-            class="p-4 bg-red-500/5 border border-red-500/10 text-red-400 rounded-2xl text-xs flex gap-2 items-start relative z-10"
-          >
-            <AlertTriangle size={16} class="shrink-0 mt-0.5" />
-            <div>
-              <p class="font-bold">Sin Impresoras Disponibles</p>
-              <p class="text-[10px] text-red-500/70 mt-1 font-medium leading-relaxed">
-                Debes configurar al menos una impresora en el módulo de Sistema para esta sucursal.
-              </p>
-            </div>
+        <!-- PRINTER STATUS CARD -->
+        <div class="p-4 bg-surface-soft/60 border border-border-subtle rounded-2xl space-y-2.5 relative z-10 text-xs">
+          <div class="flex items-center justify-between">
+            <span class="text-[10px] font-black uppercase tracking-wider text-text-muted flex items-center gap-1.5">
+              <Printer size={13} class="text-brand-400" />
+              Impresión Automática en Sede
+            </span>
+            <a href="/dashboard/settings/printers" class="text-[10px] text-brand-400 hover:underline font-bold">
+              Configurar
+            </a>
           </div>
-        {/if}
+
+          <!-- Nota de Entrega Status -->
+          <div class="flex items-center justify-between bg-surface-base/60 p-2.5 rounded-xl border border-border-subtle/50">
+            <div class="flex items-center gap-2">
+              <FileText size={15} class={thermalNotePrinter ? "text-emerald-400" : "text-text-muted/60"} />
+              <div>
+                <p class="font-bold text-[11px] text-text-base">Nota de Entrega (Térmica)</p>
+                <p class="text-[9.5px] text-text-muted">
+                  {thermalNotePrinter ? `${thermalNotePrinter.name} (${thermalNotePrinter.ip_address})` : 'No configurada'}
+                </p>
+              </div>
+            </div>
+            {#if thermalNotePrinter}
+              <span class="px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 font-bold text-[9px] border border-emerald-500/20">
+                Activa
+              </span>
+            {:else}
+              <span class="px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400 font-bold text-[9px] border border-amber-500/20">
+                Inactiva
+              </span>
+            {/if}
+          </div>
+
+          <!-- Pre-despacho Status -->
+          <div class="flex items-center justify-between bg-surface-base/60 p-2.5 rounded-xl border border-border-subtle/50">
+            <div class="flex items-center gap-2">
+              <PackageCheck size={15} class={preDespachoPrinters.length > 0 ? "text-emerald-400" : "text-text-muted/60"} />
+              <div>
+                <p class="font-bold text-[11px] text-text-base">Pre-despacho (Almacén)</p>
+                <p class="text-[9.5px] text-text-muted">
+                  {preDespachoPrinters.length > 0 ? `${preDespachoPrinters.length} impresora(s) asignada(s)` : 'No configurado'}
+                </p>
+              </div>
+            </div>
+            {#if preDespachoPrinters.length > 0}
+              <span class="px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 font-bold text-[9px] border border-emerald-500/20">
+                Activa
+              </span>
+            {:else}
+              <span class="px-2 py-0.5 rounded-full bg-surface-soft text-text-muted font-bold text-[9px] border border-border-subtle">
+                Opcional
+              </span>
+            {/if}
+          </div>
+        </div>
 
         <!-- <div
           class="p-4 bg-amber-500/5 border border-amber-500/10 rounded-2xl flex gap-3 text-amber-500 text-xs relative z-10"
