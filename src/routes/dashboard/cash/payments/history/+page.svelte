@@ -266,8 +266,10 @@
     editTasa = Number(detailData.tasa) || 1;
 
     editRenglones = detailData.renglones.filter((r: any) => {
-      const type = r.co_tipo_doc.trim().toUpperCase();
-      return !['IVAN', 'ISLR'].includes(type);
+      const type = r.co_tipo_doc?.trim()?.toUpperCase();
+      const isAutoDoc = ['IVAN', 'ISLR'].includes(type) || 
+                        (r.doc_orig?.trim()?.toUpperCase() === 'COBRO' && r.nro_orig?.trim() === detailData.cob_num?.trim());
+      return !isAutoDoc;
     }).map((r: any) => {
       const retIvaMatch = detailData.retenciones_iva?.find((ri: any) => ri.rowguid_reng_cob === r.rowguid || ri.numero_documento_afectado?.trim() === r.nro_doc?.trim());
       const retIslrMatch = detailData.retenciones_islr?.find((rn: any) => rn.rowguid_reng_cob === r.rowguid);
