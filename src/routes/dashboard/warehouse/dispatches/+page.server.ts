@@ -204,6 +204,15 @@ export const actions: Actions = {
         }, profile, fetch);
 
         try {
+            // Resolver sucursal por defecto de la sede
+            const starCode = (branch.profit_branch_codes || []).find((c: any) => c.is_default)?.code?.trim();
+            const defaultSucu = starCode || branch.default_warehouse || (branch.profit_branch_codes?.[0]?.code) || '01';
+            payload.branch_id = branch.id;
+            if (!payload.co_sucu && !payload.co_sucu_in) {
+                payload.co_sucu = defaultSucu;
+                payload.co_sucu_in = defaultSucu;
+            }
+
             const saveRes = await agentClient.saveDispatch(payload, branch.id);
 
             if (!saveRes.success) {

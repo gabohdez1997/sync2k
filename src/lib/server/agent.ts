@@ -559,6 +559,16 @@ export class AgentClient {
 	}
 
 	/**
+	 * Elimina físicamente una nota de despacho y revierte inventario
+	 */
+	async deleteDispatch(doc_num: string, sedeId?: string) {
+		const query = sedeId ? `?sede=${encodeURIComponent(sedeId)}` : '';
+		return this.request<any>(`/notas-despacho/${encodeURIComponent(doc_num)}${query}`, {
+			method: 'DELETE'
+		});
+	}
+
+	/**
 	 * Sincroniza usuarios y mapas de MasterProfitPro entre sedes
 	 */
 	async syncMasterUsers() {

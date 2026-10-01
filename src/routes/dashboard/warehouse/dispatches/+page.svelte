@@ -345,6 +345,9 @@
     isSavingDispatch = true;
 
     try {
+      const starBranchCode = (data.selectedBranch?.profit_branch_codes || []).find((c: any) => c.is_default)?.code?.trim();
+      const sucuToAssign = selectedInvoice?.co_sucu_in || starBranchCode || data.defaultWarehouse || "01";
+
       const payload = {
         isEditing: isEditing,
         doc_num: isEditing ? editingDocNum : undefined,
@@ -354,6 +357,8 @@
         co_cond: selectedInvoice.co_cond || "CONT",
         n_control: selectedInvoice.doc_num,
         comentario: observations.trim(),
+        co_sucu: sucuToAssign,
+        co_sucu_in: sucuToAssign,
         co_alma_defecto: data.defaultWarehouse || "01",
         renglones: linesToProcess.map((l, i) => ({
           reng_num: i + 1,
