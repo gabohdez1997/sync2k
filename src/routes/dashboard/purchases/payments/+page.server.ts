@@ -22,6 +22,7 @@ export const load: PageServerLoad = protectLoad('pur_payments', async ({ url, lo
 			bancos: [],
 			tarjetasCredito: [],
 			conceptosIslr: [],
+			activeRate: 1,
 			error: 'No tienes sucursales asignadas.'
 		};
 	}
@@ -35,6 +36,7 @@ export const load: PageServerLoad = protectLoad('pur_payments', async ({ url, lo
 	let bancos: any[] = [];
 	let tarjetasCredito: any[] = [];
 	let conceptosIslr: any[] = [];
+	let activeRate = 1;
 	let errorMsg = '';
 
 	if (selectedBranchId) {
@@ -48,12 +50,13 @@ export const load: PageServerLoad = protectLoad('pur_payments', async ({ url, lo
 				return [];
 			};
 
-			const [cRes, cbRes, bRes, tRes, islrRes] = await Promise.all([
+			const [cRes, cbRes, bRes, tRes, islrRes, tasaRes] = await Promise.all([
 				fetchCatalog('cajas'),
 				fetchCatalog('cuentas_bancarias'),
 				fetchCatalog('bancos'),
 				fetchCatalog('tarjetas_credito'),
-				fetch(`/api/agent/payables/conceptos-islr?branch_id=${selectedBranchId}`).then(r => r.ok ? r.json() : { data: [] }).catch(() => ({ data: [] }))
+				fetch(`/api/agent/payables/conceptos-islr?branch_id=${selectedBranchId}`).then(r => r.ok ? r.json() : { data: [] }).catch(() => ({ data: [] })),
+				fetch(`/api/agent/tasa?branch_id=${selectedBranchId}`).then(r => r.ok ? r.json() : { tasa: 1 }).catch(() => ({ tasa: 1 }))
 			]);
 
 			cajas = cRes;
@@ -61,6 +64,9 @@ export const load: PageServerLoad = protectLoad('pur_payments', async ({ url, lo
 			bancos = bRes;
 			tarjetasCredito = tRes;
 			conceptosIslr = islrRes.data || [];
+			if (tasaRes && Number(tasaRes.tasa || tasaRes.data?.tasa || 0) > 0) {
+				activeRate = Number(tasaRes.tasa || tasaRes.data?.tasa);
+			}
 		} catch (err: any) {
 			errorMsg = `Error al cargar catálogos desde el agente: ${err.message}`;
 		}
@@ -75,6 +81,7 @@ export const load: PageServerLoad = protectLoad('pur_payments', async ({ url, lo
 		bancos,
 		tarjetasCredito,
 		conceptosIslr,
+		activeRate,
 		error: errorMsg || null
 	};
 });
