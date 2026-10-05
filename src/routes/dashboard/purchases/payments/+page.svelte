@@ -45,6 +45,47 @@
     showUSD = toUSD;
   }
 
+  // ─── Helpers monetarios ───────────────────────────────────────────────
+  // Regla: el monto en Bs de la factura es la fuente de verdad (fiscal y de pago).
+  // Las retenciones y netos se calculan SIEMPRE sobre los Bs del documento,
+  // redondeando una sola vez. El USD es solo referencial (Bs / tasa actual) y
+  // nunca se reconvierte USD → Bs (eso generaba diferencias de redondeo).
+  function r2(n: number): number {
+    const v = Number(n) || 0;
+    return Math.round(Number((v * 100).toFixed(6))) / 100;
+  }
+
+  function getRate(): number {
+    const r = Number(currentExchangeRate || 1);
+    return r > 0 ? r : 1;
+  }
+
+  function toUsd(bs: number): number {
+    return r2((Number(bs) || 0) / getRate());
+  }
+
+  function isNcDoc(doc: any): boolean {
+    return doc.co_tipo_doc.trim() === "N/CR";
+  }
+
+  function getPorcRetIva(): number {
+    return selectedSupplier && selectedSupplier.contribu_e
+      ? Number(selectedSupplier.porc_esp) || 75
+      : 75;
+  }
+
+  function getDocBaseBs(doc: any): number {
+    return r2(doc.base_imponible > 0 ? doc.base_imponible : (doc.total_neto - doc.monto_imp));
+  }
+
+  function getAppliedRetIvaBs(inp: any): number {
+    return inp && !inp.yaTieneRetIva && inp.showIvaDetails ? r2(inp.reten_iva_bs) : 0;
+  }
+
+  function getAppliedRetIslrBs(inp: any): number {
+    return inp && !inp.yaTieneRetIslr && inp.showIslrDetails ? r2(inp.reten_islr_bs) : 0;
+  }
+
   // Documentos cargados del proveedor
   let documentos = $state<any[]>([]);
   let checkedDocs = $state<Record<string, boolean>>({});
@@ -59,6 +100,7 @@
         reten_iva: number;
         reten_iva_bs: number;
         num_comprobante_iva: string;
+        porc_ret_iva: number;
         base_imponible_iva: number;
         base_imponible_iva_bs: number;
         alicuota_iva: number;
@@ -87,30 +129,17 @@
   let formasPago = $state<any[]>([]);
 
   // Reactivo: Auto-distribuir el total de instrumentos de pago y notas de crédito a las facturas seleccionadas
-  // Reactivo: Auto-distribuir el total de instrumentos de pago y notas de crédito a las facturas seleccionadas
+  // (todo en Bs, que es la moneda en la que se liquida la factura)
   $effect(() => {
-    // 1. Calcular primero el saldo a favor aportado por Notas de Crédito seleccionadas
+    // 1. Saldo a favor aportado por Notas de Crédito seleccionadas
     let creditFromNCsBs = 0;
-    let creditFromNCsUsd = 0;
-    const rate = Number(currentExchangeRate || 1) > 0 ? Number(currentExchangeRate || 1) : 1;
-
     for (const doc of documentos) {
-      const nro = doc.nro_doc.trim();
-      if (!checkedDocs[nro]) continue;
-
-      const isNC = doc.co_tipo_doc.trim() === "N/CR";
-      if (isNC) {
-        const emissionTasa = Number(doc.tasa || 1) > 1 ? Number(doc.tasa) : 1;
-        const saldoUsd = Math.round((doc.saldo / emissionTasa) * 100) / 100;
-        const saldoBs = Math.round(saldoUsd * rate * 100) / 100;
-        creditFromNCsBs += saldoBs;
-        creditFromNCsUsd += saldoUsd;
-      }
+      if (!checkedDocs[doc.nro_doc.trim()]) continue;
+      if (isNcDoc(doc)) creditFromNCsBs += r2(doc.saldo);
     }
 
     // 2. Fondo disponible total para aplicar a facturas/deudas (Instrumentos + Notas de Crédito)
-    let remainingPaymentUsd = Math.round((totalInstrumentosPago + creditFromNCsUsd) * 100) / 100;
-    let remainingPaymentBs = Math.round((totalInstrumentosPagoBs + creditFromNCsBs) * 100) / 100;
+    let remainingPaymentBs = r2(totalInstrumentosPagoBs + creditFromNCsBs);
 
     // 3. Procesar todos los documentos cargados
     for (const doc of documentos) {
@@ -124,29 +153,21 @@
         continue;
       }
 
-      const emissionTasa = Number(doc.tasa || 1) > 1 ? Number(doc.tasa) : 1;
-      const isNC = doc.co_tipo_doc.trim() === "N/CR";
-
-      if (isNC) {
-        const saldoUsd = Math.round((doc.saldo / emissionTasa) * 100) / 100;
-        const saldoBs = Math.round(saldoUsd * rate * 100) / 100;
+      if (isNcDoc(doc)) {
+        const saldoBs = r2(doc.saldo);
         inp.mont_cob_bs = -saldoBs;
-        inp.mont_cob = -saldoUsd;
+        inp.mont_cob = -toUsd(saldoBs);
       } else {
-        const retIvaUsd = (!inp.yaTieneRetIva && inp.showIvaDetails) ? (Number(inp.reten_iva) || 0) : 0;
-        const retIslrUsd = (!inp.yaTieneRetIslr && inp.showIslrDetails) ? (Number(inp.reten_islr) || 0) : 0;
+        const maxAbonoBs = Math.max(
+          0,
+          r2(r2(doc.saldo) - getAppliedRetIvaBs(inp) - getAppliedRetIslrBs(inp)),
+        );
+        const appliedBs = r2(Math.min(remainingPaymentBs, maxAbonoBs));
 
-        const saldoDocUsd = Math.round((doc.saldo / emissionTasa) * 100) / 100;
-        const maxAbonoUsd = Math.max(0, Math.round((saldoDocUsd - retIvaUsd - retIslrUsd) * 100) / 100);
-
-        const appliedUsd = Math.min(remainingPaymentUsd, maxAbonoUsd);
-        const appliedBs = Math.round(appliedUsd * rate * 100) / 100;
-
-        inp.mont_cob = Math.round(appliedUsd * 100) / 100;
         inp.mont_cob_bs = appliedBs;
+        inp.mont_cob = toUsd(appliedBs);
 
-        remainingPaymentUsd = Math.max(0, Math.round((remainingPaymentUsd - appliedUsd) * 100) / 100);
-        remainingPaymentBs = Math.max(0, Math.round((remainingPaymentBs - appliedBs) * 100) / 100);
+        remainingPaymentBs = Math.max(0, r2(remainingPaymentBs - appliedBs));
       }
     }
   });
@@ -154,181 +175,106 @@
   // Modal toggle
   let showImportModal = $state(false);
 
-  // Monto neto esperado a pagar en efectivo/instrumentos
-  let expectedNetPayUsd = $derived(
-    Math.round(
+  // Monto neto esperado a pagar en efectivo/instrumentos (Bs exactos de la factura)
+  let expectedNetPayBs = $derived(
+    r2(
       documentos.reduce((acc, doc) => {
         if (checkedDocs[doc.nro_doc.trim()]) {
-          const isNC = doc.co_tipo_doc.trim() === "N/CR";
-          const emissionTasa = Number(doc.tasa || 1) > 1 ? Number(doc.tasa) : 1;
-          const saldoUsd = doc.saldo / emissionTasa;
-          if (isNC) return acc - saldoUsd;
+          const saldoBs = r2(doc.saldo);
+          if (isNcDoc(doc)) return acc - saldoBs;
           const inp = docInputs[doc.nro_doc.trim()];
           if (inp) {
-            const appliedRetIvaUsd = (!inp.yaTieneRetIva && inp.showIvaDetails) ? (Number(inp.reten_iva) || 0) : 0;
-            const appliedRetIslrUsd = (!inp.yaTieneRetIslr && inp.showIslrDetails) ? (Number(inp.reten_islr) || 0) : 0;
-            return acc + Math.max(0, saldoUsd - appliedRetIvaUsd - appliedRetIslrUsd);
+            return acc + Math.max(0, r2(saldoBs - getAppliedRetIvaBs(inp) - getAppliedRetIslrBs(inp)));
           }
         }
         return acc;
-      }, 0) * 100
-    ) / 100
+      }, 0),
+    ),
   );
 
-  let expectedNetPayBs = $derived(
-    Math.round(
-      expectedNetPayUsd * (Number(currentExchangeRate || 1) > 0 ? Number(currentExchangeRate || 1) : 1) * 100
-    ) / 100
-  );
+  let expectedNetPayUsd = $derived(toUsd(expectedNetPayBs));
 
-  // Totales de Abonos en USD y Bs
-  let totalCobradoNeto = $derived(
-    Math.round(
-      documentos.reduce((acc, doc) => {
-        if (checkedDocs[doc.nro_doc.trim()]) {
-          const inp = docInputs[doc.nro_doc.trim()];
-          return acc + (inp?.mont_cob || 0);
-        }
-        return acc;
-      }, 0) * 100,
-    ) / 100,
-  );
-
+  // Totales de Abonos (Bs es la fuente; USD referencial)
   let totalCobradoNetoBs = $derived(
-    Math.round(
+    r2(
       documentos.reduce((acc, doc) => {
         if (checkedDocs[doc.nro_doc.trim()]) {
           const inp = docInputs[doc.nro_doc.trim()];
-          return acc + (inp?.mont_cob_bs || 0);
+          return acc + (Number(inp?.mont_cob_bs) || 0);
         }
         return acc;
-      }, 0) * 100,
-    ) / 100,
+      }, 0),
+    ),
   );
+
+  let totalCobradoNeto = $derived(toUsd(totalCobradoNetoBs));
 
   // Totales de Retenciones de IVA
-  let totalRetenidoIva = $derived(
-    Math.round(
-      documentos.reduce((acc, doc) => {
-        if (checkedDocs[doc.nro_doc.trim()]) {
-          const inp = docInputs[doc.nro_doc.trim()];
-          return acc + (!inp?.yaTieneRetIva && inp?.showIvaDetails ? inp.reten_iva || 0 : 0);
-        }
-        return acc;
-      }, 0) * 100,
-    ) / 100,
-  );
-
   let totalRetenidoIvaBs = $derived(
-    Math.round(
+    r2(
       documentos.reduce((acc, doc) => {
         if (checkedDocs[doc.nro_doc.trim()]) {
-          const inp = docInputs[doc.nro_doc.trim()];
-          return acc + (!inp?.yaTieneRetIva && inp?.showIvaDetails ? inp.reten_iva_bs || 0 : 0);
+          return acc + getAppliedRetIvaBs(docInputs[doc.nro_doc.trim()]);
         }
         return acc;
-      }, 0) * 100,
-    ) / 100,
+      }, 0),
+    ),
   );
 
-  let totalRetenidoIvaVista = $derived(
-    Math.round(
-      documentos.reduce((acc, doc) => {
-        if (checkedDocs[doc.nro_doc.trim()]) {
-          const inp = docInputs[doc.nro_doc.trim()];
-          if (inp?.yaTieneRetIva) {
-            return acc + (inp.monto_ret_iva_previo_usd || 0);
-          } else if (inp?.showIvaDetails) {
-            return acc + (inp.reten_iva || 0);
-          } else {
-            const porcIva = (selectedSupplier && selectedSupplier.contribu_e) ? (Number(selectedSupplier.porc_esp) || 75) : 75;
-            const theoreticalRetIvaBs = Math.round((doc.monto_imp || 0) * (porcIva / 100) * 100) / 100;
-            const rate = Number(currentExchangeRate || 1) > 0 ? Number(currentExchangeRate || 1) : 1;
-            const docTasa = Number(doc.tasa || 1) > 1 ? Number(doc.tasa) : rate;
-            const theoreticalRetIvaUsd = Math.round((theoreticalRetIvaBs / docTasa) * 100) / 100;
-            return acc + theoreticalRetIvaUsd;
-          }
-        }
-        return acc;
-      }, 0) * 100,
-    ) / 100,
-  );
+  let totalRetenidoIva = $derived(toUsd(totalRetenidoIvaBs));
 
   let totalRetenidoIvaVistaBs = $derived(
-    Math.round(
+    r2(
       documentos.reduce((acc, doc) => {
         if (checkedDocs[doc.nro_doc.trim()]) {
           const inp = docInputs[doc.nro_doc.trim()];
           if (inp?.yaTieneRetIva) {
-            return acc + (inp.monto_ret_iva_previo_bs || 0);
+            return acc + (Number(inp.monto_ret_iva_previo_bs) || 0);
           } else if (inp?.showIvaDetails) {
-            return acc + (inp.reten_iva_bs || 0);
+            return acc + r2(inp.reten_iva_bs);
           } else {
-            const porcIva = (selectedSupplier && selectedSupplier.contribu_e) ? (Number(selectedSupplier.porc_esp) || 75) : 75;
-            const emissionTasa = Number(doc.tasa || 1) > 1 ? Number(doc.tasa) : 1;
-            const ivaUsd = (doc.monto_imp || 0) / emissionTasa;
-            const rate = Number(currentExchangeRate || 1) > 0 ? Number(currentExchangeRate || 1) : 1;
-            const theoreticalRetIvaBs = Math.round(ivaUsd * (porcIva / 100) * rate * 100) / 100;
-            return acc + theoreticalRetIvaBs;
+            // Retención teórica sobre el IVA en Bs de la factura
+            return acc + r2((Number(doc.monto_imp) || 0) * (getPorcRetIva() / 100));
           }
         }
         return acc;
-      }, 0) * 100,
-    ) / 100,
+      }, 0),
+    ),
   );
+
+  let totalRetenidoIvaVista = $derived(toUsd(totalRetenidoIvaVistaBs));
 
   // Totales de Retenciones de ISLR
-  let totalRetenidoIslr = $derived(
-    Math.round(
-      documentos.reduce((acc, doc) => {
-        if (checkedDocs[doc.nro_doc.trim()]) {
-          const inp = docInputs[doc.nro_doc.trim()];
-          return acc + (!inp?.yaTieneRetIslr && inp?.showIslrDetails ? inp.reten_islr || 0 : 0);
-        }
-        return acc;
-      }, 0) * 100,
-    ) / 100,
-  );
-
   let totalRetenidoIslrBs = $derived(
-    Math.round(
+    r2(
       documentos.reduce((acc, doc) => {
         if (checkedDocs[doc.nro_doc.trim()]) {
-          const inp = docInputs[doc.nro_doc.trim()];
-          return acc + (!inp?.yaTieneRetIslr && inp?.showIslrDetails ? inp.reten_islr_bs || 0 : 0);
+          return acc + getAppliedRetIslrBs(docInputs[doc.nro_doc.trim()]);
         }
         return acc;
-      }, 0) * 100,
-    ) / 100,
+      }, 0),
+    ),
   );
 
-  let totalRetenidoIslrVista = $derived(
-    Math.round(
-      documentos.reduce((acc, doc) => {
-        if (checkedDocs[doc.nro_doc.trim()]) {
-          const inp = docInputs[doc.nro_doc.trim()];
-          return acc + (inp?.showIslrDetails ? inp.reten_islr || 0 : 0);
-        }
-        return acc;
-      }, 0) * 100,
-    ) / 100,
-  );
+  let totalRetenidoIslr = $derived(toUsd(totalRetenidoIslrBs));
 
   let totalRetenidoIslrVistaBs = $derived(
-    Math.round(
+    r2(
       documentos.reduce((acc, doc) => {
         if (checkedDocs[doc.nro_doc.trim()]) {
           const inp = docInputs[doc.nro_doc.trim()];
           if (inp?.yaTieneRetIslr) {
-            return acc + (inp.monto_ret_islr_previo_bs || 0);
+            return acc + (Number(inp.monto_ret_islr_previo_bs) || 0);
           } else if (inp?.showIslrDetails) {
-            return acc + (inp.reten_islr_bs || 0);
+            return acc + r2(inp.reten_islr_bs);
           }
         }
         return acc;
-      }, 0) * 100,
-    ) / 100,
+      }, 0),
+    ),
   );
+
+  let totalRetenidoIslrVista = $derived(toUsd(totalRetenidoIslrVistaBs));
 
   // Total de Instrumentos de Pago ingresados
   let totalInstrumentosPago = $derived(
@@ -347,41 +293,25 @@
     ) / 100,
   );
 
-  // Saldo total pendiente solo de las facturas seleccionadas
-  let saldoPendientePorCobrar = $derived(
-    Math.round(
+  // Saldo total pendiente solo de las facturas seleccionadas (Bs exactos del documento)
+  let saldoPendientePorCobrarBs = $derived(
+    r2(
       documentos.reduce((acc, doc) => {
         if (!checkedDocs[doc.nro_doc.trim()]) return acc;
-        const isNC = doc.co_tipo_doc.trim() === "N/CR";
-        const emissionTasa = Number(doc.tasa || 1) > 1 ? Number(doc.tasa) : 1;
-        const saldoDocUsd = doc.saldo / emissionTasa;
-        return isNC ? acc - saldoDocUsd : acc + saldoDocUsd;
-      }, 0) * 100,
-    ) / 100,
+        const saldoBs = r2(doc.saldo);
+        return isNcDoc(doc) ? acc - saldoBs : acc + saldoBs;
+      }, 0),
+    ),
   );
 
-  let saldoPendientePorCobrarBs = $derived(
-    Math.round(
-      saldoPendientePorCobrar * (Number(currentExchangeRate || 1) > 0 ? Number(currentExchangeRate || 1) : 1) * 100,
-    ) / 100,
-  );
+  let saldoPendientePorCobrar = $derived(toUsd(saldoPendientePorCobrarBs));
 
-  // Cuadre
-  let diferenciaCuadre = $derived(
-    Math.round(
-      Math.abs(
-        totalCobradoNeto - totalInstrumentosPago
-      ) * 100
-    ) / 100
-  );
-
+  // Cuadre: se valida en Bs, que es lo que se registra en Profit
   let diferenciaCuadreBs = $derived(
-    Math.round(
-      Math.abs(
-        totalCobradoNetoBs - totalInstrumentosPagoBs
-      ) * 100
-    ) / 100
+    r2(Math.abs(totalCobradoNetoBs - totalInstrumentosPagoBs)),
   );
+
+  let diferenciaCuadre = $derived(toUsd(diferenciaCuadreBs));
 
   // Condición para habilitar Guardar Pago
   let canSave = $derived.by(() => {
@@ -389,14 +319,14 @@
     const selectedCount = Object.values(checkedDocs).filter(Boolean).length;
     if (selectedCount === 0) return false;
 
-    // Caso 1: Pago normal o mixto (requiere instrumentos y cuadre con el neto abonado)
-    if (totalCobradoNeto > 0) {
-      return diferenciaCuadre === 0 && formasPago.length > 0;
+    // Caso 1: Pago normal o mixto (requiere instrumentos y cuadre en Bs con el neto abonado)
+    if (totalCobradoNetoBs > 0) {
+      return diferenciaCuadreBs === 0 && formasPago.length > 0;
     }
 
     // Caso 2: Pago parcial exclusivamente de retenciones (IVA y/o ISLR aplicadas sin instrumentos)
-    if (totalCobradoNeto === 0) {
-      return totalRetenidoIva > 0 || totalRetenidoIslr > 0;
+    if (totalCobradoNetoBs === 0) {
+      return totalRetenidoIvaBs > 0 || totalRetenidoIslrBs > 0;
     }
 
     return false;
@@ -439,11 +369,7 @@
       if (!fp.manual_override) {
         applyExactPendingAmount(idx);
       } else {
-        if (curr === "BS") {
-          fp.mont_doc = Math.round((fp.mont_doc_bs / rate) * 100) / 100;
-        } else {
-          fp.mont_doc_bs = Math.round(fp.mont_doc * rate * 100) / 100;
-        }
+        handleAmountChange(idx, curr === "BS" ? fp.mont_doc_bs : fp.mont_doc);
       }
     });
   }
@@ -570,68 +496,53 @@
 
         documentos.forEach((doc) => {
           const nro = doc.nro_doc.trim();
-          const rate = Number(currentExchangeRate || 1) > 0 ? Number(currentExchangeRate || 1) : 1;
-          const emissionTasa = Number(doc.tasa || 1) > 1 ? Number(doc.tasa) : 1;
-          const isNC = doc.co_tipo_doc.trim() === "N/CR";
+          const isNC = isNcDoc(doc);
 
           // Verificar si ya tiene retención de IVA o ISLR aplicada
           const yaTieneRetIva = (Number(doc.ya_reten_iva_bs) > 0) || Boolean(doc.nro_comp_iva);
           const yaTieneRetIslr = (Number(doc.ya_reten_islr_bs) > 0) || Boolean(doc.nro_comp_islr);
-          const montoRetIvaPrevioBs = Number(doc.ya_reten_iva_bs) || 0;
-          const montoRetIvaPrevioUsd = Math.round((montoRetIvaPrevioBs / emissionTasa) * 100) / 100;
-          const montoRetIslrPrevioBs = Number(doc.ya_reten_islr_bs) || 0;
-          const montoRetIslrPrevioUsd = Math.round((montoRetIslrPrevioBs / emissionTasa) * 100) / 100;
+          const montoRetIvaPrevioBs = r2(doc.ya_reten_iva_bs);
+          const montoRetIslrPrevioBs = r2(doc.ya_reten_islr_bs);
 
-          // Base imponible del documento (USD fija según emisión, Bs dinámica según tasa actual)
-          const rawBaseImpBs = doc.base_imponible > 0 ? doc.base_imponible : (doc.total_neto - doc.monto_imp);
-          const baseImpUsd = Math.round((rawBaseImpBs / emissionTasa) * 100) / 100;
-          const baseImpBs = Math.round(baseImpUsd * rate * 100) / 100;
+          // Base imponible del documento en Bs (exacta, tal como está en la factura)
+          const baseImpBs = getDocBaseBs(doc);
 
-          // Retención de IVA por defecto (75% / 100%) - Solo si NO tiene retención previa
-          const rawIvaBs = doc.monto_imp || 0;
-          const ivaUsd = Math.round((rawIvaBs / emissionTasa) * 100) / 100;
-          const porcRetIva = (selectedSupplier && selectedSupplier.contribu_e) ? (Number(selectedSupplier.porc_esp) || 75) : 75;
-          const retIvaUsd = !isNC && !yaTieneRetIva && (ivaUsd > 0)
-            ? Math.round(ivaUsd * (porcRetIva / 100) * 100) / 100
+          // Retención de IVA por defecto (75% / 100%) sobre el IVA en Bs - Solo si NO tiene retención previa
+          const ivaBs = Number(doc.monto_imp) || 0;
+          const porcRetIva = getPorcRetIva();
+          const retIvaBs = !isNC && !yaTieneRetIva && ivaBs > 0
+            ? r2(ivaBs * (porcRetIva / 100))
             : 0;
-          const retIvaBs = Math.round(retIvaUsd * rate * 100) / 100;
 
-          // Retención ISLR
+          // Retención ISLR (desactivada por defecto hasta que se active el toggle)
           const porcIslr = 2; // Default 2%
-          const baseIslrUsd = baseImpUsd;
-          const baseIslrBs = baseImpBs;
-          const retIslrUsd = 0; // Desactivado por defecto hasta que se active el toggle
-          const retIslrBs = 0;
-
-          // Sugerencia de comprobante
-          const today = new Date();
-          const periodStr = today.getFullYear() + String(today.getMonth() + 1).padStart(2, "0");
 
           docInputs[nro] = {
             mont_cob: 0,
             mont_cob_bs: 0,
-            reten_iva: retIvaUsd,
+            reten_iva: toUsd(retIvaBs),
             reten_iva_bs: retIvaBs,
             num_comprobante_iva: "",
-            base_imponible_iva: baseImpUsd,
+            porc_ret_iva: porcRetIva,
+            base_imponible_iva: toUsd(baseImpBs),
             base_imponible_iva_bs: baseImpBs,
             alicuota_iva: doc.porc_imp || 16,
-            reten_islr: retIslrUsd,
-            reten_islr_bs: retIslrBs,
+            reten_islr: 0,
+            reten_islr_bs: 0,
             co_islr: defaultIslrConcept,
             porc_islr: porcIslr,
-            base_imponible_islr: baseIslrUsd,
-            base_imponible_islr_bs: baseIslrBs,
+            base_imponible_islr: toUsd(baseImpBs),
+            base_imponible_islr_bs: baseImpBs,
             showIvaDetails: !yaTieneRetIva && retIvaBs > 0,
             showIslrDetails: false,
             yaTieneRetIva,
             nro_comp_iva_previo: doc.nro_comp_iva ? doc.nro_comp_iva.trim() : "",
             monto_ret_iva_previo_bs: montoRetIvaPrevioBs,
-            monto_ret_iva_previo_usd: montoRetIvaPrevioUsd,
+            monto_ret_iva_previo_usd: toUsd(montoRetIvaPrevioBs),
             yaTieneRetIslr,
             nro_comp_islr_previo: doc.nro_comp_islr ? doc.nro_comp_islr.trim() : "",
             monto_ret_islr_previo_bs: montoRetIslrPrevioBs,
-            monto_ret_islr_previo_usd: montoRetIslrPrevioUsd,
+            monto_ret_islr_previo_usd: toUsd(montoRetIslrPrevioBs),
           };
 
           if (specificDocToSelect && nro === specificDocToSelect) {
@@ -678,57 +589,43 @@
     const inp = docInputs[docNo];
     if (!inp) return;
 
-    const rate = Number(currentExchangeRate || 1) > 0 ? Number(currentExchangeRate || 1) : 1;
-    const emissionTasa = Number(doc.tasa || 1) > 1 ? Number(doc.tasa) : 1;
-    const isNC = doc.co_tipo_doc.trim() === "N/CR";
+    // Base imponible: Bs exactos del documento; USD solo referencial
+    const baseImpBs = getDocBaseBs(doc);
+    inp.base_imponible_iva_bs = baseImpBs;
+    inp.base_imponible_iva = toUsd(baseImpBs);
+    inp.monto_ret_iva_previo_usd = toUsd(inp.monto_ret_iva_previo_bs || 0);
+    inp.monto_ret_islr_previo_usd = toUsd(inp.monto_ret_islr_previo_bs || 0);
 
-    // Actualizar bases imponibles en USD y Bs
-    const rawBaseImpBs = doc.base_imponible > 0 ? doc.base_imponible : (doc.total_neto - doc.monto_imp);
-    const baseImpUsd = Math.round((rawBaseImpBs / emissionTasa) * 100) / 100;
-    inp.base_imponible_iva = baseImpUsd;
-    inp.base_imponible_iva_bs = Math.round(baseImpUsd * rate * 100) / 100;
-
-    // Manejo de Retención de IVA
+    // Manejo de Retención de IVA (se calcula sobre el IVA en Bs de la factura)
     if (inp.yaTieneRetIva) {
       inp.showIvaDetails = false;
       inp.reten_iva_bs = 0;
-      inp.reten_iva = 0;
     } else if (!inp.manual_override_iva) {
       if (inp.showIvaDetails) {
-        const porcIva = (selectedSupplier && selectedSupplier.contribu_e) ? (Number(selectedSupplier.porc_esp) || 75) : 75;
-        const rawIvaBs = doc.monto_imp || 0;
-        const ivaUsd = Math.round((rawIvaBs / emissionTasa) * 100) / 100;
-        const theoreticalRetIvaUsd = Math.round(ivaUsd * (porcIva / 100) * 100) / 100;
-        inp.reten_iva = theoreticalRetIvaUsd;
-        inp.reten_iva_bs = Math.round(theoreticalRetIvaUsd * rate * 100) / 100;
+        const porcIva = Number(inp.porc_ret_iva) || getPorcRetIva();
+        inp.reten_iva_bs = r2((Number(doc.monto_imp) || 0) * (porcIva / 100));
       } else {
         inp.reten_iva_bs = 0;
-        inp.reten_iva = 0;
       }
-    } else {
-      inp.reten_iva_bs = Math.round(Number(inp.reten_iva || 0) * rate * 100) / 100;
     }
+    // (si es manual se respeta el monto en Bs ingresado por el usuario)
+    inp.reten_iva = toUsd(inp.reten_iva_bs);
 
-    // Manejo de Retención de ISLR
+    // Manejo de Retención de ISLR (se calcula sobre la base en Bs)
     if (inp.yaTieneRetIslr) {
       inp.showIslrDetails = false;
       inp.reten_islr_bs = 0;
-      inp.reten_islr = 0;
     } else if (!inp.manual_override_islr) {
       if (inp.showIslrDetails) {
-        const baseUsd = inp.base_imponible_islr || baseImpUsd;
-        inp.base_imponible_islr = baseUsd;
-        inp.base_imponible_islr_bs = Math.round(baseUsd * rate * 100) / 100;
-        const retUsd = Math.round(baseUsd * ((inp.porc_islr || 2) / 100) * 100) / 100;
-        inp.reten_islr = retUsd;
-        inp.reten_islr_bs = Math.round(retUsd * rate * 100) / 100;
+        const baseIslrBs = Number(inp.base_imponible_islr_bs) > 0 ? r2(inp.base_imponible_islr_bs) : baseImpBs;
+        inp.reten_islr_bs = r2(baseIslrBs * ((Number(inp.porc_islr) || 2) / 100));
       } else {
         inp.reten_islr_bs = 0;
-        inp.reten_islr = 0;
       }
-    } else {
-      inp.reten_islr_bs = Math.round(Number(inp.reten_islr || 0) * rate * 100) / 100;
     }
+    // (si es manual se respeta el monto en Bs ingresado por el usuario)
+    inp.base_imponible_islr = toUsd(inp.base_imponible_islr_bs);
+    inp.reten_islr = toUsd(inp.reten_islr_bs);
 
     if (syncInstrument) {
       syncSinglePaymentInstrument();
@@ -742,46 +639,33 @@
     syncSinglePaymentInstrument();
   }
 
-  // Helper para calcular el monto neto pendiente que deja el saldo del documento en 0
+  // Helper para calcular el monto neto pendiente (en Bs exactos) que deja el saldo del documento en 0
   function getRemainingPendingBalance(excludeIndex: number = -1) {
-    let creditFromNCsUsd = 0;
-    const rate = Number(currentExchangeRate || 1) > 0 ? Number(currentExchangeRate || 1) : 1;
+    let totalNeededBs = 0;
 
     for (const doc of documentos) {
       const nro = doc.nro_doc.trim();
       if (!checkedDocs[nro]) continue;
-      if (doc.co_tipo_doc.trim() === "N/CR") {
-        const emissionTasa = Number(doc.tasa || 1) > 1 ? Number(doc.tasa) : 1;
-        creditFromNCsUsd += Math.round((doc.saldo / emissionTasa) * 100) / 100;
+
+      const saldoBs = r2(doc.saldo);
+      if (isNcDoc(doc)) {
+        totalNeededBs -= saldoBs;
+        continue;
       }
-    }
-
-    let totalNeededUsd = 0;
-
-    for (const doc of documentos) {
-      const nro = doc.nro_doc.trim();
-      if (!checkedDocs[nro]) continue;
-      if (doc.co_tipo_doc.trim() === "N/CR") continue;
 
       const inp = docInputs[nro];
-      const emissionTasa = Number(doc.tasa || 1) > 1 ? Number(doc.tasa) : 1;
-      const retIvaUsd = (!inp?.yaTieneRetIva && inp?.showIvaDetails) ? (Number(inp.reten_iva) || 0) : 0;
-      const retIslrUsd = (!inp?.yaTieneRetIslr && inp?.showIslrDetails) ? (Number(inp.reten_islr) || 0) : 0;
-
-      const maxUsd = Math.max(0, (doc.saldo / emissionTasa) - retIvaUsd - retIslrUsd);
-      totalNeededUsd += maxUsd;
+      totalNeededBs += Math.max(0, r2(saldoBs - getAppliedRetIvaBs(inp) - getAppliedRetIslrBs(inp)));
     }
 
-    let otherInstrumentsUsd = 0;
-
+    let otherInstrumentsBs = 0;
     formasPago.forEach((fp, i) => {
       if (i !== excludeIndex) {
-        otherInstrumentsUsd += Math.abs(Number(fp.mont_doc) || 0);
+        otherInstrumentsBs += Math.abs(Number(fp.mont_doc_bs) || 0);
       }
     });
 
-    const pendingUsd = Math.max(0, Math.round((totalNeededUsd - creditFromNCsUsd - otherInstrumentsUsd) * 100) / 100);
-    const pendingBs = Math.round(pendingUsd * rate * 100) / 100;
+    const pendingBs = Math.max(0, r2(totalNeededBs - otherInstrumentsBs));
+    const pendingUsd = toUsd(pendingBs);
 
     return { pendingBs, pendingUsd };
   }
@@ -789,17 +673,11 @@
   function applyExactPendingAmount(index: number) {
     if (!formasPago[index]) return;
     const fp = formasPago[index];
-    const curr = getRowCurrency(fp);
-    const rate = Number(currentExchangeRate || 1) > 0 ? Number(currentExchangeRate || 1) : 1;
     const { pendingBs, pendingUsd } = getRemainingPendingBalance(index);
 
-    if (curr === "BS") {
-      fp.mont_doc_bs = pendingBs;
-      fp.mont_doc = Math.round((pendingBs / rate) * 100) / 100;
-    } else {
-      fp.mont_doc = pendingUsd;
-      fp.mont_doc_bs = pendingBs;
-    }
+    // Siempre se liquida el monto exacto en Bs; el USD es el equivalente a la tasa actual
+    fp.mont_doc_bs = pendingBs;
+    fp.mont_doc = pendingUsd;
   }
 
   function syncSinglePaymentInstrument() {
@@ -876,14 +754,19 @@
     const fp = formasPago[index];
     if (!fp) return;
     const curr = getRowCurrency(fp);
-    const rate = currentExchangeRate > 0 ? currentExchangeRate : 1;
 
     if (curr === "BS") {
-      fp.mont_doc_bs = Number(val) || 0;
-      fp.mont_doc = Math.round((fp.mont_doc_bs / rate) * 100) / 100;
+      fp.mont_doc_bs = r2(val);
+      fp.mont_doc = toUsd(fp.mont_doc_bs);
     } else {
-      fp.mont_doc = Number(val) || 0;
-      fp.mont_doc_bs = Math.round(fp.mont_doc * rate * 100) / 100;
+      fp.mont_doc = r2(val);
+      // Si el monto en $ corresponde al pendiente, se usa el Bs exacto de la factura
+      // (evita que el redondeo del USD descuadre el pago en Bs)
+      const { pendingBs, pendingUsd } = getRemainingPendingBalance(index);
+      fp.mont_doc_bs =
+        pendingBs > 0 && Math.abs(fp.mont_doc - pendingUsd) < 0.005
+          ? pendingBs
+          : r2(fp.mont_doc * getRate());
     }
   }
 
@@ -903,17 +786,17 @@
       return;
     }
 
-    if (totalCobradoNeto === 0 && totalRetenidoIva === 0 && totalRetenidoIslr === 0) {
+    if (totalCobradoNetoBs === 0 && totalRetenidoIvaBs === 0 && totalRetenidoIslrBs === 0) {
       toast.error("Debe ingresar un monto a pagar o aplicar al menos una retención (IVA o ISLR).");
       return;
     }
 
-    if (totalCobradoNeto > 0 && formasPago.length === 0) {
+    if (totalCobradoNetoBs > 0 && formasPago.length === 0) {
       toast.error("Debe agregar al menos un instrumento de pago (Efectivo, Banco, etc.).");
       return;
     }
 
-    if (totalCobradoNeto > 0 && diferenciaCuadre !== 0) {
+    if (totalCobradoNetoBs > 0 && diferenciaCuadreBs !== 0) {
       toast.error("El monto abonado en facturas debe coincidir exactamente con los instrumentos de pago.");
       return;
     }
@@ -1001,7 +884,8 @@
       });
 
       const firstDoc = selectedDocsList[0];
-      const safeCurrency = firstDoc?.co_mone?.trim()?.toUpperCase() === "BS" ? "BS" : "USD";
+      const docMone = (firstDoc?.co_mone || "").trim().toUpperCase();
+      const safeCurrency = !docMone || ["BS", "VES", "BS.", "BOL"].includes(docMone) ? "BS" : docMone;
 
       const payload = {
         co_prov: selectedSupplier.co_prov,
@@ -1340,9 +1224,7 @@
                           >Saldo Pendiente</span
                         >
                         <span class="text-lg font-black text-brand-500">
-                          {#if doc.co_tipo_doc.trim() === "N/CR"}-{/if}$ {(
-                            doc.saldo / (Number(doc.tasa || 1) > 1 ? Number(doc.tasa) : 1)
-                          ).toLocaleString("de-DE", {
+                          {#if doc.co_tipo_doc.trim() === "N/CR"}-{/if}$ {toUsd(doc.saldo).toLocaleString("de-DE", {
                             minimumFractionDigits: 2,
                             maximumFractionDigits: 2,
                           })}
@@ -1350,10 +1232,7 @@
                         <span
                           class="block text-xs text-text-muted font-bold mt-1"
                         >
-                          Bs. {#if doc.co_tipo_doc.trim() === "N/CR"}-{/if}{(
-                            (doc.saldo / (Number(doc.tasa || 1) > 1 ? Number(doc.tasa) : 1)) *
-                            (Number(currentExchangeRate || 1) > 0 ? Number(currentExchangeRate || 1) : 1)
-                          ).toLocaleString("de-DE", {
+                          Bs. {#if doc.co_tipo_doc.trim() === "N/CR"}-{/if}{r2(doc.saldo).toLocaleString("de-DE", {
                             minimumFractionDigits: 2,
                             maximumFractionDigits: 2,
                           })}
@@ -1382,10 +1261,7 @@
                             <span
                               class="block text-xs text-text-muted font-bold text-right mt-1.5"
                             >
-                              Bs. {(
-                                (input.base_imponible_iva || 0) *
-                                (Number(currentExchangeRate || 1) > 0 ? Number(currentExchangeRate || 1) : 1)
-                              ).toLocaleString("de-DE", {
+                              Bs. {(input.base_imponible_iva_bs || 0).toLocaleString("de-DE", {
                                 minimumFractionDigits: 2,
                                 maximumFractionDigits: 2,
                               })}
@@ -1400,21 +1276,14 @@
                             <input
                               type="number"
                               step="0.01"
-                              value={Math.round(
-                                (doc.monto_imp /
-                                  (Number(doc.tasa || 1) > 1 ? Number(doc.tasa) : 1)) *
-                                  100,
-                              ) / 100}
+                              value={toUsd(doc.monto_imp)}
                               readonly
                               class="w-full bg-surface-soft border border-border-subtle px-3 py-2 rounded-xl text-sm text-text-base text-right font-bold cursor-not-allowed opacity-90"
                             />
                             <span
                               class="block text-xs text-text-muted font-bold text-right mt-1.5"
                             >
-                              Bs. {(
-                                (Math.round((doc.monto_imp / (Number(doc.tasa || 1) > 1 ? Number(doc.tasa) : 1)) * 100) / 100) *
-                                (Number(currentExchangeRate || 1) > 0 ? Number(currentExchangeRate || 1) : 1)
-                              ).toLocaleString("de-DE", {
+                              Bs. {r2(doc.monto_imp).toLocaleString("de-DE", {
                                 minimumFractionDigits: 2,
                                 maximumFractionDigits: 2,
                               })}
@@ -1580,30 +1449,25 @@
                                   >PORC. RETENCIÓN (%)</span
                                 >
                                 <select
-                                  onchange={(e) => {
-                                    const porc = Number(e.currentTarget.value);
-                                    const emissionTasa = Number(doc.tasa || 1) > 1 ? Number(doc.tasa) : 1;
-                                    const ivaUsd = (doc.monto_imp || 0) / emissionTasa;
-                                    const rate = Number(currentExchangeRate || 1) > 0 ? Number(currentExchangeRate || 1) : 1;
-                                    input.reten_iva = Math.round(ivaUsd * (porc / 100) * 100) / 100;
-                                    input.reten_iva_bs = Math.round(input.reten_iva * rate * 100) / 100;
-                                    input.manual_override_iva = true;
+                                  bind:value={input.porc_ret_iva}
+                                  onchange={() => {
+                                    input.manual_override_iva = false;
                                     recalculateDocAmounts(doc.nro_doc.trim(), doc);
                                   }}
                                   class="w-full bg-surface-soft border border-border-subtle px-2 py-1.5 rounded-lg text-xs"
                                 >
-                                  <option value="75">75% (General)</option>
-                                  <option value="100">100% (Total)</option>
+                                  <option value={75}>75% (General)</option>
+                                  <option value={100}>100% (Total)</option>
                                 </select>
                               </div>
                               <div>
                                 <span class="text-[9px] text-text-muted font-bold block mb-1 font-semibold text-green-400"
-                                  >MTO RETENIDO ($)</span
+                                  >MTO RETENIDO (Bs.)</span
                                 >
                                 <input
                                   type="number"
                                   step="0.01"
-                                  bind:value={input.reten_iva}
+                                  bind:value={input.reten_iva_bs}
                                   oninput={() => {
                                     input.manual_override_iva = true;
                                     recalculateDocAmounts(doc.nro_doc.trim(), doc);
@@ -1679,11 +1543,11 @@
                                 />
                               </div>
                               <div>
-                                <span class="text-[9px] text-text-muted font-bold block mb-1 font-semibold text-amber-400">MTO RETENIDO ($)</span>
+                                <span class="text-[9px] text-text-muted font-bold block mb-1 font-semibold text-amber-400">MTO RETENIDO (Bs.)</span>
                                 <input
                                   type="number"
                                   step="0.01"
-                                  bind:value={input.reten_islr}
+                                  bind:value={input.reten_islr_bs}
                                   oninput={() => {
                                     input.manual_override_islr = true;
                                     recalculateDocAmounts(doc.nro_doc.trim(), doc);
@@ -1696,7 +1560,7 @@
                         {/if}
 
                         <!-- Neto Abonado por este Documento -->
-                        {#if doc.co_tipo_doc.trim() !== "N/CR" && input.mont_cob > 0}
+                        {#if doc.co_tipo_doc.trim() !== "N/CR" && input.mont_cob_bs > 0}
                           <div
                             class="flex flex-col sm:flex-row sm:items-center justify-between border-t border-border-subtle/40 pt-3 gap-3"
                           >
