@@ -107,6 +107,30 @@
     return filtered.length > 0 ? filtered : list;
   }
 
+  function resolveConceptValues(conceptObj: any, coIslr: string, currentTab: string) {
+    let porcRet = Number(conceptObj?.porc_ret ?? 0);
+    let porcImp = Number(conceptObj?.porc_imp ?? 100);
+    let sustraen = Number(conceptObj?.sustraen ?? 0);
+
+    // Fallback de contingencia: si el agente remoto aún no tiene el tabulador/sustraendo o devolvió 0
+    if (porcRet === 0) {
+      if (currentTab === '5') {
+        // Tabulador 5: Persona Natural Residente (PNR)
+        // Por ley SENIAT: 3% y sustraendo de 107.50 Bs (2.5 UT * 43 Bs = 107.50 Bs)
+        porcRet = 3;
+        porcImp = 100;
+        sustraen = 107.50;
+      } else {
+        // Tabulador 7: Persona Jurídica Domiciliada (PJD)
+        porcRet = (coIslr === '072' || coIslr === '083') ? 3 : 2;
+        porcImp = 100;
+        sustraen = 0;
+      }
+    }
+
+    return { porcRet, porcImp, sustraen };
+  }
+
   function handleConceptChange(docNo: string, doc: any, selectedCode: string) {
     const inp = docInputs[docNo];
     if (!inp) return;
@@ -121,11 +145,10 @@
     );
     const found = foundInTab || allList.find((c: any) => String(c.co_islr || '').trim() === inp.co_islr);
 
-    if (found) {
-      inp.porc_islr = Number(found.porc_ret ?? 0);
-      inp.porc_base_islr = Number(found.porc_imp ?? 100);
-      inp.sustraendo_islr_bs = Number(found.sustraen ?? 0);
-    }
+    const { porcRet, porcImp, sustraen } = resolveConceptValues(found, inp.co_islr, currentTab);
+    inp.porc_islr = porcRet;
+    inp.porc_base_islr = porcImp;
+    inp.sustraendo_islr_bs = sustraen;
     recalculateDocAmounts(docNo, doc);
   }
 
@@ -141,9 +164,10 @@
       const inp = docInputs[nro];
       if (inp && defaultConceptObj) {
         inp.co_islr = defaultConceptObj.co_islr.trim();
-        inp.porc_islr = Number(defaultConceptObj.porc_ret ?? 0);
-        inp.porc_base_islr = Number(defaultConceptObj.porc_imp ?? 100);
-        inp.sustraendo_islr_bs = Number(defaultConceptObj.sustraen ?? 0);
+        const { porcRet, porcImp, sustraen } = resolveConceptValues(defaultConceptObj, inp.co_islr, currentTab);
+        inp.porc_islr = porcRet;
+        inp.porc_base_islr = porcImp;
+        inp.sustraendo_islr_bs = sustraen;
         inp.manual_override_islr = false;
         recalculateDocAmounts(nro, doc, false);
       }
@@ -607,9 +631,7 @@
           : (supplierConceptos.find((c: any) => c.co_islr.trim() === '055') || supplierConceptos.find((c: any) => c.co_islr.trim() === '072') || supplierConceptos[0]);
 
         const defaultIslrConcept = defaultConceptObj ? defaultConceptObj.co_islr.trim() : (currentTab === '5' ? '083' : '055');
-        const defaultPorcIslr = Number(defaultConceptObj?.porc_ret ?? (currentTab === '5' ? 3 : 2));
-        const defaultPorcBaseIslr = Number(defaultConceptObj?.porc_imp ?? 100);
-        const defaultSustraendoIslr = Number(defaultConceptObj?.sustraen ?? (currentTab === '5' ? 107.50 : 0));
+        const { porcRet: defaultPorcIslr, porcImp: defaultPorcBaseIslr, sustraen: defaultSustraendoIslr } = resolveConceptValues(defaultConceptObj, defaultIslrConcept, currentTab);
 
         documentos.forEach((doc) => {
           const nro = doc.nro_doc.trim();
@@ -1502,9 +1524,10 @@
                                         String(c.co_islr || '').trim() === String(input.co_islr || '').trim()
                                       ) || allList.find((c: any) => String(c.co_islr || '').trim() === String(input.co_islr || '').trim());
                                       if (found) {
-                                        input.porc_islr = Number(found.porc_ret ?? 0);
-                                        input.porc_base_islr = Number(found.porc_imp ?? 100);
-                                        input.sustraendo_islr_bs = Number(found.sustraen ?? 0);
+                                        const { porcRet, porcImp, sustraen } = resolveConceptValues(found, String(input.co_islr || '').trim(), currentTab);
+                                        input.porc_islr = porcRet;
+                                        input.porc_base_islr = porcImp;
+                                        input.sustraendo_islr_bs = sustraen;
                                       }
                                     }
                                     recalculateDocAmounts(doc.nro_doc.trim(), doc);
@@ -1647,8 +1670,9 @@
                                   class="w-full bg-surface-soft border border-border-subtle px-2 py-1.5 rounded-lg text-xs"
                                 >
                                   {#each getConceptosForSupplier() as c}
+                                    {@const cVals = resolveConceptValues(c, c.co_islr.trim(), getEffectiveSupplierTab())}
                                     <option value={c.co_islr.trim()}>
-                                      {c.co_islr.trim()} - {c.islr_des.trim()} ({c.porc_ret}%{c.sustraen > 0 ? ` - Sustr: Bs. ${c.sustraen}` : ''})
+                                      {c.co_islr.trim()} - {c.islr_des.trim()} ({cVals.porcRet}%{cVals.sustraen > 0 ? ` - Sustr: Bs. ${cVals.sustraen}` : ''})
                                     </option>
                                   {/each}
                                 </select>
