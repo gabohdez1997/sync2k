@@ -39,6 +39,9 @@ export const load: PageServerLoad = protectLoad('pur_payments', async ({ url, lo
 	let activeRate = 1;
 	let errorMsg = '';
 
+	let unidadTributaria = 43;
+	let tabuladores: any[] = [];
+
 	if (selectedBranchId) {
 		try {
 			const fetchCatalog = async (name: string) => {
@@ -64,6 +67,8 @@ export const load: PageServerLoad = protectLoad('pur_payments', async ({ url, lo
 			bancos = bRes;
 			tarjetasCredito = tRes;
 			conceptosIslr = islrRes.data || [];
+			unidadTributaria = islrRes.unidad_tributaria || 43;
+			tabuladores = islrRes.tabuladores || [];
 			if (tasaRes && Number(tasaRes.tasa || tasaRes.data?.tasa || 0) > 0) {
 				activeRate = Number(tasaRes.tasa || tasaRes.data?.tasa);
 			}
@@ -81,6 +86,8 @@ export const load: PageServerLoad = protectLoad('pur_payments', async ({ url, lo
 		bancos,
 		tarjetasCredito,
 		conceptosIslr,
+		unidadTributaria,
+		tabuladores,
 		activeRate,
 		error: errorMsg || null
 	};

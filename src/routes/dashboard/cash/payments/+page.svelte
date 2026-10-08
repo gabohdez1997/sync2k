@@ -53,6 +53,7 @@
         mont_cob_bs?: number;
         reten_iva: number;
         reten_iva_bs?: number;
+        porc_ret_iva?: number;
         num_comprobante_iva: string;
         base_imponible_iva: number;
         base_imponible_iva_bs?: number;
@@ -542,6 +543,7 @@
             base_imponible_iva: baseImpUsd,
             base_imponible_iva_bs: baseImpBs,
             alicuota_iva: 16,
+            porc_ret_iva: (selectedClient && selectedClient.contribu_e) ? (Number(selectedClient.porc_esp) || 75) : 75,
             reten_islr: 0,
             reten_islr_bs: 0,
             co_islr: "072",
@@ -611,18 +613,15 @@
         input.reten_iva_bs = 0;
         input.reten_iva = 0;
       } else if (input.showIvaDetails) {
-        if (!input.manual_override_iva && input.reten_iva === 0) {
-          const porc = (selectedClient && selectedClient.contribu_e) ? (Number(selectedClient.porc_esp) || 75) : 0;
-          input.reten_iva_bs = Math.round(doc.monto_imp * (porc / 100) * 100) / 100;
-          input.reten_iva = Math.round((input.reten_iva_bs / docTasa) * 100) / 100;
+        const porc = Number(input.porc_ret_iva) || ((selectedClient && selectedClient.contribu_e) ? (Number(selectedClient.porc_esp) || 75) : 75);
+        input.porc_ret_iva = porc;
+        input.reten_iva_bs = Math.round(doc.monto_imp * (porc / 100) * 100) / 100;
+        input.reten_iva = Math.round((input.reten_iva_bs / docTasa) * 100) / 100;
 
-          input.base_imponible_iva_bs = doc.total_neto - doc.monto_imp - (doc.otros1 || 0);
-          input.base_imponible_iva =
-            Math.round((input.base_imponible_iva_bs / docTasa) * 100) / 100;
-          input.alicuota_iva = 16;
-        } else if (input.manual_override_iva) {
-          input.reten_iva_bs = Math.round((input.reten_iva || 0) * docTasa * 100) / 100;
-        }
+        input.base_imponible_iva_bs = doc.total_neto - doc.monto_imp - (doc.otros1 || 0);
+        input.base_imponible_iva =
+          Math.round((input.base_imponible_iva_bs / docTasa) * 100) / 100;
+        input.alicuota_iva = 16;
       } else {
         input.reten_iva = 0;
         input.reten_iva_bs = 0;
@@ -635,13 +634,11 @@
         input.reten_islr_bs = 0;
         input.reten_islr = 0;
       } else if (input.showIslrDetails) {
-        if (!input.manual_override_islr && input.reten_islr === 0) {
-          const baseImpBs = input.base_imponible_islr_bs > 0 ? input.base_imponible_islr_bs : (doc.total_neto - doc.monto_imp);
-          input.reten_islr_bs = Math.round(baseImpBs * (input.porc_islr / 100) * 100) / 100;
-          input.reten_islr = Math.round((input.reten_islr_bs / docTasa) * 100) / 100;
-        } else if (input.manual_override_islr) {
-          input.reten_islr_bs = Math.round((input.reten_islr || 0) * docTasa * 100) / 100;
-        }
+        const baseImpBs = Number(input.base_imponible_islr_bs) > 0 ? Number(input.base_imponible_islr_bs) : (Number(doc.base_islr_default) > 0 ? Number(doc.base_islr_default) : (doc.total_neto - doc.monto_imp));
+        input.base_imponible_islr_bs = baseImpBs;
+        input.base_imponible_islr = Math.round((baseImpBs / docTasa) * 100) / 100;
+        input.reten_islr_bs = Math.round(baseImpBs * (input.porc_islr / 100) * 100) / 100;
+        input.reten_islr = Math.round((input.reten_islr_bs / docTasa) * 100) / 100;
       } else {
         input.reten_islr = 0;
         input.reten_islr_bs = 0;
@@ -1590,8 +1587,8 @@
                           </div>
                         </div>
 
-                        <!-- Detalles Retención IVA (Inputs manuales) -->
-                        {#if input.showIvaDetails && !input.yaTieneRetIva && Number(selectedClient?.porc_esp) > 0}
+                        <!-- Detalles Retención IVA -->
+                        {#if input.showIvaDetails && !input.yaTieneRetIva}
                           <div
                             class="bg-green-500/5 border border-green-500/20 p-4 rounded-2xl space-y-3 text-xs animate-in slide-in-from-top-2 duration-150"
                           >
@@ -1607,11 +1604,11 @@
                                   input.manual_override_iva = true;
                                   recalculateDocAmounts(doc.nro_doc.trim(), doc);
                                 }}
-                                class="text-text-muted hover:text-text-base"
+                                class="text-text-muted hover:text-text-base cursor-pointer"
                                 ><X size={14} /></button
                               >
                             </div>
-                            <div class="grid grid-cols-1 sm:grid-cols-4 gap-3">
+                            <div class="grid grid-cols-1 sm:grid-cols-5 gap-3">
                               <div>
                                 <span
                                   class="text-[9px] text-text-muted font-bold block mb-1"
@@ -1627,13 +1624,13 @@
                               <div>
                                 <span
                                   class="text-[9px] text-text-muted font-bold block mb-1"
-                                  >BASE IMPONIBLE</span
+                                  >BASE IMPONIBLE (Bs.)</span
                                 >
                                 <input
                                   type="number"
                                   step="0.01"
                                   readonly
-                                  bind:value={input.base_imponible_iva}
+                                  bind:value={input.base_imponible_iva_bs}
                                   class="w-full bg-surface-soft/50 border border-border-subtle px-2 py-1.5 rounded-lg text-xs text-right opacity-70 cursor-not-allowed"
                                 />
                               </div>
@@ -1651,28 +1648,38 @@
                               </div>
                               <div>
                                 <span
+                                  class="text-[9px] text-text-muted font-bold block mb-1"
+                                  >PORC. RETENCIÓN (%)</span
+                                >
+                                <select
+                                  bind:value={input.porc_ret_iva}
+                                  onchange={() => {
+                                    recalculateDocAmounts(doc.nro_doc.trim(), doc);
+                                  }}
+                                  class="w-full bg-surface-soft border border-border-subtle px-2 py-1.5 rounded-lg text-xs"
+                                >
+                                  <option value={75}>75% (General)</option>
+                                  <option value={100}>100% (Total)</option>
+                                </select>
+                              </div>
+                              <div>
+                                <span
                                   class="text-[9px] text-text-muted font-bold block mb-1 font-semibold text-green-400"
-                                  >MTO RETENIDO ($)</span
+                                  >MTO RETENIDO (Bs.)</span
                                 >
                                 <input
                                   type="number"
                                   step="0.01"
-                                  bind:value={input.reten_iva}
-                                  oninput={() => {
-                                    input.manual_override_iva = true;
-                                    recalculateDocAmounts(
-                                      doc.nro_doc.trim(),
-                                      doc,
-                                    );
-                                  }}
-                                  class="w-full bg-surface-soft border border-green-500/30 text-green-400 font-bold px-2 py-1.5 rounded-lg text-xs text-right focus:border-green-500 focus:ring-0 focus:outline-hidden"
+                                  readonly
+                                  value={input.reten_iva_bs}
+                                  class="w-full bg-surface-soft/60 border border-border-subtle text-green-400 font-bold px-2 py-1.5 rounded-lg text-xs text-right cursor-not-allowed opacity-90"
                                 />
                               </div>
                             </div>
                           </div>
                         {/if}
 
-                        <!-- Detalles Retención ISLR (Inputs manuales) -->
+                        <!-- Detalles Retención ISLR -->
                         {#if input.showIslrDetails && !input.yaTieneRetIslr}
                           <div
                             class="bg-amber-500/5 border border-amber-500/20 p-4 rounded-2xl space-y-3 text-xs animate-in slide-in-from-top-2 duration-150"
@@ -1689,7 +1696,7 @@
                                   input.manual_override_islr = true;
                                   recalculateDocAmounts(doc.nro_doc.trim(), doc);
                                 }}
-                                class="text-text-muted hover:text-text-base"
+                                class="text-text-muted hover:text-text-base cursor-pointer"
                                 ><X size={14} /></button
                               >
                             </div>
@@ -1700,14 +1707,12 @@
                                   bind:value={input.co_islr}
                                   onchange={() => {
                                     input.porc_islr = input.co_islr === '072' ? 3 : 2;
-                                    input.manual_override_islr = false; // reset manual override just in case
-                                    input.reten_islr = 0; // force recalculate
                                     recalculateDocAmounts(doc.nro_doc.trim(), doc);
                                   }}
                                   class="w-full bg-surface-soft border border-border-subtle px-2 py-1.5 rounded-lg text-xs appearance-none"
                                 >
-                                  <option value="072">072 = Servicio de Flete</option>
-                                  <option value="055">055 = Servicio de Corte</option>
+                                  <option value="072">072 = Servicio de Flete (3%)</option>
+                                  <option value="055">055 = Servicio de Corte (2%)</option>
                                 </select>
                               </div>
                               <div>
@@ -1717,8 +1722,6 @@
                                   step="0.01"
                                   bind:value={input.base_imponible_islr_bs}
                                   oninput={() => {
-                                    input.manual_override_islr = false; // Reset to let auto-calc run based on new base
-                                    input.reten_islr = 0;
                                     recalculateDocAmounts(doc.nro_doc.trim(), doc);
                                   }}
                                   class="w-full bg-surface-soft border border-border-subtle px-2 py-1.5 rounded-lg text-xs text-right"
@@ -1735,16 +1738,13 @@
                                 />
                               </div>
                               <div>
-                                <span class="text-[9px] text-text-muted font-bold block mb-1 font-semibold text-amber-400">MTO RETENIDO ($)</span>
+                                <span class="text-[9px] text-text-muted font-bold block mb-1 font-semibold text-amber-400">MTO RETENIDO (Bs.)</span>
                                 <input
                                   type="number"
                                   step="0.01"
-                                  bind:value={input.reten_islr}
-                                  oninput={() => {
-                                    input.manual_override_islr = true;
-                                    recalculateDocAmounts(doc.nro_doc.trim(), doc);
-                                  }}
-                                  class="w-full bg-surface-soft border border-border-subtle px-2 py-1.5 rounded-lg text-xs text-right text-amber-400 font-bold"
+                                  readonly
+                                  value={input.reten_islr_bs}
+                                  class="w-full bg-surface-soft/60 border border-border-subtle px-2 py-1.5 rounded-lg text-xs text-right text-amber-400 font-bold cursor-not-allowed opacity-90"
                                 />
                               </div>
                             </div>
