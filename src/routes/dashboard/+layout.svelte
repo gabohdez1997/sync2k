@@ -45,6 +45,7 @@
     Tag,
     Search,
     Printer,
+    SlidersHorizontal,
     Award,
     Image,
     TrendingUp,
@@ -240,12 +241,6 @@
           href: "/dashboard/purchases/payments",
           icon: Wallet,
         },
-        {
-          id: "pur_returns",
-          label: "Devoluciones",
-          href: "/dashboard/purchases/returns",
-          icon: RotateCcw,
-        },
       ],
     },
     {
@@ -345,12 +340,6 @@
           icon: Key,
         },
         {
-          id: "sec_tenants",
-          label: "Empresas",
-          href: "/dashboard/tenants",
-          icon: Building,
-        },
-        {
           id: "sec_branches",
           label: "Sucursales",
           href: "/dashboard/branches",
@@ -361,6 +350,12 @@
           label: "Impresoras",
           href: "/dashboard/security/printers",
           icon: Printer,
+        },
+        {
+          id: "sec_settings",
+          label: "Parametrización",
+          href: "/dashboard/settings",
+          icon: SlidersHorizontal,
         },
         {
           id: "sec_audit",

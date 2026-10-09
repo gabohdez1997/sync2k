@@ -1,9 +1,12 @@
-// src/routes/dashboard/settings/+page.server.ts
 import { fail } from '@sveltejs/kit';
-import { protectAction } from '$lib/server/permissions';
+import { protectAction, protectLoad } from '$lib/server/permissions';
 import { updateSystemSettings } from '$lib/server/settings';
 import { supabaseAdmin } from '$lib/server/supabase';
-import type { Actions } from './$types';
+import type { Actions, PageServerLoad } from './$types';
+
+export const load: PageServerLoad = protectLoad('sec_settings', async () => {
+  return {};
+});
 
 export const actions: Actions = {
   saveSettings: protectAction('sec_settings', async ({ request, locals }) => {
