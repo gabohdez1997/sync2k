@@ -17,6 +17,7 @@
     CreditCard,
     Landmark,
     CheckCircle,
+    Check,
     Info,
     User,
     Receipt,
@@ -666,6 +667,7 @@
     documentos = [];
     docInputs = {};
     formasPago = [];
+    checkedDocs = {};
   }
 
   // Helper para calcular el monto neto pendiente que deja el saldo del documento en 0
@@ -2209,27 +2211,39 @@
           {/if}
         </div>
 
-        <!-- BOTÓN DE GUARDADO H-20 DIRECTO -->
+        <!-- BOTONES DE ACCIÓN: GUARDAR COBRO Y DESCARTAR TODO -->
         {#if selectedClient}
-          <button
-            disabled={(expectedNetPayUsd > 0 && (formasPago.length === 0 || totalInstrumentosPago <= 0)) ||
-              saving ||
-              !documentos.some((doc) => checkedDocs[doc.nro_doc])}
-            onclick={saveCobro}
-            class="w-full h-20 bg-brand-600 hover:bg-brand-500 disabled:bg-surface-soft text-white disabled:text-text-muted/30 rounded-[24px] font-black text-lg uppercase tracking-[0.2em] transition-all active:scale-[0.97] disabled:opacity-50 disabled:pointer-events-none flex items-center justify-center gap-4 shadow-xl shadow-brand-500/10 hover:shadow-brand-500/30 group relative z-10 cursor-pointer"
-          >
-            {#if saving}
-              <RefreshCw size={24} class="animate-spin text-brand-400/40" />
-              <span class="animate-pulse">Procesando...</span>
-            {:else}
-              <div
-                class="bg-surface-strong/50 p-2.5 rounded-xl group-hover:scale-110 transition-transform"
-              >
-                <Wallet size={24} />
-              </div>
-              <span>Guardar</span>
-            {/if}
-          </button>
+          <div class="pt-6 space-y-4 relative z-10">
+            <button
+              disabled={(expectedNetPayUsd > 0 && (formasPago.length === 0 || totalInstrumentosPago <= 0)) ||
+                saving ||
+                !documentos.some((doc) => checkedDocs[doc.nro_doc])}
+              onclick={saveCobro}
+              class="w-full h-20 bg-brand-600 hover:bg-brand-500 text-white rounded-[24px] font-black text-xl uppercase tracking-[0.2em] shadow-[0_20px_40px_-10px_rgba(var(--brand-rgb),0.3)] active:scale-[0.97] transition-all flex items-center justify-center gap-4 disabled:opacity-50 disabled:grayscale group cursor-pointer border-none"
+            >
+              {#if saving}
+                <RefreshCw size={28} class="animate-spin text-brand-400/40" />
+                <span class="animate-pulse">Procesando Cobro...</span>
+              {:else}
+                <div
+                  class="bg-surface-strong/50 p-2.5 rounded-xl group-hover:scale-110 transition-transform"
+                >
+                  <Check size={28} />
+                </div>
+                <span>Guardar Cobro</span>
+              {/if}
+            </button>
+
+            <!-- BOTÓN DESCARTAR TODO -->
+            <button
+              type="button"
+              onclick={clearClient}
+              disabled={saving}
+              class="w-full h-14 rounded-2xl text-text-muted hover:bg-red-500/10 hover:text-red-400 hover:border-red-500/20 transition-all text-xs font-black uppercase tracking-widest border border-border-subtle cursor-pointer disabled:opacity-40 disabled:pointer-events-none flex items-center justify-center active:scale-[0.98]"
+            >
+              Descartar Todo
+            </button>
+          </div>
         {/if}
       </div>
     </div>

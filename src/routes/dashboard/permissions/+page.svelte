@@ -76,6 +76,12 @@
           hasOthers: true,
           hasVoid: true,
         },
+        {
+          id: "cash_credits",
+          label: "Devoluciones",
+          hasOthers: true,
+          hasVoid: true,
+        },
         { id: "cash_exchange", label: "Tasa Cambiaria" },
       ],
     },

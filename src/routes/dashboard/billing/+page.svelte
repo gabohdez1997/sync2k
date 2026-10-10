@@ -410,6 +410,16 @@
     }
   }
 
+  function clearBillingForm() {
+    selectedClient = null;
+    billingLines = [];
+    activeTasa = 1;
+    importedOrdersInfo = {};
+    enableIgtf = false;
+    igtfMontoDivisa = null;
+    toast.success("Factura descartada");
+  }
+
   // Modal de Previsualización y Envío a Impresoras
   let showPreviewModal = $state(false);
   let isPrintingNote = $state(false);
@@ -1093,11 +1103,11 @@
                       {line.reng_num || idx + 1}
                     </td>
 
-                    <td class="px-6 py-4">
-                      <div class="flex flex-col gap-0.5 max-w-[200px]">
-                        <span class="font-black text-text-base truncate"
-                          >{line.art_des}</span
-                        >
+                    <td class="px-6 py-4 min-w-[220px]">
+                      <div class="flex flex-col gap-1">
+                        <span class="font-black text-text-base leading-snug break-words">
+                          {line.art_des}
+                        </span>
                         <span
                           class="text-[9px] text-text-muted font-mono font-bold"
                           >{line.co_art.trim()}</span
@@ -1290,79 +1300,6 @@
           </div>
         </div>
 
-        <!-- PRINTER STATUS CARD -->
-        <div class="p-4 bg-surface-soft/60 border border-border-subtle rounded-2xl space-y-2.5 relative z-10 text-xs">
-          <div class="flex items-center justify-between">
-            <span class="text-[10px] font-black uppercase tracking-wider text-text-muted flex items-center gap-1.5">
-              <Printer size={13} class="text-brand-400" />
-              Impresión Automática en Sede
-            </span>
-            <a href="/dashboard/settings/printers" class="text-[10px] text-brand-400 hover:underline font-bold">
-              Configurar
-            </a>
-          </div>
-
-          <!-- Nota de Entrega Status -->
-          <div class="flex items-center justify-between bg-surface-base/60 p-2.5 rounded-xl border border-border-subtle/50">
-            <div class="flex items-center gap-2">
-              <FileText size={15} class={thermalNotePrinter ? "text-emerald-400" : "text-text-muted/60"} />
-              <div>
-                <p class="font-bold text-[11px] text-text-base">Nota de Entrega (Térmica)</p>
-                <p class="text-[9.5px] text-text-muted">
-                  {thermalNotePrinter ? `${thermalNotePrinter.name} (${thermalNotePrinter.ip_address})` : 'No configurada'}
-                </p>
-              </div>
-            </div>
-            {#if thermalNotePrinter}
-              <span class="px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 font-bold text-[9px] border border-emerald-500/20">
-                Activa
-              </span>
-            {:else}
-              <span class="px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400 font-bold text-[9px] border border-amber-500/20">
-                Inactiva
-              </span>
-            {/if}
-          </div>
-
-          <!-- Pre-despacho Status -->
-          <div class="flex items-center justify-between bg-surface-base/60 p-2.5 rounded-xl border border-border-subtle/50">
-            <div class="flex items-center gap-2">
-              <PackageCheck size={15} class={preDespachoPrinters.length > 0 ? "text-emerald-400" : "text-text-muted/60"} />
-              <div>
-                <p class="font-bold text-[11px] text-text-base">Pre-despacho (Almacén)</p>
-                <p class="text-[9.5px] text-text-muted">
-                  {preDespachoPrinters.length > 0 ? `${preDespachoPrinters.length} impresora(s) asignada(s)` : 'No configurado'}
-                </p>
-              </div>
-            </div>
-            {#if preDespachoPrinters.length > 0}
-              <span class="px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 font-bold text-[9px] border border-emerald-500/20">
-                Activa
-              </span>
-            {:else}
-              <span class="px-2 py-0.5 rounded-full bg-surface-soft text-text-muted font-bold text-[9px] border border-border-subtle">
-                Opcional
-              </span>
-            {/if}
-          </div>
-        </div>
-
-        <!-- <div
-          class="p-4 bg-amber-500/5 border border-amber-500/10 rounded-2xl flex gap-3 text-amber-500 text-xs relative z-10"
-        >
-          <ShieldAlert size={18} class="shrink-0 mt-0.5" />
-          <div class="font-bold leading-relaxed">
-            <p
-              class="uppercase tracking-wider text-[10px] text-amber-400 mb-0.5"
-            >
-              Modo de Pruebas Activo
-            </p>
-            <p class="text-text-muted font-medium text-[11px] leading-relaxed">
-              Al guardar, la factura no se grabará en la base de datos SQL (saFacturaVenta), pero se enviará de inmediato el ticket de pre-despacho a las impresoras correspondientes según la sub-línea de los artículos.
-            </p>
-          </div>
-        </div> -->
-
         {#if hasMultipleOrigins}
           <div
             class="p-4 bg-red-500/10 border border-red-500/20 text-red-400 rounded-2xl text-xs flex gap-2 items-start relative z-10"
@@ -1377,18 +1314,8 @@
           </div>
         {/if}
 
-        <!-- ACTION BUTTONS: PREVIEW & SAVE -->
-        <div class="flex flex-col gap-3 relative z-10">
-          <button
-            type="button"
-            onclick={openPreviewModal}
-            disabled={billingLines.length === 0 || isSavingInvoice}
-            class="w-full h-12 bg-surface-soft hover:bg-surface-strong border border-border-subtle text-text-base rounded-2xl font-bold text-xs uppercase tracking-wider transition-all active:scale-[0.98] disabled:opacity-40 disabled:pointer-events-none flex items-center justify-center gap-2.5 cursor-pointer shadow-sm"
-          >
-            <FileText size={18} class="text-brand-400" />
-            <span>Previsualizar Nota (Matricial)</span>
-          </button>
-
+        <!-- ACTION BUTTONS: SAVE & SECONDARY (DESCARTAR / PREVISUALIZAR) -->
+        <div class="pt-6 space-y-4 relative z-10">
           <!-- SAVE BUTTON -->
           <button
             type="button"
@@ -1396,18 +1323,38 @@
             disabled={billingLines.length === 0 ||
               isSavingInvoice ||
               hasMultipleOrigins}
-            class="w-full h-18 bg-brand-600 hover:bg-brand-500 disabled:bg-surface-soft text-white disabled:text-text-muted/30 rounded-[22px] font-black text-base uppercase tracking-[0.2em] transition-all active:scale-[0.97] disabled:opacity-50 disabled:pointer-events-none flex items-center justify-center gap-3 shadow-xl shadow-brand-500/10 hover:shadow-brand-500/30 group cursor-pointer border-none"
+            class="w-full h-20 bg-brand-600 hover:bg-brand-500 text-white rounded-[24px] font-black text-xl uppercase tracking-[0.2em] shadow-[0_20px_40px_-10px_rgba(var(--brand-rgb),0.3)] active:scale-[0.97] transition-all flex items-center justify-center gap-4 disabled:opacity-50 disabled:grayscale group cursor-pointer border-none"
           >
             {#if isSavingInvoice}
-              <RefreshCw size={22} class="animate-spin text-brand-400/40" />
+              <RefreshCw size={28} class="animate-spin text-brand-400/40" />
               <span class="animate-pulse">Guardando Factura...</span>
             {:else}
-              <div class="bg-surface-strong/50 p-2 rounded-xl group-hover:scale-110 transition-transform">
-                <Printer size={22} />
+              <div class="bg-surface-strong/50 p-2.5 rounded-xl group-hover:scale-110 transition-transform">
+                <Check size={28} />
               </div>
               <span>Guardar Factura</span>
             {/if}
           </button>
+
+          <!-- SECONDARY BUTTONS: DESCARTAR TODO & PREVISUALIZAR -->
+          <div class="grid grid-cols-2 gap-4">
+            <button
+              type="button"
+              onclick={clearBillingForm}
+              disabled={billingLines.length === 0 && !selectedClient}
+              class="h-14 rounded-2xl text-text-muted hover:bg-red-500/10 hover:text-red-400 hover:border-red-500/20 transition-all text-xs font-black uppercase tracking-widest border border-border-subtle cursor-pointer disabled:opacity-40 disabled:pointer-events-none flex items-center justify-center active:scale-[0.98]"
+            >
+              Descartar Todo
+            </button>
+            <button
+              type="button"
+              onclick={openPreviewModal}
+              disabled={billingLines.length === 0 || isSavingInvoice}
+              class="h-14 rounded-2xl text-brand-400 hover:bg-brand-500/10 transition-all text-xs font-black uppercase tracking-widest border border-brand-500/15 cursor-pointer disabled:opacity-40 disabled:pointer-events-none flex items-center justify-center active:scale-[0.98]"
+            >
+              Previsualizar
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -1630,12 +1577,7 @@
             {/if}
           </div>
           <div>
-            <div class="flex items-center gap-2">
-              <h2 class="text-2xl font-black tracking-tight text-text-base">Previsualización de Documento</h2>
-              <span class="px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-brand-500/20 text-brand-400 border border-brand-500/30">
-                {previewDocData.branch_desc}
-              </span>
-            </div>
+            <h2 class="text-2xl font-black tracking-tight text-text-base">Previsualización de Documento</h2>
             <p class="text-text-muted text-xs font-medium">Nota de Entrega N° <span class="font-bold text-text-base">{previewDocData.doc_num}</span></p>
           </div>
         </div>
@@ -1912,20 +1854,7 @@
       </div>
 
       <!-- MODAL FOOTER ACTIONS -->
-      <div class="p-6 border-t border-border-subtle bg-surface-soft/60 flex flex-col md:flex-row items-center justify-between gap-4">
-        <div class="flex items-center gap-2 text-text-muted text-xs font-mono">
-          <Store size={16} class="text-brand-500 shrink-0" />
-          <span>Sede: <strong class="text-text-base">{previewDocData.branch_desc}</strong> ({previewFormat === 'thermal' ? 'Térmica 80mm ESC/POS' : 'Matricial ESC/P'})</span>
-        </div>
-
-        <div class="flex flex-wrap items-center gap-3 w-full md:w-auto justify-end">
-          <button
-            type="button"
-            onclick={() => (showPreviewModal = false)}
-            class="px-5 py-3 rounded-2xl bg-surface-soft hover:bg-surface-strong text-text-base font-bold text-sm transition-all cursor-pointer border border-border-subtle"
-          >
-            Cerrar
-          </button>
+      <div class="p-6 border-t border-border-subtle bg-surface-soft/60 flex items-center justify-end gap-3">
 
           <!-- BOTÓN IMPRESIÓN DIRECTA NAVEGADOR -->
           <button
@@ -1958,7 +1887,6 @@
               </span>
             {/if}
           </button>
-        </div>
       </div>
     </div>
   </div>

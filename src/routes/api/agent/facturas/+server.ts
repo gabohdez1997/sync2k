@@ -12,9 +12,9 @@ export const GET: RequestHandler = async ({ url, locals, fetch: svelteFetch }) =
         return json({ success: false, message: 'No autenticado.' }, { status: 401 });
     }
 
-    if (!hasPermission(profile, 'cash_billing', 'read')) {
-        console.warn('[API /api/agent/facturas] Profile does not have cash_billing read permission.');
-        return json({ success: false, message: 'No tienes permisos de facturación.' }, { status: 403 });
+    if (!hasPermission(profile, 'cash_billing', 'read') && !hasPermission(profile, 'cash_credits', 'read')) {
+        console.warn('[API /api/agent/facturas] Profile does not have cash_billing or cash_credits read permission.');
+        return json({ success: false, message: 'No tienes permisos para consultar facturas.' }, { status: 403 });
     }
 
     const branchId = url.searchParams.get('branch_id');
@@ -25,9 +25,11 @@ export const GET: RequestHandler = async ({ url, locals, fetch: svelteFetch }) =
     const co_cli = url.searchParams.get('co_cli') || '';
     const fec_d = url.searchParams.get('fec_d') || '';
     const fec_h = url.searchParams.get('fec_h') || '';
+    const anulado = url.searchParams.get('anulado');
+    const solo_activas = url.searchParams.get('solo_activas');
 
     // Permiso de ver terceros para facturas
-    const canSeeOthers = hasPermission(profile, 'cash_billing', 'others');
+    const canSeeOthers = hasPermission(profile, 'cash_billing', 'others') || hasPermission(profile, 'cash_credits', 'others');
     let co_us_in = url.searchParams.get('co_us_in') || '';
 
     if (!canSeeOthers) {
@@ -69,7 +71,9 @@ export const GET: RequestHandler = async ({ url, locals, fetch: svelteFetch }) =
             search,
             co_us_in: co_us_in || '',
             fec_d,
-            fec_h
+            fec_h,
+            ...(anulado !== null ? { anulado } : {}),
+            ...(solo_activas !== null ? { solo_activas } : {})
         });
 
         console.log('[API /api/agent/facturas] Requesting facturas from agent...');

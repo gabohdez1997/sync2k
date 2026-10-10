@@ -8,8 +8,8 @@ export const GET: RequestHandler = async ({ params, url, locals }) => {
     const profile = (locals as any).profile;
     if (!profile) return json({ success: false, message: 'No autenticado.' }, { status: 401 });
 
-    if (!hasPermission(profile, 'cash_billing', 'read')) {
-        return json({ success: false, message: 'No tienes permisos de facturación.' }, { status: 403 });
+    if (!hasPermission(profile, 'cash_billing', 'read') && !hasPermission(profile, 'cash_credits', 'read')) {
+        return json({ success: false, message: 'No tienes permisos para consultar facturas.' }, { status: 403 });
     }
 
     const doc_num = params.doc_num;
