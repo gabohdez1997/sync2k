@@ -32,6 +32,8 @@ export const load: PageServerLoad = protectLoad('cash_billing', async ({ url, lo
     const search = url.searchParams.get('search') || '';
     const fec_d = url.searchParams.get('fec_d') || '';
     const fec_h = url.searchParams.get('fec_h') || '';
+    const order_by = url.searchParams.get('order_by') || 'fec_emis';
+    const order_dir = url.searchParams.get('order_dir') || 'DESC';
     
     // LÓGICA DE PERMISOS
     const canSeeOthers = hasPermission(profile, 'cash_billing', 'others');
@@ -65,7 +67,9 @@ export const load: PageServerLoad = protectLoad('cash_billing', async ({ url, lo
         search,
         co_us_in: co_us_in || '',
         fec_d,
-        fec_h
+        fec_h,
+        order_by,
+        order_dir
     });
 
     try {
@@ -116,7 +120,7 @@ export const load: PageServerLoad = protectLoad('cash_billing', async ({ url, lo
             canVoid,
             canDelete,
             canCreate,
-            filters: { doc_num, co_cli, search, co_us_in, fec_d, fec_h }
+            filters: { doc_num, co_cli, search, co_us_in, fec_d, fec_h, order_by, order_dir }
         };
     } catch (e: any) {
         return {

@@ -15,6 +15,9 @@
     Plus,
     Trash2,
     BellRing,
+    ArrowUpDown,
+    ArrowUp,
+    ArrowDown,
   } from "lucide-svelte";
   import { goto } from "$app/navigation";
   import { page } from "$app/stores";
@@ -100,9 +103,36 @@
     else params.delete("fec_d");
     if (filterFecH) params.set("fec_h", filterFecH);
     else params.delete("fec_h");
+    params.delete("con_saldo");
     params.set("page", "1");
     goto(`?${params.toString()}`);
   }
+
+  // Estado de Ordenamiento (del lado servidor)
+  let sortBy = $derived(data.filters?.order_by || "fec_emis");
+  let sortAsc = $derived((data.filters?.order_dir || "DESC").toUpperCase() === "ASC");
+
+  function toggleSort(col: string) {
+    const params = new URLSearchParams($page.url.searchParams);
+    const currentOrder = data.filters?.order_by || "fec_emis";
+    const currentDir = (data.filters?.order_dir || "DESC").toUpperCase();
+
+    let nextDir = "DESC";
+    if (currentOrder === col) {
+      nextDir = currentDir === "ASC" ? "DESC" : "ASC";
+    } else {
+      // Dirección inicial: alfabéticos en ASC, fechas y montos en DESC
+      nextDir = ["cliente", "doc_num", "cajero", "vendedor", "estatus"].includes(col) ? "ASC" : "DESC";
+    }
+
+    params.set("order_by", col);
+    params.set("order_dir", nextDir);
+    params.set("page", "1");
+    goto(`?${params.toString()}`);
+  }
+
+  // Lista ordenada devuelta por el servidor
+  let sortedInvoices = $derived(data.invoices || []);
 
   function changePage(p: number) {
     const params = new URLSearchParams($page.url.searchParams);
@@ -253,46 +283,185 @@
     <div class="overflow-x-auto">
       <table class="w-full text-left border-collapse">
         <thead>
-          <tr class="bg-surface-soft/50 border-b border-border-subtle">
-            <th class="px-6 py-5 text-xs font-black uppercase tracking-[0.1em] text-text-muted"
-              >Fecha Emisión</th
-            >
-            <th class="px-6 py-5 text-xs font-black uppercase tracking-[0.1em] text-text-muted"
-              >Factura / Documento</th
-            >
-            <th class="px-6 py-5 text-xs font-black uppercase tracking-[0.1em] text-text-muted"
-              >Cliente</th
-            >
-            <th
-              class="px-6 py-5 text-xs font-black uppercase tracking-[0.1em] text-text-muted text-right"
-              >Monto</th
-            >
-            <th
-              class="px-6 py-5 text-xs font-black uppercase tracking-[0.1em] text-text-muted text-right"
-              >Saldo</th
-            >
-            {#if data.canSeeOthers}
-              <th
-                class="px-6 py-5 text-xs font-black uppercase tracking-[0.1em] text-text-muted text-center"
-                >Cajero</th
+          <tr class="bg-surface-soft/50 border-b border-border-subtle text-xs font-black uppercase tracking-[0.1em] text-text-muted">
+            <!-- Fecha Emisión -->
+            <th class="px-6 py-5">
+              <button
+                type="button"
+                onclick={() => toggleSort("fec_emis")}
+                class="inline-flex items-center gap-1.5 hover:text-text-base transition-colors group/th cursor-pointer select-none"
+                title="Ordenar por Fecha de Emisión"
               >
+                <span>Fecha Emisión</span>
+                {#if sortBy === 'fec_emis'}
+                  {#if sortAsc}
+                    <ArrowUp size={13} class="text-brand-500 shrink-0" />
+                  {:else}
+                    <ArrowDown size={13} class="text-brand-500 shrink-0" />
+                  {/if}
+                {:else}
+                  <ArrowUpDown size={13} class="opacity-30 group-hover/th:opacity-70 transition-opacity shrink-0" />
+                {/if}
+              </button>
+            </th>
+
+            <!-- Factura / Documento -->
+            <th class="px-6 py-5">
+              <button
+                type="button"
+                onclick={() => toggleSort("doc_num")}
+                class="inline-flex items-center gap-1.5 hover:text-text-base transition-colors group/th cursor-pointer select-none"
+                title="Ordenar por Factura / Documento"
+              >
+                <span>Factura / Documento</span>
+                {#if sortBy === 'doc_num'}
+                  {#if sortAsc}
+                    <ArrowUp size={13} class="text-brand-500 shrink-0" />
+                  {:else}
+                    <ArrowDown size={13} class="text-brand-500 shrink-0" />
+                  {/if}
+                {:else}
+                  <ArrowUpDown size={13} class="opacity-30 group-hover/th:opacity-70 transition-opacity shrink-0" />
+                {/if}
+              </button>
+            </th>
+
+            <!-- Cliente -->
+            <th class="px-6 py-5">
+              <button
+                type="button"
+                onclick={() => toggleSort("cliente")}
+                class="inline-flex items-center gap-1.5 hover:text-text-base transition-colors group/th cursor-pointer select-none"
+                title="Ordenar por Cliente"
+              >
+                <span>Cliente</span>
+                {#if sortBy === 'cliente'}
+                  {#if sortAsc}
+                    <ArrowUp size={13} class="text-brand-500 shrink-0" />
+                  {:else}
+                    <ArrowDown size={13} class="text-brand-500 shrink-0" />
+                  {/if}
+                {:else}
+                  <ArrowUpDown size={13} class="opacity-30 group-hover/th:opacity-70 transition-opacity shrink-0" />
+                {/if}
+              </button>
+            </th>
+
+            <!-- Monto -->
+            <th class="px-6 py-5 text-right">
+              <button
+                type="button"
+                onclick={() => toggleSort("monto")}
+                class="inline-flex items-center justify-end gap-1.5 w-full hover:text-text-base transition-colors group/th cursor-pointer select-none"
+                title="Ordenar por Monto"
+              >
+                <span>Monto</span>
+                {#if sortBy === 'monto'}
+                  {#if sortAsc}
+                    <ArrowUp size={13} class="text-brand-500 shrink-0" />
+                  {:else}
+                    <ArrowDown size={13} class="text-brand-500 shrink-0" />
+                  {/if}
+                {:else}
+                  <ArrowUpDown size={13} class="opacity-30 group-hover/th:opacity-70 transition-opacity shrink-0" />
+                {/if}
+              </button>
+            </th>
+
+            <!-- Saldo -->
+            <th class="px-6 py-5 text-right">
+              <button
+                type="button"
+                onclick={() => toggleSort("saldo")}
+                class="inline-flex items-center justify-end gap-1.5 w-full hover:text-text-base transition-colors group/th cursor-pointer select-none"
+                title="Ordenar por Saldo"
+              >
+                <span>Saldo</span>
+                {#if sortBy === 'saldo'}
+                  {#if sortAsc}
+                    <ArrowUp size={13} class="text-brand-500 shrink-0" />
+                  {:else}
+                    <ArrowDown size={13} class="text-brand-500 shrink-0" />
+                  {/if}
+                {:else}
+                  <ArrowUpDown size={13} class="opacity-30 group-hover/th:opacity-70 transition-opacity shrink-0" />
+                {/if}
+              </button>
+            </th>
+
+            <!-- Cajero -->
+            {#if data.canSeeOthers}
+              <th class="px-6 py-5 text-center">
+                <button
+                  type="button"
+                  onclick={() => toggleSort("cajero")}
+                  class="inline-flex items-center justify-center gap-1.5 w-full hover:text-text-base transition-colors group/th cursor-pointer select-none"
+                  title="Ordenar por Cajero"
+                >
+                  <span>Cajero</span>
+                  {#if sortBy === 'cajero'}
+                    {#if sortAsc}
+                      <ArrowUp size={13} class="text-brand-500 shrink-0" />
+                    {:else}
+                      <ArrowDown size={13} class="text-brand-500 shrink-0" />
+                    {/if}
+                  {:else}
+                    <ArrowUpDown size={13} class="opacity-30 group-hover/th:opacity-70 transition-opacity shrink-0" />
+                  {/if}
+                </button>
+              </th>
             {/if}
-            <th
-              class="px-6 py-5 text-xs font-black uppercase tracking-[0.1em] text-text-muted text-center"
-              >Vendedor</th
-            >
-            <th
-              class="px-6 py-5 text-xs font-black uppercase tracking-[0.1em] text-text-muted text-center"
-              >Estatus</th
-            >
-            <th
-              class="px-6 py-5 text-xs font-black uppercase tracking-[0.1em] text-text-muted text-center"
-              >Acciones</th
-            >
+
+            <!-- Vendedor -->
+            <th class="px-6 py-5 text-center">
+              <button
+                type="button"
+                onclick={() => toggleSort("vendedor")}
+                class="inline-flex items-center justify-center gap-1.5 w-full hover:text-text-base transition-colors group/th cursor-pointer select-none"
+                title="Ordenar por Vendedor"
+              >
+                <span>Vendedor</span>
+                {#if sortBy === 'vendedor'}
+                  {#if sortAsc}
+                    <ArrowUp size={13} class="text-brand-500 shrink-0" />
+                  {:else}
+                    <ArrowDown size={13} class="text-brand-500 shrink-0" />
+                  {/if}
+                {:else}
+                  <ArrowUpDown size={13} class="opacity-30 group-hover/th:opacity-70 transition-opacity shrink-0" />
+                {/if}
+              </button>
+            </th>
+
+            <!-- Estatus -->
+            <th class="px-6 py-5 text-center">
+              <button
+                type="button"
+                onclick={() => toggleSort("estatus")}
+                class="inline-flex items-center justify-center gap-1.5 w-full hover:text-text-base transition-colors group/th cursor-pointer select-none"
+                title="Ordenar por Estatus"
+              >
+                <span>Estatus</span>
+                {#if sortBy === 'estatus'}
+                  {#if sortAsc}
+                    <ArrowUp size={13} class="text-brand-500 shrink-0" />
+                  {:else}
+                    <ArrowDown size={13} class="text-brand-500 shrink-0" />
+                  {/if}
+                {:else}
+                  <ArrowUpDown size={13} class="opacity-30 group-hover/th:opacity-70 transition-opacity shrink-0" />
+                {/if}
+              </button>
+            </th>
+
+            <!-- Acciones -->
+            <th class="px-6 py-5 text-center">
+              Acciones
+            </th>
           </tr>
         </thead>
         <tbody class="divide-y divide-border-subtle/30">
-          {#if !data.invoices || data.invoices.length === 0}
+          {#if !sortedInvoices || sortedInvoices.length === 0}
             <tr>
               <td colspan={data.canSeeOthers ? 9 : 8} class="px-6 py-32 text-center">
                 <FileText size={48} class="mx-auto text-text-muted/20 mb-4" />
@@ -310,7 +479,7 @@
               </td>
             </tr>
           {:else}
-            {#each data.invoices as invoice}
+            {#each sortedInvoices as invoice}
               <tr class="hover:bg-brand-500/5 transition-colors group">
                 <td class="px-6 py-5">
                   <div class="text-xs font-bold text-text-base">
