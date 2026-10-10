@@ -310,84 +310,54 @@
     }
   }
 
-  // --- QUANTITY ADJUSTMENT & VALIDATION ---
-  function handleQuantityChange(line: any, event: Event) {
-    const input = event.currentTarget as HTMLInputElement;
-    let val = parseFloat(input.value);
-
-    // En caso de estar vacío o no numérico: deseleccionar y dejar en cero
-    if (input.value === "" || isNaN(val)) {
-      line.cantidad_devolver = 0;
-      line.checked = false;
-      return;
-    }
-
-    // En caso de ser cero o negativo: deseleccionar el artículo
-    if (val <= 0) {
-      line.cantidad_devolver = 0;
-      line.checked = false;
-      input.value = "0";
-      return;
-    }
-
-    // Regla estricta: NO puede escribir un número mayor a lo facturado disponible
-    if (val > line.disponible) {
+  // --- QUANTITY ADJUSTMENT & VALIDATION (ESTILO NOTAS DE RECEPCIÓN) ---
+  function updateReturnQty(line: any, val: number, inputEl?: HTMLInputElement | null) {
+    if (!line || line.disponible <= 0) return;
+    const maxAllowed = Number(line.disponible || 0);
+    let clamped = Math.max(0, isNaN(val) ? 0 : val);
+    if (maxAllowed > 0 && clamped > maxAllowed) {
+      clamped = maxAllowed;
       toast.warning(
-        `La cantidad (${val}) no puede superar lo facturado disponible (${line.disponible}).`,
+        `La cantidad no puede superar lo facturado disponible (${maxAllowed}).`
       );
-      val = line.disponible;
-      line.cantidad_devolver = line.disponible;
-      input.value = String(line.disponible);
-    } else {
-      line.cantidad_devolver = val;
     }
+    line.cantidad_devolver = clamped;
+    line.checked = clamped > 0;
 
-    // Si tiene cantidad mayor a cero y válida, seleccionar el artículo
-    line.checked = true;
-  }
-
-  function handleQuantityBlur(line: any, event: Event) {
-    const input = event.currentTarget as HTMLInputElement;
-    let val = parseFloat(input.value);
-
-    if (isNaN(val) || val <= 0) {
-      line.cantidad_devolver = 0;
-      line.checked = false;
-      input.value = "0";
-    } else if (val > line.disponible) {
-      line.cantidad_devolver = line.disponible;
-      input.value = String(line.disponible);
-      line.checked = true;
+    if (inputEl) {
+      inputEl.value = String(clamped);
     }
   }
 
   function handleRowCheckbox(line: any, event: Event) {
     const target = event.currentTarget as HTMLInputElement;
-    line.checked = target.checked;
-    if (target.checked) {
+    const isChecked = target.checked;
+    line.checked = isChecked;
+    if (isChecked) {
       if (Number(line.cantidad_devolver || 0) <= 0) {
-        line.cantidad_devolver = line.disponible;
+        line.cantidad_devolver = Number(line.disponible || 1);
       }
     } else {
       line.cantidad_devolver = 0;
     }
   }
 
-  function handleMasterCheckbox(event: Event) {
-    const target = event.currentTarget as HTMLInputElement;
-    const checked = target.checked;
+  function handleMasterCheckbox() {
+    const allChecked =
+      returnLines.length > 0 &&
+      returnLines
+        .filter((l) => l.disponible > 0)
+        .every((l) => l.checked && Number(l.cantidad_devolver) > 0);
+    const newChecked = !allChecked;
     returnLines.forEach((l) => {
       if (l.disponible > 0) {
-        l.checked = checked;
-        l.cantidad_devolver = checked ? l.disponible : 0;
+        l.checked = newChecked;
+        l.cantidad_devolver = newChecked ? l.disponible : 0;
       }
     });
   }
 
-  function setMaxQuantity(line: any) {
-    line.cantidad_devolver = line.disponible;
-    line.checked = line.disponible > 0;
-  }
+
 
   function removeLine(idx: number) {
     returnLines = returnLines.filter((_, i) => i !== idx);
@@ -833,16 +803,31 @@
                       class="bg-surface-strong border-b border-border-subtle text-xs font-black uppercase tracking-wider text-text-muted"
                     >
                       <th class="px-6 py-4 w-12 text-center">
-                        <input
-                          type="checkbox"
-                          checked={returnLines.length > 0 && returnLines.filter(l => l.disponible > 0).every((l) => l.checked && Number(l.cantidad_devolver) > 0)}
-                          onchange={handleMasterCheckbox}
-                          class="w-4 h-4 rounded border-border-subtle text-brand-500 focus:ring-brand-500 bg-surface-base cursor-pointer"
-                        />
+                        <label class="group relative inline-flex items-center cursor-pointer justify-center" title="Seleccionar Todos">
+                          <input
+                            type="checkbox"
+                            checked={returnLines.length > 0 && returnLines.filter(l => l.disponible > 0).every((l) => l.checked && Number(l.cantidad_devolver) > 0)}
+                            onchange={handleMasterCheckbox}
+                            class="sr-only peer"
+                          />
+                          <div
+                            class="w-6 h-6 bg-surface-base border-2 border-border-subtle rounded-lg peer-checked:bg-brand-500 peer-checked:border-brand-500 transition-all flex items-center justify-center shadow-inner group-hover:border-brand-500/30"
+                          >
+                            {#if returnLines.length > 0 && returnLines.filter(l => l.disponible > 0).every((l) => l.checked && Number(l.cantidad_devolver) > 0)}
+                              <div in:fade={{ duration: 100 }}>
+                                <Check
+                                  size={14}
+                                  class="text-white"
+                                  strokeWidth={4}
+                                />
+                              </div>
+                            {/if}
+                          </div>
+                        </label>
                       </th>
                       <th class="px-6 py-4">Artículo</th>
-                      <th class="px-6 py-4 text-center">Facturado</th>
-                      <th class="px-6 py-4 text-center w-40">Cant. a Devolver</th>
+                      <th class="px-6 py-4 text-center">Facturado / Disp.</th>
+                      <th class="px-6 py-4 text-center">Cant. a Devolver</th>
                       <th class="px-6 py-4 text-right">Precio {showUSD ? 'USD' : 'Bs'}</th>
                       <th class="px-6 py-4 text-right">Total {showUSD ? 'USD' : 'Bs'}</th>
                     </tr>
@@ -850,28 +835,44 @@
                   <tbody class="divide-y divide-border-subtle text-xs">
                     {#each returnLines as line, idx (line.co_art + idx)}
                       {@const isRowDisabled = line.disponible <= 0}
-                      <tr class="hover:bg-surface-soft/60 transition-colors {line.checked ? 'bg-brand-500/[0.02]' : 'opacity-60'}">
+                      <tr class="transition-all {line.checked && Number(line.cantidad_devolver) > 0 ? 'bg-emerald-500/10 hover:bg-emerald-500/15 border-l-4 border-l-emerald-500' : 'opacity-50 hover:bg-surface-soft/60'}">
                         <td class="px-6 py-4 text-center">
-                          <input
-                            type="checkbox"
-                            checked={line.checked && Number(line.cantidad_devolver) > 0}
-                            disabled={isRowDisabled}
-                            onchange={(e) => handleRowCheckbox(line, e)}
-                            class="w-4 h-4 rounded border-border-subtle text-brand-500 focus:ring-brand-500 bg-surface-base cursor-pointer disabled:opacity-30"
-                          />
+                          <label class="group relative inline-flex items-center {isRowDisabled ? 'cursor-not-allowed opacity-30' : 'cursor-pointer'} justify-center">
+                            <input
+                              type="checkbox"
+                              checked={line.checked && Number(line.cantidad_devolver) > 0}
+                              disabled={isRowDisabled}
+                              onchange={(e) => handleRowCheckbox(line, e)}
+                              class="sr-only peer"
+                            />
+                            <div
+                              class="w-6 h-6 bg-surface-base border-2 border-border-subtle rounded-lg peer-checked:bg-brand-500 peer-checked:border-brand-500 transition-all flex items-center justify-center shadow-inner group-hover:border-brand-500/30"
+                            >
+                              {#if line.checked && Number(line.cantidad_devolver) > 0}
+                                <div in:fade={{ duration: 100 }}>
+                                  <Check
+                                    size={14}
+                                    class="text-white"
+                                    strokeWidth={4}
+                                  />
+                                </div>
+                              {/if}
+                            </div>
+                          </label>
                         </td>
                         <td class="px-6 py-4 min-w-[220px]">
-                          <div class="flex flex-col gap-1">
+                          <div class="flex flex-col gap-1 max-w-md">
                             <span class="font-black text-text-base leading-snug break-words">
                               {line.art_des}
                             </span>
-                            <span class="text-[9px] text-text-muted font-mono font-bold">
-                              {line.co_art.trim()}
-                            </span>
+                            <div class="flex items-center gap-2 flex-wrap">
+                              <span class="text-[10px] text-text-muted font-mono font-bold">{line.co_art.trim()}</span>
+                              <span class="text-[10px] text-emerald-400 font-bold uppercase">({line.unidad?.trim() || line.co_uni?.trim() || "UND"})</span>
+                            </div>
                           </div>
                         </td>
-                        <td class="px-6 py-4 text-center font-black text-text-base">
-                          {Number(line.cantidad_facturada).toFixed(2)} {line.unidad?.trim() || line.co_uni?.trim()}
+                        <td class="px-6 py-4 text-center font-bold text-text-muted font-mono text-sm">
+                          {Number(line.cantidad_facturada).toFixed(2)} <span class="text-text-muted/40">/</span> <strong class="text-amber-400 font-black">{Number(line.disponible).toFixed(2)}</strong>
                           {#if Number(line.total_dev) > 0}
                             <span class="block text-[10px] text-amber-400 font-normal">
                               (Dev: {Number(line.total_dev).toFixed(2)})
@@ -884,26 +885,45 @@
                               Agotado
                             </span>
                           {:else}
-                            <div class="flex items-center gap-1 w-full justify-center">
+                            <div class="inline-flex items-center gap-1.5 bg-surface-base border border-border-subtle rounded-2xl p-1.5 shadow-inner">
+                              <button
+                                type="button"
+                                onclick={() => updateReturnQty(line, Number(line.cantidad_devolver || 0) - 1)}
+                                class="h-8 w-8 rounded-xl bg-surface-strong hover:bg-surface-soft text-text-base font-black flex items-center justify-center transition-all disabled:opacity-30 cursor-pointer"
+                                disabled={Number(line.cantidad_devolver || 0) <= 0}
+                              >
+                                -
+                              </button>
                               <input
                                 type="number"
                                 min="0"
                                 max={line.disponible}
                                 step="any"
-                                bind:value={line.cantidad_devolver}
-                                oninput={(e) => handleQuantityChange(line, e)}
-                                onblur={(e) => handleQuantityBlur(line, e)}
-                                class="w-24 h-9 px-2 text-center bg-surface-base border rounded-xl font-black text-xs outline-none transition-all {line.checked
-                                  ? 'border-border-subtle text-text-base focus:border-brand-500'
-                                  : 'border-border-subtle/40 text-text-muted bg-surface-soft/40'}"
+                                value={line.cantidad_devolver}
+                                oninput={(e) => {
+                                  const target = e.currentTarget as HTMLInputElement;
+                                  const parsed = parseFloat(target.value);
+                                  updateReturnQty(line, isNaN(parsed) ? 0 : parsed, target);
+                                }}
+                                onchange={(e) => {
+                                  const target = e.currentTarget as HTMLInputElement;
+                                  const parsed = parseFloat(target.value);
+                                  updateReturnQty(line, isNaN(parsed) ? 0 : parsed, target);
+                                }}
+                                onblur={(e) => {
+                                  const target = e.currentTarget as HTMLInputElement;
+                                  const parsed = parseFloat(target.value);
+                                  updateReturnQty(line, isNaN(parsed) ? 0 : parsed, target);
+                                }}
+                                class="w-20 bg-transparent text-center font-mono font-black text-sm text-text-base focus:outline-none"
                               />
                               <button
                                 type="button"
-                                onclick={() => setMaxQuantity(line)}
-                                class="px-2 h-9 rounded-xl bg-surface-soft hover:bg-brand-500/10 text-brand-400 border border-border-subtle hover:border-brand-500/30 text-[10px] font-black tracking-wider transition-all cursor-pointer"
-                                title={`Poner máximo disponible (${line.disponible})`}
+                                onclick={() => updateReturnQty(line, Number(line.cantidad_devolver || 0) + 1)}
+                                class="h-8 w-8 rounded-xl bg-surface-strong hover:bg-surface-soft text-text-base font-black flex items-center justify-center transition-all disabled:opacity-30 cursor-pointer"
+                                disabled={Number(line.cantidad_devolver || 0) >= Number(line.disponible)}
                               >
-                                MÁX
+                                +
                               </button>
                             </div>
                           {/if}

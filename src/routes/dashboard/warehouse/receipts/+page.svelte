@@ -461,14 +461,7 @@
     toast.info(`Orden ${docNum} retirada de la recepción.`);
   }
 
-  // Quitar un renglón individual específico (especialmente útil para líneas recién importadas)
-  function removeSingleLine(index: number) {
-    const line = receiptLines[index];
-    if (!line) return;
-    const desc = line.art_des || line.co_art || "Artículo";
-    receiptLines = receiptLines.filter((_, i) => i !== index);
-    toast.info(`Artículo "${desc}" retirado de la recepción.`);
-  }
+
 
   // Quitar todas las órdenes
   function removeAllOrders() {
@@ -480,8 +473,13 @@
 
   // --- SELECCIÓN GENERAL DE RENGLONES ---
   function toggleSelectAll() {
-    const allChecked = receiptLines.every((l) => l.checked);
-    receiptLines = receiptLines.map((l) => ({ ...l, checked: !allChecked }));
+    const allChecked = receiptLines.length > 0 && receiptLines.every((l) => l.checked && Number(l.cant_recibida) > 0);
+    const newChecked = !allChecked;
+    receiptLines = receiptLines.map((l) => ({
+      ...l,
+      checked: newChecked,
+      cant_recibida: newChecked ? Number(l.cant_pendiente || l.cant_original || 0) : 0
+    }));
   }
 
   // --- MODIFICAR CANTIDADES DE FORMA SEGURA ---
@@ -963,14 +961,14 @@
                       <label class="group relative inline-flex items-center cursor-pointer justify-center" title="Seleccionar Todos">
                         <input
                           type="checkbox"
-                          checked={receiptLines.length > 0 && receiptLines.every((l) => l.checked)}
+                          checked={receiptLines.length > 0 && receiptLines.every((l) => l.checked && Number(l.cant_recibida) > 0)}
                           onchange={toggleSelectAll}
                           class="sr-only peer"
                         />
                         <div
                           class="w-6 h-6 bg-surface-base border-2 border-border-subtle rounded-lg peer-checked:bg-brand-500 peer-checked:border-brand-500 transition-all flex items-center justify-center shadow-inner group-hover:border-brand-500/30"
                         >
-                          {#if receiptLines.length > 0 && receiptLines.every((l) => l.checked)}
+                          {#if receiptLines.length > 0 && receiptLines.every((l) => l.checked && Number(l.cant_recibida) > 0)}
                             <div in:fade={{ duration: 100 }}>
                               <Check
                                 size={14}
@@ -985,23 +983,31 @@
                     <th class="px-6 py-4">Artículo</th>
                     <th class="px-6 py-4 text-center">OC / Pendiente</th>
                     <th class="px-6 py-4 text-center">Cant. Recibida</th>
-                    <th class="px-3 py-4 text-center w-12"></th>
                   </tr>
                 </thead>
                 <tbody class="divide-y divide-border-subtle text-xs">
                   {#each filteredReceiptLines as { line, originalIndex } (line.co_art + '_' + originalIndex)}
-                    <tr class="transition-all {receiptLines[originalIndex].checked ? '' : 'opacity-50'} {line.isNewlyAdded ? 'bg-emerald-500/10 hover:bg-emerald-500/15 border-l-4 border-l-emerald-500' : 'hover:bg-surface-soft/60'}">
+                    <tr class="transition-all {receiptLines[originalIndex].checked && Number(receiptLines[originalIndex].cant_recibida) > 0 ? 'bg-emerald-500/10 hover:bg-emerald-500/15 border-l-4 border-l-emerald-500' : 'opacity-50 hover:bg-surface-soft/60'}">
                       <td class="px-6 py-4 text-center">
                         <label class="group relative inline-flex items-center cursor-pointer justify-center">
                           <input
                             type="checkbox"
-                            bind:checked={receiptLines[originalIndex].checked}
+                            checked={receiptLines[originalIndex].checked && Number(receiptLines[originalIndex].cant_recibida) > 0}
+                            onchange={(e) => {
+                              const isChecked = (e.currentTarget as HTMLInputElement).checked;
+                              receiptLines[originalIndex].checked = isChecked;
+                              if (isChecked && Number(receiptLines[originalIndex].cant_recibida) <= 0) {
+                                receiptLines[originalIndex].cant_recibida = Number(line.cant_pendiente || line.cant_original || 1);
+                              } else if (!isChecked) {
+                                receiptLines[originalIndex].cant_recibida = 0;
+                              }
+                            }}
                             class="sr-only peer"
                           />
                           <div
                             class="w-6 h-6 bg-surface-base border-2 border-border-subtle rounded-lg peer-checked:bg-brand-500 peer-checked:border-brand-500 transition-all flex items-center justify-center shadow-inner group-hover:border-brand-500/30"
                           >
-                            {#if receiptLines[originalIndex].checked}
+                            {#if receiptLines[originalIndex].checked && Number(receiptLines[originalIndex].cant_recibida) > 0}
                               <div in:fade={{ duration: 100 }}>
                                 <Check
                                   size={14}
@@ -1088,19 +1094,6 @@
                             +
                           </button>
                         </div>
-                      </td>
-
-                      <td class="px-3 py-4 text-center">
-                        {#if line.isNewlyAdded}
-                          <button
-                            type="button"
-                            onclick={() => removeSingleLine(originalIndex)}
-                            class="p-2 hover:bg-red-500/20 text-text-muted hover:text-red-400 rounded-xl transition-colors cursor-pointer"
-                            title="Quitar este artículo nuevo de la recepción"
-                          >
-                            <X size={14} />
-                          </button>
-                        {/if}
                       </td>
                     </tr>
                   {/each}

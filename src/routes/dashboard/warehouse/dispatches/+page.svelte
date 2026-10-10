@@ -616,24 +616,6 @@
               {/if}
             </div>
 
-            {#if selectedInvoice}
-              <div class="flex items-center gap-2 self-end sm:self-auto">
-                <button
-                  type="button"
-                  onclick={() => toggleAllLines(true)}
-                  class="px-3 py-2 rounded-xl bg-surface-strong hover:bg-surface-soft text-[11px] font-black text-text-muted hover:text-text-base transition-all border border-border-subtle cursor-pointer"
-                >
-                  Todos
-                </button>
-                <button
-                  type="button"
-                  onclick={() => toggleAllLines(false)}
-                  class="px-3 py-2 rounded-xl bg-surface-strong hover:bg-surface-soft text-[11px] font-black text-text-muted hover:text-text-base transition-all border border-border-subtle cursor-pointer"
-                >
-                  Ninguno
-                </button>
-              </div>
-            {/if}
           </div>
 
           {#if !selectedInvoice || dispatchLines.length === 0}
@@ -645,10 +627,10 @@
             </div>
           {:else}
             <div class="overflow-x-auto">
-              <table class="w-full text-left border-collapse text-xs">
+              <table class="w-full text-left border-collapse">
                 <thead>
-                  <tr class="bg-surface-soft/60 border-b border-border-subtle text-text-muted font-black uppercase tracking-wider text-[10px]">
-                    <th class="py-4 px-4 w-12 text-center">
+                  <tr class="bg-surface-strong border-b border-border-subtle text-xs font-black uppercase tracking-wider text-text-muted">
+                    <th class="px-6 py-4 w-12 text-center">
                       <label class="group relative inline-flex items-center cursor-pointer justify-center" title="Seleccionar Todos">
                         <input
                           type="checkbox"
@@ -675,17 +657,17 @@
                         </div>
                       </label>
                     </th>
-                    <th class="py-4 px-4 min-w-[220px]">Artículo</th>
-                    <th class="py-4 px-4 text-center w-28">Facturado</th>
-                    <th class="py-4 px-4 text-center w-28">Pendiente</th>
+                    <th class="px-6 py-4 min-w-[220px]">Artículo</th>
+                    <th class="px-6 py-4 text-center w-28">Facturado</th>
+                    <th class="px-6 py-4 text-center w-28">Pendiente</th>
                   </tr>
                 </thead>
-                <tbody class="divide-y divide-border-subtle/50 font-medium">
+                <tbody class="divide-y divide-border-subtle text-xs">
                   {#each filteredDispatchLines as { line, originalIndex } (line.reng_num + line.co_art)}
                     {@const isItemCompleted = !line.checked && Number(line.cant_pendiente || 0) <= 0}
-                    <tr class="hover:bg-surface-soft/30 transition-colors {line.checked ? '' : isItemCompleted ? 'opacity-40 bg-surface-soft/20' : 'opacity-60'}">
+                    <tr class="transition-all {line.checked && Number(line.cant_pendiente || 0) > 0 ? 'bg-emerald-500/10 hover:bg-emerald-500/15 border-l-4 border-l-emerald-500' : isItemCompleted ? 'opacity-40 bg-surface-soft/20' : 'opacity-50 hover:bg-surface-soft/60'}">
                       <!-- Checkbox -->
-                      <td class="py-3 px-4 text-center">
+                      <td class="px-6 py-4 text-center">
                         {#if isItemCompleted}
                           <div
                             class="w-6 h-6 bg-surface-base border-2 border-border-subtle/40 rounded-lg flex items-center justify-center mx-auto cursor-not-allowed opacity-30 shadow-inner"
@@ -723,33 +705,35 @@
                       </td>
 
                       <!-- Article Info -->
-                      <td class="py-3 px-4">
-                        <div class="font-black text-text-base text-sm leading-snug">
-                          {line.art_des || line.co_art}
-                        </div>
-                        <div class="text-[11px] text-text-muted font-bold font-mono mt-0.5 flex items-center gap-2 flex-wrap">
-                          <span class="text-brand-400">{line.co_art}</span>
-                          {#if line.referencia}
-                            <span>• Ref: {line.referencia}</span>
-                          {/if}
-                          {#if line.modelo}
-                            <span>• Mod: {line.modelo}</span>
-                          {/if}
-                          <span class="text-text-muted/80">({line.unidad || line.co_uni || 'UNI'})</span>
+                      <td class="px-6 py-4">
+                        <div class="flex flex-col gap-1 max-w-md">
+                          <span class="font-black text-text-base text-sm leading-snug" title={line.art_des}>
+                            {line.art_des || line.co_art}
+                          </span>
+                          <div class="flex items-center gap-2 flex-wrap">
+                            <span class="text-[10px] text-text-muted font-mono font-bold">{line.co_art?.trim()}</span>
+                            {#if line.referencia}
+                              <span class="text-[10px] text-text-muted font-bold">• Ref: {line.referencia.trim()}</span>
+                            {/if}
+                            {#if line.modelo}
+                              <span class="text-[10px] text-brand-400 font-bold">• Mod: {line.modelo.trim()}</span>
+                            {/if}
+                            <span class="text-[10px] text-emerald-400 font-bold uppercase">({line.unidad?.trim() || line.co_uni?.trim() || 'UNI'})</span>
+                          </div>
                         </div>
                       </td>
 
                       <!-- Invoiced Qty -->
-                      <td class="py-3 px-4 text-center font-mono font-bold text-text-muted">
+                      <td class="px-6 py-4 text-center font-bold text-text-muted font-mono text-sm">
                         {formatQuantity(line.cant_original)}
                       </td>
 
                       <!-- Pending Qty -->
-                      <td class="py-3 px-4 text-center font-mono font-black">
+                      <td class="px-6 py-4 text-center font-bold font-mono text-sm">
                         {#if Number(line.cant_pendiente || 0) > 0}
-                          <span class="text-amber-400">{formatQuantity(line.cant_pendiente)}</span>
+                          <strong class="text-amber-400 font-black">{formatQuantity(line.cant_pendiente)}</strong>
                         {:else if line.despachado_en_otro}
-                          <span class="text-[10px] text-emerald-400 font-bold px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 block whitespace-nowrap" title="Entregado en Nota N° {line.despachado_en_otro}">
+                          <span class="text-[10px] text-emerald-400 font-bold px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 inline-block whitespace-nowrap" title="Entregado en Nota N° {line.despachado_en_otro}">
                             0 (En N/D {line.despachado_en_otro})
                           </span>
                         {:else}
