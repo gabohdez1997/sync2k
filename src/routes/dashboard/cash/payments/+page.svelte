@@ -32,6 +32,14 @@
 
   let { data } = $props();
 
+  // Constantes y Helpers de Tipos de Documento
+  const CREDIT_DOC_TYPES = ["N/CR", "AJNA", "AJNM", "ADEL"];
+  const DEBIT_DOC_TYPES = ["FACT", "NDEB", "N/DB", "GIRO", "AJPA", "AJPM"];
+  const isCreditDoc = (t: string | undefined | null) =>
+    CREDIT_DOC_TYPES.includes((t || "").trim().toUpperCase());
+  const isDebitDoc = (t: string | undefined | null) =>
+    DEBIT_DOC_TYPES.includes((t || "").trim().toUpperCase());
+
   // Estado del Formulario
   let co_cli = $state("");
   let selectedClient = $state<any>(null);
@@ -84,9 +92,9 @@
 
   let formasPago = $state<any[]>([]);
 
-  // Reactivo: Auto-distribuir el total de instrumentos de pago y notas de crédito a las facturas seleccionadas
+  // Reactivo: Auto-distribuir el total de instrumentos de pago y notas de crédito/ajustes negativos a las facturas/ajustes positivos seleccionados
   $effect(() => {
-    // 1. Calcular primero el saldo a favor aportado por Notas de Crédito seleccionadas
+    // 1. Calcular primero el saldo a favor aportado por Documentos de Crédito seleccionados (N/CR, AJNA, AJNM, ADEL)
     let creditFromNCsBs = 0;
     let creditFromNCsUsd = 0;
 
@@ -94,8 +102,7 @@
       const nro = doc.nro_doc.trim();
       if (!checkedDocs[nro]) continue;
 
-      const isNC = doc.co_tipo_doc.trim() === "N/CR";
-      if (isNC) {
+      if (isCreditDoc(doc.co_tipo_doc)) {
         const docTasa = doc.tasa > 0 ? doc.tasa : 1;
         const saldoUsd = Math.round((doc.saldo / docTasa) * 100) / 100;
         creditFromNCsBs += doc.saldo;
@@ -103,7 +110,7 @@
       }
     }
 
-    // 2. Fondo disponible total para aplicar a facturas/deudas (Instrumentos + Notas de Crédito)
+    // 2. Fondo disponible total para aplicar a deudas (Instrumentos + Documentos de Crédito)
     let remainingPaymentBs = Math.round((totalInstrumentosPagoBs + creditFromNCsBs) * 100) / 100;
     let remainingPaymentUsd = Math.round((totalInstrumentosPago + creditFromNCsUsd) * 100) / 100;
 
@@ -120,15 +127,14 @@
       }
 
       const docTasa = doc.tasa > 0 ? doc.tasa : 1;
-      const isNC = doc.co_tipo_doc.trim() === "N/CR";
 
-      if (isNC) {
-        // Notas de Crédito restan saldo (abono negativo)
+      if (isCreditDoc(doc.co_tipo_doc)) {
+        // Documentos de Crédito restan saldo (abono negativo a favor del cliente)
         const saldoUsd = Math.round((doc.saldo / docTasa) * 100) / 100;
         inp.mont_cob_bs = -doc.saldo;
         inp.mont_cob = -saldoUsd;
       } else {
-        // Documentos normales (Facturas, etc.)
+        // Documentos normales de cobro (Facturas, Ajustes Positivos AJPA/AJPM, etc.)
         const retIvaBs = (!inp.yaTieneRetIva && inp.showIvaDetails) ? (Number(inp.reten_iva_bs) || 0) : 0;
         const retIslrBs = (!inp.yaTieneRetIslr && inp.showIslrDetails) ? (Number(inp.reten_islr_bs) || 0) : 0;
         
@@ -138,7 +144,7 @@
         const maxAbonoBs = Math.max(0, Math.round((doc.saldo - retIvaBs - retIslrBs) * 100) / 100);
         const maxAbonoUsd = Math.max(0, Math.round(((doc.saldo / docTasa) - retIvaUsd - retIslrUsd) * 100) / 100);
 
-        // Si tenemos saldo de pago, lo aplicamos
+        // Si tenemos saldo de pago o crédito disponible, lo aplicamos
         const appliedBs = Math.min(remainingPaymentBs, maxAbonoBs);
         const appliedUsd = Math.min(remainingPaymentUsd, maxAbonoUsd);
 
@@ -159,20 +165,20 @@
     Math.round(
       documentos.reduce((acc, doc) => {
         if (checkedDocs[doc.nro_doc.trim()]) {
-          const isNC = doc.co_tipo_doc.trim() === "N/CR";
-          if (isNC) return acc - doc.saldo;
+          if (isCreditDoc(doc.co_tipo_doc)) return acc - doc.saldo;
           const inp = docInputs[doc.nro_doc.trim()];
           if (inp) {
             const appliedRetIvaBs = (!inp.yaTieneRetIva && inp.showIvaDetails) ? (Number(inp.reten_iva_bs) || 0) : 0;
             const appliedRetIslrBs = (!inp.yaTieneRetIslr && inp.showIslrDetails) ? (Number(inp.reten_islr_bs) || 0) : 0;
 
-            // Cálculo del diferencial cambiario N/DB si la factura es de una fecha anterior
+            // Cálculo del diferencial cambiario N/DB EXCLUSIVAMENTE para Facturas de venta (FACT) de una fecha anterior
+            const isFactura = doc.co_tipo_doc?.trim()?.toUpperCase() === "FACT";
             const docFecEmisStr = doc.fec_emis ? new Date(doc.fec_emis).toISOString().split('T')[0] : '';
             const todayStr = new Date().toISOString().split('T')[0];
             const isPreviousDateDoc = docFecEmisStr && docFecEmisStr < todayStr;
             const docTasa = doc.tasa > 0 ? doc.tasa : 1;
             let diffBs = 0;
-            if (isPreviousDateDoc && doc.saldo > 0 && currentExchangeRate > docTasa) {
+            if (isFactura && isPreviousDateDoc && doc.saldo > 0 && currentExchangeRate > docTasa) {
               const saldoUsd = doc.saldo / docTasa;
               const montoBsActual = Math.round((saldoUsd * currentExchangeRate) * 100) / 100;
               diffBs = Math.max(0, Math.round((montoBsActual - doc.saldo) * 100) / 100);
@@ -192,8 +198,7 @@
       documentos.reduce((acc, doc) => {
         if (checkedDocs[doc.nro_doc.trim()]) {
           const docTasa = doc.tasa > 0 ? doc.tasa : 1;
-          const isNC = doc.co_tipo_doc.trim() === "N/CR";
-          if (isNC) return acc - (doc.saldo / docTasa);
+          if (isCreditDoc(doc.co_tipo_doc)) return acc - (doc.saldo / docTasa);
           const inp = docInputs[doc.nro_doc.trim()];
           if (inp) {
             const appliedRetIva = (!inp.yaTieneRetIva && inp.showIvaDetails) ? (Number(inp.reten_iva) || 0) : 0;
@@ -597,10 +602,11 @@
     const docTasa = doc.tasa > 0 ? doc.tasa : 1;
 
     if (checkedDocs[nroDoc]) {
-      // Auto-enable retenciones si es contribuyente especial y tiene IVA (SOLO si no tiene retención previa)
+      // Auto-enable retenciones si es contribuyente especial y tiene IVA (SOLO si no tiene retención previa y NO es documento de crédito)
       if (
         selectedClient?.contribu_e &&
         doc.monto_imp > 0 &&
+        !isCreditDoc(doc.co_tipo_doc) &&
         !input.yaTieneRetIva &&
         !input.manual_override_iva &&
         !input.showIvaDetails
@@ -678,7 +684,7 @@
     for (const doc of documentos) {
       const nro = doc.nro_doc.trim();
       if (!checkedDocs[nro]) continue;
-      if (doc.co_tipo_doc.trim() === "N/CR") {
+      if (isCreditDoc(doc.co_tipo_doc)) {
         const docTasa = doc.tasa > 0 ? doc.tasa : (currentExchangeRate > 0 ? currentExchangeRate : 1);
         creditFromNCsBs += doc.saldo;
         creditFromNCsUsd += Math.round((doc.saldo / docTasa) * 100) / 100;
@@ -691,7 +697,7 @@
     for (const doc of documentos) {
       const nro = doc.nro_doc.trim();
       if (!checkedDocs[nro]) continue;
-      if (doc.co_tipo_doc.trim() === "N/CR") continue;
+      if (isCreditDoc(doc.co_tipo_doc)) continue;
 
       const inp = docInputs[nro];
       const docTasa = doc.tasa > 0 ? doc.tasa : (currentExchangeRate > 0 ? currentExchangeRate : 1);
@@ -700,12 +706,13 @@
       const retIvaUsd = (!inp?.yaTieneRetIva && inp?.showIvaDetails) ? (Number(inp.reten_iva) || 0) : 0;
       const retIslrUsd = (!inp?.yaTieneRetIslr && inp?.showIslrDetails) ? (Number(inp.reten_islr) || 0) : 0;
 
-      // Cálculo del diferencial cambiario N/DB si la factura es de una fecha anterior
+      // Cálculo del diferencial cambiario N/DB EXCLUSIVAMENTE para Facturas de venta (FACT) de una fecha anterior
+      const isFactura = doc.co_tipo_doc?.trim()?.toUpperCase() === "FACT";
       const docFecEmisStr = doc.fec_emis ? new Date(doc.fec_emis).toISOString().split('T')[0] : '';
       const todayStr = new Date().toISOString().split('T')[0];
       const isPreviousDateDoc = docFecEmisStr && docFecEmisStr < todayStr;
       let diffBs = 0;
-      if (isPreviousDateDoc && doc.saldo > 0 && currentExchangeRate > docTasa) {
+      if (isFactura && isPreviousDateDoc && doc.saldo > 0 && currentExchangeRate > docTasa) {
         const saldoUsd = doc.saldo / docTasa;
         const montoBsActual = Math.round((saldoUsd * currentExchangeRate) * 100) / 100;
         diffBs = Math.max(0, Math.round((montoBsActual - doc.saldo) * 100) / 100);
@@ -894,7 +901,7 @@
     const firstSelectedParent = documentos.find(
       (d) =>
         checkedDocs[d.nro_doc] &&
-        ["FACT", "NDEB", "N/DB", "GIRO", "AJPA"].includes(d.co_tipo_doc.trim()),
+        isDebitDoc(d.co_tipo_doc),
     );
     const parentDocNo = firstSelectedParent
       ? firstSelectedParent.nro_doc
@@ -905,9 +912,7 @@
       .filter((doc) => checkedDocs[doc.nro_doc])
       .map((doc) => {
         const inp = docInputs[doc.nro_doc];
-        const isParent = ["FACT", "NDEB", "N/DB", "GIRO", "AJPA"].includes(
-          doc.co_tipo_doc.trim(),
-        );
+        const isParent = isDebitDoc(doc.co_tipo_doc);
         const docTasa = doc.tasa > 0 ? doc.tasa : 1;
         const saldoUsd = Math.round((doc.saldo / docTasa) * 100) / 100;
         
@@ -1370,7 +1375,7 @@
                         <div>
                           <div class="flex items-center gap-2">
                             <span
-                              class="bg-white/5 border border-white/5 px-2 py-0.5 rounded-md font-bold text-xs text-text-muted uppercase"
+                              class="{isCreditDoc(doc.co_tipo_doc) ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30' : 'bg-white/5 border border-white/5 text-text-muted'} px-2 py-0.5 rounded-md font-bold text-xs uppercase"
                               >{doc.co_tipo_doc}</span
                             >
                             <span class="font-black text-text-base text-base"
@@ -1400,10 +1405,10 @@
                       <div class="text-left sm:text-right shrink-0">
                         <span
                           class="text-xs text-text-muted font-black block uppercase tracking-wider"
-                          >Saldo Pendiente</span
+                          >{isCreditDoc(doc.co_tipo_doc) ? "Saldo a Favor" : "Saldo Pendiente"}</span
                         >
-                        <span class="text-lg font-black text-brand-500">
-                          {#if doc.co_tipo_doc.trim() === "N/CR"}-{/if}$ {(
+                        <span class="text-lg font-black {isCreditDoc(doc.co_tipo_doc) ? 'text-emerald-400' : 'text-brand-500'}">
+                          {#if isCreditDoc(doc.co_tipo_doc)}-{/if}$ {(
                             doc.saldo / (doc.tasa > 0 ? doc.tasa : 1)
                           ).toLocaleString("de-DE", {
                             minimumFractionDigits: 2,
@@ -1411,9 +1416,9 @@
                           })}
                         </span>
                         <span
-                          class="block text-xs text-text-muted font-bold mt-1"
+                          class="block text-xs {isCreditDoc(doc.co_tipo_doc) ? 'text-emerald-400/80' : 'text-text-muted'} font-bold mt-1"
                         >
-                          Bs. {#if doc.co_tipo_doc.trim() === "N/CR"}-{/if}{Number(
+                          Bs. {#if isCreditDoc(doc.co_tipo_doc)}-{/if}{Number(
                             doc.saldo,
                           ).toLocaleString("de-DE", {
                             minimumFractionDigits: 2,
@@ -1424,9 +1429,22 @@
 
                     <!-- Detalle de Abonos y Retenciones -->
                     {#if checkedDocs[doc.nro_doc.trim()]}
-                      <div
-                        class="border-t border-border-subtle/50 pt-4 space-y-4 transition-all duration-200"
-                      >
+                      {#if isCreditDoc(doc.co_tipo_doc)}
+                        <div
+                          class="border-t border-border-subtle/50 pt-3 flex items-center justify-between text-xs text-emerald-400 bg-emerald-500/5 px-4 py-3 rounded-xl border border-emerald-500/20"
+                        >
+                          <span class="font-bold flex items-center gap-2">
+                            <CheckCircle size={15} />
+                            Documento a favor del cliente. Resta del saldo de la deuda sin generar N/DB ni retenciones.
+                          </span>
+                          <span class="font-mono font-black text-sm">
+                            -$ {(doc.saldo / (doc.tasa > 0 ? doc.tasa : 1)).toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </span>
+                        </div>
+                      {:else}
+                        <div
+                          class="border-t border-border-subtle/50 pt-4 space-y-4 transition-all duration-200"
+                        >
                         <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
                           <div>
                             <label
@@ -1784,8 +1802,8 @@
                           </div>
                         {/if}
 
-                        <!-- Alerta Diferencial Cambiario (N/DB) para facturas de días anteriores -->
-                        {#if doc.co_tipo_doc.trim() !== "N/CR"}
+                        <!-- Alerta Diferencial Cambiario (N/DB) exclusivamente para facturas de venta (FACT) de días anteriores -->
+                        {#if doc.co_tipo_doc.trim().toUpperCase() === "FACT"}
                           {@const docFecEmisStr = doc.fec_emis ? new Date(doc.fec_emis).toISOString().split('T')[0] : ''}
                           {@const todayStr = new Date().toISOString().split('T')[0]}
                           {@const isPreviousDateDoc = docFecEmisStr && docFecEmisStr < todayStr}
@@ -1818,7 +1836,7 @@
                         {/if}
 
                         <!-- Neto Cobrado Calculado (Solo Lectura) -->
-                        {#if doc.co_tipo_doc.trim() !== "N/CR" && input.mont_cob > 0}
+                        {#if !isCreditDoc(doc.co_tipo_doc) && input.mont_cob > 0}
                           <div
                             class="flex flex-col sm:flex-row sm:items-center justify-between border-t border-border-subtle/40 pt-3 gap-3"
                           >
@@ -1845,6 +1863,7 @@
                         {/if}
                       </div>
                     {/if}
+                  {/if}
                   </div>
                 {/if}
               {/each}
@@ -2312,16 +2331,16 @@
               class="space-y-3 max-h-[50vh] overflow-y-auto pr-1 custom-scrollbar"
             >
               {#each pendingInvoices as inv}
-                {@const isNcr = inv.co_tipo_doc.trim() === "N/CR"}
+                {@const isCredit = isCreditDoc(inv.co_tipo_doc)}
                 {@const rawUsd = inv.saldo / (inv.tasa > 0 ? inv.tasa : 1)}
                 {@const formattedUsd =
-                  (isNcr ? "-" : "") +
+                  (isCredit ? "-" : "") +
                   rawUsd.toLocaleString("de-DE", {
                     minimumFractionDigits: 2,
                     maximumFractionDigits: 2,
                   })}
                 {@const formattedBs =
-                  (isNcr ? "-" : "") +
+                  (isCredit ? "-" : "") +
                   Number(inv.saldo).toLocaleString("de-DE", {
                     minimumFractionDigits: 2,
                     maximumFractionDigits: 2,
