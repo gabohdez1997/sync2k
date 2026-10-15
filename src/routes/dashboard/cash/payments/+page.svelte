@@ -487,9 +487,13 @@
     }, 0)
   );
 
-  let totalInstrumentosPago = $derived(
-    formasPago.reduce((acc, curr) => acc + (Number(curr.mont_doc) || 0), 0),
-  );
+  let totalInstrumentosPago = $derived.by(() => {
+    const rawUsd = formasPago.reduce((acc, curr) => acc + (Number(curr.mont_doc) || 0), 0);
+    if (totalCobradoNeto > 0 && Math.abs(totalInstrumentosPagoBs - totalCobradoNetoBs) <= 0.05 && Math.abs(rawUsd - totalCobradoNeto) <= 0.02) {
+      return totalCobradoNeto;
+    }
+    return Math.round(rawUsd * 100) / 100;
+  });
 
   let saldoPendientePorCobrar = $derived(
     Math.max(0, Math.round((expectedNetPayUsd - totalInstrumentosPago) * 100) / 100)
@@ -1137,7 +1141,9 @@
     const totalSurplusUsd = Math.round((creditRemanenteUsd + realSurplusInstrumentosUsd) * 100) / 100;
     const totalSurplusBs = Math.round((creditRemanenteBs + surplusInstrumentosBs) * 100) / 100;
 
-    if (totalSurplusUsd > 0.009 && (totalSurplusBs > 0.05 || creditRemanenteUsd > 0.009) && !pendingDifferenceConfirmation) {
+    const isRealSurplus = (totalSurplusBs > 0.05) || (creditRemanenteUsd > 0.009);
+
+    if (isRealSurplus && totalSurplusUsd > 0.009 && !pendingDifferenceConfirmation) {
       differenceSurplusUsd = totalSurplusUsd;
       differenceSurplusBs = totalSurplusBs;
       differenceCreditDocNum = lastCreditDocNum;
