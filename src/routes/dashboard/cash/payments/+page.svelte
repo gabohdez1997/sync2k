@@ -927,7 +927,12 @@
 
     if (curr === "BS") {
       fp.mont_doc_bs = pendingBs;
-      fp.mont_doc = Math.round((pendingBs / rate) * 100) / 100;
+      const calculatedUsd = Math.round((pendingBs / rate) * 100) / 100;
+      if (Math.abs(calculatedUsd - pendingUsd) <= 0.02) {
+        fp.mont_doc = pendingUsd;
+      } else {
+        fp.mont_doc = calculatedUsd;
+      }
     } else {
       fp.mont_doc = pendingUsd;
       // Para USD, fijar exactamente el equivalente en Bs pendiente para garantizar saldo 0 Bs en Profit Plus
@@ -1017,7 +1022,12 @@
 
     if (curr === "BS") {
       fp.mont_doc_bs = Number(val) || 0;
-      fp.mont_doc = Math.round((fp.mont_doc_bs / rate) * 100) / 100;
+      const calculatedUsd = Math.round((fp.mont_doc_bs / rate) * 100) / 100;
+      if (Math.abs(fp.mont_doc_bs - totalCobradoNetoBs) <= 0.05 && Math.abs(calculatedUsd - expectedNetPayUsd) <= 0.02) {
+        fp.mont_doc = expectedNetPayUsd;
+      } else {
+        fp.mont_doc = calculatedUsd;
+      }
     } else {
       fp.mont_doc = Number(val) || 0;
       fp.mont_doc_bs = Math.round(fp.mont_doc * rate * 100) / 100;
@@ -1118,10 +1128,16 @@
     const creditRemanenteUsd = Math.round((anticipoRemanenteUsd + ncrRemanenteUsd) * 100) / 100;
     const creditRemanenteBs = Math.round((anticipoRemanenteBs + ncrRemanenteBs) * 100) / 100;
 
-    const totalSurplusUsd = Math.round((creditRemanenteUsd + surplusInstrumentosUsd) * 100) / 100;
+    // Si los instrumentos en Bs cuadran (diferencia <= 0.05 Bs) y en USD solo hay 1-2 centavos por redondeo de tasa,
+    // se trata de un residuo de conversión y no de un exceso de dinero real entregado por el cliente
+    const realSurplusInstrumentosUsd = (surplusInstrumentosBs <= 0.05 && surplusInstrumentosUsd <= 0.02)
+      ? 0
+      : surplusInstrumentosUsd;
+
+    const totalSurplusUsd = Math.round((creditRemanenteUsd + realSurplusInstrumentosUsd) * 100) / 100;
     const totalSurplusBs = Math.round((creditRemanenteBs + surplusInstrumentosBs) * 100) / 100;
 
-    if (totalSurplusUsd > 0.009 && !pendingDifferenceConfirmation) {
+    if (totalSurplusUsd > 0.009 && (totalSurplusBs > 0.05 || creditRemanenteUsd > 0.009) && !pendingDifferenceConfirmation) {
       differenceSurplusUsd = totalSurplusUsd;
       differenceSurplusBs = totalSurplusBs;
       differenceCreditDocNum = lastCreditDocNum;
