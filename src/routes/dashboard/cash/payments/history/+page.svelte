@@ -168,6 +168,60 @@
     });
   }
 
+  function getDocTypeBadge(co_tipo_doc: string, isFiscal: boolean) {
+    const t = (co_tipo_doc || '').trim().toUpperCase();
+    if (t === 'FACT') {
+      return {
+        label: isFiscal ? 'Factura' : 'Nota de Entrega',
+        class: isFiscal
+          ? 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20'
+          : 'bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/20'
+      };
+    }
+    if (t === 'AJPM' || t === 'AJPA') {
+      return {
+        label: 'Reintegro',
+        class: 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20'
+      };
+    }
+    if (t === 'AJNM' || t === 'AJNA') {
+      return {
+        label: 'Anticipo',
+        class: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20'
+      };
+    }
+    if (t === 'N/CR' || t === 'NCR') {
+      return {
+        label: 'Nota de Crédito',
+        class: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20'
+      };
+    }
+    if (t === 'N/DB' || t === 'NDEB') {
+      return {
+        label: 'Nota de Débito',
+        class: 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20'
+      };
+    }
+    if (t === 'GIRO') {
+      return {
+        label: 'Giro',
+        class: 'bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border border-cyan-500/20'
+      };
+    }
+    if (t === 'ADEL') {
+      return {
+        label: 'Adelanto',
+        class: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20'
+      };
+    }
+    return {
+      label: t || (isFiscal ? 'Factura' : 'Nota de Entrega'),
+      class: isFiscal
+        ? 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20'
+        : 'bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/20'
+    };
+  }
+
   function formatFormaPag(fp: string) {
     const mappings: Record<string, string> = {
       'EF': 'Efectivo',
@@ -801,14 +855,15 @@
                 <td class="px-6 py-5">
                   <div class="flex flex-col gap-1.5 items-start">
                     {#each parseDocumentosAsociados(p.documentos_asociados, p.sede_id) as doc}
+                      {@const badge = getDocTypeBadge(doc.co_tipo_doc, doc.isFiscal)}
                       <div class="flex flex-col gap-1 items-start">
                         <span
                           class="px-2.5 py-1 rounded-lg bg-surface-soft border border-border-subtle text-xs font-black text-brand-500 group-hover:bg-brand-500 group-hover:border-brand-500 group-hover:text-white transition-all inline-block"
                         >
                           {doc.nro_doc}
                         </span>
-                        <span class="text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded-md {doc.isFiscal ? 'bg-purple-500/10 text-purple-400 border border-purple-500/20' : 'bg-amber-500/10 text-amber-400 border border-amber-500/20'}">
-                          {doc.isFiscal ? 'Factura' : 'Nota de Entrega'}
+                        <span class="text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded-md {badge.class}">
+                          {badge.label}
                         </span>
                       </div>
                     {:else}
@@ -1028,11 +1083,12 @@
                 
                 <div class="space-y-4">
                   {#each editRenglones as r, idx}
+                    {@const badge = getDocTypeBadge(r.co_tipo_doc, false)}
                     <div class="bg-surface-soft/20 rounded-2xl border border-border-subtle p-5 hover:border-white/10 transition-all space-y-4">
                       <!-- Fila Superior -->
                       <div class="flex items-center justify-between">
                         <div class="flex items-center gap-2">
-                          <span class="bg-white/5 border border-white/5 px-2 py-0.5 rounded-md font-bold text-xs text-text-muted uppercase">{r.co_tipo_doc}</span>
+                          <span class="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md {badge.class}">{badge.label}</span>
                           <span class="font-black text-text-base text-base">{r.nro_doc}</span>
                         </div>
                         <div class="flex items-center gap-6">
@@ -1506,9 +1562,12 @@
                   </thead>
                   <tbody class="divide-y divide-white/5 text-text-base">
                     {#each detailData.renglones || [] as r}
+                      {@const badge = getDocTypeBadge(r.co_tipo_doc, false)}
                       <tr class="hover:bg-white/[0.01]">
                         <td class="px-4 py-3.5 text-text-muted font-bold">{r.reng_num}</td>
-                        <td class="px-4 py-3.5"><span class="bg-white/5 border border-white/5 px-2 py-0.5 rounded-md font-bold text-xs">{r.co_tipo_doc}</span></td>
+                        <td class="px-4 py-3.5">
+                          <span class="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md {badge.class}">{badge.label}</span>
+                        </td>
                         <td class="px-4 py-3.5 font-bold text-brand-500">{r.nro_doc}</td>
                         <td class="px-4 py-3.5 text-right">
                           <div class="font-black text-text-base">

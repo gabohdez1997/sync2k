@@ -40,6 +40,56 @@
   const isDebitDoc = (t: string | undefined | null) =>
     DEBIT_DOC_TYPES.includes((t || "").trim().toUpperCase());
 
+  function getDocTypeBadge(co_tipo_doc: string) {
+    const t = (co_tipo_doc || "").trim().toUpperCase();
+    if (t === "FACT") {
+      return {
+        label: "Factura",
+        class: "bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20"
+      };
+    }
+    if (t === "AJPM" || t === "AJPA") {
+      return {
+        label: "Reintegro",
+        class: "bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20"
+      };
+    }
+    if (t === "AJNM" || t === "AJNA") {
+      return {
+        label: "Anticipo",
+        class: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20"
+      };
+    }
+    if (t === "N/CR" || t === "NCR") {
+      return {
+        label: "Nota de Crédito",
+        class: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20"
+      };
+    }
+    if (t === "N/DB" || t === "NDEB") {
+      return {
+        label: "Nota de Débito",
+        class: "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20"
+      };
+    }
+    if (t === "GIRO") {
+      return {
+        label: "Giro",
+        class: "bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border border-cyan-500/20"
+      };
+    }
+    if (t === "ADEL") {
+      return {
+        label: "Adelanto",
+        class: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20"
+      };
+    }
+    return {
+      label: t,
+      class: "bg-surface-soft border border-border-subtle text-text-muted"
+    };
+  }
+
   // Estado del Formulario
   let co_cli = $state("");
   let selectedClient = $state<any>(null);
@@ -86,6 +136,9 @@
         nro_comp_islr_previo?: string;
         monto_ret_islr_previo_bs?: number;
         monto_ret_islr_previo_usd?: number;
+        saldo_remanente_bs?: number;
+        saldo_remanente_usd?: number;
+        es_abono_parcial?: boolean;
       }
     >
   >({});
@@ -94,31 +147,97 @@
 
   // Reactivo: Auto-distribuir el total de instrumentos de pago y notas de crédito/ajustes negativos a las facturas/ajustes positivos seleccionados
   $effect(() => {
-    // 1. Calcular primero el saldo a favor aportado por Documentos de Crédito seleccionados (N/CR, AJNA, AJNM, ADEL)
-    let creditFromNCsBs = 0;
-    let creditFromNCsUsd = 0;
+    // 1. Calcular la deuda neta total requerida por todos los documentos de débito seleccionados (Facturas, AJPA, AJPM, etc.)
+    let totalDebtNeededBs = 0;
+    let totalDebtNeededUsd = 0;
 
     for (const doc of documentos) {
       const nro = doc.nro_doc.trim();
       if (!checkedDocs[nro]) continue;
+      if (isCreditDoc(doc.co_tipo_doc)) continue;
 
-      if (isCreditDoc(doc.co_tipo_doc)) {
-        const docTasa = doc.tasa > 0 ? doc.tasa : 1;
-        const saldoUsd = Math.round((doc.saldo / docTasa) * 100) / 100;
-        creditFromNCsBs += doc.saldo;
-        creditFromNCsUsd += saldoUsd;
+      const inp = docInputs[nro];
+      const docTasa = doc.tasa > 0 ? doc.tasa : 1;
+      const retIvaBs = (!inp?.yaTieneRetIva && inp?.showIvaDetails) ? (Number(inp.reten_iva_bs) || 0) : 0;
+      const retIslrBs = (!inp?.yaTieneRetIslr && inp?.showIslrDetails) ? (Number(inp.reten_islr_bs) || 0) : 0;
+      const retIvaUsd = (!inp?.yaTieneRetIva && inp?.showIvaDetails) ? (Number(inp.reten_iva) || 0) : 0;
+      const retIslrUsd = (!inp?.yaTieneRetIslr && inp?.showIslrDetails) ? (Number(inp.reten_islr) || 0) : 0;
+
+      const isFactura = doc.co_tipo_doc?.trim()?.toUpperCase() === "FACT";
+      const docFecEmisStr = doc.fec_emis ? new Date(doc.fec_emis).toISOString().split('T')[0] : '';
+      const todayStr = new Date().toISOString().split('T')[0];
+      const isPreviousDateDoc = docFecEmisStr && docFecEmisStr < todayStr;
+      let diffBs = 0;
+      if (isFactura && isPreviousDateDoc && doc.saldo > 0 && currentExchangeRate > docTasa) {
+        const saldoUsd = doc.saldo / docTasa;
+        const montoBsActual = Math.round((saldoUsd * currentExchangeRate) * 100) / 100;
+        diffBs = Math.max(0, Math.round((montoBsActual - doc.saldo) * 100) / 100);
       }
+
+      const maxAbonoBs = Math.max(0, Math.round((doc.saldo - retIvaBs - retIslrBs + diffBs) * 100) / 100);
+      const maxAbonoUsd = Math.max(0, Math.round(((doc.saldo / docTasa) - retIvaUsd - retIslrUsd) * 100) / 100);
+
+      totalDebtNeededBs += maxAbonoBs;
+      totalDebtNeededUsd += maxAbonoUsd;
     }
 
-    // 2. Fondo disponible total para aplicar a deudas (Instrumentos + Documentos de Crédito)
-    let remainingPaymentBs = Math.round((totalInstrumentosPagoBs + creditFromNCsBs) * 100) / 100;
-    let remainingPaymentUsd = Math.round((totalInstrumentosPago + creditFromNCsUsd) * 100) / 100;
+    // 2. Prorratear los Documentos de Crédito (N/CR, AJNA, AJNM, ADEL) limitando su abono a la deuda neta a cubrir
+    let remainingDebtToCoverBs = Math.round(totalDebtNeededBs * 100) / 100;
+    let remainingDebtToCoverUsd = Math.round(totalDebtNeededUsd * 100) / 100;
 
-    // 3. Procesar todos los documentos cargados
+    let totalCreditAppliedBs = 0;
+    let totalCreditAppliedUsd = 0;
+
     for (const doc of documentos) {
       const nro = doc.nro_doc.trim();
       const inp = docInputs[nro];
       if (!inp) continue;
+
+      if (!isCreditDoc(doc.co_tipo_doc)) continue;
+
+      const docTasa = doc.tasa > 0 ? doc.tasa : 1;
+      const docSaldoUsd = Math.round((doc.saldo / docTasa) * 100) / 100;
+
+      if (!checkedDocs[nro]) {
+        inp.mont_cob = 0;
+        inp.mont_cob_bs = 0;
+        inp.saldo_remanente_bs = doc.saldo;
+        inp.saldo_remanente_usd = docSaldoUsd;
+        inp.es_abono_parcial = false;
+        continue;
+      }
+
+      // Monto a aplicar: hasta agotar la deuda pendiente o el saldo de este crédito
+      const appliedUsd = Math.min(docSaldoUsd, remainingDebtToCoverUsd);
+      const appliedBs = Math.min(doc.saldo, remainingDebtToCoverBs);
+
+      const remanenteUsd = Math.max(0, Math.round((docSaldoUsd - appliedUsd) * 100) / 100);
+      const remanenteBs = Math.max(0, Math.round((doc.saldo - appliedBs) * 100) / 100);
+
+      inp.mont_cob_bs = -Math.round(appliedBs * 100) / 100;
+      inp.mont_cob = -Math.round(appliedUsd * 100) / 100;
+      inp.saldo_remanente_bs = remanenteBs;
+      inp.saldo_remanente_usd = remanenteUsd;
+      inp.es_abono_parcial = remanenteUsd >= 0.01;
+
+      totalCreditAppliedBs += appliedBs;
+      totalCreditAppliedUsd += appliedUsd;
+
+      remainingDebtToCoverBs = Math.max(0, Math.round((remainingDebtToCoverBs - appliedBs) * 100) / 100);
+      remainingDebtToCoverUsd = Math.max(0, Math.round((remainingDebtToCoverUsd - appliedUsd) * 100) / 100);
+    }
+
+    // 3. Fondo total disponible para amortizar las deudas (Crédito efectivamente aplicado + Instrumentos de pago)
+    let remainingPaymentBs = Math.round((totalInstrumentosPagoBs + totalCreditAppliedBs) * 100) / 100;
+    let remainingPaymentUsd = Math.round((totalInstrumentosPago + totalCreditAppliedUsd) * 100) / 100;
+
+    // 4. Distribuir a los documentos de débito (Facturas, Ajustes Positivos, etc.)
+    for (const doc of documentos) {
+      const nro = doc.nro_doc.trim();
+      const inp = docInputs[nro];
+      if (!inp) continue;
+
+      if (isCreditDoc(doc.co_tipo_doc)) continue;
 
       if (!checkedDocs[nro]) {
         inp.mont_cob = 0;
@@ -127,86 +246,136 @@
       }
 
       const docTasa = doc.tasa > 0 ? doc.tasa : 1;
+      const retIvaBs = (!inp.yaTieneRetIva && inp.showIvaDetails) ? (Number(inp.reten_iva_bs) || 0) : 0;
+      const retIslrBs = (!inp.yaTieneRetIslr && inp.showIslrDetails) ? (Number(inp.reten_islr_bs) || 0) : 0;
+      const retIvaUsd = (!inp.yaTieneRetIva && inp.showIvaDetails) ? (Number(inp.reten_iva) || 0) : 0;
+      const retIslrUsd = (!inp.yaTieneRetIslr && inp.showIslrDetails) ? (Number(inp.reten_islr) || 0) : 0;
 
-      if (isCreditDoc(doc.co_tipo_doc)) {
-        // Documentos de Crédito restan saldo (abono negativo a favor del cliente)
-        const saldoUsd = Math.round((doc.saldo / docTasa) * 100) / 100;
-        inp.mont_cob_bs = -doc.saldo;
-        inp.mont_cob = -saldoUsd;
-      } else {
-        // Documentos normales de cobro (Facturas, Ajustes Positivos AJPA/AJPM, etc.)
-        const retIvaBs = (!inp.yaTieneRetIva && inp.showIvaDetails) ? (Number(inp.reten_iva_bs) || 0) : 0;
-        const retIslrBs = (!inp.yaTieneRetIslr && inp.showIslrDetails) ? (Number(inp.reten_islr_bs) || 0) : 0;
-        
-        const retIvaUsd = (!inp.yaTieneRetIva && inp.showIvaDetails) ? (Number(inp.reten_iva) || 0) : 0;
-        const retIslrUsd = (!inp.yaTieneRetIslr && inp.showIslrDetails) ? (Number(inp.reten_islr) || 0) : 0;
+      const maxAbonoBs = Math.max(0, Math.round((doc.saldo - retIvaBs - retIslrBs) * 100) / 100);
+      const maxAbonoUsd = Math.max(0, Math.round(((doc.saldo / docTasa) - retIvaUsd - retIslrUsd) * 100) / 100);
 
-        const maxAbonoBs = Math.max(0, Math.round((doc.saldo - retIvaBs - retIslrBs) * 100) / 100);
-        const maxAbonoUsd = Math.max(0, Math.round(((doc.saldo / docTasa) - retIvaUsd - retIslrUsd) * 100) / 100);
+      const appliedBs = Math.min(remainingPaymentBs, maxAbonoBs);
+      const appliedUsd = Math.min(remainingPaymentUsd, maxAbonoUsd);
 
-        // Si tenemos saldo de pago o crédito disponible, lo aplicamos
-        const appliedBs = Math.min(remainingPaymentBs, maxAbonoBs);
-        const appliedUsd = Math.min(remainingPaymentUsd, maxAbonoUsd);
+      inp.mont_cob_bs = Math.round(appliedBs * 100) / 100;
+      inp.mont_cob = Math.round(appliedUsd * 100) / 100;
 
-        inp.mont_cob_bs = Math.round(appliedBs * 100) / 100;
-        inp.mont_cob = Math.round(appliedUsd * 100) / 100;
-
-        remainingPaymentBs = Math.max(0, Math.round((remainingPaymentBs - appliedBs) * 100) / 100);
-        remainingPaymentUsd = Math.max(0, Math.round((remainingPaymentUsd - appliedUsd) * 100) / 100);
-      }
+      remainingPaymentBs = Math.max(0, Math.round((remainingPaymentBs - appliedBs) * 100) / 100);
+      remainingPaymentUsd = Math.max(0, Math.round((remainingPaymentUsd - appliedUsd) * 100) / 100);
     }
   });
 
   // Modal toggle
   let showImportModal = $state(false);
 
-  // Monto neto esperado a cobrar en efectivo/instrumentos (saldo - retenciones + diferencial N/DB) independiente de los instrumentos
+  // Monto neto esperado a cobrar en efectivo/instrumentos (deuda neta requerida - créditos efectivamente aplicados)
   let expectedNetPayBs = $derived(
+    Math.max(
+      0,
+      Math.round(
+        documentos.reduce((acc, doc) => {
+          if (checkedDocs[doc.nro_doc.trim()]) {
+            if (isCreditDoc(doc.co_tipo_doc)) {
+              const inp = docInputs[doc.nro_doc.trim()];
+              return acc - Math.abs(inp?.mont_cob_bs || 0);
+            }
+            const inp = docInputs[doc.nro_doc.trim()];
+            if (inp) {
+              const appliedRetIvaBs = (!inp.yaTieneRetIva && inp.showIvaDetails) ? (Number(inp.reten_iva_bs) || 0) : 0;
+              const appliedRetIslrBs = (!inp.yaTieneRetIslr && inp.showIslrDetails) ? (Number(inp.reten_islr_bs) || 0) : 0;
+
+              // Cálculo del diferencial cambiario N/DB EXCLUSIVAMENTE para Facturas de venta (FACT) de una fecha anterior
+              const isFactura = doc.co_tipo_doc?.trim()?.toUpperCase() === "FACT";
+              const docFecEmisStr = doc.fec_emis ? new Date(doc.fec_emis).toISOString().split('T')[0] : '';
+              const todayStr = new Date().toISOString().split('T')[0];
+              const isPreviousDateDoc = docFecEmisStr && docFecEmisStr < todayStr;
+              const docTasa = doc.tasa > 0 ? doc.tasa : 1;
+              let diffBs = 0;
+              if (isFactura && isPreviousDateDoc && doc.saldo > 0 && currentExchangeRate > docTasa) {
+                const saldoUsd = doc.saldo / docTasa;
+                const montoBsActual = Math.round((saldoUsd * currentExchangeRate) * 100) / 100;
+                diffBs = Math.max(0, Math.round((montoBsActual - doc.saldo) * 100) / 100);
+              }
+
+              return acc + doc.saldo - appliedRetIvaBs - appliedRetIslrBs + diffBs;
+            }
+            return acc + doc.saldo;
+          }
+          return acc;
+        }, 0) * 100
+      ) / 100
+    )
+  );
+
+  let expectedNetPayUsd = $derived(
+    Math.max(
+      0,
+      Math.round(
+        documentos.reduce((acc, doc) => {
+          if (checkedDocs[doc.nro_doc.trim()]) {
+            const docTasa = doc.tasa > 0 ? doc.tasa : 1;
+            if (isCreditDoc(doc.co_tipo_doc)) {
+              const inp = docInputs[doc.nro_doc.trim()];
+              return acc - Math.abs(inp?.mont_cob || 0);
+            }
+            const inp = docInputs[doc.nro_doc.trim()];
+            if (inp) {
+              const appliedRetIva = (!inp.yaTieneRetIva && inp.showIvaDetails) ? (Number(inp.reten_iva) || 0) : 0;
+              const appliedRetIslr = (!inp.yaTieneRetIslr && inp.showIslrDetails) ? (Number(inp.reten_islr) || 0) : 0;
+              const saldoUsd = doc.saldo / docTasa;
+              return acc + Math.max(0, saldoUsd - appliedRetIva - appliedRetIslr);
+            }
+            return acc + (doc.saldo / docTasa);
+          }
+          return acc;
+        }, 0) * 100
+      ) / 100
+    )
+  );
+
+  // Totales de crédito aplicados y remanentes
+  let totalCreditoAplicadoBs = $derived(
     Math.round(
       documentos.reduce((acc, doc) => {
-        if (checkedDocs[doc.nro_doc.trim()]) {
-          if (isCreditDoc(doc.co_tipo_doc)) return acc - doc.saldo;
+        if (checkedDocs[doc.nro_doc.trim()] && isCreditDoc(doc.co_tipo_doc)) {
           const inp = docInputs[doc.nro_doc.trim()];
-          if (inp) {
-            const appliedRetIvaBs = (!inp.yaTieneRetIva && inp.showIvaDetails) ? (Number(inp.reten_iva_bs) || 0) : 0;
-            const appliedRetIslrBs = (!inp.yaTieneRetIslr && inp.showIslrDetails) ? (Number(inp.reten_islr_bs) || 0) : 0;
-
-            // Cálculo del diferencial cambiario N/DB EXCLUSIVAMENTE para Facturas de venta (FACT) de una fecha anterior
-            const isFactura = doc.co_tipo_doc?.trim()?.toUpperCase() === "FACT";
-            const docFecEmisStr = doc.fec_emis ? new Date(doc.fec_emis).toISOString().split('T')[0] : '';
-            const todayStr = new Date().toISOString().split('T')[0];
-            const isPreviousDateDoc = docFecEmisStr && docFecEmisStr < todayStr;
-            const docTasa = doc.tasa > 0 ? doc.tasa : 1;
-            let diffBs = 0;
-            if (isFactura && isPreviousDateDoc && doc.saldo > 0 && currentExchangeRate > docTasa) {
-              const saldoUsd = doc.saldo / docTasa;
-              const montoBsActual = Math.round((saldoUsd * currentExchangeRate) * 100) / 100;
-              diffBs = Math.max(0, Math.round((montoBsActual - doc.saldo) * 100) / 100);
-            }
-
-            return acc + doc.saldo - appliedRetIvaBs - appliedRetIslrBs + diffBs;
-          }
-          return acc + doc.saldo;
+          return acc + Math.abs(inp?.mont_cob_bs || 0);
         }
         return acc;
       }, 0) * 100
     ) / 100
   );
 
-  let expectedNetPayUsd = $derived(
+  let totalCreditoAplicadoUsd = $derived(
     Math.round(
       documentos.reduce((acc, doc) => {
-        if (checkedDocs[doc.nro_doc.trim()]) {
-          const docTasa = doc.tasa > 0 ? doc.tasa : 1;
-          if (isCreditDoc(doc.co_tipo_doc)) return acc - (doc.saldo / docTasa);
+        if (checkedDocs[doc.nro_doc.trim()] && isCreditDoc(doc.co_tipo_doc)) {
           const inp = docInputs[doc.nro_doc.trim()];
-          if (inp) {
-            const appliedRetIva = (!inp.yaTieneRetIva && inp.showIvaDetails) ? (Number(inp.reten_iva) || 0) : 0;
-            const appliedRetIslr = (!inp.yaTieneRetIslr && inp.showIslrDetails) ? (Number(inp.reten_islr) || 0) : 0;
-            const saldoUsd = doc.saldo / docTasa;
-            return acc + Math.max(0, saldoUsd - appliedRetIva - appliedRetIslr);
-          }
-          return acc + (doc.saldo / docTasa);
+          return acc + Math.abs(inp?.mont_cob || 0);
+        }
+        return acc;
+      }, 0) * 100
+    ) / 100
+  );
+
+  let totalCreditoRemanenteUsd = $derived(
+    Math.round(
+      documentos.reduce((acc, doc) => {
+        if (checkedDocs[doc.nro_doc.trim()] && isCreditDoc(doc.co_tipo_doc)) {
+          const inp = docInputs[doc.nro_doc.trim()];
+          return acc + (inp?.saldo_remanente_usd || 0);
+        }
+        return acc;
+      }, 0) * 100
+    ) / 100
+  );
+
+  let totalCreditoRemanenteBs = $derived(
+    Math.round(
+      documentos.reduce((acc, doc) => {
+        if (checkedDocs[doc.nro_doc.trim()] && isCreditDoc(doc.co_tipo_doc)) {
+          const inp = docInputs[doc.nro_doc.trim()];
+          return acc + (inp?.saldo_remanente_bs || 0);
         }
         return acc;
       }, 0) * 100
@@ -569,6 +738,9 @@
             nro_comp_islr_previo: doc.nro_comp_islr ? doc.nro_comp_islr.trim() : "",
             monto_ret_islr_previo_bs: montoRetIslrPrevioBs,
             monto_ret_islr_previo_usd: montoRetIslrPrevioUsd,
+            saldo_remanente_bs: doc.saldo,
+            saldo_remanente_usd: doc.saldo / docTasa,
+            es_abono_parcial: false,
           };
 
           if (isTargetDoc) {
@@ -678,19 +850,6 @@
 
   // Helper para calcular el monto neto pendiente que deja el saldo del documento en 0
   function getRemainingPendingBalance(excludeIndex: number = -1) {
-    let creditFromNCsBs = 0;
-    let creditFromNCsUsd = 0;
-
-    for (const doc of documentos) {
-      const nro = doc.nro_doc.trim();
-      if (!checkedDocs[nro]) continue;
-      if (isCreditDoc(doc.co_tipo_doc)) {
-        const docTasa = doc.tasa > 0 ? doc.tasa : (currentExchangeRate > 0 ? currentExchangeRate : 1);
-        creditFromNCsBs += doc.saldo;
-        creditFromNCsUsd += Math.round((doc.saldo / docTasa) * 100) / 100;
-      }
-    }
-
     let totalNeededBs = 0;
     let totalNeededUsd = 0;
 
@@ -724,6 +883,24 @@
       totalNeededBs += maxBs;
       totalNeededUsd += maxUsd;
     }
+
+    // Calcular el crédito total disponible de todas las N/CR y Ajustes Negativos seleccionados de forma directa y síncrona
+    let totalCreditAvailableBs = 0;
+    let totalCreditAvailableUsd = 0;
+
+    for (const doc of documentos) {
+      const nro = doc.nro_doc.trim();
+      if (!checkedDocs[nro]) continue;
+      if (isCreditDoc(doc.co_tipo_doc)) {
+        const docTasa = doc.tasa > 0 ? doc.tasa : 1;
+        totalCreditAvailableBs += doc.saldo;
+        totalCreditAvailableUsd += Math.round((doc.saldo / docTasa) * 100) / 100;
+      }
+    }
+
+    // El crédito efectivamente aplicable nunca puede exceder la deuda requerida
+    const creditFromNCsBs = Math.min(totalCreditAvailableBs, totalNeededBs);
+    const creditFromNCsUsd = Math.min(totalCreditAvailableUsd, totalNeededUsd);
 
     let otherInstrumentsBs = 0;
     let otherInstrumentsUsd = 0;
@@ -759,8 +936,17 @@
   }
 
   function syncSinglePaymentInstrument() {
+    if (formasPago.length === 0) return;
     if (formasPago.length === 1 && !formasPago[0].manual_override) {
       applyExactPendingAmount(0);
+      return;
+    }
+    // Si hay un solo instrumento sin manual_override entre varios, sincronizar ese automáticamente
+    const nonOverrideIndices = formasPago
+      .map((fp, i) => (!fp.manual_override ? i : -1))
+      .filter((i) => i !== -1);
+    if (nonOverrideIndices.length === 1) {
+      applyExactPendingAmount(nonOverrideIndices[0]);
     }
   }
 
@@ -861,7 +1047,108 @@
   let saveSuccess = $state(false);
   let generatedDocNum = $state("");
 
+  let showDifferenceModal = $state(false);
+  let selectedDifferenceAction = $state<'AJNM' | 'AJPM' | 'KEEP_REMAINING'>('KEEP_REMAINING');
+  let differenceSurplusUsd = $state(0);
+  let differenceSurplusBs = $state(0);
+  let differenceHasCreditRemanente = $state(false);
+  let differenceOriginType = $state<'CREDIT_DOC' | 'INSTRUMENTS' | 'MIXED'>('CREDIT_DOC');
+  let differenceCreditDocNum = $state('');
+  let differenceCreditDocType = $state('');
+  let hasSelectedPositiveAdjustment = $state(false);
+  let positiveAdjustmentDocNum = $state('');
+  let pendingDifferenceConfirmation = $state(false);
+
+  async function confirmAndSaveWithDifference() {
+    showDifferenceModal = false;
+    pendingDifferenceConfirmation = true;
+    try {
+      await saveCobro();
+    } finally {
+      pendingDifferenceConfirmation = false;
+    }
+  }
+
   async function saveCobro() {
+    // 0. Determinar si hay un saldo a favor / diferencia del cliente para desplegar el modal de decisión
+    let anticipoRemanenteUsd = 0;
+    let anticipoRemanenteBs = 0;
+    let ncrRemanenteUsd = 0;
+    let ncrRemanenteBs = 0;
+    let lastCreditDocNum = '';
+    let lastCreditDocType = '';
+    let foundPosAdjustment = false;
+    let foundPosAdjustmentDocNum = '';
+
+    for (const doc of documentos) {
+      if (checkedDocs[doc.nro_doc.trim()]) {
+        const t = doc.co_tipo_doc.trim().toUpperCase();
+        if (t === 'AJPM' || t === 'AJPA') {
+          foundPosAdjustment = true;
+          foundPosAdjustmentDocNum = doc.nro_doc.trim();
+        }
+
+        if (isCreditDoc(doc.co_tipo_doc)) {
+          const inp = docInputs[doc.nro_doc.trim()];
+          const docTasa = doc.tasa > 0 ? doc.tasa : 1;
+          const remUsd = (inp?.saldo_remanente_usd !== undefined) ? inp.saldo_remanente_usd : (doc.saldo / docTasa);
+          const remBs = (inp?.saldo_remanente_bs !== undefined) ? inp.saldo_remanente_bs : doc.saldo;
+          if (remUsd > 0.009) {
+            lastCreditDocNum = doc.nro_doc.trim();
+            lastCreditDocType = (t === 'N/CR' || t === 'NCR') ? 'Nota de Crédito' : 'Anticipo';
+            if (t === 'N/CR' || t === 'NCR') {
+              ncrRemanenteUsd += remUsd;
+              ncrRemanenteBs += remBs;
+            } else {
+              // AJNM, AJNA, ADEL (Anticipos)
+              anticipoRemanenteUsd += remUsd;
+              anticipoRemanenteBs += remBs;
+            }
+          }
+        }
+      }
+    }
+
+    hasSelectedPositiveAdjustment = foundPosAdjustment;
+    positiveAdjustmentDocNum = foundPosAdjustmentDocNum;
+
+    const surplusInstrumentosUsd = Math.max(0, Math.round((totalInstrumentosPago - Math.max(0, expectedNetPayUsd)) * 100) / 100);
+    const surplusInstrumentosBs = Math.max(0, Math.round((totalInstrumentosPagoBs - Math.max(0, totalCobradoNetoBs)) * 100) / 100);
+
+    const creditRemanenteUsd = Math.round((anticipoRemanenteUsd + ncrRemanenteUsd) * 100) / 100;
+    const creditRemanenteBs = Math.round((anticipoRemanenteBs + ncrRemanenteBs) * 100) / 100;
+
+    const totalSurplusUsd = Math.round((creditRemanenteUsd + surplusInstrumentosUsd) * 100) / 100;
+    const totalSurplusBs = Math.round((creditRemanenteBs + surplusInstrumentosBs) * 100) / 100;
+
+    if (totalSurplusUsd > 0.009 && !pendingDifferenceConfirmation) {
+      differenceSurplusUsd = totalSurplusUsd;
+      differenceSurplusBs = totalSurplusBs;
+      differenceCreditDocNum = lastCreditDocNum;
+      differenceCreditDocType = lastCreditDocType || 'Crédito';
+
+      if (creditRemanenteUsd > 0.009 && surplusInstrumentosUsd <= 0.009) {
+        // La diferencia proviene de un documento de crédito existente (N/CR, AJNM, etc.)
+        // NUNCA generar AJNM (otro documento negativo) porque sumaría negativos en vez de cancelar a $0
+        differenceOriginType = 'CREDIT_DOC';
+        differenceHasCreditRemanente = true;
+        selectedDifferenceAction = 'KEEP_REMAINING';
+      } else if (surplusInstrumentosUsd > 0.009 && creditRemanenteUsd <= 0.009) {
+        // La diferencia proviene de instrumentos de pago recibidos en exceso (Efectivo/Banco)
+        // El dinero ingresado es positivo (+), por lo que un crédito AJNM (-) sí cuadra a $0
+        differenceOriginType = 'INSTRUMENTS';
+        differenceHasCreditRemanente = false;
+        selectedDifferenceAction = 'AJNM';
+      } else {
+        // Mixto (Crédito + Sobrante en efectivo)
+        differenceOriginType = 'MIXED';
+        differenceHasCreditRemanente = creditRemanenteUsd > 0.009;
+        selectedDifferenceAction = 'KEEP_REMAINING';
+      }
+
+      showDifferenceModal = true;
+      return;
+    }
     // 1. Validar y limpiar retenciones de IVA/ISLR según si están habilitadas las secciones o no
     for (const doc of documentos) {
       if (checkedDocs[doc.nro_doc]) {
@@ -925,9 +1212,19 @@
         const fullAbonoUsd = Math.round((saldoUsd - retIvaUsd - retIslrUsd) * 100) / 100;
         
         let montCobBs;
-        if (Math.abs(Math.abs(inp.mont_cob) - fullAbonoUsd) < 0.01) {
-          // Si el cliente paga la totalidad de la deuda en divisa (diferencia menor a 0,01 USD),
-          // amortizar automáticamente el 100% del saldo en Bs del documento para dejar saldo 0 Bs
+        if (isCreditDoc(doc.co_tipo_doc)) {
+          if (pendingDifferenceConfirmation && (selectedDifferenceAction === 'AJNM' || selectedDifferenceAction === 'AJPM')) {
+            // Se absorbe el 100% del saldo del crédito para convertirlo/transferirlo al Ajuste (AJNM o AJPM)
+            montCobBs = -doc.saldo;
+          } else {
+            montCobBs = inp.mont_cob_bs || 0;
+          }
+        } else if (
+          Math.abs(Math.abs(inp.mont_cob) - fullAbonoUsd) <= 0.02 ||
+          Math.abs((doc.saldo - retIvaBs - retIslrBs) - (inp.mont_cob_bs || 0)) <= Math.max(15.0, tasaCobro * 0.02)
+        ) {
+          // Si el cliente paga la totalidad de la deuda en divisa o bolívares (diferencia residual <= 0,02 USD o su equivalente en Bs),
+          // amortizar automáticamente el 100% del saldo en Bs del documento para dejar saldo 0 Bs exacto
           montCobBs = Math.round((doc.saldo - retIvaBs - retIslrBs) * 100) / 100;
           if (inp.mont_cob < 0) {
             montCobBs = -montCobBs;
@@ -952,6 +1249,17 @@
     if (renglones.length === 0) {
       toast.error(
         "Debe registrar al menos un abono o retención en los documentos.",
+      );
+      saving = false;
+      return;
+    }
+
+    const hasActiveAjuste = pendingDifferenceConfirmation && selectedDifferenceAction !== 'KEEP_REMAINING' && differenceSurplusUsd > 0.009;
+    const hasAnyEffectiveApplication = renglones.some(r => Math.abs(r.mont_cob) > 0.009 || (r.monto_retencion_iva || 0) > 0.009 || (r.monto_retencion || 0) > 0.009);
+
+    if (!hasActiveAjuste && !hasAnyEffectiveApplication) {
+      toast.info(
+        "No hay facturas amortizadas ni pagos que registrar. El saldo permanece disponible en el documento actual."
       );
       saving = false;
       return;
@@ -1044,7 +1352,8 @@
 
     // Ajustar por diferencias de redondeo pequeñas si se paga en total
     const diffBs = Math.round((totalDocBs - totalFpBs) * 100) / 100;
-    if (Math.abs(diffBs) > 0 && Math.abs(diffBs) < 5.00 && formas_pago_cleaned.length > 0) {
+    const maxDiffBsTolerance = Math.max(15.0, tasaCobro * 0.02);
+    if (Math.abs(diffBs) > 0 && Math.abs(diffBs) <= maxDiffBsTolerance && formas_pago_cleaned.length > 0) {
       // Intentar compensar primero en el primer instrumento de Bs/VES
       let targetFp = formas_pago_cleaned.find((fp) => fp._moneda === "BS" || fp._moneda === "VES");
       if (!targetFp) {
@@ -1073,12 +1382,17 @@
       co_ven: effectiveCoVen,
       co_mone: safeCollectionCurrency,
       tasa: tasaCobro,
-      monto: totalDocBs,
+      monto: Math.max(0, Math.round(totalDocBs * 100) / 100),
       descrip: `COBRO CLIENTE ${selectedClient.co_cli}`,
       renglones,
       formas_pago: formas_pago_cleaned,
       retenciones_iva,
       retenciones_islr,
+      ajuste_diferencia: (pendingDifferenceConfirmation && selectedDifferenceAction !== 'KEEP_REMAINING' && differenceSurplusUsd > 0.009) ? {
+        tipo: selectedDifferenceAction,
+        monto_usd: differenceSurplusUsd,
+        monto_bs: differenceSurplusBs
+      } : null
     };
 
 
@@ -1352,6 +1666,7 @@
             <div class="space-y-4">
               {#each documentos as doc}
                 {@const input = docInputs[doc.nro_doc.trim()]}
+                {@const badge = getDocTypeBadge(doc.co_tipo_doc)}
                 {#if input}
                   <div
                     class="bg-surface-soft/20 rounded-2xl border border-border-subtle p-5 hover:border-white/10 transition-all space-y-4"
@@ -1375,8 +1690,8 @@
                         <div>
                           <div class="flex items-center gap-2">
                             <span
-                              class="{isCreditDoc(doc.co_tipo_doc) ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30' : 'bg-white/5 border border-white/5 text-text-muted'} px-2 py-0.5 rounded-md font-bold text-xs uppercase"
-                              >{doc.co_tipo_doc}</span
+                              class="{badge.class} px-2 py-0.5 rounded-md font-bold text-xs uppercase"
+                              >{badge.label}</span
                             >
                             <span class="font-black text-text-base text-base"
                               >{doc.nro_doc}</span
@@ -1395,7 +1710,7 @@
                               ).toLocaleDateString("es-VE")}</span
                             >
                             <span>•</span>
-                            <span class="text-brand-400 font-bold"
+                            <span class="text-brand-500 dark:text-brand-400 font-bold"
                               >Tasa Doc: {Number(doc.tasa).toFixed(2)}</span
                             >
                           </div>
@@ -1407,7 +1722,7 @@
                           class="text-xs text-text-muted font-black block uppercase tracking-wider"
                           >{isCreditDoc(doc.co_tipo_doc) ? "Saldo a Favor" : "Saldo Pendiente"}</span
                         >
-                        <span class="text-lg font-black {isCreditDoc(doc.co_tipo_doc) ? 'text-emerald-400' : 'text-brand-500'}">
+                        <span class="text-lg font-black {isCreditDoc(doc.co_tipo_doc) ? 'text-emerald-600 dark:text-emerald-400' : 'text-brand-500'}">
                           {#if isCreditDoc(doc.co_tipo_doc)}-{/if}$ {(
                             doc.saldo / (doc.tasa > 0 ? doc.tasa : 1)
                           ).toLocaleString("de-DE", {
@@ -1416,7 +1731,7 @@
                           })}
                         </span>
                         <span
-                          class="block text-xs {isCreditDoc(doc.co_tipo_doc) ? 'text-emerald-400/80' : 'text-text-muted'} font-bold mt-1"
+                          class="block text-xs {isCreditDoc(doc.co_tipo_doc) ? 'text-emerald-700 dark:text-emerald-400/90' : 'text-text-muted'} font-bold mt-1"
                         >
                           Bs. {#if isCreditDoc(doc.co_tipo_doc)}-{/if}{Number(
                             doc.saldo,
@@ -1424,22 +1739,82 @@
                             minimumFractionDigits: 2,
                           })}
                         </span>
+                        {#if isCreditDoc(doc.co_tipo_doc) && checkedDocs[doc.nro_doc.trim()] && input.es_abono_parcial}
+                          <span class="inline-block text-[10px] bg-amber-500/15 dark:bg-amber-500/25 text-amber-800 dark:text-amber-200 border border-amber-500/40 px-2.5 py-0.5 rounded-full font-bold mt-1.5">
+                            Aplica: -${Math.abs(input.mont_cob || 0).toFixed(2)} | Queda: +${(input.saldo_remanente_usd || 0).toFixed(2)}
+                          </span>
+                        {/if}
                       </div>
                     </div>
 
                     <!-- Detalle de Abonos y Retenciones -->
                     {#if checkedDocs[doc.nro_doc.trim()]}
                       {#if isCreditDoc(doc.co_tipo_doc)}
-                        <div
-                          class="border-t border-border-subtle/50 pt-3 flex items-center justify-between text-xs text-emerald-400 bg-emerald-500/5 px-4 py-3 rounded-xl border border-emerald-500/20"
-                        >
-                          <span class="font-bold flex items-center gap-2">
-                            <CheckCircle size={15} />
-                            Documento a favor del cliente. Resta del saldo de la deuda sin generar N/DB ni retenciones.
-                          </span>
-                          <span class="font-mono font-black text-sm">
-                            -$ {(doc.saldo / (doc.tasa > 0 ? doc.tasa : 1)).toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                          </span>
+                        {@const appliedUsd = Math.abs(input.mont_cob || 0)}
+                        {@const appliedBs = Math.abs(input.mont_cob_bs || 0)}
+                        {@const remanenteUsd = input.saldo_remanente_usd || 0}
+                        {@const remanenteBs = input.saldo_remanente_bs || 0}
+                        {@const isParcial = input.es_abono_parcial}
+
+                        <div class="border-t border-border-subtle/50 pt-3 space-y-3">
+                          {#if isParcial}
+                            <div
+                              class="bg-amber-500/10 dark:bg-amber-500/15 border border-amber-500/30 p-4 rounded-2xl text-xs space-y-3 animate-in fade-in duration-150"
+                            >
+                              <div class="flex items-center justify-between">
+                                <span class="font-bold text-amber-800 dark:text-amber-300 flex items-center gap-1.5">
+                                  <AlertCircle size={16} class="text-amber-600 dark:text-amber-400 shrink-0" />
+                                  Crédito superior a la deuda (Abono Prorrateado Automático)
+                                </span>
+                                <span class="text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-900 dark:text-amber-200 border border-amber-500/40">
+                                  Abono Parcial
+                                </span>
+                              </div>
+                              <p class="text-text-muted leading-relaxed">
+                                El monto de este crédito supera la deuda seleccionada. Se aplicará únicamente lo necesario para saldar la factura y el remanente quedará como saldo a favor en Profit Plus para futuras compras.
+                              </p>
+                              <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-amber-500/20">
+                                <div class="bg-surface-base dark:bg-black/40 p-3.5 rounded-xl border border-border-subtle dark:border-white/10 shadow-xs">
+                                  <span class="block text-[10px] text-text-muted uppercase font-black tracking-wider">Monto a Aplicar en este Cobro:</span>
+                                  <span class="text-base font-black text-emerald-600 dark:text-emerald-400 font-mono block mt-0.5">
+                                    -$ {appliedUsd.toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                  </span>
+                                  <span class="block text-xs text-text-muted font-bold mt-0.5">
+                                    -Bs. {appliedBs.toLocaleString("de-DE", { minimumFractionDigits: 2 })}
+                                  </span>
+                                </div>
+                                <div class="bg-surface-base dark:bg-black/40 p-3.5 rounded-xl border border-amber-500/30 dark:border-white/10 shadow-xs">
+                                  <span class="block text-[10px] text-amber-800 dark:text-amber-300 uppercase font-black tracking-wider">Saldo a Favor Remanente (Queda disponible):</span>
+                                  <span class="text-base font-black text-amber-700 dark:text-amber-300 font-mono block mt-0.5">
+                                    +$ {remanenteUsd.toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                  </span>
+                                  <span class="block text-xs text-text-muted font-bold mt-0.5">
+                                    +Bs. {remanenteBs.toLocaleString("de-DE", { minimumFractionDigits: 2 })}
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+                          {:else}
+                            <div
+                              class="bg-emerald-500/10 dark:bg-emerald-500/5 border border-emerald-500/30 p-4 rounded-2xl text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-in fade-in duration-150"
+                            >
+                              <div class="flex items-center gap-2.5">
+                                <CheckCircle size={18} class="text-emerald-600 dark:text-emerald-400 shrink-0" />
+                                <div>
+                                  <span class="font-bold text-emerald-800 dark:text-emerald-300 block">Crédito aplicado en su totalidad</span>
+                                  <span class="text-text-muted text-[11px]">Se descuenta de la deuda sin generar N/DB ni retenciones.</span>
+                                </div>
+                              </div>
+                              <div class="text-left sm:text-right shrink-0">
+                                <span class="font-mono font-black text-emerald-600 dark:text-emerald-400 text-sm">
+                                  -$ {appliedUsd.toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                </span>
+                                <span class="block text-[10px] text-text-muted font-bold">
+                                  -Bs. {appliedBs.toLocaleString("de-DE", { minimumFractionDigits: 2 })}
+                                </span>
+                              </div>
+                            </div>
+                          {/if}
                         </div>
                       {:else}
                         <div
@@ -1613,7 +1988,7 @@
                             class="bg-green-500/5 border border-green-500/20 p-4 rounded-2xl space-y-3 text-xs animate-in slide-in-from-top-2 duration-150"
                           >
                             <div class="flex justify-between items-center">
-                              <span class="font-bold text-green-400"
+                              <span class="font-bold text-emerald-700 dark:text-green-400"
                                 >Datos Comprobante Retención IVA</span
                               >
                               <button
@@ -1684,7 +2059,7 @@
                               </div>
                               <div>
                                 <span
-                                  class="text-[9px] text-text-muted font-bold block mb-1 font-semibold text-green-400"
+                                  class="text-[9px] text-text-muted font-bold block mb-1 font-semibold text-emerald-700 dark:text-green-400"
                                   >MTO RETENIDO (Bs.)</span
                                 >
                                 <input
@@ -1692,7 +2067,7 @@
                                   step="0.01"
                                   readonly
                                   value={input.reten_iva_bs}
-                                  class="w-full bg-surface-soft/60 border border-border-subtle text-green-400 font-bold px-2 py-1.5 rounded-lg text-xs text-right cursor-not-allowed opacity-90"
+                                  class="w-full bg-surface-soft/60 border border-border-subtle text-emerald-700 dark:text-green-400 font-bold px-2 py-1.5 rounded-lg text-xs text-right cursor-not-allowed opacity-90"
                                 />
                               </div>
                             </div>
@@ -1705,7 +2080,7 @@
                             class="bg-amber-500/5 border border-amber-500/20 p-4 rounded-2xl space-y-3 text-xs animate-in slide-in-from-top-2 duration-150"
                           >
                             <div class="flex justify-between items-center">
-                              <span class="font-bold text-amber-300"
+                              <span class="font-bold text-amber-700 dark:text-amber-300"
                                 >Datos Retención ISLR / Municipal</span
                               >
                               <button
@@ -1758,13 +2133,13 @@
                                 />
                               </div>
                               <div>
-                                <span class="text-[9px] text-text-muted font-bold block mb-1 font-semibold text-amber-400">MTO RETENIDO (Bs.)</span>
+                                <span class="text-[9px] text-text-muted font-bold block mb-1 font-semibold text-amber-700 dark:text-amber-400">MTO RETENIDO (Bs.)</span>
                                 <input
                                   type="number"
                                   step="0.01"
                                   readonly
                                   value={input.reten_islr_bs}
-                                  class="w-full bg-surface-soft/60 border border-border-subtle px-2 py-1.5 rounded-lg text-xs text-right text-amber-400 font-bold cursor-not-allowed opacity-90"
+                                  class="w-full bg-surface-soft/60 border border-border-subtle px-2 py-1.5 rounded-lg text-xs text-right text-amber-700 dark:text-amber-400 font-bold cursor-not-allowed opacity-90"
                                 />
                               </div>
                             </div>
@@ -1904,12 +2279,36 @@
                 })}</span
               >
             </div>
+            {#if totalCreditoAplicadoUsd > 0}
+              <div
+                class="flex justify-between items-center text-sm font-bold text-emerald-600 dark:text-emerald-400"
+              >
+                <span>Créditos Aplicados (N/CR)</span>
+                <span class="font-mono"
+                  >-$ {totalCreditoAplicadoUsd.toLocaleString("de-DE", {
+                    minimumFractionDigits: 2,
+                  })}</span
+                >
+              </div>
+            {/if}
+            {#if totalCreditoRemanenteUsd > 0}
+              <div
+                class="flex justify-between items-center text-xs font-bold bg-amber-500/15 dark:bg-amber-500/10 border border-amber-500/30 px-3.5 py-2.5 rounded-xl"
+              >
+                <span class="text-amber-900 dark:text-amber-200">Crédito Remanente (Queda disponible):</span>
+                <span class="font-mono font-black text-amber-700 dark:text-amber-300 text-sm"
+                  >+${totalCreditoRemanenteUsd.toLocaleString("de-DE", {
+                    minimumFractionDigits: 2,
+                  })}</span
+                >
+              </div>
+            {/if}
             {#if totalRetenidoIvaVista > 0}
             <div
               class="flex justify-between items-center text-base font-bold text-text-muted"
             >
               <span>Retenciones IVA</span>
-              <span class="font-mono text-green-400"
+              <span class="font-mono text-emerald-600 dark:text-green-400"
                 >$ {totalRetenidoIvaVista.toLocaleString("de-DE", {
                   minimumFractionDigits: 2,
                 })}</span
@@ -1921,7 +2320,7 @@
               class="flex justify-between items-center text-base font-bold text-text-muted"
             >
               <span>Retenciones ISLR</span>
-              <span class="font-mono text-amber-300"
+              <span class="font-mono text-amber-700 dark:text-amber-300"
                 >$ {totalRetenidoIslrVista.toLocaleString("de-DE", {
                   minimumFractionDigits: 2,
                 })}</span
@@ -1930,7 +2329,7 @@
             {/if}
             {#if totalIgtf > 0}
               <div
-                class="flex justify-between items-center text-base font-bold text-brand-400"
+                class="flex justify-between items-center text-base font-bold text-brand-500 dark:text-brand-400"
                 transition:slide
               >
                 <span>Impuesto IGTF (3%)</span>
@@ -2347,7 +2746,7 @@
                   })}
 
                 <ImportItemCard
-                  docType={inv.co_tipo_doc}
+                  docType={getDocTypeBadge(inv.co_tipo_doc).label}
                   docNum={inv.nro_doc}
                   clientName={inv.cli_des?.trim()}
                   clientRif={inv.rif ? `${inv.rif.trim()} ` : null}
@@ -2380,6 +2779,263 @@
             </div>
           {/if}
         </div>
+      </div>
+    </div>
+  </div>
+{/if}
+
+<!-- MODAL DE DECISIÓN DE SALDO A FAVOR / DIFERENCIA (AJNM vs AJPM) -->
+{#if showDifferenceModal}
+  <div
+    class="fixed inset-0 bg-black/80 backdrop-blur-md z-[100] flex items-center justify-center p-4 md:p-6"
+    transition:fade={{ duration: 150 }}
+  >
+    <div
+      class="bg-surface-raised border border-border-subtle rounded-[28px] w-full max-w-xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh] animate-in zoom-in-95 duration-200"
+    >
+      <!-- Cabecera del Modal -->
+      <div class="p-6 border-b border-border-subtle flex items-center justify-between bg-surface-soft/40">
+        <div class="flex items-center gap-3">
+          <div class="p-3 bg-brand-500/10 text-brand-500 dark:text-brand-400 rounded-2xl border border-brand-500/20">
+            <Wallet size={24} />
+          </div>
+          <div>
+            <h3 class="text-xl font-black text-text-base tracking-tight">
+              Saldo a Favor Detectado
+            </h3>
+            <p class="text-xs text-text-muted mt-0.5">
+              {#if differenceOriginType === 'CREDIT_DOC'}
+                El cobro incluye un saldo a favor en {differenceCreditDocType} ({differenceCreditDocNum}):
+              {:else if differenceOriginType === 'INSTRUMENTS'}
+                El cliente entregó dinero en exceso en los instrumentos de pago:
+              {:else}
+                El cobro presenta una diferencia a favor del cliente:
+              {/if}
+            </p>
+          </div>
+        </div>
+        <button
+          onclick={() => (showDifferenceModal = false)}
+          class="p-2 text-text-muted hover:text-text-base rounded-xl hover:bg-surface-soft transition-colors cursor-pointer"
+        >
+          <X size={20} />
+        </button>
+      </div>
+
+      <!-- Cuerpo del Modal -->
+      <div class="p-6 space-y-6 overflow-y-auto">
+        <!-- Banner del Monto a Favor -->
+        <div class="bg-emerald-500/10 dark:bg-emerald-500/15 border border-emerald-500/30 p-5 rounded-2xl flex items-center justify-between">
+          <div>
+            <span class="text-[11px] font-black uppercase tracking-wider text-emerald-700 dark:text-emerald-400 block">
+              Diferencia a Favor del Cliente
+            </span>
+            <span class="text-xs text-text-muted/80 mt-0.5 block">
+              Tasa aplicada: Bs. {currentExchangeRate.toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </span>
+          </div>
+          <div class="text-right">
+            <span class="text-2xl font-black text-emerald-600 dark:text-emerald-400 font-mono block">
+              +${differenceSurplusUsd.toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </span>
+            <span class="text-xs font-bold text-emerald-700 dark:text-emerald-400/90 font-mono mt-0.5 block">
+              +Bs. {differenceSurplusBs.toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </span>
+          </div>
+        </div>
+
+        <!-- Opciones de Resolución -->
+        <div class="space-y-3">
+          <label class="text-xs font-black uppercase tracking-wider text-text-muted block ml-1">
+            ¿Qué deseas hacer con esta diferencia?
+          </label>
+
+          {#if differenceOriginType === 'CREDIT_DOC'}
+            <!-- ORIGEN: DOCUMENTO DE CRÉDITO EXISTENTE (N/CR, AJNM, ADEL) -->
+            <!-- Al ser ya un crédito (-), NUNCA se debe generar un AJNM (-) porque sumaría negativos (-86 + -86 = -172) -->
+            <!-- Opción 1: Conservar saldo en documento original (Recomendado) -->
+            <button
+              type="button"
+              onclick={() => (selectedDifferenceAction = 'KEEP_REMAINING')}
+              class="w-full text-left p-4 rounded-2xl border transition-all cursor-pointer flex items-start gap-3.5 {selectedDifferenceAction === 'KEEP_REMAINING' ? 'bg-emerald-500/10 border-emerald-500 ring-2 ring-emerald-500/20' : 'bg-surface-soft/40 border-border-subtle hover:bg-surface-soft hover:border-white/20'}"
+            >
+              <div class="p-2.5 rounded-xl {selectedDifferenceAction === 'KEEP_REMAINING' ? 'bg-emerald-500 text-white' : 'bg-surface-soft text-text-muted'} shrink-0 mt-0.5">
+                <CheckCircle size={20} />
+              </div>
+              <div class="flex-1">
+                <div class="flex items-center justify-between gap-2">
+                  <span class="font-bold text-sm text-text-base">Conservar Saldo en {differenceCreditDocType} ({differenceCreditDocNum || 'actual'})</span>
+                  <span class="text-[9px] font-black uppercase px-2 py-0.5 rounded-md bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30">
+                    Recomendado • Sin nuevo doc
+                  </span>
+                </div>
+                <p class="text-xs text-text-muted mt-1 leading-relaxed">
+                  No crea documentos adicionales ni duplica comprobantes. El remanente de +${differenceSurplusUsd.toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} permanece dentro de la <strong>{differenceCreditDocType} {differenceCreditDocNum}</strong> en Profit Plus para amortizar futuras compras o cobros.
+                </p>
+              </div>
+            </button>
+
+            <!-- Opción 2: Reintegro / Vuelto (AJPM) - Oculto si ya se seleccionó un AJPM o AJPA -->
+            {#if !hasSelectedPositiveAdjustment}
+              <button
+                type="button"
+                onclick={() => (selectedDifferenceAction = 'AJPM')}
+                class="w-full text-left p-4 rounded-2xl border transition-all cursor-pointer flex items-start gap-3.5 {selectedDifferenceAction === 'AJPM' ? 'bg-blue-500/10 border-blue-500 ring-2 ring-blue-500/20' : 'bg-surface-soft/40 border-border-subtle hover:bg-surface-soft hover:border-white/20'}"
+              >
+                <div class="p-2.5 rounded-xl {selectedDifferenceAction === 'AJPM' ? 'bg-blue-500 text-white' : 'bg-surface-soft text-text-muted'} shrink-0 mt-0.5">
+                  <Wallet size={20} />
+                </div>
+                <div class="flex-1">
+                  <div class="flex items-center justify-between gap-2">
+                    <span class="font-bold text-sm text-text-base">Generar Reintegro o Vuelto (AJPM)</span>
+                    <span class="text-[9px] font-black uppercase px-2 py-0.5 rounded-md bg-blue-500/15 text-blue-700 dark:text-blue-400 border border-blue-500/30">
+                      Serie V014
+                    </span>
+                  </div>
+                  <p class="text-xs text-text-muted mt-1 leading-relaxed">
+                    Genera un Ajuste Positivo (<strong>AJPM</strong>) para cruzar y saldar el crédito a $0,00, registrando la devolución del dinero en efectivo o transferencia bancaria al cliente.
+                  </p>
+                </div>
+              </button>
+            {/if}
+
+            <!-- Explicación contable del por qué no se permite AJNM ni AJPM de AJPM -->
+            <div class="p-3.5 bg-brand-500/10 border border-brand-500/20 rounded-2xl text-xs text-text-base flex items-start gap-2.5 mt-2">
+              <Info size={16} class="text-brand-500 shrink-0 mt-0.5" />
+              <span class="text-text-muted leading-relaxed">
+                <strong class="text-text-base">Validación Contable y de Cuadre:</strong> 
+                {#if hasSelectedPositiveAdjustment}
+                  El cobro ya incluye un Ajuste Positivo ({positiveAdjustmentDocNum || 'AJPM / AJPA'}). En Profit Plus no se puede generar un AJPM de otro AJPM/AJPA ni un AJNM de un crédito; el remanente permanece intacto en su documento original.
+                {:else}
+                  Al provenir de un documento de crédito ({differenceCreditDocType}), no se puede generar otro documento negativo (AJNM) porque en el cobro ambos montos se sumarían en lugar de restarse a $0,00. El saldo se mantiene en el documento existente o se cruza con un Reintegro positivo (AJPM).
+                {/if}
+              </span>
+            </div>
+
+          {:else if differenceOriginType === 'INSTRUMENTS'}
+            <!-- ORIGEN: INSTRUMENTOS DE PAGO (EFECTIVO O BANCO EN EXCESO) -->
+            <!-- El dinero ingresado es positivo (+), por lo que un crédito AJNM (-) sí cuadra el cobro a 0 -->
+            <!-- Opción 1: Anticipo (AJNM) -->
+            <button
+              type="button"
+              onclick={() => (selectedDifferenceAction = 'AJNM')}
+              class="w-full text-left p-4 rounded-2xl border transition-all cursor-pointer flex items-start gap-3.5 {selectedDifferenceAction === 'AJNM' ? 'bg-emerald-500/10 border-emerald-500 ring-2 ring-emerald-500/20' : 'bg-surface-soft/40 border-border-subtle hover:bg-surface-soft hover:border-white/20'}"
+            >
+              <div class="p-2.5 rounded-xl {selectedDifferenceAction === 'AJNM' ? 'bg-emerald-500 text-white' : 'bg-surface-soft text-text-muted'} shrink-0 mt-0.5">
+                <Receipt size={20} />
+              </div>
+              <div class="flex-1">
+                <div class="flex items-center justify-between gap-2">
+                  <span class="font-bold text-sm text-text-base">Generar Anticipo (AJNM)</span>
+                  <span class="text-[9px] font-black uppercase px-2 py-0.5 rounded-md bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30">
+                    Serie V012 • Recomendado
+                  </span>
+                </div>
+                <p class="text-xs text-text-muted mt-1 leading-relaxed">
+                  El cliente entregó dinero de más en efectivo o banco. Crea un documento de crédito <strong>AJNM</strong> a su favor con saldo disponible para futuras compras, cuadrando el cobro a $0,00.
+                </p>
+              </div>
+            </button>
+
+            <!-- Opción 2: Reintegro / Vuelto (AJPM) - Oculto si ya hay un AJPM/AJPA seleccionado -->
+            {#if !hasSelectedPositiveAdjustment}
+              <button
+                type="button"
+                onclick={() => (selectedDifferenceAction = 'AJPM')}
+                class="w-full text-left p-4 rounded-2xl border transition-all cursor-pointer flex items-start gap-3.5 {selectedDifferenceAction === 'AJPM' ? 'bg-blue-500/10 border-blue-500 ring-2 ring-blue-500/20' : 'bg-surface-soft/40 border-border-subtle hover:bg-surface-soft hover:border-white/20'}"
+              >
+                <div class="p-2.5 rounded-xl {selectedDifferenceAction === 'AJPM' ? 'bg-blue-500 text-white' : 'bg-surface-soft text-text-muted'} shrink-0 mt-0.5">
+                  <Wallet size={20} />
+                </div>
+                <div class="flex-1">
+                  <div class="flex items-center justify-between gap-2">
+                    <span class="font-bold text-sm text-text-base">Generar Reintegro o Vuelto (AJPM)</span>
+                    <span class="text-[9px] font-black uppercase px-2 py-0.5 rounded-md bg-blue-500/15 text-blue-700 dark:text-blue-400 border border-blue-500/30">
+                      Serie V014
+                    </span>
+                  </div>
+                  <p class="text-xs text-text-muted mt-1 leading-relaxed">
+                    Registra un <strong>AJPM</strong> por la salida del dinero entregado como vuelto o devolución de efectivo al cliente.
+                  </p>
+                </div>
+              </button>
+            {/if}
+
+          {:else}
+            <!-- CASO MIXTO -->
+            <!-- Opción 1: Conservar saldo en documento de crédito -->
+            <button
+              type="button"
+              onclick={() => (selectedDifferenceAction = 'KEEP_REMAINING')}
+              class="w-full text-left p-4 rounded-2xl border transition-all cursor-pointer flex items-start gap-3.5 {selectedDifferenceAction === 'KEEP_REMAINING' ? 'bg-emerald-500/10 border-emerald-500 ring-2 ring-emerald-500/20' : 'bg-surface-soft/40 border-border-subtle hover:bg-surface-soft hover:border-white/20'}"
+            >
+              <div class="p-2.5 rounded-xl {selectedDifferenceAction === 'KEEP_REMAINING' ? 'bg-emerald-500 text-white' : 'bg-surface-soft text-text-muted'} shrink-0 mt-0.5">
+                <CheckCircle size={20} />
+              </div>
+              <div class="flex-1">
+                <div class="flex items-center justify-between gap-2">
+                  <span class="font-bold text-sm text-text-base">Conservar Saldo en Documento de Crédito</span>
+                  <span class="text-[9px] font-black uppercase px-2 py-0.5 rounded-md bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30">
+                    Recomendado • Sin nuevo doc
+                  </span>
+                </div>
+                <p class="text-xs text-text-muted mt-1 leading-relaxed">
+                  Mantiene el remanente en el documento de crédito original sin duplicar documentos.
+                </p>
+              </div>
+            </button>
+
+            <!-- Opción 2: Reintegro / Vuelto (AJPM) - Oculto si ya hay un AJPM/AJPA seleccionado -->
+            {#if !hasSelectedPositiveAdjustment}
+              <button
+                type="button"
+                onclick={() => (selectedDifferenceAction = 'AJPM')}
+                class="w-full text-left p-4 rounded-2xl border transition-all cursor-pointer flex items-start gap-3.5 {selectedDifferenceAction === 'AJPM' ? 'bg-blue-500/10 border-blue-500 ring-2 ring-blue-500/20' : 'bg-surface-soft/40 border-border-subtle hover:bg-surface-soft hover:border-white/20'}"
+              >
+                <div class="p-2.5 rounded-xl {selectedDifferenceAction === 'AJPM' ? 'bg-blue-500 text-white' : 'bg-surface-soft text-text-muted'} shrink-0 mt-0.5">
+                  <Wallet size={20} />
+                </div>
+                <div class="flex-1">
+                  <div class="flex items-center justify-between gap-2">
+                    <span class="font-bold text-sm text-text-base">Generar Reintegro o Vuelto (AJPM)</span>
+                    <span class="text-[9px] font-black uppercase px-2 py-0.5 rounded-md bg-blue-500/15 text-blue-700 dark:text-blue-400 border border-blue-500/30">
+                      Serie V014
+                    </span>
+                  </div>
+                  <p class="text-xs text-text-muted mt-1 leading-relaxed">
+                    Registra un <strong>AJPM</strong> por la entrega del dinero al cliente.
+                  </p>
+                </div>
+              </button>
+            {/if}
+          {/if}
+        </div>
+      </div>
+
+      <!-- Pie del Modal -->
+      <div class="p-6 border-t border-border-subtle bg-surface-soft/30 flex items-center justify-end gap-3">
+        <button
+          type="button"
+          onclick={() => (showDifferenceModal = false)}
+          disabled={saving}
+          class="px-5 py-3 rounded-xl border border-border-subtle text-text-muted hover:text-text-base hover:bg-surface-soft text-xs font-bold uppercase tracking-wider transition-all cursor-pointer"
+        >
+          Cancelar / Corregir
+        </button>
+        <button
+          type="button"
+          onclick={confirmAndSaveWithDifference}
+          disabled={saving}
+          class="px-6 py-3 rounded-xl bg-brand-600 hover:bg-brand-500 text-white text-xs font-black uppercase tracking-widest shadow-lg shadow-brand-500/20 hover:scale-[1.02] active:scale-[0.98] transition-all cursor-pointer flex items-center gap-2"
+        >
+          {#if saving}
+            <RefreshCw size={16} class="animate-spin text-white/50" />
+            <span>Procesando...</span>
+          {:else}
+            <Check size={16} />
+            <span>Confirmar y Procesar Cobro</span>
+          {/if}
+        </button>
       </div>
     </div>
   </div>

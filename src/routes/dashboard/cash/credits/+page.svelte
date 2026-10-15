@@ -137,22 +137,39 @@
       }
     }
 
-    const totalUSD = subtotalUSD + taxUSD;
     const tasa = activeTasa > 0 ? activeTasa : 1;
-
     const subtotalBs = subtotalUSD * tasa;
     const taxBs = taxUSD * tasa;
-    const totalBs = totalUSD * tasa;
+
+    // Calcular IGTF proporcional si la factura original tenía IGTF
+    const facOtros1 = Number(selectedInvoice?.otros1 || 0);
+    const facBruto = Number(selectedInvoice?.total_bruto || 0);
+    let igtfBs = 0;
+    if (facOtros1 > 0 && facBruto > 0) {
+      const ratio = Math.min(1, Math.max(0, subtotalBs / facBruto));
+      if (ratio >= 0.9999 || Math.abs(subtotalBs - facBruto) <= 0.05) {
+        igtfBs = facOtros1;
+      } else {
+        igtfBs = Math.round((facOtros1 * ratio) * 100) / 100;
+      }
+    }
+    const igtfUSD = igtfBs / tasa;
+
+    const totalUSD = subtotalUSD + taxUSD + igtfUSD;
+    const totalBs = subtotalBs + taxBs + igtfBs;
 
     return {
       subtotalUSD,
       taxUSD,
+      igtfUSD,
       totalUSD,
       subtotalBs,
       taxBs,
+      igtfBs,
       totalBs,
       activeSubtotal: showUSD ? subtotalUSD : subtotalBs,
       activeTax: showUSD ? taxUSD : taxBs,
+      activeIgtf: showUSD ? igtfUSD : igtfBs,
       activeTotal: showUSD ? totalUSD : totalBs,
       symbol: showUSD ? "$" : "Bs",
     };
@@ -766,6 +783,26 @@
                     </p>
                   </div>
                 </div>
+
+                {#if Number(selectedInvoice.otros1 || 0) > 0}
+                  <div class="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-xs flex flex-wrap items-center justify-between gap-3">
+                    <div class="flex items-center gap-2.5">
+                      <div class="h-7 w-7 rounded-lg bg-amber-500/20 flex items-center justify-center shrink-0">
+                        <AlertTriangle size={15} class="text-amber-500" />
+                      </div>
+                      <div>
+                        <p class="text-amber-300 font-bold">Factura con IGTF (3%) Incluido</p>
+                        <p class="text-[11px] text-amber-400/80 font-mono">
+                          Monto IGTF Original: ${(Number(selectedInvoice.otros1) / Number(selectedInvoice.tasa || 1)).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          <span class="text-text-muted">({Number(selectedInvoice.otros1).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Bs)</span>
+                        </p>
+                      </div>
+                    </div>
+                    <span class="text-[10px] uppercase font-black text-amber-400 bg-amber-500/20 px-2.5 py-1 rounded-xl border border-amber-500/30">
+                      Abono automático en Nota de Crédito
+                    </span>
+                  </div>
+                {/if}
               </div>
             {/if}
           </div>
@@ -1007,11 +1044,28 @@
                 >
               </div>
 
+              {#if totals.igtfBs > 0}
+                <div
+                  class="flex justify-between items-center text-base font-bold text-amber-500"
+                >
+                  <span class="flex items-center gap-1.5">
+                    <span>IGTF (3%)</span>
+                    <span class="text-[9px] bg-amber-500/15 text-amber-400 border border-amber-500/30 px-1.5 py-0.5 rounded-md font-black uppercase tracking-wider">Abono</span>
+                  </span>
+                  <span class="font-mono"
+                    >{totals.symbol} {totals.activeIgtf.toLocaleString("de-DE", {
+                      minimumFractionDigits: 2,
+                      maximumFractionDigits: 2,
+                    })}</span
+                  >
+                </div>
+              {/if}
+
               <div
                 class="flex justify-between items-center text-base font-bold text-text-muted border-t border-border-subtle/50 pt-4"
               >
-                <span>Total Factura</span>
-                <span class="font-mono text-text-base"
+                <span>Total Devolución</span>
+                <span class="font-mono text-text-base text-lg font-black text-brand-400"
                   >{totals.symbol} {totals.activeTotal.toLocaleString("de-DE", {
                     minimumFractionDigits: 2,
                     maximumFractionDigits: 2,
@@ -1473,6 +1527,11 @@
               ${(Number(selectedDetailDev.total_neto) / Number(selectedDetailDev.tasa || 1)).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               <span class="text-xs font-normal text-text-muted">({Number(selectedDetailDev.total_neto).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Bs)</span>
             </p>
+            {#if Number(selectedDetailDev.otros1 || 0) > 0}
+              <p class="text-[10px] text-amber-400 font-bold mt-0.5">
+                Incluye IGTF (3%): ${(Number(selectedDetailDev.otros1) / Number(selectedDetailDev.tasa || 1)).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </p>
+            {/if}
           </div>
         </div>
 
