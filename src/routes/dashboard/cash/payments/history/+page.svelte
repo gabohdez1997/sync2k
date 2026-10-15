@@ -234,6 +234,35 @@
     return mappings[fp] || fp;
   }
 
+  function getPaymentAmounts(p: any) {
+    if (!p) return { usd: 0, bs: 0, tasa: 1 };
+    const tasa = Number(p.tasa) > 0 ? Number(p.tasa) : 1;
+    const isUsd = ['USD', 'US$', 'US', '$'].includes((p.co_mone || '').trim().toUpperCase());
+
+    if (p.monto_usd != null && p.monto_bs != null) {
+      return {
+        usd: Number(p.monto_usd),
+        bs: Number(p.monto_bs),
+        tasa
+      };
+    }
+
+    const rawMonto = Number(p.monto || 0);
+    if (isUsd) {
+      return {
+        usd: rawMonto,
+        bs: Math.round(rawMonto * tasa * 100) / 100,
+        tasa
+      };
+    } else {
+      return {
+        usd: Math.round((rawMonto / tasa) * 100) / 100,
+        bs: rawMonto,
+        tasa
+      };
+    }
+  }
+
   // Edit State & Actions
   import { toast } from 'svelte-sonner';
   let isEditingPayment = $state(false);
@@ -345,6 +374,7 @@
         mont_cob: montCobUsd,
         mont_cob_bs: rawNetoBs,
         monto_imp: Number(r.monto_imp) || 0,
+        co_sucu_in: r.co_sucu_in || "",
         total_neto: Number(r.total_neto) || (rawNetoBs + Number(r.monto_retencion_iva) + Number(r.monto_retencion)),
         otros1: Number(r.otros1) || 0,
         
@@ -837,6 +867,7 @@
           </thead>
           <tbody class="divide-y divide-white/5 text-sm text-text-base">
             {#each data.payments as p}
+              {@const amounts = getPaymentAmounts(p)}
               <tr class="hover:bg-white/[0.02] transition-colors group">
                 <td class="px-6 py-5">
                   <div class="font-bold text-text-base">{new Date(p.fecha).toLocaleDateString('es-VE')}</div>
@@ -878,12 +909,12 @@
                 <td class="px-6 py-5 text-right font-bold">
                   <div class="text-base text-text-base">
                     <span class="text-text-muted text-xs font-medium mr-1">USD</span>
-                    {Number(p.monto / (p.tasa > 0 ? p.tasa : 1)).toLocaleString('de-DE', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+                    {amounts.usd.toLocaleString('de-DE', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
                   </div>
                   <div class="text-xs text-text-muted/60 mt-0.5">
                     <span>Bs. </span>
-                    {Number(p.monto).toLocaleString('de-DE', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
-                    <span class="text-[10px] text-text-muted/40 ml-1">(Tasa: {Number(p.tasa).toLocaleString('de-DE', {minimumFractionDigits: 2, maximumFractionDigits: 2})})</span>
+                    {amounts.bs.toLocaleString('de-DE', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+                    <span class="text-[10px] text-text-muted/40 ml-1">(Tasa: {amounts.tasa.toLocaleString('de-DE', {minimumFractionDigits: 2, maximumFractionDigits: 2})})</span>
                   </div>
                 </td>
                 {#if data.canSeeOthers}
@@ -1083,7 +1114,7 @@
                 
                 <div class="space-y-4">
                   {#each editRenglones as r, idx}
-                    {@const badge = getDocTypeBadge(r.co_tipo_doc, false)}
+                    {@const badge = getDocTypeBadge(r.co_tipo_doc, isDocumentoFiscal(r.co_sucu_in, Number(r.monto_imp), detailData?.sede_id || selectedBranch))}
                     <div class="bg-surface-soft/20 rounded-2xl border border-border-subtle p-5 hover:border-white/10 transition-all space-y-4">
                       <!-- Fila Superior -->
                       <div class="flex items-center justify-between">
@@ -1511,6 +1542,7 @@
             </div>
           {:else}
             <!-- VISTA DETALLE ORIGINAL -->
+            {@const detailAmounts = getPaymentAmounts(detailData)}
             <!-- Información General -->
             <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
               <div class="bg-white/5 p-5 rounded-2xl border border-white/5">
@@ -1531,11 +1563,11 @@
                 <span class="text-xs text-text-muted/60 uppercase font-bold tracking-wider">Monto Total</span>
                 <div class="text-2xl font-black text-text-base mt-1">
                   <span class="text-sm text-text-muted font-normal mr-1">USD</span>
-                  {Number(detailData.monto / (detailData.tasa > 0 ? detailData.tasa : 1)).toLocaleString('de-DE', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+                  {detailAmounts.usd.toLocaleString('de-DE', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
                 </div>
                 <div class="text-xs text-text-muted mt-1">
                   <span>Equivalente: Bs. </span>
-                  {Number(detailData.monto).toLocaleString('de-DE', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+                  {detailAmounts.bs.toLocaleString('de-DE', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
                 </div>
                 <div class="text-[10px] text-text-muted/50 mt-1">Tasa: {Number(detailData.tasa).toFixed(4)} • {new Date(detailData.fecha).toLocaleDateString('es-VE')}</div>
               </div>
@@ -1562,7 +1594,7 @@
                   </thead>
                   <tbody class="divide-y divide-white/5 text-text-base">
                     {#each detailData.renglones || [] as r}
-                      {@const badge = getDocTypeBadge(r.co_tipo_doc, false)}
+                      {@const badge = getDocTypeBadge(r.co_tipo_doc, isDocumentoFiscal(r.co_sucu_in, Number(r.monto_imp), detailData?.sede_id || selectedBranch))}
                       <tr class="hover:bg-white/[0.01]">
                         <td class="px-4 py-3.5 text-text-muted font-bold">{r.reng_num}</td>
                         <td class="px-4 py-3.5">
