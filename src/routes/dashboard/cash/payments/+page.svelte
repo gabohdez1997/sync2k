@@ -208,17 +208,28 @@
       }
 
       // Monto a aplicar: hasta agotar la deuda pendiente o el saldo de este crédito
-      const appliedUsd = Math.min(docSaldoUsd, remainingDebtToCoverUsd);
-      const appliedBs = Math.min(doc.saldo, remainingDebtToCoverBs);
+      let appliedUsd = Math.min(docSaldoUsd, remainingDebtToCoverUsd);
+      let appliedBs = Math.min(doc.saldo, remainingDebtToCoverBs);
 
-      const remanenteUsd = Math.max(0, Math.round((docSaldoUsd - appliedUsd) * 100) / 100);
-      const remanenteBs = Math.max(0, Math.round((doc.saldo - appliedBs) * 100) / 100);
+      let remanenteUsd = Math.max(0, Math.round((docSaldoUsd - appliedUsd) * 100) / 100);
+      let remanenteBs = Math.max(0, Math.round((doc.saldo - appliedBs) * 100) / 100);
+
+      // Si el remanente en Bs es insignificante (<= 0.05 Bs por redondeo o centavos),
+      // o si la deuda en Bs cubre o excede el saldo en Bs del crédito (remainingDebtToCoverBs >= doc.saldo - 0.05),
+      // o si en USD el remanente es solo de 1-2 centavos (<= 0.02) y en Bs no hay remanente real (remanenteBs <= 0.05):
+      // significa que el crédito se consume al 100% y NO debe quedar saldo a favor remanente ni abono parcial.
+      if (remanenteBs <= 0.05 || (remanenteUsd <= 0.02 && remainingDebtToCoverBs >= (doc.saldo - 0.05))) {
+        appliedBs = doc.saldo;
+        appliedUsd = docSaldoUsd;
+        remanenteBs = 0;
+        remanenteUsd = 0;
+      }
 
       inp.mont_cob_bs = -Math.round(appliedBs * 100) / 100;
       inp.mont_cob = -Math.round(appliedUsd * 100) / 100;
       inp.saldo_remanente_bs = remanenteBs;
       inp.saldo_remanente_usd = remanenteUsd;
-      inp.es_abono_parcial = remanenteUsd >= 0.01;
+      inp.es_abono_parcial = remanenteUsd >= 0.01 && remanenteBs > 0.05;
 
       totalCreditAppliedBs += appliedBs;
       totalCreditAppliedUsd += appliedUsd;
@@ -254,8 +265,17 @@
       const maxAbonoBs = Math.max(0, Math.round((doc.saldo - retIvaBs - retIslrBs) * 100) / 100);
       const maxAbonoUsd = Math.max(0, Math.round(((doc.saldo / docTasa) - retIvaUsd - retIslrUsd) * 100) / 100);
 
-      const appliedBs = Math.min(remainingPaymentBs, maxAbonoBs);
-      const appliedUsd = Math.min(remainingPaymentUsd, maxAbonoUsd);
+      let appliedBs = Math.min(remainingPaymentBs, maxAbonoBs);
+      let appliedUsd = Math.min(remainingPaymentUsd, maxAbonoUsd);
+
+      // Si los fondos restantes cubren casi la totalidad de la deuda (diferencia residual <= 0.05 Bs o <= 0.02 USD),
+      // absorber esa pequeña diferencia de centavos para saldar el documento al 100%
+      if (remainingPaymentBs > 0 && Math.abs(maxAbonoBs - remainingPaymentBs) <= 0.05) {
+        appliedBs = maxAbonoBs;
+      }
+      if (remainingPaymentUsd > 0 && Math.abs(maxAbonoUsd - remainingPaymentUsd) <= 0.02) {
+        appliedUsd = maxAbonoUsd;
+      }
 
       inp.mont_cob_bs = Math.round(appliedBs * 100) / 100;
       inp.mont_cob = Math.round(appliedUsd * 100) / 100;
@@ -270,67 +290,73 @@
 
   // Monto neto esperado a cobrar en efectivo/instrumentos (deuda neta requerida - créditos efectivamente aplicados)
   let expectedNetPayBs = $derived(
-    Math.max(
-      0,
-      Math.round(
-        documentos.reduce((acc, doc) => {
-          if (checkedDocs[doc.nro_doc.trim()]) {
-            if (isCreditDoc(doc.co_tipo_doc)) {
-              const inp = docInputs[doc.nro_doc.trim()];
-              return acc - Math.abs(inp?.mont_cob_bs || 0);
-            }
-            const inp = docInputs[doc.nro_doc.trim()];
-            if (inp) {
-              const appliedRetIvaBs = (!inp.yaTieneRetIva && inp.showIvaDetails) ? (Number(inp.reten_iva_bs) || 0) : 0;
-              const appliedRetIslrBs = (!inp.yaTieneRetIslr && inp.showIslrDetails) ? (Number(inp.reten_islr_bs) || 0) : 0;
-
-              // Cálculo del diferencial cambiario N/DB EXCLUSIVAMENTE para Facturas de venta (FACT) de una fecha anterior
-              const isFactura = doc.co_tipo_doc?.trim()?.toUpperCase() === "FACT";
-              const docFecEmisStr = doc.fec_emis ? new Date(doc.fec_emis).toISOString().split('T')[0] : '';
-              const todayStr = new Date().toISOString().split('T')[0];
-              const isPreviousDateDoc = docFecEmisStr && docFecEmisStr < todayStr;
-              const docTasa = doc.tasa > 0 ? doc.tasa : 1;
-              let diffBs = 0;
-              if (isFactura && isPreviousDateDoc && doc.saldo > 0 && currentExchangeRate > docTasa) {
-                const saldoUsd = doc.saldo / docTasa;
-                const montoBsActual = Math.round((saldoUsd * currentExchangeRate) * 100) / 100;
-                diffBs = Math.max(0, Math.round((montoBsActual - doc.saldo) * 100) / 100);
+    (() => {
+      const val = Math.max(
+        0,
+        Math.round(
+          documentos.reduce((acc, doc) => {
+            if (checkedDocs[doc.nro_doc.trim()]) {
+              if (isCreditDoc(doc.co_tipo_doc)) {
+                const inp = docInputs[doc.nro_doc.trim()];
+                return acc - Math.abs(inp?.mont_cob_bs || 0);
               }
+              const inp = docInputs[doc.nro_doc.trim()];
+              if (inp) {
+                const appliedRetIvaBs = (!inp.yaTieneRetIva && inp.showIvaDetails) ? (Number(inp.reten_iva_bs) || 0) : 0;
+                const appliedRetIslrBs = (!inp.yaTieneRetIslr && inp.showIslrDetails) ? (Number(inp.reten_islr_bs) || 0) : 0;
 
-              return acc + doc.saldo - appliedRetIvaBs - appliedRetIslrBs + diffBs;
+                // Cálculo del diferencial cambiario N/DB EXCLUSIVAMENTE para Facturas de venta (FACT) de una fecha anterior
+                const isFactura = doc.co_tipo_doc?.trim()?.toUpperCase() === "FACT";
+                const docFecEmisStr = doc.fec_emis ? new Date(doc.fec_emis).toISOString().split('T')[0] : '';
+                const todayStr = new Date().toISOString().split('T')[0];
+                const isPreviousDateDoc = docFecEmisStr && docFecEmisStr < todayStr;
+                const docTasa = doc.tasa > 0 ? doc.tasa : 1;
+                let diffBs = 0;
+                if (isFactura && isPreviousDateDoc && doc.saldo > 0 && currentExchangeRate > docTasa) {
+                  const saldoUsd = doc.saldo / docTasa;
+                  const montoBsActual = Math.round((saldoUsd * currentExchangeRate) * 100) / 100;
+                  diffBs = Math.max(0, Math.round((montoBsActual - doc.saldo) * 100) / 100);
+                }
+
+                return acc + doc.saldo - appliedRetIvaBs - appliedRetIslrBs + diffBs;
+              }
+              return acc + doc.saldo;
             }
-            return acc + doc.saldo;
-          }
-          return acc;
-        }, 0) * 100
-      ) / 100
-    )
+            return acc;
+          }, 0) * 100
+        ) / 100
+      );
+      return val <= 0.05 ? 0 : val;
+    })()
   );
 
   let expectedNetPayUsd = $derived(
-    Math.max(
-      0,
-      Math.round(
-        documentos.reduce((acc, doc) => {
-          if (checkedDocs[doc.nro_doc.trim()]) {
-            const docTasa = doc.tasa > 0 ? doc.tasa : 1;
-            if (isCreditDoc(doc.co_tipo_doc)) {
+    (() => {
+      const val = Math.max(
+        0,
+        Math.round(
+          documentos.reduce((acc, doc) => {
+            if (checkedDocs[doc.nro_doc.trim()]) {
+              const docTasa = doc.tasa > 0 ? doc.tasa : 1;
+              if (isCreditDoc(doc.co_tipo_doc)) {
+                const inp = docInputs[doc.nro_doc.trim()];
+                return acc - Math.abs(inp?.mont_cob || 0);
+              }
               const inp = docInputs[doc.nro_doc.trim()];
-              return acc - Math.abs(inp?.mont_cob || 0);
+              if (inp) {
+                const appliedRetIva = (!inp.yaTieneRetIva && inp.showIvaDetails) ? (Number(inp.reten_iva) || 0) : 0;
+                const appliedRetIslr = (!inp.yaTieneRetIslr && inp.showIslrDetails) ? (Number(inp.reten_islr) || 0) : 0;
+                const saldoUsd = doc.saldo / docTasa;
+                return acc + Math.max(0, saldoUsd - appliedRetIva - appliedRetIslr);
+              }
+              return acc + (doc.saldo / docTasa);
             }
-            const inp = docInputs[doc.nro_doc.trim()];
-            if (inp) {
-              const appliedRetIva = (!inp.yaTieneRetIva && inp.showIvaDetails) ? (Number(inp.reten_iva) || 0) : 0;
-              const appliedRetIslr = (!inp.yaTieneRetIslr && inp.showIslrDetails) ? (Number(inp.reten_islr) || 0) : 0;
-              const saldoUsd = doc.saldo / docTasa;
-              return acc + Math.max(0, saldoUsd - appliedRetIva - appliedRetIslr);
-            }
-            return acc + (doc.saldo / docTasa);
-          }
-          return acc;
-        }, 0) * 100
-      ) / 100
-    )
+            return acc;
+          }, 0) * 100
+        ) / 100
+      );
+      return val <= 0.02 ? 0 : val;
+    })()
   );
 
   // Totales de crédito aplicados y remanentes
@@ -358,28 +384,36 @@
     ) / 100
   );
 
-  let totalCreditoRemanenteUsd = $derived(
-    Math.round(
-      documentos.reduce((acc, doc) => {
-        if (checkedDocs[doc.nro_doc.trim()] && isCreditDoc(doc.co_tipo_doc)) {
-          const inp = docInputs[doc.nro_doc.trim()];
-          return acc + (inp?.saldo_remanente_usd || 0);
-        }
-        return acc;
-      }, 0) * 100
-    ) / 100
+  let totalCreditoRemanenteBs = $derived(
+    (() => {
+      const val = Math.round(
+        documentos.reduce((acc, doc) => {
+          if (checkedDocs[doc.nro_doc.trim()] && isCreditDoc(doc.co_tipo_doc)) {
+            const inp = docInputs[doc.nro_doc.trim()];
+            return acc + (inp?.saldo_remanente_bs || 0);
+          }
+          return acc;
+        }, 0) * 100
+      ) / 100;
+      return val <= 0.05 ? 0 : val;
+    })()
   );
 
-  let totalCreditoRemanenteBs = $derived(
-    Math.round(
-      documentos.reduce((acc, doc) => {
-        if (checkedDocs[doc.nro_doc.trim()] && isCreditDoc(doc.co_tipo_doc)) {
-          const inp = docInputs[doc.nro_doc.trim()];
-          return acc + (inp?.saldo_remanente_bs || 0);
-        }
-        return acc;
-      }, 0) * 100
-    ) / 100
+  let totalCreditoRemanenteUsd = $derived(
+    (() => {
+      const bs = totalCreditoRemanenteBs;
+      if (bs <= 0.05) return 0;
+      const val = Math.round(
+        documentos.reduce((acc, doc) => {
+          if (checkedDocs[doc.nro_doc.trim()] && isCreditDoc(doc.co_tipo_doc)) {
+            const inp = docInputs[doc.nro_doc.trim()];
+            return acc + (inp?.saldo_remanente_usd || 0);
+          }
+          return acc;
+        }, 0) * 100
+      ) / 100;
+      return (val <= 0.02 && bs <= 0.05) ? 0 : val;
+    })()
   );
 
   // Totales derivativos
@@ -902,9 +936,16 @@
       }
     }
 
-    // El crédito efectivamente aplicable nunca puede exceder la deuda requerida
-    const creditFromNCsBs = Math.min(totalCreditAvailableBs, totalNeededBs);
-    const creditFromNCsUsd = Math.min(totalCreditAvailableUsd, totalNeededUsd);
+    // El crédito efectivamente aplicable nunca puede exceder la deuda requerida (con tolerancia a centavos de redondeo)
+    let creditFromNCsBs = Math.min(totalCreditAvailableBs, totalNeededBs);
+    let creditFromNCsUsd = Math.min(totalCreditAvailableUsd, totalNeededUsd);
+
+    if (totalCreditAvailableBs > 0 && Math.abs(totalNeededBs - totalCreditAvailableBs) <= 0.05) {
+      creditFromNCsBs = totalNeededBs;
+    }
+    if (totalCreditAvailableUsd > 0 && Math.abs(totalNeededUsd - totalCreditAvailableUsd) <= 0.02) {
+      creditFromNCsUsd = totalNeededUsd;
+    }
 
     let otherInstrumentsBs = 0;
     let otherInstrumentsUsd = 0;
@@ -1107,7 +1148,8 @@
           const docTasa = doc.tasa > 0 ? doc.tasa : 1;
           const remUsd = (inp?.saldo_remanente_usd !== undefined) ? inp.saldo_remanente_usd : (doc.saldo / docTasa);
           const remBs = (inp?.saldo_remanente_bs !== undefined) ? inp.saldo_remanente_bs : doc.saldo;
-          if (remUsd > 0.009) {
+          // Solo se considera remanente real si en Bs supera 0.05 Bs Y en USD supera 0.02 USD
+          if (remUsd > 0.02 && remBs > 0.05) {
             lastCreditDocNum = doc.nro_doc.trim();
             lastCreditDocType = (t === 'N/CR' || t === 'NCR') ? 'Nota de Crédito' : 'Anticipo';
             if (t === 'N/CR' || t === 'NCR') {
@@ -1138,12 +1180,18 @@
       ? 0
       : surplusInstrumentosUsd;
 
-    const totalSurplusUsd = Math.round((creditRemanenteUsd + realSurplusInstrumentosUsd) * 100) / 100;
+    // Si el crédito en Bs no tiene remanente real (<= 0.05 Bs) o en USD solo hay 1-2 centavos por redondeo de tasa (<= 0.02 USD),
+    // se trata de un residuo de conversión y no de un saldo a favor real disponible
+    const realCreditRemanenteUsd = (creditRemanenteBs <= 0.05 || (creditRemanenteUsd <= 0.02 && creditRemanenteBs <= 0.05))
+      ? 0
+      : creditRemanenteUsd;
+
+    const totalSurplusUsd = Math.round((realCreditRemanenteUsd + realSurplusInstrumentosUsd) * 100) / 100;
     const totalSurplusBs = Math.round((creditRemanenteBs + surplusInstrumentosBs) * 100) / 100;
 
-    const isRealSurplus = (totalSurplusBs > 0.05) || (creditRemanenteUsd > 0.009);
+    const isRealSurplus = (totalSurplusBs > 0.05) || (realCreditRemanenteUsd > 0.02);
 
-    if (isRealSurplus && totalSurplusUsd > 0.009 && !pendingDifferenceConfirmation) {
+    if (isRealSurplus && totalSurplusUsd > 0.02 && !pendingDifferenceConfirmation) {
       differenceSurplusUsd = totalSurplusUsd;
       differenceSurplusBs = totalSurplusBs;
       differenceCreditDocNum = lastCreditDocNum;
@@ -1237,6 +1285,9 @@
         if (isCreditDoc(doc.co_tipo_doc)) {
           if (pendingDifferenceConfirmation && (selectedDifferenceAction === 'AJNM' || selectedDifferenceAction === 'AJPM')) {
             // Se absorbe el 100% del saldo del crédito para convertirlo/transferirlo al Ajuste (AJNM o AJPM)
+            montCobBs = -doc.saldo;
+          } else if ((inp.saldo_remanente_bs || 0) <= 0.05 || Math.abs(doc.saldo - Math.abs(inp.mont_cob_bs || 0)) <= 0.05) {
+            // Si el crédito se aplicó en su totalidad o la diferencia es insignificante (<= 0.05 Bs), amortizar el 100% exacto de su saldo
             montCobBs = -doc.saldo;
           } else {
             montCobBs = inp.mont_cob_bs || 0;
