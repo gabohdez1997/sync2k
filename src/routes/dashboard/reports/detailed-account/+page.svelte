@@ -419,27 +419,27 @@
             <!-- svelte-ignore a11y_no_static_element_interactions -->
             <div class="fixed inset-0" onclick={closeClientDetail}></div>
 
-            <div class="glass bg-surface-raised border border-border-subtle rounded-[32px] max-w-6xl w-full max-h-[85vh] flex flex-col shadow-2xl relative z-10 overflow-hidden" 
+            <div class="bg-white dark:bg-[#0f0f11] dark:glass border border-slate-200 dark:border-border-subtle rounded-[32px] max-w-6xl w-full max-h-[85vh] flex flex-col shadow-2xl relative z-10 overflow-hidden" 
                  transition:slide={{ duration: 300 }}>
                 
                 <!-- Modal Header -->
-                <div class="px-8 py-6 border-b border-border-subtle flex items-center justify-between gap-4 bg-surface-soft">
+                <div class="px-8 py-6 border-b border-slate-200 dark:border-border-subtle flex items-center justify-between gap-4 bg-slate-50/80 dark:bg-surface-soft">
                     <div class="flex items-center gap-4 min-w-0">
                         <div class="h-12 w-12 rounded-2xl bg-brand-500/10 border border-brand-500/20 flex items-center justify-center text-brand-500 shrink-0">
                             <User size={24} />
                         </div>
                         <div class="flex flex-col min-w-0">
-                            <span class="text-xs font-black uppercase tracking-widest text-brand-400">Cuenta Detallada</span>
-                            <h2 class="text-xl font-black tracking-tight text-text-base truncate" title={client.cli_des}>
+                            <span class="text-xs font-black uppercase tracking-widest text-brand-500 dark:text-brand-400">Cuenta Detallada</span>
+                            <h2 class="text-xl font-black tracking-tight text-slate-900 dark:text-text-base truncate" title={client.cli_des}>
                                 {client.cli_des}
                             </h2>
-                            <span class="text-xs text-text-muted font-mono font-bold mt-0.5">Código / RIF: {client.co_cli}</span>
+                            <span class="text-xs text-slate-500 dark:text-text-muted font-mono font-bold mt-0.5">Código / RIF: {client.co_cli}</span>
                         </div>
                     </div>
                     
                     <button 
                         onclick={closeClientDetail}
-                        class="p-3 rounded-2xl bg-surface-soft hover:bg-surface-strong text-text-muted hover:text-text-base transition-all cursor-pointer"
+                        class="p-3 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-900 dark:bg-surface-soft dark:hover:bg-surface-strong dark:text-text-muted dark:hover:text-text-base transition-all cursor-pointer"
                         aria-label="Cerrar"
                     >
                         <X size={20} />
@@ -452,20 +452,20 @@
                     <!-- Client Quick Totals Grid -->
                     <div class="grid grid-cols-1 sm:grid-cols-2 gap-6">
                         <!-- Total outstanding -->
-                        <div class="p-5 rounded-2xl bg-surface-soft border border-border-subtle space-y-1 relative overflow-hidden">
-                            <span class="text-[10px] font-black uppercase tracking-widest text-text-muted">Saldo Neto (USD)</span>
+                        <div class="p-5 rounded-2xl bg-slate-50 dark:bg-surface-soft border border-slate-200/80 dark:border-border-subtle space-y-1 relative overflow-hidden shadow-sm">
+                            <span class="text-[10px] font-black uppercase tracking-widest text-slate-500 dark:text-text-muted">Saldo Neto (USD)</span>
                             <h3 class="text-xl font-black tracking-tight {client.saldo_usd >= 0 ? 'text-text-green' : 'text-text-red'}">
                                 {formatCurrency(client.saldo_usd, 'USD')}
                             </h3>
                             <p class="text-[11px] font-bold {client.saldo_bs >= 0 ? 'text-text-green' : 'text-text-red'}">{formatCurrency(client.saldo_bs, 'VES')}</p>
                         </div>
                         <!-- Docs count -->
-                        <div class="p-5 rounded-2xl bg-surface-soft border border-border-subtle flex items-center justify-between">
+                        <div class="p-5 rounded-2xl bg-slate-50 dark:bg-surface-soft border border-slate-200/80 dark:border-border-subtle flex items-center justify-between shadow-sm">
                             <div>
-                                <span class="text-[10px] font-black uppercase tracking-widest text-text-muted block">Documentos Registrados</span>
-                                <span class="text-xl font-black text-text-base">{client.doc_count} asociados</span>
+                                <span class="text-[10px] font-black uppercase tracking-widest text-slate-500 dark:text-text-muted block">Documentos Registrados</span>
+                                <span class="text-xl font-black text-slate-900 dark:text-text-base">{client.doc_count} asociados</span>
                             </div>
-                            <div class="p-3 bg-brand-500/10 text-brand-400 rounded-2xl">
+                            <div class="p-3 bg-brand-500/10 text-brand-600 dark:text-brand-400 rounded-2xl">
                                 <FileText size={24} />
                             </div>
                         </div>
@@ -473,16 +473,16 @@
 
                     <!-- Documents Table -->
                     <div class="space-y-4">
-                        <h3 class="text-sm font-black uppercase tracking-widest text-text-muted flex items-center gap-2">
+                        <h3 class="text-sm font-black uppercase tracking-widest text-slate-600 dark:text-text-muted flex items-center gap-2">
                             <FileSpreadsheet size={16} />
                             Detalle de Documentos
                         </h3>
                         
-                        <div class="bg-surface-soft rounded-2xl border border-border-subtle overflow-hidden">
+                        <div class="bg-white dark:bg-surface-soft rounded-2xl border border-slate-200 dark:border-border-subtle overflow-hidden shadow-sm">
                             <div class="overflow-x-auto">
                                 <table class="w-full text-left border-collapse">
                                     <thead>
-                                        <tr class="bg-surface-strong border-b border-border-subtle text-xs font-black uppercase tracking-wider text-text-muted">
+                                        <tr class="bg-slate-100/90 dark:bg-surface-strong border-b border-slate-200 dark:border-border-subtle text-xs font-black uppercase tracking-wider text-slate-600 dark:text-text-muted">
                                             <th class="px-6 py-4">Documento</th>
                                             <th class="px-6 py-4">Emisión</th>
                                             <th class="px-6 py-4">Origen</th>
@@ -493,18 +493,18 @@
                                             <th class="px-6 py-4 text-right">Saldo</th>
                                         </tr>
                                     </thead>
-                                    <tbody class="divide-y divide-border-subtle text-xs">
+                                    <tbody class="divide-y divide-slate-100 dark:divide-border-subtle text-xs">
                                         {#each client.documents as doc, idx (doc.nro_doc + doc.co_tipo_doc + (doc.nro_orig || '') + (doc.doc_orig || '') + doc.sede_id + idx)}
                                             {@const badge = getDocTypeBadge(doc.co_tipo_doc)}
-                                            <tr class="hover:bg-surface-soft transition-colors">
+                                            <tr class="hover:bg-slate-50 dark:hover:bg-surface-soft/60 transition-colors">
                                                 <!-- Documento / Tipo -->
                                                 <td class="px-6 py-4">
                                                     <div class="flex items-center gap-3">
-                                                        <div class="p-2 rounded-lg bg-surface-soft text-text-muted">
+                                                        <div class="p-2 rounded-lg bg-slate-100 dark:bg-surface-soft text-slate-500 dark:text-text-muted">
                                                             <FileText size={14} />
                                                         </div>
                                                         <div class="flex flex-col gap-1.5">
-                                                            <span class="font-black text-text-base">{doc.nro_doc}</span>
+                                                            <span class="font-black text-slate-900 dark:text-text-base">{doc.nro_doc}</span>
                                                             <span class="px-1.5 py-0.5 border text-[9px] font-black uppercase tracking-wider rounded text-center max-w-[70px] {badge.class}">
                                                                 {doc.co_tipo_doc.trim()}
                                                             </span>
@@ -513,15 +513,15 @@
                                                 </td>
                                                 
                                                 <!-- Emision -->
-                                                <td class="px-6 py-4 whitespace-nowrap text-text-muted font-bold">
+                                                <td class="px-6 py-4 whitespace-nowrap text-slate-600 dark:text-text-muted font-bold">
                                                     {dayjs(doc.fec_emis).format('DD MMM YYYY')}
                                                 </td>
  
                                                 <!-- Origen -->
-                                                <td class="px-6 py-4 whitespace-nowrap text-text-muted">
+                                                <td class="px-6 py-4 whitespace-nowrap text-slate-600 dark:text-text-muted">
                                                     <div class="flex flex-col gap-1.5">
                                                         {#if doc.nro_orig && doc.nro_orig.trim()}
-                                                            <span class="font-black text-text-base">{doc.nro_orig.trim()}</span>
+                                                            <span class="font-black text-slate-900 dark:text-text-base">{doc.nro_orig.trim()}</span>
                                                             {#if doc.doc_orig && doc.doc_orig.trim()}
                                                                 {@const origBadge = getDocTypeBadge(doc.doc_orig)}
                                                                 <span class="px-1.5 py-0.5 border text-[9px] font-black uppercase tracking-wider rounded text-center max-w-[70px] {origBadge.class}">
@@ -529,53 +529,53 @@
                                                                 </span>
                                                             {/if}
                                                         {:else}
-                                                            <span class="text-text-muted/40 italic font-medium">—</span>
+                                                            <span class="text-slate-400 dark:text-text-muted/40 italic font-medium">—</span>
                                                         {/if}
                                                     </div>
                                                 </td>
-
+ 
                                                 <!-- Vencimiento -->
-                                                <td class="px-6 py-4 whitespace-nowrap font-bold {doc.vencido ? 'text-text-red' : 'text-text-muted'}">
+                                                <td class="px-6 py-4 whitespace-nowrap font-bold {doc.vencido ? 'text-text-red' : 'text-slate-600 dark:text-text-muted'}">
                                                     {dayjs(doc.fec_venc).format('DD MMM YYYY')}
                                                 </td>
-
+ 
                                                 <!-- Estado / Anulado -->
                                                 <td class="px-6 py-4 text-center whitespace-nowrap">
                                                     {#if doc.anulado}
-                                                        <span class="inline-flex items-center justify-center h-7 w-7 rounded-full bg-red-500/10 text-red-500 border border-red-500/20" title="Anulado">
+                                                        <span class="inline-flex items-center justify-center h-7 w-7 rounded-full bg-red-500/10 text-red-600 dark:text-red-500 border border-red-500/20" title="Anulado">
                                                             <X size={14} />
                                                         </span>
                                                     {:else}
-                                                        <span class="inline-flex items-center justify-center h-7 w-7 rounded-full bg-green-500/10 text-green-500 border border-green-500/20" title="Activo">
+                                                        <span class="inline-flex items-center justify-center h-7 w-7 rounded-full bg-green-500/10 text-green-600 dark:text-green-500 border border-green-500/20" title="Activo">
                                                             <CheckCircle size={14} />
                                                         </span>
                                                     {/if}
                                                 </td>
-
+ 
                                                 <!-- Debe (-) -->
-                                                <td class="px-6 py-4 text-right whitespace-nowrap font-bold text-text-muted">
+                                                <td class="px-6 py-4 text-right whitespace-nowrap font-bold text-slate-600 dark:text-text-muted">
                                                     {#if doc.debeUsd > 0}
                                                         <div class="flex flex-col items-end">
-                                                            <span class="text-text-base">{formatCurrency(doc.debeUsd, 'USD')}</span>
-                                                            <span class="text-[9px] text-text-muted mt-0.5">{formatCurrency(doc.debeBs, 'VES')}</span>
+                                                            <span class="text-slate-900 dark:text-text-base">{formatCurrency(doc.debeUsd, 'USD')}</span>
+                                                            <span class="text-[9px] text-slate-500 dark:text-text-muted mt-0.5">{formatCurrency(doc.debeBs, 'VES')}</span>
                                                         </div>
                                                     {:else}
-                                                        <span class="text-text-muted/40 italic font-medium">—</span>
+                                                        <span class="text-slate-400 dark:text-text-muted/40 italic font-medium">—</span>
                                                     {/if}
                                                 </td>
-
+ 
                                                 <!-- Haber (+) -->
-                                                <td class="px-6 py-4 text-right whitespace-nowrap font-bold text-text-muted">
+                                                <td class="px-6 py-4 text-right whitespace-nowrap font-bold text-slate-600 dark:text-text-muted">
                                                     {#if doc.haberUsd > 0}
                                                         <div class="flex flex-col items-end">
-                                                            <span class="text-text-base">{formatCurrency(doc.haberUsd, 'USD')}</span>
-                                                            <span class="text-[9px] text-text-muted mt-0.5">{formatCurrency(doc.haberBs, 'VES')}</span>
+                                                            <span class="text-slate-900 dark:text-text-base">{formatCurrency(doc.haberUsd, 'USD')}</span>
+                                                            <span class="text-[9px] text-slate-500 dark:text-text-muted mt-0.5">{formatCurrency(doc.haberBs, 'VES')}</span>
                                                         </div>
                                                     {:else}
-                                                        <span class="text-text-muted/40 italic font-medium">—</span>
+                                                        <span class="text-slate-400 dark:text-text-muted/40 italic font-medium">—</span>
                                                     {/if}
                                                 </td>
-
+ 
                                                 <!-- Saldo -->
                                                 <td class="px-6 py-4 text-right whitespace-nowrap font-black">
                                                     <div class="flex flex-col items-end">
@@ -597,7 +597,7 @@
                 </div>
 
                 <!-- Modal Footer -->
-                <div class="px-8 py-5 border-t border-border-subtle flex justify-end gap-3 bg-surface-soft/50 font-bold text-xs">
+                <div class="px-8 py-5 border-t border-slate-200 dark:border-border-subtle flex justify-end gap-3 bg-slate-50 dark:bg-surface-soft/50 font-bold text-xs">
                     <button 
                         onclick={exportToPDF}
                         class="px-5 py-2.5 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-black transition-all flex items-center gap-2 cursor-pointer shadow-lg shadow-brand-500/20"
@@ -607,7 +607,7 @@
                     </button>
                     <button 
                         onclick={closeClientDetail}
-                        class="px-6 py-2.5 rounded-xl bg-surface-soft hover:bg-surface-strong text-sm font-black transition-all cursor-pointer"
+                        class="px-6 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 dark:bg-surface-soft dark:hover:bg-surface-strong dark:text-text-base text-sm font-black border border-slate-200 dark:border-border-subtle transition-all cursor-pointer"
                     >
                         Cerrar Detalle
                     </button>

@@ -848,12 +848,12 @@
             <div class="fixed inset-0" onclick={closeSupplierDetail}></div>
 
             <div
-                class="glass bg-surface-raised border border-border-subtle rounded-[32px] max-w-6xl w-full max-h-[85vh] flex flex-col shadow-2xl relative z-10 overflow-hidden"
+                class="bg-white dark:bg-[#0f0f11] dark:glass border border-slate-200 dark:border-border-subtle rounded-[32px] max-w-6xl w-full max-h-[85vh] flex flex-col shadow-2xl relative z-10 overflow-hidden"
                 transition:slide={{ duration: 300 }}
             >
                 <!-- Modal Header -->
                 <div
-                    class="px-8 py-6 border-b border-border-subtle flex items-center justify-between gap-4 bg-surface-soft"
+                    class="px-8 py-6 border-b border-slate-200 dark:border-border-subtle flex items-center justify-between gap-4 bg-slate-50/80 dark:bg-surface-soft"
                 >
                     <div class="flex items-center gap-4 min-w-0">
                         <div
@@ -863,17 +863,17 @@
                         </div>
                         <div class="flex flex-col min-w-0">
                             <span
-                                class="text-xs font-black uppercase tracking-widest text-brand-400"
+                                class="text-xs font-black uppercase tracking-widest text-brand-500 dark:text-brand-400"
                                 >Detalle de Cuenta por Pagar</span
                             >
                             <h2
-                                class="text-xl font-black tracking-tight text-text-base truncate"
+                                class="text-xl font-black tracking-tight text-slate-900 dark:text-text-base truncate"
                                 title={supplier.prov_des}
                             >
                                 {supplier.prov_des}
                             </h2>
                             <span
-                                class="text-xs text-text-muted font-mono font-bold mt-0.5"
+                                class="text-xs text-slate-500 dark:text-text-muted font-mono font-bold mt-0.5"
                                 >Código / RIF: {supplier.co_prov}</span
                             >
                         </div>
@@ -881,7 +881,7 @@
 
                     <button
                         onclick={closeSupplierDetail}
-                        class="p-3 rounded-2xl bg-surface-soft hover:bg-surface-strong text-text-muted hover:text-text-base transition-all cursor-pointer"
+                        class="p-3 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-900 dark:bg-surface-soft dark:hover:bg-surface-strong dark:text-text-muted dark:hover:text-text-base transition-all cursor-pointer"
                         aria-label="Cerrar"
                     >
                         <X size={20} />
@@ -896,27 +896,27 @@
                     >
                         <!-- Total outstanding -->
                         <div
-                            class="p-5 rounded-2xl bg-surface-soft border border-border-subtle space-y-1 relative overflow-hidden"
+                            class="p-5 rounded-2xl bg-slate-50 dark:bg-surface-soft border border-slate-200/80 dark:border-border-subtle space-y-1 relative overflow-hidden shadow-sm"
                         >
                             <span
-                                class="text-[10px] font-black uppercase tracking-widest text-text-muted"
+                                class="text-[10px] font-black uppercase tracking-widest text-slate-500 dark:text-text-muted"
                                 >Total Pendiente</span
                             >
                             <h3
-                                class="text-xl font-black text-text-base tracking-tight"
+                                class="text-xl font-black text-slate-900 dark:text-text-base tracking-tight"
                             >
                                 {formatCurrency(supplier.saldo_usd, "USD")}
                             </h3>
-                            <p class="text-[11px] text-text-muted font-bold">
+                            <p class="text-[11px] text-slate-500 dark:text-text-muted font-bold">
                                 {formatCurrency(supplier.saldo_bs, "VES")}
                             </p>
                         </div>
                         <!-- Overdue -->
                         <div
-                            class="p-5 rounded-2xl bg-surface-soft border border-border-subtle space-y-1"
+                            class="p-5 rounded-2xl bg-slate-50 dark:bg-surface-soft border border-slate-200/80 dark:border-border-subtle space-y-1 shadow-sm"
                         >
                             <span
-                                class="text-[10px] font-black uppercase tracking-widest text-red-500/80"
+                                class="text-[10px] font-black uppercase tracking-widest text-red-600 dark:text-red-500/80"
                                 >Saldo Vencido</span
                             >
                             <h3
@@ -929,7 +929,7 @@
                                       )
                                     : "Al día"}
                             </h3>
-                            <p class="text-[11px] text-text-muted font-bold">
+                            <p class="text-[11px] text-slate-500 dark:text-text-muted font-bold">
                                 {formatCurrency(
                                     supplier.saldo_vencido_bs,
                                     "VES",
@@ -938,10 +938,10 @@
                         </div>
                         <!-- Upcoming -->
                         <div
-                            class="p-5 rounded-2xl bg-surface-soft border border-border-subtle space-y-1"
+                            class="p-5 rounded-2xl bg-slate-50 dark:bg-surface-soft border border-slate-200/80 dark:border-border-subtle space-y-1 shadow-sm"
                         >
                             <span
-                                class="text-[10px] font-black uppercase tracking-widest text-green-500/80"
+                                class="text-[10px] font-black uppercase tracking-widest text-green-700 dark:text-green-500/80"
                                 >Por Vencer</span
                             >
                             <h3
@@ -952,7 +952,7 @@
                                     "USD",
                                 )}
                             </h3>
-                            <p class="text-[11px] text-text-muted font-bold">
+                            <p class="text-[11px] text-slate-500 dark:text-text-muted font-bold">
                                 {formatCurrency(
                                     supplier.saldo_por_vencer_bs,
                                     "VES",
@@ -961,20 +961,20 @@
                         </div>
                         <!-- Documents counts and delay -->
                         <div
-                            class="p-5 rounded-2xl bg-surface-soft border border-border-subtle flex flex-col justify-between"
+                            class="p-5 rounded-2xl bg-slate-50 dark:bg-surface-soft border border-slate-200/80 dark:border-border-subtle flex flex-col justify-between shadow-sm"
                         >
                             <div class="flex justify-between items-center">
                                 <span
-                                    class="text-[10px] font-black uppercase tracking-widest text-text-muted"
+                                    class="text-[10px] font-black uppercase tracking-widest text-slate-500 dark:text-text-muted"
                                     >Docs Activos</span
                                 >
                                 <span
-                                    class="px-2 py-0.5 bg-brand-500/10 text-brand-400 border border-brand-500/20 text-[10px] font-black rounded-md"
+                                    class="px-2 py-0.5 bg-brand-500/10 text-brand-600 dark:text-brand-400 border border-brand-500/20 text-[10px] font-black rounded-md"
                                 >
                                     {supplier.doc_count}
                                 </span>
                             </div>
-                            <div class="pt-2 text-xs font-bold text-text-muted">
+                            <div class="pt-2 text-xs font-bold text-slate-500 dark:text-text-muted">
                                 {#if supplier.saldo_vencido_usd < 0}
                                     <span
                                         class="text-text-red font-black flex items-center gap-1"
@@ -997,20 +997,20 @@
                     <!-- Documents Table -->
                     <div class="space-y-4">
                         <h3
-                            class="text-sm font-black uppercase tracking-widest text-text-muted flex items-center gap-2"
+                            class="text-sm font-black uppercase tracking-widest text-slate-600 dark:text-text-muted flex items-center gap-2"
                         >
                             <FileSpreadsheet size={16} />
                             Desglose de Documentos Pendientes
                         </h3>
 
                         <div
-                            class="bg-surface-soft rounded-2xl border border-border-subtle overflow-hidden"
+                            class="bg-white dark:bg-surface-soft rounded-2xl border border-slate-200 dark:border-border-subtle overflow-hidden shadow-sm"
                         >
                             <div class="overflow-x-auto">
                                 <table class="w-full text-left border-collapse">
                                     <thead>
                                         <tr
-                                            class="bg-surface-strong border-b border-border-subtle text-[10px] font-black uppercase tracking-wider text-text-muted"
+                                            class="bg-slate-100/90 dark:bg-surface-strong border-b border-slate-200 dark:border-border-subtle text-[10px] font-black uppercase tracking-wider text-slate-600 dark:text-text-muted"
                                         >
                                             <th class="px-3 py-3">Documento</th>
                                             <th class="px-3 py-3">Emisión</th>
@@ -1024,7 +1024,7 @@
                                         </tr>
                                     </thead>
                                     <tbody
-                                        class="divide-y divide-border-subtle text-xs"
+                                        class="divide-y divide-slate-100 dark:divide-border-subtle text-xs"
                                     >
                                         {#each supplier.documents as doc (doc.nro_doc + doc.co_tipo_doc)}
                                             {@const badge = getDocTypeBadge(
@@ -1032,7 +1032,7 @@
                                             )}
                                             {@const isCredit = ['ADEL', 'AJNA', 'AJNM', 'ISLR', 'IVAN', 'N/CR', 'NCR'].includes(doc.co_tipo_doc.trim().toUpperCase())}
                                             <tr
-                                                class="hover:bg-surface-soft transition-colors"
+                                                class="hover:bg-slate-50 dark:hover:bg-surface-soft/60 transition-colors"
                                             >
                                                 <!-- Documento / Tipo -->
                                                 <td class="px-3 py-3">
@@ -1040,7 +1040,7 @@
                                                         class="flex items-center gap-3"
                                                     >
                                                         <div
-                                                            class="p-2 rounded-lg bg-surface-soft text-text-muted shrink-0"
+                                                            class="p-2 rounded-lg bg-slate-100 dark:bg-surface-soft text-slate-500 dark:text-text-muted shrink-0"
                                                         >
                                                             <FileText
                                                                 size={14}
@@ -1050,7 +1050,7 @@
                                                             class="flex flex-col gap-1.5"
                                                         >
                                                             <span
-                                                                class="font-black text-text-base"
+                                                                class="font-black text-slate-900 dark:text-text-base"
                                                                 >{doc.nro_doc}</span
                                                             >
                                                             <span
@@ -1064,7 +1064,7 @@
 
                                                 <!-- Emision -->
                                                 <td
-                                                    class="px-3 py-3 whitespace-nowrap text-text-muted font-bold"
+                                                    class="px-3 py-3 whitespace-nowrap text-slate-600 dark:text-text-muted font-bold"
                                                 >
                                                     {dayjs(doc.fec_emis).format(
                                                         "DD MMM YYYY",
@@ -1073,14 +1073,14 @@
 
                                                 <!-- Origen -->
                                                 <td
-                                                    class="px-3 py-3 whitespace-nowrap text-text-muted"
+                                                    class="px-3 py-3 whitespace-nowrap text-slate-600 dark:text-text-muted"
                                                 >
                                                     <div
                                                         class="flex flex-col gap-1.5"
                                                     >
                                                         {#if doc.nro_orig && doc.nro_orig.trim()}
                                                             <span
-                                                                class="font-black text-text-base"
+                                                                class="font-black text-slate-900 dark:text-text-base"
                                                                 >{doc.nro_orig.trim()}</span
                                                             >
                                                             {#if doc.doc_orig && doc.doc_orig.trim()}
@@ -1096,7 +1096,7 @@
                                                             {/if}
                                                         {:else}
                                                             <span
-                                                                class="text-text-muted/40 italic font-medium"
+                                                                class="text-slate-400 dark:text-text-muted/40 italic font-medium"
                                                                 >—</span
                                                             >
                                                         {/if}
@@ -1107,7 +1107,7 @@
                                                 <td
                                                     class="px-3 py-3 whitespace-nowrap font-bold {doc.vencido
                                                         ? 'text-text-red'
-                                                        : 'text-text-muted'}"
+                                                        : 'text-slate-600 dark:text-text-muted'}"
                                                 >
                                                     {dayjs(doc.fec_venc).format(
                                                         "DD MMM YYYY",
@@ -1122,14 +1122,14 @@
                                                         class="flex flex-col items-end"
                                                     >
                                                         <span
-                                                            class="text-text-base"
+                                                            class="text-slate-900 dark:text-text-base"
                                                             >{formatCurrency(
                                                                 doc.total_usd,
                                                                 "USD",
                                                             )}</span
                                                         >
                                                         <span
-                                                            class="text-[9px] text-text-muted mt-0.5"
+                                                            class="text-[9px] text-slate-500 dark:text-text-muted mt-0.5"
                                                             >{formatCurrency(
                                                                 doc.total_bs,
                                                                 "VES",
@@ -1144,7 +1144,7 @@
                                                 >
                                                     <button
                                                         onclick={() => openDiscountModal(doc)}
-                                                        class="p-2 rounded-lg transition-all cursor-pointer { (doc.campo1 > 0 || doc.campo2 > 0 || doc.campo3 > 0) ? 'bg-emerald-500/15 text-emerald-500 border border-emerald-500/30 font-black' : 'bg-surface-soft text-text-muted hover:bg-brand-500/10 hover:text-brand-500 border border-transparent' }"
+                                                        class="p-2 rounded-lg transition-all cursor-pointer { (doc.campo1 > 0 || doc.campo2 > 0 || doc.campo3 > 0) ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-500 border border-emerald-500/30 font-black' : 'bg-slate-100 hover:bg-slate-200 text-slate-600 dark:bg-surface-soft dark:hover:bg-surface-strong dark:text-text-muted hover:text-brand-500 border border-transparent' }"
                                                         title="Descuentos: {doc.campo1 || 0}%, {doc.campo2 || 0}%, {doc.campo3 || 0}%"
                                                     >
                                                         <Percent size={14} />
@@ -1174,7 +1174,7 @@
                                                         <span
                                                             class="text-[9px] mt-0.5 font-bold {isCredit
                                                                 ? 'text-emerald-500/80'
-                                                                : 'text-text-muted'}"
+                                                                : 'text-slate-500 dark:text-text-muted'}"
                                                         >
                                                             {formatCurrency(
                                                                 doc.saldo_bs,
@@ -1196,7 +1196,7 @@
                                                         disabled={!data.canEdit}
                                                         value={doc.tasa_proveedor || ""} 
                                                         onchange={(e) => updateProviderTasa(doc, e.currentTarget.value)}
-                                                        class="w-18 bg-surface-base border border-border-subtle rounded-lg px-1 py-0.5 text-xs text-center focus:outline-none focus:ring-1 focus:ring-brand-500/50 transition-all font-mono disabled:opacity-50 disabled:cursor-not-allowed"
+                                                        class="w-18 bg-slate-50 dark:bg-surface-base border border-slate-300 dark:border-border-subtle rounded-lg px-1 py-0.5 text-xs text-center text-slate-900 dark:text-text-base focus:outline-none focus:ring-1 focus:ring-brand-500/50 transition-all font-mono disabled:opacity-50 disabled:cursor-not-allowed shadow-xs"
                                                     />
                                                 </td>
 
@@ -1207,16 +1207,16 @@
                                                     {#if doc.vencido}
                                                         <span
                                                             class="px-2 py-0.5 font-bold rounded {isCredit
-                                                                ? 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20'
-                                                                : 'bg-red-500/10 text-red-500 border border-red-500/20'}"
+                                                                ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-500 border border-emerald-500/20'
+                                                                : 'bg-red-500/10 text-red-600 dark:text-red-500 border border-red-500/20'}"
                                                         >
                                                             {doc.dias_vencidos} días
                                                         </span>
                                                     {:else}
                                                         <span
                                                             class="px-2 py-0.5 font-bold rounded inline-flex items-center gap-1 {isCredit
-                                                                ? 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20'
-                                                                : 'bg-green-500/10 text-green-500 border border-green-500/20'}"
+                                                                ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-500 border border-emerald-500/20'
+                                                                : 'bg-green-500/10 text-green-600 dark:text-green-500 border border-green-500/20'}"
                                                         >
                                                             {#if !isCredit}
                                                                 <CheckCircle
@@ -1238,7 +1238,7 @@
 
                 <!-- Modal Footer -->
                 <div
-                    class="px-8 py-5 border-t border-border-subtle flex justify-end gap-3 bg-surface-soft/50 font-bold text-xs"
+                    class="px-8 py-5 border-t border-slate-200 dark:border-border-subtle flex justify-end gap-3 bg-slate-50 dark:bg-surface-soft/50 font-bold text-xs"
                 >
                     {#if supplier.documents.some((d) => d.tasa_proveedor && d.tasa_proveedor > 0)}
                         <a
@@ -1262,7 +1262,7 @@
 
                     <button
                         onclick={closeSupplierDetail}
-                        class="px-6 py-2.5 rounded-xl bg-surface-soft hover:bg-surface-strong text-sm font-black transition-all cursor-pointer"
+                        class="px-6 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 dark:bg-surface-soft dark:hover:bg-surface-strong dark:text-text-base border border-slate-200 dark:border-transparent text-sm font-black transition-all cursor-pointer"
                     >
                         Cerrar Detalle
                     </button>
@@ -1284,23 +1284,23 @@
             <div class="fixed inset-0" onclick={closeDiscountModal}></div>
 
             <div
-                class="glass bg-surface-raised border border-border-subtle rounded-[24px] max-w-md w-full flex flex-col shadow-2xl relative z-10 overflow-hidden"
+                class="bg-white dark:bg-[#0f0f11] dark:glass border border-slate-200 dark:border-border-subtle rounded-[24px] max-w-md w-full flex flex-col shadow-2xl relative z-10 overflow-hidden"
                 transition:slide={{ duration: 250 }}
             >
                 <!-- Header -->
-                <div class="px-6 py-4 border-b border-border-subtle flex items-center justify-between bg-surface-soft">
+                <div class="px-6 py-4 border-b border-slate-200 dark:border-border-subtle flex items-center justify-between bg-slate-50 dark:bg-surface-soft">
                     <div class="flex items-center gap-3">
                         <div class="h-8 w-8 rounded-lg bg-brand-500/10 border border-brand-500/20 flex items-center justify-center text-brand-500 shrink-0">
                             <Percent size={16} />
                         </div>
                         <div>
-                            <h3 class="font-black text-sm text-text-base">Descuentos de Documento</h3>
-                            <p class="text-[10px] text-text-muted font-bold font-mono">{doc.co_tipo_doc} {doc.nro_doc}</p>
+                            <h3 class="font-black text-sm text-slate-900 dark:text-text-base">Descuentos de Documento</h3>
+                            <p class="text-[10px] text-slate-500 dark:text-text-muted font-bold font-mono">{doc.co_tipo_doc} {doc.nro_doc}</p>
                         </div>
                     </div>
                     <button
                         onclick={closeDiscountModal}
-                        class="p-2 rounded-xl bg-surface-soft hover:bg-surface-strong text-text-muted hover:text-text-base transition-all cursor-pointer"
+                        class="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-800 dark:bg-surface-soft dark:hover:bg-surface-strong dark:text-text-muted dark:hover:text-text-base transition-all cursor-pointer"
                     >
                         <X size={16} />
                     </button>
@@ -1308,15 +1308,15 @@
 
                 <!-- Body / Inputs -->
                 <div class="p-6 space-y-4">
-                    <p class="text-xs text-text-muted font-medium leading-relaxed">
+                    <p class="text-xs text-slate-600 dark:text-text-muted font-medium leading-relaxed">
                         Ingresa los porcentajes de descuento a aplicar sobre este documento. Rango permitido: <strong>0.00%</strong> a <strong>100.00%</strong>.
                     </p>
 
                     <div class="space-y-3">
                         <!-- Campo 1 -->
                         <div class="flex flex-col gap-1.5">
-                            <label for="campo1" class="text-[10px] font-black uppercase tracking-wider text-text-muted">Descuento 1 (%)</label>
-                            <div class="relative rounded-xl bg-surface-soft border border-border-subtle overflow-hidden focus-within:border-brand-500/50 transition-all">
+                            <label for="campo1" class="text-[10px] font-black uppercase tracking-wider text-slate-600 dark:text-text-muted">Descuento 1 (%)</label>
+                            <div class="relative rounded-xl bg-slate-50 dark:bg-surface-soft border border-slate-300 dark:border-border-subtle overflow-hidden focus-within:border-brand-500/50 transition-all">
                                 <input
                                     id="campo1"
                                     type="number"
@@ -1326,16 +1326,16 @@
                                     placeholder="0.00"
                                     disabled={!data.canEdit}
                                     bind:value={tempCampo1}
-                                    class="w-full h-10 bg-transparent outline-none px-3 pr-8 text-xs font-mono text-text-base disabled:opacity-50"
+                                    class="w-full h-10 bg-transparent outline-none px-3 pr-8 text-xs font-mono text-slate-900 dark:text-text-base disabled:opacity-50"
                                 />
-                                <span class="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-text-muted/60">%</span>
+                                <span class="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400 dark:text-text-muted/60">%</span>
                             </div>
                         </div>
 
                         <!-- Campo 2 -->
                         <div class="flex flex-col gap-1.5">
-                            <label for="campo2" class="text-[10px] font-black uppercase tracking-wider text-text-muted">Descuento 2 (%)</label>
-                            <div class="relative rounded-xl bg-surface-soft border border-border-subtle overflow-hidden focus-within:border-brand-500/50 transition-all">
+                            <label for="campo2" class="text-[10px] font-black uppercase tracking-wider text-slate-600 dark:text-text-muted">Descuento 2 (%)</label>
+                            <div class="relative rounded-xl bg-slate-50 dark:bg-surface-soft border border-slate-300 dark:border-border-subtle overflow-hidden focus-within:border-brand-500/50 transition-all">
                                 <input
                                     id="campo2"
                                     type="number"
@@ -1345,16 +1345,16 @@
                                     placeholder="0.00"
                                     disabled={!data.canEdit}
                                     bind:value={tempCampo2}
-                                    class="w-full h-10 bg-transparent outline-none px-3 pr-8 text-xs font-mono text-text-base disabled:opacity-50"
+                                    class="w-full h-10 bg-transparent outline-none px-3 pr-8 text-xs font-mono text-slate-900 dark:text-text-base disabled:opacity-50"
                                 />
-                                <span class="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-text-muted/60">%</span>
+                                <span class="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400 dark:text-text-muted/60">%</span>
                             </div>
                         </div>
 
                         <!-- Campo 3 -->
                         <div class="flex flex-col gap-1.5">
-                            <label for="campo3" class="text-[10px] font-black uppercase tracking-wider text-text-muted">Descuento 3 (%)</label>
-                            <div class="relative rounded-xl bg-surface-soft border border-border-subtle overflow-hidden focus-within:border-brand-500/50 transition-all">
+                            <label for="campo3" class="text-[10px] font-black uppercase tracking-wider text-slate-600 dark:text-text-muted">Descuento 3 (%)</label>
+                            <div class="relative rounded-xl bg-slate-50 dark:bg-surface-soft border border-slate-300 dark:border-border-subtle overflow-hidden focus-within:border-brand-500/50 transition-all">
                                 <input
                                     id="campo3"
                                     type="number"
@@ -1364,19 +1364,19 @@
                                     placeholder="0.00"
                                     disabled={!data.canEdit}
                                     bind:value={tempCampo3}
-                                    class="w-full h-10 bg-transparent outline-none px-3 pr-8 text-xs font-mono text-text-base disabled:opacity-50"
+                                    class="w-full h-10 bg-transparent outline-none px-3 pr-8 text-xs font-mono text-slate-900 dark:text-text-base disabled:opacity-50"
                                 />
-                                <span class="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-text-muted/60">%</span>
+                                <span class="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400 dark:text-text-muted/60">%</span>
                             </div>
                         </div>
                     </div>
                 </div>
 
                 <!-- Footer -->
-                <div class="px-6 py-4 border-t border-border-subtle flex justify-end gap-2 bg-surface-soft/50 text-xs font-bold">
+                <div class="px-6 py-4 border-t border-slate-200 dark:border-border-subtle flex justify-end gap-2 bg-slate-50 dark:bg-surface-soft/50 text-xs font-bold">
                     <button
                         onclick={closeDiscountModal}
-                        class="px-4 py-2 rounded-xl bg-surface-soft hover:bg-surface-strong text-text-base transition-all cursor-pointer"
+                        class="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 dark:bg-surface-soft dark:hover:bg-surface-strong dark:text-text-base border border-slate-200 dark:border-transparent transition-all cursor-pointer"
                     >
                         Cancelar
                     </button>
