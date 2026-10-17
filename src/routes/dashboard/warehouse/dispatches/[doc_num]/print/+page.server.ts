@@ -59,12 +59,11 @@ export const load: PageServerLoad = protectLoad('inv_dispatches', async ({ param
             }
         }
 
-        // 4. Buscar nombres de Usuario Despachador (co_us_in) y Editor (co_us_mo) en Supabase profiles
-        let creatorName = '';
-        let editorName = '';
-
+        // 4. Buscar nombres de Usuario Despachador (co_us_in) y Editor (co_us_mo) en Supabase profiles o Profit Plus
         const creatorUser = (dispatch.co_us_in || '').trim();
         const editorUser = (dispatch.co_us_mo || '').trim();
+        let creatorName = dispatch.despachador_name || creatorUser;
+        let editorName = dispatch.editor_name || editorUser;
 
         const usersToFetch = Array.from(new Set([creatorUser, editorUser].filter(Boolean)));
 
@@ -82,16 +81,16 @@ export const load: PageServerLoad = protectLoad('inv_dispatches', async ({ param
                 });
 
                 if (creatorUser) {
-                    creatorName = profileMap.get(creatorUser.toUpperCase()) || creatorUser;
+                    creatorName = profileMap.get(creatorUser.toUpperCase()) || dispatch.despachador_name || creatorUser;
                 }
                 if (editorUser && editorUser.toUpperCase() !== creatorUser.toUpperCase()) {
-                    editorName = profileMap.get(editorUser.toUpperCase()) || editorUser;
+                    editorName = profileMap.get(editorUser.toUpperCase()) || dispatch.editor_name || editorUser;
                 }
             } catch (e) {
                 console.warn('[PRINT-DISPATCH] Warning looking up user profiles:', e);
-                creatorName = creatorUser;
+                creatorName = dispatch.despachador_name || creatorUser;
                 if (editorUser && editorUser.toUpperCase() !== creatorUser.toUpperCase()) {
-                    editorName = editorUser;
+                    editorName = dispatch.editor_name || editorUser;
                 }
             }
         }

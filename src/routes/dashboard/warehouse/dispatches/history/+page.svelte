@@ -584,13 +584,21 @@
             {#if detailDispatch.despachador_name || detailDispatch.co_us_in}
               <div class="space-y-1">
                 <span class="text-text-muted text-[10px] uppercase font-bold tracking-wider">Despachador</span>
-                <p class="text-text-base font-bold text-sm text-brand-400 font-medium">{detailDispatch.despachador_name || detailDispatch.co_us_in}</p>
+                <p class="text-text-base font-bold text-sm text-brand-400 font-medium">
+                  {#if detailDispatch.despachador_name}
+                    {detailDispatch.despachador_name} <span class="text-xs text-text-muted font-normal font-mono">({detailDispatch.co_us_in})</span>
+                  {:else}
+                    {detailDispatch.co_us_in}
+                  {/if}
+                </p>
               </div>
             {/if}
-            {#if detailDispatch.editor_name}
+            {#if detailDispatch.editor_name && (!detailDispatch.despachador_name || detailDispatch.editor_name !== detailDispatch.despachador_name)}
               <div class="space-y-1">
                 <span class="text-text-muted text-[10px] uppercase font-bold tracking-wider">Editado por</span>
-                <p class="text-text-base font-bold text-sm text-amber-400 font-medium">{detailDispatch.editor_name}</p>
+                <p class="text-text-base font-bold text-sm text-amber-400 font-medium">
+                  {detailDispatch.editor_name} <span class="text-xs text-text-muted font-normal font-mono">({detailDispatch.co_us_mo})</span>
+                </p>
               </div>
             {/if}
             <div class="space-y-1">
@@ -647,7 +655,13 @@
       <!-- Footer Modal -->
       <div class="p-6 border-t border-border-subtle flex items-center justify-between bg-surface-soft/50">
         <span class="text-xs text-text-muted">
-          Registrado por: <strong class="text-text-base">{detailDispatch?.co_us_in || "---"}</strong>
+          Registrado por: <strong class="text-text-base">
+            {#if detailDispatch?.despachador_name}
+              {detailDispatch.despachador_name} <span class="text-text-muted font-normal font-mono">({detailDispatch.co_us_in})</span>
+            {:else}
+              {detailDispatch?.co_us_in || "---"}
+            {/if}
+          </strong>
         </span>
         {#if detailDispatch}
           <a
