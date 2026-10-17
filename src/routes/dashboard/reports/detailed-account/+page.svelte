@@ -134,6 +134,10 @@
                 if (!d.anulado) {
                     runningUsd = parseFloat((runningUsd + (haberUsd - debeUsd)).toFixed(2));
                     runningBs = parseFloat((runningBs + (haberBs - debeBs)).toFixed(2));
+                    if (Math.abs(runningBs) <= 0.05) {
+                        runningBs = 0;
+                        runningUsd = 0;
+                    }
                 }
                 
                 return {
@@ -148,10 +152,19 @@
             });
             
             // Client total balances correspond to the final running balance
-            g.saldo_usd = parseFloat(runningUsd.toFixed(2));
-            g.saldo_bs = parseFloat(runningBs.toFixed(2));
-            g.total_usd = parseFloat(runningUsd.toFixed(2));
-            g.total_bs = parseFloat(runningBs.toFixed(2));
+            let finalSaldoBs = parseFloat(runningBs.toFixed(2));
+            let finalSaldoUsd = parseFloat(runningUsd.toFixed(2));
+
+            // Si el cliente no tiene saldo pendiente en Bolívares (<= 0.05 Bs), su cuenta está solvente al 100%
+            if (Math.abs(finalSaldoBs) <= 0.05) {
+                finalSaldoBs = 0;
+                finalSaldoUsd = 0;
+            }
+
+            g.saldo_usd = finalSaldoUsd;
+            g.saldo_bs = finalSaldoBs;
+            g.total_usd = finalSaldoUsd;
+            g.total_bs = finalSaldoBs;
         }
         
         // Sort clients putting those who owe us the most (most negative) at the top
