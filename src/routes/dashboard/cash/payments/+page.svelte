@@ -1221,13 +1221,14 @@
     }
     // 1. Validar y limpiar retenciones de IVA/ISLR según si están habilitadas las secciones o no
     for (const doc of documentos) {
-      if (checkedDocs[doc.nro_doc]) {
-        const inp = docInputs[doc.nro_doc];
+      const nroTrim = doc.nro_doc.trim();
+      if (checkedDocs[nroTrim]) {
+        const inp = docInputs[nroTrim];
         if (inp.showIvaDetails && inp.reten_iva_bs > 0) {
           const compNum = (inp.num_comprobante_iva || "").trim();
           if (!compNum || compNum.toUpperCase() === "S/N" || compNum.toUpperCase() === "SN") {
             toast.error(
-              `Debe ingresar el número de comprobante para la retención de IVA del documento ${doc.nro_doc}.`
+              `Debe ingresar el número de comprobante para la retención de IVA del documento ${nroTrim}.`
             );
             saving = false;
             return;
@@ -1237,7 +1238,7 @@
           if (inp.reten_iva_bs > 0 || inp.reten_iva > 0) {
             inp.reten_iva_bs = 0;
             inp.reten_iva = 0;
-            recalculateDocAmounts(doc.nro_doc, doc);
+            recalculateDocAmounts(nroTrim, doc);
           }
         }
 
@@ -1245,7 +1246,7 @@
           if (inp.reten_islr_bs > 0 || inp.reten_islr > 0) {
             inp.reten_islr_bs = 0;
             inp.reten_islr = 0;
-            recalculateDocAmounts(doc.nro_doc, doc);
+            recalculateDocAmounts(nroTrim, doc);
           }
         }
       }
@@ -1257,18 +1258,18 @@
     const tasaCobro = currentExchangeRate;
     const firstSelectedParent = documentos.find(
       (d) =>
-        checkedDocs[d.nro_doc] &&
+        checkedDocs[d.nro_doc.trim()] &&
         isDebitDoc(d.co_tipo_doc),
     );
     const parentDocNo = firstSelectedParent
-      ? firstSelectedParent.nro_doc
+      ? firstSelectedParent.nro_doc.trim()
       : null;
 
     let totalDocBs = 0;
     const renglones = documentos
-      .filter((doc) => checkedDocs[doc.nro_doc])
+      .filter((doc) => checkedDocs[doc.nro_doc.trim()])
       .map((doc) => {
-        const inp = docInputs[doc.nro_doc];
+        const inp = docInputs[doc.nro_doc.trim()];
         const isParent = isDebitDoc(doc.co_tipo_doc);
         const docTasa = doc.tasa > 0 ? doc.tasa : 1;
         const saldoUsd = Math.round((doc.saldo / docTasa) * 100) / 100;
@@ -1348,27 +1349,27 @@
 
     const retenciones_iva = documentos
       .filter((doc) => {
-        const inp = docInputs[doc.nro_doc];
-        return checkedDocs[doc.nro_doc] && inp && !inp.yaTieneRetIva && inp.showIvaDetails && inp.reten_iva_bs > 0;
+        const inp = docInputs[doc.nro_doc.trim()];
+        return checkedDocs[doc.nro_doc.trim()] && inp && !inp.yaTieneRetIva && inp.showIvaDetails && inp.reten_iva_bs > 0;
       })
       .map((doc) => {
-        const inp = docInputs[doc.nro_doc];
+        const inp = docInputs[doc.nro_doc.trim()];
         const today = new Date();
         const periodStr =
           today.getFullYear() + String(today.getMonth() + 1).padStart(2, "0");
 
         return {
-          nro_doc_asoc: doc.nro_doc,
+          nro_doc_asoc: doc.nro_doc.trim(),
           rif_contribuyente: selectedClient.rif,
           periodo_impositivo: Number(periodStr),
           fecha_documento: doc.fec_emis,
           rif_comprador: "J000000000",
-          numero_documento: doc.nro_doc,
+          numero_documento: doc.nro_doc.trim(),
           numero_control_documento: doc.n_control,
           monto_documento: doc.total_neto,
           base_imponible: inp.base_imponible_iva_bs || 0,
           monto_ret_imp: inp.reten_iva_bs || 0,
-          numero_documento_afectado: doc.nro_doc,
+          numero_documento_afectado: doc.nro_doc.trim(),
           num_comprobante: inp.num_comprobante_iva ? inp.num_comprobante_iva.trim() : "",
           monto_excento: 0,
           alicuota: inp.alicuota_iva,
@@ -1377,13 +1378,13 @@
 
     const retenciones_islr = documentos
       .filter((doc) => {
-        const inp = docInputs[doc.nro_doc];
-        return checkedDocs[doc.nro_doc] && inp && !inp.yaTieneRetIslr && inp.showIslrDetails && inp.reten_islr_bs > 0;
+        const inp = docInputs[doc.nro_doc.trim()];
+        return checkedDocs[doc.nro_doc.trim()] && inp && !inp.yaTieneRetIslr && inp.showIslrDetails && inp.reten_islr_bs > 0;
       })
       .map((doc) => {
-        const inp = docInputs[doc.nro_doc];
+        const inp = docInputs[doc.nro_doc.trim()];
         return {
-          nro_doc_asoc: doc.nro_doc,
+          nro_doc_asoc: doc.nro_doc.trim(),
           co_islr: inp.co_islr,
           monto: doc.total_neto - doc.monto_imp,
           monto_reten: inp.reten_islr_bs || 0,
@@ -2708,7 +2709,7 @@
             <button
               disabled={(expectedNetPayUsd > 0 && (formasPago.length === 0 || totalInstrumentosPago <= 0)) ||
                 saving ||
-                !documentos.some((doc) => checkedDocs[doc.nro_doc])}
+                !documentos.some((doc) => checkedDocs[doc.nro_doc.trim()])}
               onclick={saveCobro}
               class="w-full h-20 bg-brand-600 hover:bg-brand-500 text-white rounded-[24px] font-black text-xl uppercase tracking-[0.2em] shadow-[0_20px_40px_-10px_rgba(var(--brand-rgb),0.3)] active:scale-[0.97] transition-all flex items-center justify-center gap-4 disabled:opacity-50 disabled:grayscale group cursor-pointer border-none"
             >
