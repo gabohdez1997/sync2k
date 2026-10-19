@@ -4,13 +4,14 @@
         Wallet, FileText, Calendar, DollarSign, Clock, AlertTriangle, 
         ChevronLeft, ChevronRight, Store, Search, Filter, FileDown,
         TrendingDown, TrendingUp, CheckCircle, RefreshCw, Loader2,
-        User, Eye, X, FileSpreadsheet, ClipboardList
+        User, Eye, X, FileSpreadsheet, ClipboardList, CornerDownRight
     } from 'lucide-svelte';
     import { goto } from '$app/navigation';
     import { page } from '$app/stores';
     import { toast } from 'svelte-sonner';
     import SearchBar from '$lib/components/ui/SearchBar.svelte';
     import Combobox from '$lib/components/ui/Combobox.svelte';
+    import { organizeDetailedAccountDocs } from '$lib/detailed-account';
     import dayjs from 'dayjs';
     import 'dayjs/locale/es';
 
@@ -114,10 +115,10 @@
             g.doc_count++;
         }
 
-        // For each client, sort documents ascending chronologically and compute Debe, Haber, and running Saldo
+        // For each client, group documents by origin with children (COBR, NCR) under parent invoice, and compute running Saldo
         for (const key of Object.keys(groups)) {
             const g = groups[key];
-            g.documents.sort((a: any, b: any) => new Date(a.fec_emis).getTime() - new Date(b.fec_emis).getTime());
+            g.documents = organizeDetailedAccountDocs(g.documents);
             
             let runningUsd = 0;
             let runningBs = 0;
@@ -509,10 +510,15 @@
                                     <tbody class="divide-y divide-slate-100 dark:divide-border-subtle text-xs">
                                         {#each client.documents as doc, idx (doc.nro_doc + doc.co_tipo_doc + (doc.nro_orig || '') + (doc.doc_orig || '') + doc.sede_id + idx)}
                                             {@const badge = getDocTypeBadge(doc.co_tipo_doc)}
-                                            <tr class="hover:bg-slate-50 dark:hover:bg-surface-soft/60 transition-colors">
+                                            <tr class="hover:bg-slate-50 dark:hover:bg-surface-soft/60 transition-colors {doc.isChild ? 'bg-slate-50/50 dark:bg-surface-strong/20' : ''}">
                                                 <!-- Documento / Tipo -->
                                                 <td class="px-6 py-4">
-                                                    <div class="flex items-center gap-3">
+                                                    <div class="flex items-center gap-2.5 {doc.isChild ? 'pl-5' : ''}">
+                                                        {#if doc.isChild}
+                                                            <div class="text-brand-500/80 dark:text-brand-400 shrink-0" title="Asociado a documento origen">
+                                                                <CornerDownRight size={15} />
+                                                            </div>
+                                                        {/if}
                                                         <div class="p-2 rounded-lg bg-slate-100 dark:bg-surface-soft text-slate-500 dark:text-text-muted">
                                                             <FileText size={14} />
                                                         </div>

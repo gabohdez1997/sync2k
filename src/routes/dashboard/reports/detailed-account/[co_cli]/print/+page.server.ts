@@ -1,6 +1,7 @@
 import { protectLoad, hasPermission } from '$lib/server/permissions';
 import { AgentClient } from '$lib/server/agent';
 import { supabaseAdmin } from '$lib/server/supabase';
+import { organizeDetailedAccountDocs } from '$lib/detailed-account';
 import { error } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
 
@@ -48,10 +49,10 @@ export const load: PageServerLoad = protectLoad('reports_detailed_account', asyn
         }
 
         // Filtrar documentos que coincidan exactamente con el co_cli
-        const documents = (res.data || []).filter((d: any) => (d.co_cli || "").trim().toUpperCase() === co_cli.trim().toUpperCase());
+        let documents = (res.data || []).filter((d: any) => (d.co_cli || "").trim().toUpperCase() === co_cli.trim().toUpperCase());
 
-        // Ordenar cronológicamente por fecha de emisión ascendente
-        documents.sort((a: any, b: any) => new Date(a.fec_emis).getTime() - new Date(b.fec_emis).getTime());
+        // Ordenar agrupando cobros y NCR debajo de la factura correspondiente
+        documents = organizeDetailedAccountDocs(documents);
 
         if (documents.length === 0) {
             throw error(404, 'No se encontraron movimientos activos para este cliente.');

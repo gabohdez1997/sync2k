@@ -247,8 +247,13 @@
                         <tbody>
                             {#each page.items as item}
                                 {@const isCredit = ['ADEL', 'AJNA', 'AJNM', 'ISLR', 'IVAN', 'N/CR', 'NCR'].includes(item.co_tipo_doc.trim().toUpperCase())}
-                                <tr>
-                                    <td class="font-mono font-bold">{item.nro_doc}</td>
+                                <tr class={item.isChild ? 'bg-slate-50/60' : ''}>
+                                    <td class="font-mono font-bold {item.isChild ? 'pl-3' : ''}">
+                                        {#if item.isChild}
+                                            <span class="text-slate-400 font-sans mr-1 inline-block">↳</span>
+                                        {/if}
+                                        {item.nro_doc}
+                                    </td>
                                     <td
                                         class="font-bold uppercase"
                                         class:text-emerald-600={isCredit || item.co_tipo_doc.trim().toUpperCase() === 'COBR'}
