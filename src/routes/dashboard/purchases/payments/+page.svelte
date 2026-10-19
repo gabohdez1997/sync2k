@@ -65,7 +65,8 @@
   }
 
   function isNcDoc(doc: any): boolean {
-    return doc.co_tipo_doc.trim() === "N/CR";
+    const t = doc?.co_tipo_doc?.trim()?.toUpperCase();
+    return t === "N/CR" || t === "NCR" || t === "AJNA";
   }
 
   function getPorcRetIva(): number {
@@ -232,13 +233,19 @@
   let formasPago = $state<any[]>([]);
 
   // Reactivo: Auto-distribuir el total de instrumentos de pago y notas de crédito a las facturas seleccionadas
+  // Reactivo: Auto-distribuir el total de instrumentos de pago y notas de crédito a las facturas seleccionadas
   // (todo en Bs, que es la moneda en la que se liquida la factura)
   $effect(() => {
-    // 1. Saldo a favor aportado por Notas de Crédito seleccionadas
+    // 1. Saldo a favor aportado por Notas de Crédito seleccionadas (descontando retenciones aplicadas en la misma N/CR)
     let creditFromNCsBs = 0;
     for (const doc of documentos) {
       if (!checkedDocs[doc.nro_doc.trim()]) continue;
-      if (isNcDoc(doc)) creditFromNCsBs += r2(doc.saldo);
+      if (isNcDoc(doc)) {
+        const inp = docInputs[doc.nro_doc.trim()];
+        const retIvaBs = inp ? getAppliedRetIvaBs(inp) : 0;
+        const retIslrBs = inp ? getAppliedRetIslrBs(inp) : 0;
+        creditFromNCsBs += Math.max(0, r2(r2(doc.saldo) - retIvaBs - retIslrBs));
+      }
     }
 
     // 2. Fondo disponible total para aplicar a facturas/deudas (Instrumentos + Notas de Crédito)
@@ -257,9 +264,14 @@
       }
 
       if (isNcDoc(doc)) {
+        // La N/CR amortiza facturas únicamente hasta el monto neto que las facturas requieren
         const saldoBs = r2(doc.saldo);
-        inp.mont_cob_bs = -saldoBs;
-        inp.mont_cob = -toUsd(saldoBs);
+        const retIvaBs = getAppliedRetIvaBs(inp);
+        const retIslrBs = getAppliedRetIslrBs(inp);
+        const netCreditBs = Math.max(0, r2(saldoBs - retIvaBs - retIslrBs));
+        const appliedToInvoicesBs = Math.min(netCreditBs, totalFacturasNetoBs);
+        inp.mont_cob_bs = -appliedToInvoicesBs;
+        inp.mont_cob = -toUsd(appliedToInvoicesBs);
       } else {
         const maxAbonoBs = Math.max(
           0,
@@ -284,7 +296,12 @@
       documentos.reduce((acc, doc) => {
         if (checkedDocs[doc.nro_doc.trim()]) {
           const saldoBs = r2(doc.saldo);
-          if (isNcDoc(doc)) return acc - saldoBs;
+          if (isNcDoc(doc)) {
+            const inp = docInputs[doc.nro_doc.trim()];
+            const retIvaBs = inp ? getAppliedRetIvaBs(inp) : 0;
+            const retIslrBs = inp ? getAppliedRetIslrBs(inp) : 0;
+            return acc - Math.max(0, r2(saldoBs - retIvaBs - retIslrBs));
+          }
           const inp = docInputs[doc.nro_doc.trim()];
           if (inp) {
             return acc + Math.max(0, r2(saldoBs - getAppliedRetIvaBs(inp) - getAppliedRetIslrBs(inp)));
@@ -396,22 +413,81 @@
     ) / 100,
   );
 
-  // Saldo total pendiente solo de las facturas seleccionadas (Bs exactos del documento)
-  let saldoPendientePorCobrarBs = $derived(
+  // Total neto adeudado en facturas de débito seleccionadas
+  let totalFacturasNetoBs = $derived(
     r2(
       documentos.reduce((acc, doc) => {
-        if (!checkedDocs[doc.nro_doc.trim()]) return acc;
+        if (!checkedDocs[doc.nro_doc.trim()] || isNcDoc(doc)) return acc;
+        const inp = docInputs[doc.nro_doc.trim()];
         const saldoBs = r2(doc.saldo);
-        return isNcDoc(doc) ? acc - saldoBs : acc + saldoBs;
+        const retIvaBs = inp ? getAppliedRetIvaBs(inp) : 0;
+        const retIslrBs = inp ? getAppliedRetIslrBs(inp) : 0;
+        return acc + Math.max(0, r2(saldoBs - retIvaBs - retIslrBs));
       }, 0),
     ),
   );
 
+  let totalFacturasNetoUsd = $derived(toUsd(totalFacturasNetoBs));
+
+  // Total crédito aportado por Notas de Crédito / AJNA seleccionadas (después de retenciones)
+  let totalCreditoDisponibleBs = $derived(
+    r2(
+      documentos.reduce((acc, doc) => {
+        if (!checkedDocs[doc.nro_doc.trim()] || !isNcDoc(doc)) return acc;
+        const inp = docInputs[doc.nro_doc.trim()];
+        const saldoBs = r2(doc.saldo);
+        const retIvaBs = inp ? getAppliedRetIvaBs(inp) : 0;
+        const retIslrBs = inp ? getAppliedRetIslrBs(inp) : 0;
+        return acc + Math.max(0, r2(saldoBs - retIvaBs - retIslrBs));
+      }, 0),
+    ),
+  );
+
+  let totalCreditoDisponibleUsd = $derived(toUsd(totalCreditoDisponibleBs));
+
+  // Crédito de N/CR que realmente se aplica a las facturas seleccionadas
+  let creditoNcAplicadoBs = $derived(
+    r2(Math.min(totalCreditoDisponibleBs, totalFacturasNetoBs))
+  );
+
+  let creditoNcAplicadoUsd = $derived(toUsd(creditoNcAplicadoBs));
+
+  // Excedente de la N/CR que NO se consume y permanece como saldo pendiente en la misma N/CR
+  let creditoNcExcedenteBs = $derived(
+    r2(Math.max(0, totalCreditoDisponibleBs - totalFacturasNetoBs))
+  );
+
+  let creditoNcExcedenteUsd = $derived(toUsd(creditoNcExcedenteBs));
+
+  // Monto neto de facturas que debe ser cubierto por instrumentos de pago (caja/banco)
+  let montoNetoAPagarBs = $derived(
+    r2(Math.max(0, totalFacturasNetoBs - creditoNcAplicadoBs))
+  );
+
+  let montoNetoAPagarUsd = $derived(toUsd(montoNetoAPagarBs));
+
+  // Excedente cuando el monto ingresado en instrumentos de pago es MAYOR a la sumatoria neta de las facturas
+  let excedentePagoBs = $derived(
+    r2(Math.max(0, totalInstrumentosPagoBs - montoNetoAPagarBs))
+  );
+
+  let excedentePagoUsd = $derived(toUsd(excedentePagoBs));
+
+  // Solo se genera AJNA cuando se ingresa un pago en efectivo/banco mayor a la sumatoria de las facturas
+  let hasPaymentSurplus = $derived(
+    totalInstrumentosPagoBs > montoNetoAPagarBs + 0.05
+  );
+
+  // Saldo pendiente por pagar (Bs exactos del documento)
+  let saldoPendientePorCobrarBs = $derived(
+    hasPaymentSurplus ? 0 : r2(Math.max(0, montoNetoAPagarBs - totalInstrumentosPagoBs))
+  );
+
   let saldoPendientePorCobrar = $derived(toUsd(saldoPendientePorCobrarBs));
 
-  // Cuadre: se valida en Bs, que es lo que se registra en Profit
+  // Cuadre: si hay excedente en instrumentos, se cuadra generando el AJNA
   let diferenciaCuadreBs = $derived(
-    r2(Math.abs(totalCobradoNetoBs - totalInstrumentosPagoBs)),
+    hasPaymentSurplus ? 0 : r2(Math.abs(montoNetoAPagarBs - totalInstrumentosPagoBs))
   );
 
   let diferenciaCuadre = $derived(toUsd(diferenciaCuadreBs));
@@ -422,17 +498,20 @@
     const selectedCount = Object.values(checkedDocs).filter(Boolean).length;
     if (selectedCount === 0) return false;
 
-    // Caso 1: Pago normal o mixto (requiere instrumentos y cuadre en Bs con el neto abonado)
-    if (totalCobradoNetoBs > 0) {
-      return diferenciaCuadreBs === 0 && formasPago.length > 0;
+    // Caso 1: Hay pago en exceso en instrumentos (se generará un AJNA por la diferencia a favor)
+    if (hasPaymentSurplus) {
+      return true;
     }
 
-    // Caso 2: Pago parcial exclusivamente de retenciones (IVA y/o ISLR aplicadas sin instrumentos)
-    if (totalCobradoNetoBs === 0) {
-      return totalRetenidoIvaBs > 0 || totalRetenidoIslrBs > 0;
+    // Caso 2: Deuda en 0 (cubierta 100% por N/CR o es solo retención de N/CR)
+    if (montoNetoAPagarBs === 0) {
+      const hasRetentions = totalRetenidoIvaBs > 0 || totalRetenidoIslrBs > 0;
+      const hasCreditApplied = creditoNcAplicadoBs > 0;
+      return (hasRetentions || hasCreditApplied) && totalInstrumentosPagoBs === 0;
     }
 
-    return false;
+    // Caso 3: Queda un neto por pagar en efectivo / transferencias
+    return diferenciaCuadreBs === 0 && formasPago.length > 0;
   });
 
   // Sincronizar sucursal seleccionada
@@ -649,7 +728,7 @@
           // Retención de IVA por defecto (75% / 100%) sobre el IVA en Bs - Solo si NO tiene retención previa
           const ivaBs = Number(doc.monto_imp) || 0;
           const porcRetIva = getPorcRetIva();
-          const retIvaBs = !isNC && !yaTieneRetIva && ivaBs > 0
+          const retIvaBs = !yaTieneRetIva && ivaBs > 0
             ? r2(ivaBs * (porcRetIva / 100))
             : 0;
 
@@ -790,6 +869,9 @@
 
   // Helper para calcular el monto neto pendiente (en Bs exactos) que deja el saldo del documento en 0
   function getRemainingPendingBalance(excludeIndex: number = -1) {
+    if (montoNetoAPagarBs === 0) {
+      return { pendingBs: 0, pendingUsd: 0 };
+    }
     let totalNeededBs = 0;
 
     for (const doc of documentos) {
@@ -798,7 +880,10 @@
 
       const saldoBs = r2(doc.saldo);
       if (isNcDoc(doc)) {
-        totalNeededBs -= saldoBs;
+        const inp = docInputs[nro];
+        const retIvaBs = inp ? getAppliedRetIvaBs(inp) : 0;
+        const retIslrBs = inp ? getAppliedRetIslrBs(inp) : 0;
+        totalNeededBs -= Math.max(0, r2(saldoBs - retIvaBs - retIslrBs));
         continue;
       }
 
@@ -922,8 +1007,18 @@
   let saving = $state(false);
   let saveSuccess = $state(false);
   let generatedDocNum = $state("");
+  let showAjnaConfirmModal = $state(false);
+  let confirmedAjna = $state(false);
 
-  async function savePago() {
+  function handleSaveClick() {
+    if (hasPaymentSurplus && !confirmedAjna) {
+      showAjnaConfirmModal = true;
+      return;
+    }
+    executeSavePago();
+  }
+
+  async function executeSavePago() {
     if (!selectedSupplier) {
       toast.error("Debe seleccionar un proveedor.");
       return;
@@ -935,17 +1030,17 @@
       return;
     }
 
-    if (totalCobradoNetoBs === 0 && totalRetenidoIvaBs === 0 && totalRetenidoIslrBs === 0) {
+    if (!hasPaymentSurplus && montoNetoAPagarBs === 0 && totalRetenidoIvaBs === 0 && totalRetenidoIslrBs === 0 && creditoNcAplicadoBs === 0) {
       toast.error("Debe ingresar un monto a pagar o aplicar al menos una retención (IVA o ISLR).");
       return;
     }
 
-    if (totalCobradoNetoBs > 0 && formasPago.length === 0) {
+    if (!hasPaymentSurplus && montoNetoAPagarBs > 0 && formasPago.length === 0) {
       toast.error("Debe agregar al menos un instrumento de pago (Efectivo, Banco, etc.).");
       return;
     }
 
-    if (totalCobradoNetoBs > 0 && diferenciaCuadreBs !== 0) {
+    if (!hasPaymentSurplus && montoNetoAPagarBs > 0 && diferenciaCuadreBs !== 0) {
       toast.error("El monto abonado en facturas debe coincidir exactamente con los instrumentos de pago.");
       return;
     }
@@ -962,9 +1057,19 @@
       const renglones = selectedDocsList.map((doc) => {
         const inp = docInputs[doc.nro_doc.trim()];
         const isParent = ["FACT", "NDEB", "N/DB", "GIRO", "AJPA"].includes(doc.co_tipo_doc.trim());
-        const montCobBs = inp.mont_cob_bs || 0;
         const retIvaBs = (!inp.yaTieneRetIva && inp.showIvaDetails) ? (inp.reten_iva_bs || 0) : 0;
         const retIslrBs = (!inp.yaTieneRetIslr && inp.showIslrDetails) ? (inp.reten_islr_bs || 0) : 0;
+
+        let montCobBs;
+        if (isNcDoc(doc)) {
+          // La N/CR amortiza únicamente lo que las facturas necesitan; el saldo restante permanece en la N/CR
+          const saldoBs = r2(doc.saldo);
+          const netCreditBs = Math.max(0, r2(saldoBs - retIvaBs - retIslrBs));
+          const appliedToInvoicesBs = Math.min(netCreditBs, totalFacturasNetoBs);
+          montCobBs = -appliedToInvoicesBs;
+        } else {
+          montCobBs = inp.mont_cob_bs || 0;
+        }
 
         totalDocBs += montCobBs;
 
@@ -987,11 +1092,19 @@
         })
         .map((doc) => {
           const inp = docInputs[doc.nro_doc.trim()];
+          const affectedDocNo = doc.nro_orig
+            ? doc.nro_orig.trim()
+            : doc.nro_fact
+              ? doc.nro_fact.trim()
+              : doc.doc_orig === 'FACT'
+                ? doc.nro_doc.trim()
+                : '0';
           return {
             nro_doc_asoc: doc.nro_doc.trim(),
             rif_comprador: selectedSupplier.rif || doc.rif,
             numero_documento: doc.nro_fact ? doc.nro_fact.trim() : doc.nro_doc.trim(),
             numero_control_documento: doc.n_control ? doc.n_control.trim() : "",
+            numero_documento_afectado: affectedDocNo,
             monto_documento: doc.total_neto,
             base_imponible: inp.base_imponible_iva_bs || (doc.total_neto - doc.monto_imp),
             monto_ret_imp: inp.reten_iva_bs,
@@ -1019,18 +1132,20 @@
           };
         });
 
-      // Formas de pago limpiadas
-      const formas_pago_cleaned = formasPago.map((fp) => {
-        return {
-          forma_pag: fp.forma_pag,
-          cod_caja: fp.cod_caja || null,
-          cod_cta: fp.cod_cta || null,
-          co_ban: fp.co_ban || null,
-          num_doc: fp.num_doc ? fp.num_doc.trim() : null,
-          mont_doc: fp.mont_doc_bs || 0,
-          fecha_che: fp.fecha_che || null,
-        };
-      });
+      // Formas de pago limpiadas (si hay excedente cubierto por N/CR y no hay formas de pago, se envían vacías)
+      const formas_pago_cleaned = formasPago
+        .filter((fp) => (Number(fp.mont_doc_bs) || 0) > 0.001)
+        .map((fp) => {
+          return {
+            forma_pag: fp.forma_pag,
+            cod_caja: fp.cod_caja || null,
+            cod_cta: fp.cod_cta || null,
+            co_ban: fp.co_ban || null,
+            num_doc: fp.num_doc ? fp.num_doc.trim() : null,
+            mont_doc: fp.mont_doc_bs || 0,
+            fecha_che: fp.fecha_che || null,
+          };
+        });
 
       const firstDoc = selectedDocsList[0];
       const docMone = (firstDoc?.co_mone || "").trim().toUpperCase();
@@ -1040,12 +1155,17 @@
         co_prov: selectedSupplier.co_prov,
         co_mone: safeCurrency,
         tasa: Number(currentExchangeRate || 1),
-        monto: totalDocBs,
+        monto: Math.max(0, Math.round(totalDocBs * 100) / 100),
         descrip: `PAGO PROVEEDOR ${selectedSupplier.co_prov}`,
         renglones,
         formas_pago: formas_pago_cleaned,
         retenciones_iva,
         retenciones_islr,
+        ajuste_diferencia: hasPaymentSurplus ? {
+          tipo: 'AJNA',
+          monto_usd: excedentePagoUsd,
+          monto_bs: excedentePagoBs,
+        } : null,
       };
 
       const res = await fetch(`/api/agent/payables/payments?branch_id=${selectedBranch}`, {
@@ -1060,7 +1180,13 @@
         if (resJson.success && docNum) {
           generatedDocNum = docNum;
           saveSuccess = true;
-          toast.success(`¡Pago ${docNum} generado exitosamente!`);
+          showAjnaConfirmModal = false;
+          confirmedAjna = false;
+          toast.success(
+            hasPaymentSurplus
+              ? `¡Pago ${docNum} y AJNA por excedente generados exitosamente!`
+              : `¡Pago ${docNum} generado exitosamente!`
+          );
         } else {
           toast.error(resJson.message || "Error al procesar el pago en el agente.");
         }
@@ -1865,6 +1991,54 @@
                 })}
               </span>
             </div>
+            {#if creditoNcAplicadoBs > 0}
+              <div
+                class="flex justify-between items-center text-base font-bold text-text-muted border-t border-border-subtle/50 pt-4"
+              >
+                <span class="flex items-center gap-1.5 text-blue-400">
+                  <Receipt size={16} />
+                  Crédito N/CR Aplicado
+                </span>
+                <span class="font-mono text-blue-400 font-bold">
+                  - {showUSD ? "$" : "Bs."} {(showUSD ? creditoNcAplicadoUsd : creditoNcAplicadoBs).toLocaleString("de-DE", {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
+                  })}
+                </span>
+              </div>
+            {/if}
+            {#if creditoNcExcedenteBs > 0}
+              <div
+                class="flex justify-between items-center text-xs font-bold text-text-muted border-t border-border-subtle/50 pt-3"
+              >
+                <span class="text-emerald-400 flex items-center gap-1.5">
+                  <Receipt size={14} />
+                  Saldo restante en N/CR
+                </span>
+                <span class="font-mono text-emerald-400 font-bold">
+                  {showUSD ? "$" : "Bs."} {(showUSD ? creditoNcExcedenteUsd : creditoNcExcedenteBs).toLocaleString("de-DE", {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
+                  })}
+                </span>
+              </div>
+            {/if}
+            {#if hasPaymentSurplus}
+              <div
+                class="flex justify-between items-center text-base font-bold text-text-muted border-t border-border-subtle/50 pt-4"
+              >
+                <span class="flex items-center gap-1.5 text-blue-400">
+                  <Receipt size={16} />
+                  Anticipo / AJNA (A Favor)
+                </span>
+                <span class="font-mono text-blue-400 font-bold">
+                  + {showUSD ? "$" : "Bs."} {(showUSD ? excedentePagoUsd : excedentePagoBs).toLocaleString("de-DE", {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
+                  })}
+                </span>
+              </div>
+            {/if}
             <div
               class="flex justify-between items-center text-base font-bold text-text-muted border-t border-border-subtle/50 pt-4"
             >
@@ -1874,7 +2048,7 @@
                   class="text-xs font-black text-green-500 bg-green-500/10 border border-green-500/20 px-3 py-1 rounded-full flex items-center gap-1.5 font-mono"
                 >
                   <CheckCircle size={14} />
-                  Cuadrado
+                  {hasPaymentSurplus ? "Cuadrado (con AJNA)" : "Cuadrado"}
                 </span>
               {:else}
                 <span class="font-mono text-amber-400 font-black">
@@ -2104,16 +2278,65 @@
             </div>
           {/if}
 
+          <!-- ALERTA INFORMATIVA: EXCEDENTE QUE PERMANECE EN LA N/CR -->
+          {#if creditoNcExcedenteBs > 0}
+            <div
+              class="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 text-xs flex items-start gap-3 relative z-10"
+              transition:slide={{ duration: 150 }}
+            >
+              <Info size={18} class="text-emerald-400 shrink-0 mt-0.5" />
+              <div class="space-y-1">
+                <p class="font-bold text-text-base">
+                  Nota de Crédito con saldo disponible
+                </p>
+                <p class="text-text-muted leading-relaxed">
+                  {#if totalFacturasNetoBs > 0}
+                    La Nota de Crédito cubre el 100% de las facturas seleccionadas. El saldo excedente de <strong class="text-emerald-400 font-mono">{showUSD ? "$" : "Bs."} {(showUSD ? creditoNcExcedenteUsd : creditoNcExcedenteBs).toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong> permanecerá en la misma Nota de Crédito para futuros pagos.
+                  {:else}
+                    Se descontará únicamente la retención de la Nota de Crédito. El saldo restante de <strong class="text-emerald-400 font-mono">{showUSD ? "$" : "Bs."} {(showUSD ? creditoNcExcedenteUsd : creditoNcExcedenteBs).toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong> permanecerá en la misma Nota de Crédito para futuros pagos.
+                  {/if}
+                </p>
+              </div>
+            </div>
+          {/if}
+
+          <!-- ALERTA INFORMATIVA: PAGO EN EXCESO EN INSTRUMENTOS -> AJNA -->
+          {#if hasPaymentSurplus}
+            <div
+              class="p-4 rounded-2xl bg-blue-500/10 border border-blue-500/20 text-blue-300 text-xs flex items-start gap-3 relative z-10"
+              transition:slide={{ duration: 150 }}
+            >
+              <Info size={18} class="text-blue-400 shrink-0 mt-0.5" />
+              <div class="space-y-1">
+                <p class="font-bold text-text-base">
+                  Pago en exceso en instrumentos de pago
+                </p>
+                <p class="text-text-muted leading-relaxed">
+                  El monto ingresado en los instrumentos de pago supera la deuda de las facturas seleccionadas.
+                  Se generará automáticamente un documento <strong>AJNA</strong> (Ajuste Negativo de Compra) por 
+                  <strong class="text-blue-400 font-mono">{showUSD ? "$" : "Bs."} {(showUSD ? excedentePagoUsd : excedentePagoBs).toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong> 
+                  a favor del proveedor para compensar en compras futuras.
+                </p>
+              </div>
+            </div>
+          {/if}
+
           <!-- BOTÓN PRINCIPAL: GUARDAR PAGO -->
           {#if selectedSupplier}
             <button
-              onclick={savePago}
+              onclick={handleSaveClick}
               disabled={!canSave}
               class="w-full py-4 rounded-2xl bg-brand-600 hover:bg-brand-500 active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none text-white font-black text-base transition-all shadow-xl shadow-brand-500/25 flex items-center justify-center gap-3 cursor-pointer mt-4"
             >
               {#if saving}
                 <RefreshCw size={20} class="animate-spin" />
                 Procesando Pago...
+              {:else if hasPaymentSurplus}
+                <Wallet size={20} />
+                Generar AJNA y Guardar Pago
+              {:else if totalFacturasNetoBs === 0 && (totalRetenidoIvaBs > 0 || totalRetenidoIslrBs > 0)}
+                <Wallet size={20} />
+                Guardar Retención N/CR
               {:else}
                 <Wallet size={20} />
                 Guardar Pago
@@ -2240,6 +2463,96 @@
             </button>
           {/each}
         {/if}
+      </div>
+    </div>
+  </div>
+{/if}
+
+<!-- MODAL DE CONFIRMACIÓN AJNA POR PAGO EN EXCESO -->
+{#if showAjnaConfirmModal}
+  <div
+    class="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 backdrop-blur-md"
+    style="background-color: var(--modal-backdrop);"
+    transition:fade={{ duration: 150 }}
+  >
+    <!-- svelte-ignore a11y_click_events_have_key_events -->
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <div
+      class="fixed inset-0"
+      onclick={() => (showAjnaConfirmModal = false)}
+    ></div>
+
+    <div
+      class="relative z-10 bg-surface-raised border border-border-subtle rounded-[32px] w-full max-w-lg p-6 sm:p-8 flex flex-col shadow-2xl overflow-hidden animate-in zoom-in-95 duration-150 space-y-6"
+    >
+      <div class="flex items-center gap-4">
+        <div
+          class="h-12 w-12 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 shrink-0"
+        >
+          <AlertCircle size={24} />
+        </div>
+        <div>
+          <h3 class="font-black text-lg text-text-base">
+            Pago en Exceso / Anticipo
+          </h3>
+          <p class="text-xs text-text-muted font-medium">
+            Generación de Ajuste Negativo (AJNA) en Profit Plus
+          </p>
+        </div>
+      </div>
+
+      <div class="space-y-3 bg-surface-soft/40 p-4 rounded-2xl border border-border-subtle text-xs">
+        <div class="flex justify-between items-center text-text-muted font-medium">
+          <span>Total neto a pagar en facturas:</span>
+          <span class="font-mono font-bold text-text-base">
+            $ {montoNetoAPagarUsd.toLocaleString("de-DE", { minimumFractionDigits: 2 })}
+            <span class="text-[10px] text-text-muted font-normal">(Bs. {montoNetoAPagarBs.toLocaleString("de-DE", { minimumFractionDigits: 2 })})</span>
+          </span>
+        </div>
+        <div class="flex justify-between items-center text-text-muted font-medium">
+          <span>Monto emitido en instrumentos de pago:</span>
+          <span class="font-mono font-bold text-text-base">
+            $ {totalInstrumentosPago.toLocaleString("de-DE", { minimumFractionDigits: 2 })}
+            <span class="text-[10px] text-text-muted font-normal">(Bs. {totalInstrumentosPagoBs.toLocaleString("de-DE", { minimumFractionDigits: 2 })})</span>
+          </span>
+        </div>
+        <div class="flex justify-between items-center border-t border-border-subtle/60 pt-3 text-text-base font-bold">
+          <span class="text-blue-400">Diferencia a favor (se creará como AJNA):</span>
+          <span class="font-mono font-black text-blue-400 text-sm">
+            $ {excedentePagoUsd.toLocaleString("de-DE", { minimumFractionDigits: 2 })}
+            <span class="text-xs font-bold text-blue-300/80">(Bs. {excedentePagoBs.toLocaleString("de-DE", { minimumFractionDigits: 2 })})</span>
+          </span>
+        </div>
+      </div>
+
+      <p class="text-xs text-text-muted leading-relaxed">
+        El monto pagado en efectivo/banco supera las facturas seleccionadas. El sistema registrará el pago de las facturas y creará automáticamente un documento <strong>AJNA (Ajuste Negativo de Compra)</strong> en la serie <strong>C008</strong> por la diferencia a favor en la cuenta del proveedor para compensar futuras compras.
+      </p>
+
+      <div class="flex items-center justify-end gap-3 pt-2">
+        <button
+          onclick={() => (showAjnaConfirmModal = false)}
+          class="px-5 py-3 rounded-xl bg-surface-soft hover:bg-surface-strong text-text-muted hover:text-text-base text-xs font-bold transition-all cursor-pointer"
+        >
+          Cancelar
+        </button>
+        <button
+          onclick={() => {
+            confirmedAjna = true;
+            showAjnaConfirmModal = false;
+            executeSavePago();
+          }}
+          disabled={saving}
+          class="px-5 py-3 rounded-xl bg-brand-600 hover:bg-brand-500 text-white text-xs font-black transition-all shadow-lg shadow-brand-500/25 flex items-center gap-2 cursor-pointer disabled:opacity-50"
+        >
+          {#if saving}
+            <RefreshCw size={14} class="animate-spin" />
+            Procesando...
+          {:else}
+            <CheckCircle size={14} />
+            Confirmar y Guardar Pago
+          {/if}
+        </button>
       </div>
     </div>
   </div>
