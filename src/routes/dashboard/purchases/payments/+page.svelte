@@ -17,6 +17,7 @@
     CreditCard,
     Landmark,
     CheckCircle,
+    FileCheck,
     Info,
     User,
     Receipt,
@@ -503,14 +504,14 @@
       return true;
     }
 
-    // Caso 2: Deuda en 0 (cubierta 100% por N/CR o es solo retención de N/CR)
-    if (montoNetoAPagarBs === 0) {
+    // Caso 2: Sin instrumentos de pago (pago parcial exclusivamente de retenciones o cubierto 100% por N/CR)
+    if (totalInstrumentosPagoBs === 0) {
       const hasRetentions = totalRetenidoIvaBs > 0 || totalRetenidoIslrBs > 0;
       const hasCreditApplied = creditoNcAplicadoBs > 0;
-      return (hasRetentions || hasCreditApplied) && totalInstrumentosPagoBs === 0;
+      return hasRetentions || hasCreditApplied;
     }
 
-    // Caso 3: Queda un neto por pagar en efectivo / transferencias
+    // Caso 3: Con instrumentos de pago -> debe cuadrar exactamente con el neto a pagar
     return diferenciaCuadreBs === 0 && formasPago.length > 0;
   });
 
@@ -1030,17 +1031,12 @@
       return;
     }
 
-    if (!hasPaymentSurplus && montoNetoAPagarBs === 0 && totalRetenidoIvaBs === 0 && totalRetenidoIslrBs === 0 && creditoNcAplicadoBs === 0) {
+    if (!hasPaymentSurplus && totalInstrumentosPagoBs === 0 && totalRetenidoIvaBs === 0 && totalRetenidoIslrBs === 0 && creditoNcAplicadoBs === 0) {
       toast.error("Debe ingresar un monto a pagar o aplicar al menos una retención (IVA o ISLR).");
       return;
     }
 
-    if (!hasPaymentSurplus && montoNetoAPagarBs > 0 && formasPago.length === 0) {
-      toast.error("Debe agregar al menos un instrumento de pago (Efectivo, Banco, etc.).");
-      return;
-    }
-
-    if (!hasPaymentSurplus && montoNetoAPagarBs > 0 && diferenciaCuadreBs !== 0) {
+    if (!hasPaymentSurplus && totalInstrumentosPagoBs > 0 && diferenciaCuadreBs !== 0) {
       toast.error("El monto abonado en facturas debe coincidir exactamente con los instrumentos de pago.");
       return;
     }
@@ -1182,10 +1178,13 @@
           saveSuccess = true;
           showAjpaConfirmModal = false;
           confirmedAjpa = false;
+          const isRetentionOnly = totalInstrumentosPagoBs === 0 && (totalRetenidoIvaBs > 0 || totalRetenidoIslrBs > 0);
           toast.success(
             hasPaymentSurplus
               ? `¡Pago ${docNum} y AJPA por excedente generados exitosamente!`
-              : `¡Pago ${docNum} generado exitosamente!`
+              : isRetentionOnly
+                ? `¡Comprobante de retención ${docNum} generado exitosamente!`
+                : `¡Pago ${docNum} generado exitosamente!`
           );
         } else {
           toast.error(resJson.message || "Error al procesar el pago en el agente.");
@@ -2050,6 +2049,13 @@
                   <CheckCircle size={14} />
                   {hasPaymentSurplus ? "Cuadrado (con AJPA)" : "Cuadrado"}
                 </span>
+              {:else if totalInstrumentosPagoBs === 0 && (totalRetenidoIvaBs > 0 || totalRetenidoIslrBs > 0)}
+                <span
+                  class="text-xs font-black text-blue-400 bg-blue-500/10 border border-blue-500/20 px-3 py-1 rounded-full flex items-center gap-1.5 font-mono"
+                >
+                  <FileCheck size={14} />
+                  Solo Retención
+                </span>
               {:else}
                 <span class="font-mono text-amber-400 font-black">
                   {showUSD ? "$" : "Bs."} {(showUSD ? diferenciaCuadre : diferenciaCuadreBs).toLocaleString("de-DE", {
@@ -2319,6 +2325,21 @@
                 </p>
               </div>
             </div>
+          {:else if totalInstrumentosPagoBs === 0 && (totalRetenidoIvaBs > 0 || totalRetenidoIslrBs > 0)}
+            <div
+              class="p-4 rounded-2xl bg-blue-500/10 border border-blue-500/20 text-blue-300 text-xs flex items-start gap-3 relative z-10"
+              transition:slide={{ duration: 150 }}
+            >
+              <Info size={18} class="text-blue-400 shrink-0 mt-0.5" />
+              <div class="space-y-1">
+                <p class="font-bold text-text-base">
+                  Registro exclusivo de Retenciones
+                </p>
+                <p class="text-text-muted leading-relaxed">
+                  No se han agregado instrumentos de pago. Se registrará la retención fiscal (IVA / ISLR) en Profit Plus, rebajando el monto retenido del saldo de la factura y dejando el neto pendiente por pagar.
+                </p>
+              </div>
+            </div>
           {/if}
 
           <!-- BOTÓN PRINCIPAL: GUARDAR PAGO -->
@@ -2334,6 +2355,9 @@
               {:else if hasPaymentSurplus}
                 <Wallet size={20} />
                 Generar AJPA y Guardar Pago
+              {:else if totalInstrumentosPagoBs === 0 && (totalRetenidoIvaBs > 0 || totalRetenidoIslrBs > 0)}
+                <FileCheck size={20} />
+                Guardar Retención
               {:else if totalFacturasNetoBs === 0 && (totalRetenidoIvaBs > 0 || totalRetenidoIslrBs > 0)}
                 <Wallet size={20} />
                 Guardar Retención N/CR
