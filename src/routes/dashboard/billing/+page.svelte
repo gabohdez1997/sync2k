@@ -434,6 +434,14 @@
     );
   });
 
+  // Impresora fiscal activa disponible en la sede actual
+  const fiscalPrinter = $derived.by(() => {
+    return branchPrinters.find((p: any) => {
+      const subs = (p.sublines || []).map((s: any) => String(s).trim().toUpperCase());
+      return subs.includes('TYPE:FISCAL') || subs.includes('DOC:FACTURA_FISCAL') || String(p.port || '') === '8088';
+    });
+  });
+
   // Impresora térmica para emisión de Nota de Entrega (Factura sin IVA)
   const thermalNotePrinter = $derived.by(() => {
     return branchPrinters.find((p: any) => {
@@ -545,6 +553,7 @@
       total_neto: totalNeto,
       is_usd: showUSD,
       tasa: activeTasa,
+      is_fiscal: montoImp > 0,
       comentario: originOrderNum ? `ORIGEN: PEDIDO N° ${originOrderNum}` : ""
     };
 
@@ -635,134 +644,187 @@
 
       toast.success(`Factura Nro. ${realDocNum} guardada exitosamente en la base de datos.`);
 
-      // 2. Imprimir Nota de Entrega (Factura sin IVA) en formato térmico 80mm si hay impresora térmica activa
-      if (thermalNotePrinter) {
-        toast.info(`Imprimiendo Nota de Entrega en ${thermalNotePrinter.name}...`);
-        try {
-          const branchObj = data.branches?.find((b: any) => String(b.id) === String(filterSede));
-          const isParaparal = branchObj?.name?.toLowerCase().includes('paraparal');
-          const branchPrefix = isParaparal ? 'G4' : 'G3';
+      const multiplier = showUSD ? 1 : Number(activeTasa || 1);
+      const totalBruto = activeLines.reduce((sum, l) => sum + (Number(l.cantidad) * (Number(l.precio) * multiplier)), 0);
+      const montoImp = activeLines.reduce((sum, l) => {
+        const isExento = l.tipo_imp === '0' || Number(l.porc_imp) === 0;
+        return sum + (isExento ? 0 : (Number(l.cantidad) * (Number(l.precio) * multiplier) * (Number(l.porc_imp) / 100)));
+      }, 0);
+      const totalNeto = totalBruto + montoImp;
 
-          let formattedDocNum = String(realDocNum || '').trim();
-          if (formattedDocNum && !formattedDocNum.toUpperCase().startsWith('G')) {
-            const numOnly = formattedDocNum.replace(/\D/g, '') || formattedDocNum;
-            formattedDocNum = `${branchPrefix}${numOnly.padStart(8, '0')}`;
-          }
+      // DETERMINAR SI LA FACTURA ES FISCAL (IVA > 0 o forzada como fiscal)
+      const isFiscalInvoice = montoImp > 0 || (forceSucu !== null && defaultBranchCode !== null && forceSucu === defaultBranchCode);
 
-          let branchAddr = branchObj?.address;
-          if (!branchAddr) {
-            if (isParaparal) {
-              branchAddr = 'CTRA NACIONAL LOS GUAYOS-GUACARA CRUCE CON CALLE 940-A Y CALLE PARAPARAL LOCAL GALPON NRO 20-21 SECTOR LOS GUAYOS LOS GUAYOS CARABOBO;';
+      if (isFiscalInvoice) {
+        // =========================================================================
+        // === FACTURA FISCAL ===
+        // Se manda SOLO por la impresora fiscal disponible en la sede y NO por
+        // las demás impresoras de facturación (no enviar a Nota de Entrega ni a despacho).
+        // =========================================================================
+        if (fiscalPrinter) {
+          toast.info(`Imprimiendo Factura Fiscal en [${fiscalPrinter.name}]...`);
+          try {
+            const fiscalRes = await fetch("/api/agent/printers/print-fiscal", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                branch_id: filterSede,
+                printer_id: fiscalPrinter.id,
+                invoice: {
+                  ...invoiceData,
+                  doc_num: realDocNum,
+                  invoice_num: realDocNum,
+                  cli_des: selectedClient.cli_des,
+                  rif: selectedClient.rif,
+                  direc1: selectedClient.direc1,
+                  telefonos: selectedClient.telefonos,
+                  vendedor: activeVenDes || activeCoVen || "---",
+                  total_bruto: totalBruto,
+                  monto_imp: montoImp,
+                  total_neto: totalNeto,
+                  tasa: activeTasa,
+                }
+              })
+            });
+            const fiscalResult = await fiscalRes.json();
+            if (fiscalResult.success) {
+              toast.success(fiscalResult.message || `Factura fiscal impresa en [${fiscalPrinter.name}].`);
             } else {
-              branchAddr = 'Av. 92 Pedro melean (via La Isabelica), Valencia, Carabobo';
+              toast.warning(`Factura guardada, pero ocurrió un aviso en impresora fiscal: ${fiscalResult.message}`);
             }
+          } catch (fiscalErr: any) {
+            console.error("Error al imprimir en impresora fiscal:", fiscalErr);
+            toast.warning(`Factura guardada pero no se pudo conectar con la impresora fiscal: ${fiscalErr.message}`);
           }
-
-          const multiplier = showUSD ? 1 : Number(activeTasa || 1);
-          const totalBruto = activeLines.reduce((sum, l) => sum + (Number(l.cantidad) * (Number(l.precio) * multiplier)), 0);
-          const montoImp = activeLines.reduce((sum, l) => {
-            const isExento = l.tipo_imp === '0' || Number(l.porc_imp) === 0;
-            return sum + (isExento ? 0 : (Number(l.cantidad) * (Number(l.precio) * multiplier) * (Number(l.porc_imp) / 100)));
-          }, 0);
-          const totalNeto = totalBruto + montoImp;
-
-          const noteDocData = {
-            doc_num: formattedDocNum,
-            factura_num: realDocNum,
-            pedido_num: originOrderNum || realDocNum,
-            fecha: dayjs().format("DD/MM/YYYY"),
-            fecha_hora: dayjs().format("DD/MM/YYYY hh:mm A"),
-            fecha_emision: dayjs().format("DD/MM/YYYY"),
-            branch_id: filterSede,
-            branch_name: branchObj?.business_name || branchObj?.name || "inversiones Galpe 2021 C.A.",
-            branch_rif: branchObj?.rif || "J-401750354",
-            branch_desc: branchObj?.name || (isParaparal ? "Paraparal" : "Boca de Rio"),
-            branch_address: branchAddr,
-            cli_des: selectedClient.cli_des,
-            rif: selectedClient.rif,
-            telefonos: selectedClient.telefonos || '---',
-            direc1: selectedClient.direc1 || '---',
-            dir_entrega: selectedClient.dir_ent || selectedClient.direc1 || 'CARABOBO',
-            transporte: "INTERNO",
-            vendedor: activeVenDes || activeCoVen || "---",
-            cajero: data.userProfile?.full_name || data.userProfile?.name || "---",
-            co_cond: selectedClient.co_cond || "CONTADO",
-            cond_des: selectedClient.cond_des || "CONTADO",
-            renglones: activeLines.map((l: any) => {
-              const itemPrice = Number(l.precio) * multiplier;
-              return {
-                co_art: l.co_art,
-                art_des: l.art_des,
-                cantidad: Number(l.cantidad),
-                co_uni: l.co_uni || "UND",
-                precio: itemPrice,
-                total: Number(l.cantidad) * itemPrice,
-                porc_imp: Number(l.porc_imp),
-                tipo_imp: l.tipo_imp
-              };
-            }),
-            total_bruto: totalBruto,
-            monto_imp: montoImp,
-            total_neto: totalNeto,
-            is_usd: showUSD,
-            tasa: activeTasa,
-            comentario: originOrderNum ? `ORIGEN: PEDIDO N° ${originOrderNum}` : ""
-          };
-
-          const noteRes = await fetch("/api/agent/printers/print-note", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              branch_id: filterSede,
-              format: "thermal",
-              printer_id: thermalNotePrinter.id,
-              doc: noteDocData
-            })
-          });
-          const noteResult = await noteRes.json();
-          if (noteResult.success) {
-            toast.success(noteResult.message || `Nota de Entrega impresa en [${thermalNotePrinter.name}].`);
-          } else {
-            toast.warning(`La factura se guardó pero falló la Nota de Entrega: ${noteResult.message}`);
-          }
-        } catch (noteErr: any) {
-          console.error("Error al imprimir Nota de Entrega:", noteErr);
-          toast.warning(`La factura se guardó pero ocurrió un error en Nota de Entrega: ${noteErr.message}`);
+        } else {
+          toast.warning("Factura fiscal registrada, pero no hay impresora fiscal activa configurada en esta sede.");
         }
       } else {
-        toast.info("No hay impresora térmica configurada para Notas de Entrega en esta sede.");
-      }
+        // =========================================================================
+        // === NOTA DE ENTREGA (FACTURA SIN IVA) ===
+        // Emisión por impresora térmica de Notas de Entrega y tickets de pre-despacho
+        // =========================================================================
+        // 2. Imprimir Nota de Entrega en formato térmico 80mm si hay impresora térmica activa
+        if (thermalNotePrinter) {
+          toast.info(`Imprimiendo Nota de Entrega en ${thermalNotePrinter.name}...`);
+          try {
+            const branchObj = data.branches?.find((b: any) => String(b.id) === String(filterSede));
+            const isParaparal = branchObj?.name?.toLowerCase().includes('paraparal');
+            const branchPrefix = isParaparal ? 'G4' : 'G3';
 
-      // 3. Imprimir Pre-despacho de almacén si hay impresoras de pre-despacho activas en esta sede
-      if (preDespachoPrinters.length > 0) {
-        toast.info("Enviando ticket de predespacho a almacén...");
-        try {
-          const printResponse = await fetch(`/api/agent/billing/print`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
+            let formattedDocNum = String(realDocNum || '').trim();
+            if (formattedDocNum && !formattedDocNum.toUpperCase().startsWith('G')) {
+              const numOnly = formattedDocNum.replace(/\D/g, '') || formattedDocNum;
+              formattedDocNum = `${branchPrefix}${numOnly.padStart(8, '0')}`;
+            }
+
+            let branchAddr = branchObj?.address;
+            if (!branchAddr) {
+              if (isParaparal) {
+                branchAddr = 'CTRA NACIONAL LOS GUAYOS-GUACARA CRUCE CON CALLE 940-A Y CALLE PARAPARAL LOCAL GALPON NRO 20-21 SECTOR LOS GUAYOS LOS GUAYOS CARABOBO;';
+              } else {
+                branchAddr = 'Av. 92 Pedro melean (via La Isabelica), Valencia, Carabobo';
+              }
+            }
+
+            const noteDocData = {
+              doc_num: formattedDocNum,
+              factura_num: realDocNum,
+              pedido_num: originOrderNum || realDocNum,
+              fecha: dayjs().format("DD/MM/YYYY"),
+              fecha_hora: dayjs().format("DD/MM/YYYY hh:mm A"),
+              fecha_emision: dayjs().format("DD/MM/YYYY"),
               branch_id: filterSede,
-              invoice: {
-                ...invoiceData,
-                invoice_num: realDocNum, // Usado para imprimir origen FACTURA Nro. XXX
-                doc_num: realDocNum,     // Usado para el código grande al pie del ticket
-                cli_des: selectedClient.cli_des,
-                rif: selectedClient.rif,
-                telefonos: selectedClient.telefonos,
-                direc1: selectedClient.direc1,
-                vendedor: activeVenDes || activeCoVen || "---",
-              },
-            }),
-          });
-          const printResult = await printResponse.json();
-          if (printResult.success) {
-            toast.success(printResult.message || "Ticket de predespacho enviado.");
-          } else {
-            toast.warning(`Pre-despacho no impreso: ${printResult.message}`);
+              branch_name: branchObj?.business_name || branchObj?.name || "inversiones Galpe 2021 C.A.",
+              branch_rif: branchObj?.rif || "J-401750354",
+              branch_desc: branchObj?.name || (isParaparal ? "Paraparal" : "Boca de Rio"),
+              branch_address: branchAddr,
+              cli_des: selectedClient.cli_des,
+              rif: selectedClient.rif,
+              telefonos: selectedClient.telefonos || '---',
+              direc1: selectedClient.direc1 || '---',
+              dir_entrega: selectedClient.dir_ent || selectedClient.direc1 || 'CARABOBO',
+              transporte: "INTERNO",
+              vendedor: activeVenDes || activeCoVen || "---",
+              cajero: data.userProfile?.full_name || data.userProfile?.name || "---",
+              co_cond: selectedClient.co_cond || "CONTADO",
+              cond_des: selectedClient.cond_des || "CONTADO",
+              renglones: activeLines.map((l: any) => {
+                const itemPrice = Number(l.precio) * multiplier;
+                return {
+                  co_art: l.co_art,
+                  art_des: l.art_des,
+                  cantidad: Number(l.cantidad),
+                  co_uni: l.co_uni || "UND",
+                  precio: itemPrice,
+                  total: Number(l.cantidad) * itemPrice,
+                  porc_imp: Number(l.porc_imp),
+                  tipo_imp: l.tipo_imp
+                };
+              }),
+              total_bruto: totalBruto,
+              monto_imp: montoImp,
+              total_neto: totalNeto,
+              is_usd: showUSD,
+              tasa: activeTasa,
+              comentario: originOrderNum ? `ORIGEN: PEDIDO N° ${originOrderNum}` : ""
+            };
+
+            const noteRes = await fetch("/api/agent/printers/print-note", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                branch_id: filterSede,
+                format: "thermal",
+                printer_id: thermalNotePrinter.id,
+                doc: noteDocData
+              })
+            });
+            const noteResult = await noteRes.json();
+            if (noteResult.success) {
+              toast.success(noteResult.message || `Nota de Entrega impresa en [${thermalNotePrinter.name}].`);
+            } else {
+              toast.warning(`La factura se guardó pero falló la Nota de Entrega: ${noteResult.message}`);
+            }
+          } catch (noteErr: any) {
+            console.error("Error al imprimir Nota de Entrega:", noteErr);
+            toast.warning(`La factura se guardó pero ocurrió un error en Nota de Entrega: ${noteErr.message}`);
           }
-        } catch (printErr: any) {
-          console.error("Error al imprimir ticket:", printErr);
-          toast.warning(`La factura se guardó pero ocurrió un error al imprimir pre-despacho: ${printErr.message}`);
+        } else {
+          toast.info("No hay impresora térmica configurada para Notas de Entrega en esta sede.");
+        }
+
+        // 3. Imprimir Pre-despacho de almacén si hay impresoras de pre-despacho activas en esta sede
+        if (preDespachoPrinters.length > 0) {
+          toast.info("Enviando ticket de predespacho a almacén...");
+          try {
+            const printResponse = await fetch(`/api/agent/billing/print`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                branch_id: filterSede,
+                invoice: {
+                  ...invoiceData,
+                  invoice_num: realDocNum, // Usado para imprimir origen FACTURA Nro. XXX
+                  doc_num: realDocNum,     // Usado para el código grande al pie del ticket
+                  cli_des: selectedClient.cli_des,
+                  rif: selectedClient.rif,
+                  telefonos: selectedClient.telefonos,
+                  direc1: selectedClient.direc1,
+                  vendedor: activeVenDes || activeCoVen || "---",
+                },
+              }),
+            });
+            const printResult = await printResponse.json();
+            if (printResult.success) {
+              toast.success(printResult.message || "Ticket de predespacho enviado.");
+            } else {
+              toast.warning(`Pre-despacho no impreso: ${printResult.message}`);
+            }
+          } catch (printErr: any) {
+            console.error("Error al imprimir ticket:", printErr);
+            toast.warning(`La factura se guardó pero ocurrió un error al imprimir pre-despacho: ${printErr.message}`);
+          }
         }
       }
 
@@ -817,6 +879,36 @@
       }
     } catch (err: any) {
       toast.error("Error al imprimir: " + err.message);
+    } finally {
+      isPrintingNote = false;
+    }
+  }
+
+  async function handlePrintFiscalFromModal() {
+    if (!previewDocData) return;
+    if (!fiscalPrinter) {
+      toast.warning("No hay impresora fiscal activa configurada en esta sede.");
+      return;
+    }
+    isPrintingNote = true;
+    try {
+      const res = await fetch("/api/agent/printers/print-fiscal", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          branch_id: filterSede,
+          printer_id: fiscalPrinter.id,
+          invoice: previewDocData
+        })
+      });
+      const result = await res.json();
+      if (result.success) {
+        toast.success(result.message || `Factura fiscal enviada a [${fiscalPrinter.name}].`);
+      } else {
+        toast.error(result.message || "Error al enviar a la impresora fiscal.");
+      }
+    } catch (err: any) {
+      toast.error("Error al imprimir fiscal: " + err.message);
     } finally {
       isPrintingNote = false;
     }
@@ -1578,7 +1670,9 @@
           </div>
           <div>
             <h2 class="text-2xl font-black tracking-tight text-text-base">Previsualización de Documento</h2>
-            <p class="text-text-muted text-xs font-medium">Nota de Entrega N° <span class="font-bold text-text-base">{previewDocData.doc_num}</span></p>
+            <p class="text-text-muted text-xs font-medium">
+              {previewDocData.is_fiscal ? 'Factura Fiscal N°' : 'Nota de Entrega N°'} <span class="font-bold text-text-base">{previewDocData.doc_num}</span>
+            </p>
           </div>
         </div>
 
@@ -1736,7 +1830,11 @@
 
             <!-- 5. PIE LEGAL CENTRADO -->
             <div class="text-center font-bold text-[10px] tracking-tight mt-5 pt-1 uppercase border-t border-dashed border-slate-300">
-              SIN DERECHO A CREDITO FISCAL
+              {#if previewDocData.is_fiscal}
+                DOCUMENTO FISCAL (IVA REF: {previewDocData.monto_imp.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})
+              {:else}
+                SIN DERECHO A CREDITO FISCAL
+              {/if}
             </div>
 
             <!-- BORDE DENTADO DE PAPEL TÉRMICO -->
@@ -1843,7 +1941,11 @@
                     </span>
                   </div>
                   <div class="text-[9.5px] font-bold text-black uppercase tracking-tight">
-                    SIN DERECHO A CREDITO FISCAL
+                    {#if previewDocData.is_fiscal}
+                      DOCUMENTO FISCAL (IVA REF: {previewDocData.monto_imp.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})
+                    {:else}
+                      SIN DERECHO A CREDITO FISCAL
+                    {/if}
                   </div>
                 </div>
               </div>
@@ -1866,27 +1968,44 @@
             <span>Navegador (Local)</span>
           </button>
 
-          <!-- BOTÓN IMPRESIÓN POR RED AGENTE -->
-          <button
-            type="button"
-            onclick={() => handlePrintFromModal()}
-            disabled={isPrintingNote}
-            class="px-7 py-3 rounded-2xl bg-brand-600 hover:bg-brand-500 disabled:opacity-50 text-white font-black text-sm flex items-center justify-center gap-2 shadow-lg shadow-brand-500/20 transition-all cursor-pointer border-none active:scale-[0.98]"
-          >
-            {#if isPrintingNote}
-              <RefreshCw size={18} class="animate-spin" />
-              <span>Imprimiendo...</span>
-            {:else}
-              <Printer size={18} />
-              <span>
-                {#if previewFormat === 'thermal'}
-                  Enviar a Térmica Red
-                {:else}
-                  Enviar a Matricial (LX-350)
-                {/if}
-              </span>
-            {/if}
-          </button>
+          <!-- BOTÓN IMPRESIÓN POR RED AGENTE O FISCAL -->
+          {#if previewDocData.is_fiscal && fiscalPrinter}
+            <button
+              type="button"
+              onclick={handlePrintFiscalFromModal}
+              disabled={isPrintingNote}
+              class="px-6 py-3 rounded-2xl bg-cyan-600 hover:bg-cyan-500 disabled:opacity-50 text-white font-black text-sm flex items-center justify-center gap-2 shadow-lg shadow-cyan-500/20 transition-all cursor-pointer border-none active:scale-[0.98]"
+            >
+              {#if isPrintingNote}
+                <RefreshCw size={18} class="animate-spin" />
+                <span>Imprimiendo Fiscal...</span>
+              {:else}
+                <Printer size={18} />
+                <span>Enviar a Impresora Fiscal</span>
+              {/if}
+            </button>
+          {:else}
+            <button
+              type="button"
+              onclick={() => handlePrintFromModal()}
+              disabled={isPrintingNote}
+              class="px-7 py-3 rounded-2xl bg-brand-600 hover:bg-brand-500 disabled:opacity-50 text-white font-black text-sm flex items-center justify-center gap-2 shadow-lg shadow-brand-500/20 transition-all cursor-pointer border-none active:scale-[0.98]"
+            >
+              {#if isPrintingNote}
+                <RefreshCw size={18} class="animate-spin" />
+                <span>Imprimiendo...</span>
+              {:else}
+                <Printer size={18} />
+                <span>
+                  {#if previewFormat === 'thermal'}
+                    Enviar a Térmica Red
+                  {:else}
+                    Enviar a Matricial (LX-350)
+                  {/if}
+                </span>
+              {/if}
+            </button>
+          {/if}
       </div>
     </div>
   </div>

@@ -66,7 +66,7 @@
 
   function isNcDoc(doc: any): boolean {
     const t = doc?.co_tipo_doc?.trim()?.toUpperCase();
-    return t === "N/CR" || t === "NCR" || t === "AJNA";
+    return t === "N/CR" || t === "NCR" || t === "AJPA" || t === "AJNA";
   }
 
   function getPorcRetIva(): number {
@@ -429,7 +429,7 @@
 
   let totalFacturasNetoUsd = $derived(toUsd(totalFacturasNetoBs));
 
-  // Total crédito aportado por Notas de Crédito / AJNA seleccionadas (después de retenciones)
+  // Total crédito aportado por Notas de Crédito / AJPA seleccionadas (después de retenciones)
   let totalCreditoDisponibleBs = $derived(
     r2(
       documentos.reduce((acc, doc) => {
@@ -473,7 +473,7 @@
 
   let excedentePagoUsd = $derived(toUsd(excedentePagoBs));
 
-  // Solo se genera AJNA cuando se ingresa un pago en efectivo/banco mayor a la sumatoria de las facturas
+  // Solo se genera AJPA cuando se ingresa un pago en efectivo/banco mayor a la sumatoria de las facturas
   let hasPaymentSurplus = $derived(
     totalInstrumentosPagoBs > montoNetoAPagarBs + 0.05
   );
@@ -485,7 +485,7 @@
 
   let saldoPendientePorCobrar = $derived(toUsd(saldoPendientePorCobrarBs));
 
-  // Cuadre: si hay excedente en instrumentos, se cuadra generando el AJNA
+  // Cuadre: si hay excedente en instrumentos, se cuadra generando el AJPA
   let diferenciaCuadreBs = $derived(
     hasPaymentSurplus ? 0 : r2(Math.abs(montoNetoAPagarBs - totalInstrumentosPagoBs))
   );
@@ -498,7 +498,7 @@
     const selectedCount = Object.values(checkedDocs).filter(Boolean).length;
     if (selectedCount === 0) return false;
 
-    // Caso 1: Hay pago en exceso en instrumentos (se generará un AJNA por la diferencia a favor)
+    // Caso 1: Hay pago en exceso en instrumentos (se generará un AJPA por la diferencia a favor)
     if (hasPaymentSurplus) {
       return true;
     }
@@ -1007,12 +1007,12 @@
   let saving = $state(false);
   let saveSuccess = $state(false);
   let generatedDocNum = $state("");
-  let showAjnaConfirmModal = $state(false);
-  let confirmedAjna = $state(false);
+  let showAjpaConfirmModal = $state(false);
+  let confirmedAjpa = $state(false);
 
   function handleSaveClick() {
-    if (hasPaymentSurplus && !confirmedAjna) {
-      showAjnaConfirmModal = true;
+    if (hasPaymentSurplus && !confirmedAjpa) {
+      showAjpaConfirmModal = true;
       return;
     }
     executeSavePago();
@@ -1162,7 +1162,7 @@
         retenciones_iva,
         retenciones_islr,
         ajuste_diferencia: hasPaymentSurplus ? {
-          tipo: 'AJNA',
+          tipo: 'AJPA',
           monto_usd: excedentePagoUsd,
           monto_bs: excedentePagoBs,
         } : null,
@@ -1180,11 +1180,11 @@
         if (resJson.success && docNum) {
           generatedDocNum = docNum;
           saveSuccess = true;
-          showAjnaConfirmModal = false;
-          confirmedAjna = false;
+          showAjpaConfirmModal = false;
+          confirmedAjpa = false;
           toast.success(
             hasPaymentSurplus
-              ? `¡Pago ${docNum} y AJNA por excedente generados exitosamente!`
+              ? `¡Pago ${docNum} y AJPA por excedente generados exitosamente!`
               : `¡Pago ${docNum} generado exitosamente!`
           );
         } else {
@@ -2029,7 +2029,7 @@
               >
                 <span class="flex items-center gap-1.5 text-blue-400">
                   <Receipt size={16} />
-                  Anticipo / AJNA (A Favor)
+                  Anticipo / AJPA (A Favor)
                 </span>
                 <span class="font-mono text-blue-400 font-bold">
                   + {showUSD ? "$" : "Bs."} {(showUSD ? excedentePagoUsd : excedentePagoBs).toLocaleString("de-DE", {
@@ -2048,7 +2048,7 @@
                   class="text-xs font-black text-green-500 bg-green-500/10 border border-green-500/20 px-3 py-1 rounded-full flex items-center gap-1.5 font-mono"
                 >
                   <CheckCircle size={14} />
-                  {hasPaymentSurplus ? "Cuadrado (con AJNA)" : "Cuadrado"}
+                  {hasPaymentSurplus ? "Cuadrado (con AJPA)" : "Cuadrado"}
                 </span>
               {:else}
                 <span class="font-mono text-amber-400 font-black">
@@ -2300,7 +2300,7 @@
             </div>
           {/if}
 
-          <!-- ALERTA INFORMATIVA: PAGO EN EXCESO EN INSTRUMENTOS -> AJNA -->
+          <!-- ALERTA INFORMATIVA: PAGO EN EXCESO EN INSTRUMENTOS -> AJPA -->
           {#if hasPaymentSurplus}
             <div
               class="p-4 rounded-2xl bg-blue-500/10 border border-blue-500/20 text-blue-300 text-xs flex items-start gap-3 relative z-10"
@@ -2313,9 +2313,9 @@
                 </p>
                 <p class="text-text-muted leading-relaxed">
                   El monto ingresado en los instrumentos de pago supera la deuda de las facturas seleccionadas.
-                  Se generará automáticamente un documento <strong>AJNA</strong> (Ajuste Negativo de Compra) por 
+                  Se generará automáticamente un documento <strong>AJPA</strong> (Ajuste Positivo Automático de Compra) por 
                   <strong class="text-blue-400 font-mono">{showUSD ? "$" : "Bs."} {(showUSD ? excedentePagoUsd : excedentePagoBs).toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong> 
-                  a favor del proveedor para compensar en compras futuras.
+                  a favor en la cuenta del proveedor para compensar en compras futuras.
                 </p>
               </div>
             </div>
@@ -2333,7 +2333,7 @@
                 Procesando Pago...
               {:else if hasPaymentSurplus}
                 <Wallet size={20} />
-                Generar AJNA y Guardar Pago
+                Generar AJPA y Guardar Pago
               {:else if totalFacturasNetoBs === 0 && (totalRetenidoIvaBs > 0 || totalRetenidoIslrBs > 0)}
                 <Wallet size={20} />
                 Guardar Retención N/CR
@@ -2468,8 +2468,8 @@
   </div>
 {/if}
 
-<!-- MODAL DE CONFIRMACIÓN AJNA POR PAGO EN EXCESO -->
-{#if showAjnaConfirmModal}
+<!-- MODAL DE CONFIRMACIÓN AJPA POR PAGO EN EXCESO -->
+{#if showAjpaConfirmModal}
   <div
     class="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 backdrop-blur-md"
     style="background-color: var(--modal-backdrop);"
@@ -2479,7 +2479,7 @@
     <!-- svelte-ignore a11y_no_static_element_interactions -->
     <div
       class="fixed inset-0"
-      onclick={() => (showAjnaConfirmModal = false)}
+      onclick={() => (showAjpaConfirmModal = false)}
     ></div>
 
     <div
@@ -2496,7 +2496,7 @@
             Pago en Exceso / Anticipo
           </h3>
           <p class="text-xs text-text-muted font-medium">
-            Generación de Ajuste Negativo (AJNA) en Profit Plus
+            Generación de Ajuste Positivo (AJPA) en Profit Plus
           </p>
         </div>
       </div>
@@ -2517,7 +2517,7 @@
           </span>
         </div>
         <div class="flex justify-between items-center border-t border-border-subtle/60 pt-3 text-text-base font-bold">
-          <span class="text-blue-400">Diferencia a favor (se creará como AJNA):</span>
+          <span class="text-blue-400">Diferencia a favor (se creará como AJPA):</span>
           <span class="font-mono font-black text-blue-400 text-sm">
             $ {excedentePagoUsd.toLocaleString("de-DE", { minimumFractionDigits: 2 })}
             <span class="text-xs font-bold text-blue-300/80">(Bs. {excedentePagoBs.toLocaleString("de-DE", { minimumFractionDigits: 2 })})</span>
@@ -2526,20 +2526,20 @@
       </div>
 
       <p class="text-xs text-text-muted leading-relaxed">
-        El monto pagado en efectivo/banco supera las facturas seleccionadas. El sistema registrará el pago de las facturas y creará automáticamente un documento <strong>AJNA (Ajuste Negativo de Compra)</strong> en la serie <strong>C008</strong> por la diferencia a favor en la cuenta del proveedor para compensar futuras compras.
+        El monto pagado en efectivo/banco supera las facturas seleccionadas. El sistema registrará el pago de las facturas y creará automáticamente un documento <strong>AJPA (Ajuste Positivo Automático de Compra)</strong> en la serie <strong>C010</strong> por la diferencia a favor en la cuenta del proveedor para compensar futuras compras.
       </p>
 
       <div class="flex items-center justify-end gap-3 pt-2">
         <button
-          onclick={() => (showAjnaConfirmModal = false)}
+          onclick={() => (showAjpaConfirmModal = false)}
           class="px-5 py-3 rounded-xl bg-surface-soft hover:bg-surface-strong text-text-muted hover:text-text-base text-xs font-bold transition-all cursor-pointer"
         >
           Cancelar
         </button>
         <button
           onclick={() => {
-            confirmedAjna = true;
-            showAjnaConfirmModal = false;
+            confirmedAjpa = true;
+            showAjpaConfirmModal = false;
             executeSavePago();
           }}
           disabled={saving}
