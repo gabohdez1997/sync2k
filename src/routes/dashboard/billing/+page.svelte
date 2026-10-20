@@ -545,7 +545,9 @@
           precio: itemPrice,
           total: Number(l.cantidad) * itemPrice,
           porc_imp: Number(l.porc_imp),
-          tipo_imp: l.tipo_imp
+          tipo_imp: l.tipo_imp,
+          co_subl: l.co_subl,
+          co_lin: l.co_lin
         };
       }),
       total_bruto: totalBruto,
@@ -793,38 +795,42 @@
         } else {
           toast.info("No hay impresora térmica configurada para Notas de Entrega en esta sede.");
         }
+      }
 
-        // 3. Imprimir Pre-despacho de almacén si hay impresoras de pre-despacho activas en esta sede
-        if (preDespachoPrinters.length > 0) {
-          toast.info("Enviando ticket de predespacho a almacén...");
-          try {
-            const printResponse = await fetch(`/api/agent/billing/print`, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                branch_id: filterSede,
-                invoice: {
-                  ...invoiceData,
-                  invoice_num: realDocNum, // Usado para imprimir origen FACTURA Nro. XXX
-                  doc_num: realDocNum,     // Usado para el código grande al pie del ticket
-                  cli_des: selectedClient.cli_des,
-                  rif: selectedClient.rif,
-                  telefonos: selectedClient.telefonos,
-                  direc1: selectedClient.direc1,
-                  vendedor: activeVenDes || activeCoVen || "---",
-                },
-              }),
-            });
-            const printResult = await printResponse.json();
-            if (printResult.success) {
-              toast.success(printResult.message || "Ticket de predespacho enviado.");
-            } else {
-              toast.warning(`Pre-despacho no impreso: ${printResult.message}`);
-            }
-          } catch (printErr: any) {
-            console.error("Error al imprimir ticket:", printErr);
-            toast.warning(`La factura se guardó pero ocurrió un error al imprimir pre-despacho: ${printErr.message}`);
+      // =========================================================================
+      // 2. IMPRESIÓN DE PRE-DESPACHO DE ALMACÉN:
+      // Se debe enviar SIEMPRE (tanto para facturas fiscales como para notas de entrega),
+      // para que el personal de almacén/patio prepare y despache los artículos.
+      // =========================================================================
+      if (preDespachoPrinters.length > 0) {
+        toast.info("Enviando ticket de predespacho a almacén...");
+        try {
+          const printResponse = await fetch(`/api/agent/billing/print`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              branch_id: filterSede,
+              invoice: {
+                ...invoiceData,
+                invoice_num: realDocNum, // Usado para imprimir origen FACTURA Nro. XXX
+                doc_num: realDocNum,     // Usado para el código grande al pie del ticket
+                cli_des: selectedClient.cli_des,
+                rif: selectedClient.rif,
+                telefonos: selectedClient.telefonos,
+                direc1: selectedClient.direc1,
+                vendedor: activeVenDes || activeCoVen || "---",
+              },
+            }),
+          });
+          const printResult = await printResponse.json();
+          if (printResult.success) {
+            toast.success(printResult.message || "Ticket de predespacho enviado.");
+          } else {
+            toast.warning(`Pre-despacho no impreso: ${printResult.message}`);
           }
+        } catch (printErr: any) {
+          console.error("Error al imprimir ticket:", printErr);
+          toast.warning(`La factura se guardó pero ocurrió un error al imprimir pre-despacho: ${printErr.message}`);
         }
       }
 
@@ -909,6 +915,44 @@
       }
     } catch (err: any) {
       toast.error("Error al imprimir fiscal: " + err.message);
+    } finally {
+      isPrintingNote = false;
+    }
+  }
+
+  async function handlePrintPreDespachoFromModal() {
+    if (!previewDocData) return;
+    if (preDespachoPrinters.length === 0) {
+      toast.warning("No hay impresoras térmicas de pre-despacho configuradas en esta sede.");
+      return;
+    }
+    isPrintingNote = true;
+    try {
+      const res = await fetch("/api/agent/billing/print", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          branch_id: filterSede,
+          invoice: {
+            ...previewDocData,
+            invoice_num: previewDocData.factura_num || previewDocData.doc_num,
+            doc_num: previewDocData.doc_num,
+            cli_des: previewDocData.cli_des,
+            rif: previewDocData.rif,
+            telefonos: previewDocData.telefonos,
+            direc1: previewDocData.direc1,
+            vendedor: previewDocData.vendedor || "---",
+          }
+        })
+      });
+      const result = await res.json();
+      if (result.success) {
+        toast.success(result.message || "Ticket de predespacho enviado a almacén.");
+      } else {
+        toast.warning(`Pre-despacho no impreso: ${result.message}`);
+      }
+    } catch (err: any) {
+      toast.error("Error al imprimir pre-despacho: " + err.message);
     } finally {
       isPrintingNote = false;
     }
@@ -2003,6 +2047,24 @@
                     Enviar a Matricial (LX-350)
                   {/if}
                 </span>
+              {/if}
+            </button>
+          {/if}
+
+          <!-- BOTÓN REENVIAR TICKET PRE-DESPACHO ALMACÉN -->
+          {#if preDespachoPrinters.length > 0}
+            <button
+              type="button"
+              onclick={handlePrintPreDespachoFromModal}
+              disabled={isPrintingNote}
+              class="px-5 py-3 rounded-2xl bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white font-black text-sm flex items-center justify-center gap-2 shadow-lg shadow-amber-500/20 transition-all cursor-pointer border-none active:scale-[0.98]"
+            >
+              {#if isPrintingNote}
+                <RefreshCw size={18} class="animate-spin" />
+                <span>Enviando...</span>
+              {:else}
+                <PackageCheck size={18} />
+                <span>Ticket Pre-Despacho</span>
               {/if}
             </button>
           {/if}
