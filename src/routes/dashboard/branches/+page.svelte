@@ -455,7 +455,7 @@
 {#if showModal}
   <div class="fixed inset-0 z-50 flex items-center justify-center p-4 md:p-8">
     <div
-      class="absolute inset-0 bg-black/80 backdrop-blur-xl"
+      class="absolute inset-0 bg-slate-900/40 dark:bg-black/80 backdrop-blur-md"
       onclick={() => (showModal = false)}
       onkeydown={(e) => e.key === "Escape" && (showModal = false)}
       role="button"
@@ -463,13 +463,13 @@
     ></div>
 
     <div
-      class="glass w-full max-w-2xl rounded-[40px] border border-white/10 shadow-2xl relative z-10 overflow-hidden flex flex-col max-h-[90vh]"
+      class="bg-surface-raised w-full max-w-2xl rounded-[36px] sm:rounded-[40px] border border-border-subtle shadow-2xl relative z-10 overflow-hidden flex flex-col max-h-[90vh]"
     >
       <div
-        class="p-8 border-b border-white/5 flex justify-between items-center bg-brand-500/5"
+        class="p-8 border-b border-border-subtle flex justify-between items-center bg-brand-500/[0.03]"
       >
         <div>
-          <h2 class="text-2xl font-black tracking-tight">
+          <h2 class="text-2xl font-black tracking-tight text-text-base">
             {editingBranch.id
               ? "Editar Sucursal Local"
               : "Nueva Sucursal Local"}
@@ -482,7 +482,7 @@
         </div>
         <button
           onclick={() => (showModal = false)}
-          class="p-3 hover:bg-white/10 rounded-full text-text-muted transition-colors"
+          class="p-3 hover:bg-surface-soft rounded-full text-text-muted hover:text-text-base transition-colors"
         >
           <X size={24} />
         </button>
@@ -520,7 +520,7 @@
         <input type="hidden" name="branchId" value={editingBranch.id} />
 
         <div class="space-y-6">
-          <div class="flex items-center gap-3 text-brand-400">
+          <div class="flex items-center gap-3 text-brand-600 dark:text-brand-400">
             <Store size={18} />
             <h3 class="text-xs uppercase font-black tracking-widest">
               Identidad
@@ -537,7 +537,7 @@
                 name="name"
                 bind:value={editingBranch.name}
                 required
-                class="w-full h-14 bg-white/5 border border-white/10 rounded-2xl px-5 focus:border-brand-500 focus:bg-white/10 outline-none transition-all font-medium"
+                class="w-full h-14 bg-surface-soft border border-border-subtle rounded-2xl px-5 text-text-base placeholder:text-text-muted/50 focus:border-brand-500 focus:bg-surface-raised outline-none transition-all font-medium"
               />
             </div>
 
@@ -550,7 +550,7 @@
                 name="business_name"
                 bind:value={editingBranch.business_name}
                 placeholder="Ej. INVERSIONES GALPE C.A."
-                class="w-full h-14 bg-white/5 border border-white/10 rounded-2xl px-5 focus:border-brand-500 focus:bg-white/10 outline-none transition-all font-medium"
+                class="w-full h-14 bg-surface-soft border border-border-subtle rounded-2xl px-5 text-text-base placeholder:text-text-muted/50 focus:border-brand-500 focus:bg-surface-raised outline-none transition-all font-medium"
               />
             </div>
 
@@ -564,7 +564,7 @@
                 <button
                   type="button"
                   onclick={addBranchCode}
-                  class="text-[10px] font-bold uppercase tracking-widest text-brand-400 bg-brand-500/10 px-3 py-1.5 rounded-lg hover:bg-brand-500/20 transition-all flex items-center gap-1"
+                  class="text-[10px] font-bold uppercase tracking-widest text-brand-600 dark:text-brand-400 bg-brand-500/10 px-3 py-1.5 rounded-lg hover:bg-brand-500/20 transition-all flex items-center gap-1"
                 >
                   <Plus size={12} /> Añadir
                 </button>
@@ -572,16 +572,16 @@
 
               {#if editingBranch.profit_branch_codes.length === 0}
                 <div
-                  class="w-full bg-black/20 border border-white/5 border-dashed rounded-2xl p-6 text-center text-text-muted/50 text-sm"
+                  class="w-full bg-surface-soft border border-border-subtle border-dashed rounded-2xl p-6 text-center text-text-muted text-sm"
                 >
-                  Ningún código agreado. Has clic en "Añadir" para vincular una
+                  Ningún código agregado. Haz clic en "Añadir" para vincular una
                   sucursal Profit.
                 </div>
               {:else}
                 <div class="space-y-3">
                   {#each editingBranch.profit_branch_codes as pcode, i}
                     <div
-                      class="w-full bg-surface-base border border-white/5 rounded-2xl p-3 flex gap-4 items-center"
+                      class="w-full bg-surface-soft border border-border-subtle rounded-2xl p-3 flex gap-4 items-center"
                     >
                       <button
                         type="button"
@@ -589,7 +589,7 @@
                         title="Marcar como Predeterminado principal"
                         class="shrink-0 h-10 w-10 flex items-center justify-center rounded-xl transition-all {pcode.is_default
                           ? 'bg-amber-500/10 text-amber-500'
-                          : 'bg-white/5 text-text-muted hover:text-amber-500/50 hover:bg-white/10'}"
+                          : 'bg-surface-strong text-text-muted hover:text-amber-500/50 hover:bg-surface-strong'}"
                       >
                         <Star
                           size={18}
@@ -601,7 +601,7 @@
                         bind:value={pcode.code}
                         placeholder="CÓDIGO (Ej. CAR-01)"
                         required
-                        class="flex-1 h-10 bg-transparent outline-none font-mono uppercase text-sm"
+                        class="flex-1 h-10 bg-transparent outline-none font-mono uppercase text-sm text-text-base placeholder:text-text-muted/50"
                       />
                       <button
                         type="button"
@@ -622,16 +622,16 @@
                 Almacén por Defecto (Profit)
               </label>
               <div class="relative">
-                <Database class="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted opacity-40" size={18} />
+                <Database class="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted opacity-50" size={18} />
                 <input 
                   type="text" 
                   name="default_warehouse"
                   bind:value={editingBranch.default_warehouse}
                   placeholder="Ej: 01"
-                  class="w-full h-14 bg-white/5 border border-white/10 rounded-2xl pl-12 pr-5 focus:border-brand-500 outline-none transition-all font-mono uppercase"
+                  class="w-full h-14 bg-surface-soft border border-border-subtle rounded-2xl pl-12 pr-5 text-text-base placeholder:text-text-muted/50 focus:border-brand-500 focus:bg-surface-raised outline-none transition-all font-mono uppercase"
                 />
               </div>
-              <p class="text-[10px] text-text-muted/60 ml-2 mt-1 italic">
+              <p class="text-[10px] text-text-muted/70 ml-2 mt-1 italic">
                 Este almacén se asignará automáticamente a los artículos de servicio (Línea 09).
               </p>
             </div>
@@ -641,16 +641,16 @@
                 Unidades que permiten decimales
               </label>
               <div class="relative">
-                <Database class="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted opacity-40" size={18} />
+                <Database class="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted opacity-50" size={18} />
                 <input 
                   type="text" 
                   name="allow_decimals_units"
                   bind:value={editingBranch.allow_decimals_units}
                   placeholder="MTS, MTS2, KG"
-                  class="w-full h-14 bg-white/5 border border-white/10 rounded-2xl pl-12 pr-5 focus:border-brand-500 outline-none transition-all font-mono uppercase"
+                  class="w-full h-14 bg-surface-soft border border-border-subtle rounded-2xl pl-12 pr-5 text-text-base placeholder:text-text-muted/50 focus:border-brand-500 focus:bg-surface-raised outline-none transition-all font-mono uppercase"
                 />
               </div>
-              <p class="text-[10px] text-text-muted/60 ml-2 mt-1 italic">
+              <p class="text-[10px] text-text-muted/70 ml-2 mt-1 italic">
                 Separadas por coma. Ej: MTS, MTS2, KG. Estas unidades permitirán cantidades con fracción (ej: 1.5).
               </p>
             </div>
@@ -660,23 +660,23 @@
                 Vendedor por Defecto para Clientes (saCliente)
               </label>
               <div class="relative">
-                <Users class="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted opacity-40" size={18} />
+                <Users class="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted opacity-50" size={18} />
                 <input 
                   type="text" 
                   name="default_seller"
                   bind:value={editingBranch.default_seller}
                   placeholder="Ej: 01 o VEN01"
-                  class="w-full h-14 bg-white/5 border border-white/10 rounded-2xl pl-12 pr-5 focus:border-brand-500 outline-none transition-all font-mono uppercase"
+                  class="w-full h-14 bg-surface-soft border border-border-subtle rounded-2xl pl-12 pr-5 text-text-base placeholder:text-text-muted/50 focus:border-brand-500 focus:bg-surface-raised outline-none transition-all font-mono uppercase"
                 />
               </div>
-              <p class="text-[10px] text-text-muted/60 ml-2 mt-1 italic">
+              <p class="text-[10px] text-text-muted/70 ml-2 mt-1 italic">
                 Código de vendedor general asignado automáticamente a los clientes nuevos o actualizados en esta sede (evita errores por vendedores inactivos).
               </p>
             </div>
 
             <div class="space-y-2 lg:col-span-2 flex flex-col pt-2">
               <label
-                class="flex items-center gap-3 cursor-pointer group w-max p-4 bg-white/5 border border-white/10 rounded-2xl hover:bg-white/10 transition-all"
+                class="flex items-center gap-3 cursor-pointer group w-max p-4 bg-surface-soft border border-border-subtle rounded-2xl hover:bg-surface-strong transition-all"
               >
                 <input
                   type="checkbox"
@@ -685,7 +685,7 @@
                   class="sr-only peer"
                 />
                 <div
-                  class="w-11 h-6 bg-white/10 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:inset-x-0.5 after:bg-white/20 after:border-white/10 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-green-600 peer-checked:after:bg-white relative"
+                  class="w-11 h-6 bg-surface-strong peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:inset-x-0.5 after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-green-600 relative"
                 ></div>
                 <span
                   class="text-sm font-bold text-text-muted group-hover:text-text-base transition-colors"
@@ -698,7 +698,7 @@
 
         <!-- NEW SECTION: LEGAL & LOCATION -->
         <div class="space-y-6">
-          <div class="flex items-center gap-3 text-brand-400">
+          <div class="flex items-center gap-3 text-brand-600 dark:text-brand-400">
             <Globe size={18} />
             <h3 class="text-xs uppercase font-black tracking-widest">
               Información Legal y Ubicación
@@ -717,7 +717,7 @@
                 name="rif"
                 bind:value={editingBranch.rif}
                 placeholder="J-12345678-9"
-                class="w-full h-14 bg-white/5 border border-white/10 rounded-2xl px-5 focus:border-brand-500 outline-none transition-all font-mono"
+                class="w-full h-14 bg-surface-soft border border-border-subtle rounded-2xl px-5 text-text-base placeholder:text-text-muted/50 focus:border-brand-500 focus:bg-surface-raised outline-none transition-all font-mono"
               />
             </div>
             <div class="space-y-2">
@@ -731,7 +731,7 @@
                 name="phone"
                 bind:value={editingBranch.phone}
                 placeholder="+58 412 000 0000"
-                class="w-full h-14 bg-white/5 border border-white/10 rounded-2xl px-5 focus:border-brand-500 outline-none transition-all font-mono"
+                class="w-full h-14 bg-surface-soft border border-border-subtle rounded-2xl px-5 text-text-base placeholder:text-text-muted/50 focus:border-brand-500 focus:bg-surface-raised outline-none transition-all font-mono"
               />
             </div>
           </div>
@@ -747,7 +747,7 @@
               bind:value={editingBranch.address}
               placeholder="Av. Principal, Edif. Galpe..."
               rows="2"
-              class="w-full p-4 bg-white/5 border border-white/10 rounded-2xl focus:border-brand-500 outline-none transition-all font-medium text-sm"
+              class="w-full p-4 bg-surface-soft border border-border-subtle rounded-2xl text-text-base placeholder:text-text-muted/50 focus:border-brand-500 focus:bg-surface-raised outline-none transition-all font-medium text-sm"
             ></textarea>
           </div>
 
@@ -764,7 +764,7 @@
                 name="latitude"
                 bind:value={editingBranch.latitude}
                 placeholder="10.4806"
-                class="w-full h-14 bg-white/5 border border-white/10 rounded-2xl px-5 focus:border-brand-500 outline-none transition-all font-mono"
+                class="w-full h-14 bg-surface-soft border border-border-subtle rounded-2xl px-5 text-text-base placeholder:text-text-muted/50 focus:border-brand-500 focus:bg-surface-raised outline-none transition-all font-mono"
               />
             </div>
             <div class="space-y-2">
@@ -779,7 +779,7 @@
                 name="longitude"
                 bind:value={editingBranch.longitude}
                 placeholder="-66.9036"
-                class="w-full h-14 bg-white/5 border border-white/10 rounded-2xl px-5 focus:border-brand-500 outline-none transition-all font-mono"
+                class="w-full h-14 bg-surface-soft border border-border-subtle rounded-2xl px-5 text-text-base placeholder:text-text-muted/50 focus:border-brand-500 focus:bg-surface-raised outline-none transition-all font-mono"
               />
             </div>
           </div>
@@ -814,7 +814,7 @@
               />
 
               <div
-                class="w-full h-40 bg-white/5 border-2 border-dashed border-white/10 rounded-[32px] flex flex-col items-center justify-center gap-4 group-hover:bg-white/10 group-hover:border-brand-500/50 transition-all overflow-hidden relative"
+                class="w-full h-40 bg-surface-soft border-2 border-dashed border-border-subtle rounded-[32px] flex flex-col items-center justify-center gap-4 group-hover:bg-surface-strong group-hover:border-brand-500/50 transition-all overflow-hidden relative"
               >
                 {#if previewUrl}
                   <img
@@ -823,10 +823,10 @@
                     class="h-full w-full object-contain p-4 transition-opacity group-hover:opacity-60"
                   />
                   <div
-                    class="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity backdrop-blur-sm"
+                    class="absolute inset-0 bg-slate-900/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity backdrop-blur-sm"
                   >
                     <div class="flex flex-col items-center gap-2">
-                      <Upload size={24} class="text-brand-400" />
+                      <Upload size={24} class="text-white" />
                       <span
                         class="text-xs font-bold text-white uppercase tracking-widest"
                         >Cambiar Imagen</span
@@ -835,7 +835,7 @@
                   </div>
                 {:else}
                   <div
-                    class="h-16 w-16 rounded-full bg-white/5 flex items-center justify-center text-text-muted group-hover:text-brand-400 group-hover:scale-110 transition-all"
+                    class="h-16 w-16 rounded-full bg-surface-strong flex items-center justify-center text-text-muted group-hover:text-brand-500 group-hover:scale-110 transition-all"
                   >
                     <Upload size={24} />
                   </div>
@@ -844,7 +844,7 @@
                       Haz clic para subir logo
                     </p>
                     <p
-                      class="text-[10px] uppercase font-black tracking-tighter text-text-muted/40 mt-1"
+                      class="text-[10px] uppercase font-black tracking-tighter text-text-muted/50 mt-1"
                     >
                       PNG, JPG o WebP hasta 1MB
                     </p>
@@ -862,7 +862,7 @@
         </div>
 
         <div class="space-y-6">
-          <div class="flex items-center gap-3 text-brand-400">
+          <div class="flex items-center gap-3 text-brand-600 dark:text-brand-400">
             <Database size={18} />
             <h3 class="text-xs uppercase font-black tracking-widest">
               Configuración SQL Server (Agente)
@@ -879,7 +879,7 @@
                 type="text"
                 bind:value={editingBranch.sql_config.host}
                 placeholder="192.168.1.10\SQLEXPRESS"
-                class="w-full h-14 bg-white/5 border border-white/10 rounded-2xl px-5 focus:border-brand-500 outline-none transition-all font-mono"
+                class="w-full h-14 bg-surface-soft border border-border-subtle rounded-2xl px-5 text-text-base placeholder:text-text-muted/50 focus:border-brand-500 focus:bg-surface-raised outline-none transition-all font-mono"
               />
             </div>
             <div class="space-y-2">
@@ -890,7 +890,7 @@
                 type="text"
                 bind:value={editingBranch.sql_config.database}
                 placeholder="Profit_Galpe"
-                class="w-full h-14 bg-white/5 border border-white/10 rounded-2xl px-5 focus:border-brand-500 outline-none transition-all font-mono"
+                class="w-full h-14 bg-surface-soft border border-border-subtle rounded-2xl px-5 text-text-base placeholder:text-text-muted/50 focus:border-brand-500 focus:bg-surface-raised outline-none transition-all font-mono"
               />
             </div>
           </div>
@@ -903,14 +903,14 @@
               >
               <div class="relative">
                 <Store
-                  class="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted opacity-40"
+                  class="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted opacity-50"
                   size={18}
                 />
                 <input
                   type="text"
                   bind:value={editingBranch.sql_config.user}
                   placeholder="sa"
-                  class="w-full h-14 bg-white/5 border border-white/10 rounded-2xl pl-12 pr-5 focus:border-brand-500 outline-none transition-all font-mono"
+                  class="w-full h-14 bg-surface-soft border border-border-subtle rounded-2xl pl-12 pr-5 text-text-base placeholder:text-text-muted/50 focus:border-brand-500 focus:bg-surface-raised outline-none transition-all font-mono"
                 />
               </div>
             </div>
@@ -921,14 +921,14 @@
               >
               <div class="relative">
                 <Lock
-                  class="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted opacity-40"
+                  class="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted opacity-50"
                   size={18}
                 />
                 <input
                   type="password"
                   bind:value={editingBranch.sql_config.password}
                   placeholder="••••••••"
-                  class="w-full h-14 bg-white/5 border border-white/10 rounded-2xl pl-12 pr-5 focus:border-brand-500 outline-none transition-all font-mono"
+                  class="w-full h-14 bg-surface-soft border border-border-subtle rounded-2xl pl-12 pr-5 text-text-base placeholder:text-text-muted/50 focus:border-brand-500 focus:bg-surface-raised outline-none transition-all font-mono"
                 />
               </div>
             </div>
@@ -936,7 +936,7 @@
         </div>
 
         <div class="space-y-6">
-          <div class="flex items-center gap-3 text-brand-400">
+          <div class="flex items-center gap-3 text-brand-600 dark:text-brand-400">
             <Database size={18} />
             <h3 class="text-xs uppercase font-black tracking-widest">
               Conexión Remota (Tailscale / HTTP)
@@ -954,7 +954,7 @@
                 name="agent_url"
                 bind:value={editingBranch.agent_url}
                 placeholder="https://profit-sede1.tailscale.net"
-                class="w-full h-14 bg-white/5 border border-white/10 rounded-2xl px-5 focus:border-brand-500 outline-none transition-all font-mono"
+                class="w-full h-14 bg-surface-soft border border-border-subtle rounded-2xl px-5 text-text-base placeholder:text-text-muted/50 focus:border-brand-500 focus:bg-surface-raised outline-none transition-all font-mono"
               />
             </div>
 
@@ -965,7 +965,7 @@
               >
               <div class="relative">
                 <Lock
-                  class="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted opacity-40"
+                  class="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted opacity-50"
                   size={18}
                 />
                 <input
@@ -973,25 +973,25 @@
                   name="agent_token"
                   bind:value={editingBranch.agent_token}
                   placeholder="••••••••••••••••••••••••••••••"
-                  class="w-full h-14 bg-white/5 border border-white/10 rounded-2xl pl-12 pr-5 focus:border-brand-500 outline-none transition-all font-mono text-sm"
+                  class="w-full h-14 bg-surface-soft border border-border-subtle rounded-2xl pl-12 pr-5 text-text-base placeholder:text-text-muted/50 focus:border-brand-500 focus:bg-surface-raised outline-none transition-all font-mono text-sm"
                 />
               </div>
             </div>
           </div>
         </div>
 
-        <div class="pt-8 border-t border-white/5 flex gap-4">
+        <div class="pt-8 border-t border-border-subtle flex gap-4">
           <button
             type="button"
             onclick={() => (showModal = false)}
-            class="flex-1 h-16 rounded-2xl font-bold bg-white/5 hover:bg-white/10 transition-all active:scale-95 text-text-base border border-transparent hover:border-white/10"
+            class="flex-1 h-16 rounded-2xl font-bold bg-surface-soft hover:bg-surface-strong transition-all active:scale-95 text-text-base border border-border-subtle"
           >
             Cancelar
           </button>
           <button
             type="submit"
             disabled={isSaving}
-            class="flex-1 h-16 rounded-2xl font-bold bg-brand-600 text-white shadow-xl shadow-brand-500/20 hover:shadow-brand-500/40 transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-3"
+            class="flex-1 h-16 rounded-2xl font-bold bg-brand-600 hover:bg-brand-500 text-white shadow-xl shadow-brand-500/20 hover:shadow-brand-500/40 transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-3 cursor-pointer"
           >
             {#if isSaving}
               <Loader2 size={24} class="animate-spin" />
@@ -1011,7 +1011,7 @@
 {#if showDeleteModal}
   <div class="fixed inset-0 z-50 flex items-center justify-center p-4">
     <div
-      class="absolute inset-0 bg-black/90 backdrop-blur-md"
+      class="absolute inset-0 bg-slate-900/40 dark:bg-black/90 backdrop-blur-md"
       onclick={() => !isDeleting && (showDeleteModal = false)}
       onkeydown={(e) =>
         e.key === "Escape" && !isDeleting && (showDeleteModal = false)}
@@ -1020,7 +1020,7 @@
     ></div>
 
     <div
-      class="glass w-full max-w-md rounded-[32px] border border-red-500/20 shadow-2xl relative z-10 overflow-hidden"
+      class="bg-surface-raised w-full max-w-md rounded-[32px] border border-red-500/20 shadow-2xl relative z-10 overflow-hidden"
     >
       <div class="p-8 text-center space-y-6">
         <div
@@ -1080,7 +1080,7 @@
                 required
                 bind:value={deletePassword}
                 placeholder="Introduce tu clave web..."
-                class="w-full h-14 bg-red-500/5 border border-red-500/10 rounded-2xl pl-12 pr-4 focus:border-red-500 outline-none transition-all text-sm font-mono"
+                class="w-full h-14 bg-red-500/5 border border-red-500/10 rounded-2xl pl-12 pr-4 focus:border-red-500 outline-none transition-all text-sm font-mono text-text-base placeholder:text-text-muted/50"
               />
             </div>
           </div>
@@ -1090,7 +1090,7 @@
               type="button"
               disabled={isDeleting}
               onclick={() => (showDeleteModal = false)}
-              class="flex-1 h-14 rounded-2xl font-bold bg-white/5 hover:bg-white/10 transition-all text-sm text-text-base"
+              class="flex-1 h-14 rounded-2xl font-bold bg-surface-soft hover:bg-surface-strong transition-all text-sm text-text-base border border-border-subtle"
             >
               Cancelar
             </button>
