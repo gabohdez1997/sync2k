@@ -1,6 +1,7 @@
 import { protectLoad } from '$lib/server/permissions';
 import { AgentClient } from '$lib/server/agent';
 import { supabaseAdmin } from '$lib/server/supabase';
+import { getBranchById } from '$lib/server/branches';
 import { error } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
 
@@ -9,46 +10,13 @@ export const load: PageServerLoad = protectLoad('cash_billing', async ({ params,
     const allowedBranches = locals.profile?.allowed_branches || [];
     let branchId = url.searchParams.get('branch_id');
 
-    if (!branchId && allowedBranches.length > 0) {
-        branchId = allowedBranches[0].id;
-    }
-
-    if (!doc_num || !branchId) {
+    if (!doc_num) {
         throw error(400, 'Faltan parámetros de documento o sucursal.');
     }
 
     try {
-        // 1. Obtener datos de la sucursal (revisar primero en allowed_branches, luego Supabase, luego DB local)
-        let branch = allowedBranches.find((b: any) => String(b.id) === String(branchId));
-
-        if (!branch) {
-            try {
-                const { data: bData, error: branchErr } = await supabaseAdmin
-                    .from('branches')
-                    .select('*')
-                    .eq('id', branchId)
-                    .single();
-                if (!branchErr && bData) branch = bData;
-            } catch (e) {
-                console.warn('[PRINT-INVOICE] Supabase branch fetch failed, falling back to local DB:', e);
-            }
-        }
-
-        if (!branch) {
-            try {
-                const { queryLocal } = await import('$lib/server/local-db');
-                const localBranches = await queryLocal('SELECT * FROM branches WHERE id = $1', [branchId]);
-                if (localBranches.rows?.length) {
-                    branch = localBranches.rows[0];
-                }
-            } catch (e) {
-                console.warn('[PRINT-INVOICE] Local DB branch fetch failed:', e);
-            }
-        }
-
-        if (!branch && allowedBranches.length > 0) {
-            branch = allowedBranches[0];
-        }
+        // 1. Obtener datos completos de la sucursal con membrete fiscal
+        let branch = await getBranchById(branchId, allowedBranches, fetch);
 
         if (!branch) {
             throw error(404, 'No se encontró la configuración de la sucursal.');
@@ -65,6 +33,15 @@ export const load: PageServerLoad = protectLoad('cash_billing', async ({ params,
         const invoice = Array.isArray(res.data)
             ? (res.data.find((item: any) => item && !item.error && (item.doc_num || item.renglones)) || res.data[0])
             : res.data;
+
+        // Sincronizar el membrete a la sede real del documento si difiere de la sucursal de consulta
+        const docSede = invoice?.sede_id || invoice?.sede || invoice?._branch_id;
+        if (docSede && String(docSede).toLowerCase() !== String(branch.id).toLowerCase()) {
+            const realBranch = await getBranchById(docSede, allowedBranches, fetch);
+            if (realBranch) {
+                branch = realBranch;
+            }
+        }
 
         // 3. Enriquecer con datos del cliente
         if (invoice && invoice.co_cli) {

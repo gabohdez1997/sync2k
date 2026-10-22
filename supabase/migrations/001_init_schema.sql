@@ -243,6 +243,11 @@ SELECT
       SELECT jsonb_agg(DISTINCT jsonb_build_object(
         'id',                  b.id,
         'name',                b.name,
+        'business_name',       b.business_name,
+        'rif',                 b.rif,
+        'address',             b.address,
+        'phone',               b.phone,
+        'logo_url',            b.logo_url,
         'agent_url',           b.agent_url,
         'agent_token',         b.agent_token,
         'profit_branch_code',  b.profit_branch_code,

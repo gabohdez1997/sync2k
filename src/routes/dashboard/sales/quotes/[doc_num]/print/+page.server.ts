@@ -1,6 +1,7 @@
 import { protectLoad } from '$lib/server/permissions';
 import { AgentClient } from '$lib/server/agent';
 import { supabaseAdmin } from '$lib/server/supabase';
+import { getBranchById } from '$lib/server/branches';
 import { error } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
 
@@ -13,39 +14,9 @@ export const load: PageServerLoad = protectLoad('sales_quotes', async ({ params,
     }
 
     try {
-        // 1. Obtener datos de la sucursal: priorizar allowed_branches del perfil, luego Supabase y local DB
+        // 1. Obtener datos completos de la sucursal con membrete fiscal
         const allowedBranches = locals.profile?.allowed_branches || [];
-        let branch = allowedBranches.find(
-            (b: any) => b.id === branchId || b.profit_server_id === branchId || b.name === branchId
-        );
-
-        if (!branch && branchId) {
-            try {
-                const { data, error: branchErr } = await supabaseAdmin
-                    .from('branches')
-                    .select('*')
-                    .eq('id', branchId)
-                    .single();
-                if (!branchErr && data) branch = data;
-            } catch (e) {
-                console.warn('[PRINT-QUOTE] Supabase branch query warning:', e);
-            }
-        }
-
-        if (!branch && branchId) {
-            try {
-                const { queryLocalDb } = await import('$lib/server/local-db');
-                const res = await queryLocalDb('SELECT * FROM branches WHERE id = $1 OR profit_server_id = $1', [branchId]);
-                if (res.rows.length > 0) branch = res.rows[0];
-            } catch (e) {
-                console.warn('[PRINT-QUOTE] Local DB branch query warning:', e);
-            }
-        }
-
-        // Fallback a la primera sucursal autorizada si no se encontró por ID
-        if (!branch && allowedBranches.length > 0) {
-            branch = allowedBranches[0];
-        }
+        let branch = await getBranchById(branchId, allowedBranches, fetch);
 
         if (!branch) {
             throw error(404, 'No se encontró la configuración de la sucursal.');
@@ -69,6 +40,15 @@ export const load: PageServerLoad = protectLoad('sales_quotes', async ({ params,
 
         if (!quote || quote.error) {
             throw error(404, quote?.error || 'No se encontró la cotización solicitada.');
+        }
+
+        // Sincronizar el membrete a la sede real del documento si difiere de la sucursal de consulta
+        const docSede = quote?.sede_id || quote?.sede || quote?._branch_id;
+        if (docSede && String(docSede).toLowerCase() !== String(branch.id).toLowerCase()) {
+            const realBranch = await getBranchById(docSede, allowedBranches, fetch);
+            if (realBranch) {
+                branch = realBranch;
+            }
         }
 
         // 3. Enriquecer con datos del cliente (especialmente la dirección que no viene en la cotización)
