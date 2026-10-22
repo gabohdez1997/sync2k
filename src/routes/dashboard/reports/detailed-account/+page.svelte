@@ -196,7 +196,7 @@
 
     function exportToPDF() {
         if (!selectedClient) return;
-        window.open(`/dashboard/reports/detailed-account/${selectedClient.co_cli}/print?branch_id=${data.selectedBranchId}`, '_blank');
+        window.open(`/dashboard/reports/detailed-account/${encodeURIComponent(selectedClient.co_cli)}/print?branch_id=${selectedClient.sede_id || selectedClient._branch_id || data.selectedBranchId}`, '_blank');
     }
 </script>
 

@@ -55,7 +55,7 @@
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          branch_id: data.selectedBranchId,
+          branch_id: invoice.sede_id || invoice._branch_id || filterSede || data.selectedBranchId,
           doc_num: invoice.doc_num,
           action_type: 'ANULACION',
           invoice: invoice
@@ -589,7 +589,7 @@
                   <div class="flex items-center justify-center gap-2">
                     <!-- Reimprimir Factura -->
                     <a
-                      href="/dashboard/billing/{invoice.doc_num}/print?branch_id={data.selectedBranchId}"
+                      href="/dashboard/billing/{encodeURIComponent(invoice.doc_num)}/print?branch_id={invoice.sede_id || invoice._branch_id || filterSede || data.selectedBranchId}"
                       target="_blank"
                       class="p-2 text-text-muted hover:text-brand-500 hover:bg-brand-500/10 rounded-xl transition-all cursor-pointer flex items-center justify-center"
                       title={isFiscalInvoice(invoice) ? 'Reimprimir Factura' : 'Reimprimir Nota de Entrega'}

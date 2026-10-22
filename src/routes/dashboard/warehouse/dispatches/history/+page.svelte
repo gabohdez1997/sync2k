@@ -389,7 +389,7 @@
                   <div class="flex items-center justify-center gap-2 whitespace-nowrap">
                     <!-- Imprimir -->
                     <a
-                      href="/dashboard/warehouse/dispatches/{dispatch.doc_num}/print?branch_id={dispatch.sede_id || filterSede}"
+                      href="/dashboard/warehouse/dispatches/{dispatch.doc_num}/print?branch_id={dispatch.sede_id || filterSede || data.selectedBranchId}"
                       target="_blank"
                       class="p-2 text-text-muted hover:text-brand-500 hover:bg-brand-500/10 rounded-xl transition-all inline-block cursor-pointer"
                       title="Imprimir Comprobante"
@@ -665,7 +665,7 @@
         </span>
         {#if detailDispatch}
           <a
-            href="/dashboard/warehouse/dispatches/{detailDispatch.doc_num}/print?branch_id={filterSede}"
+            href="/dashboard/warehouse/dispatches/{detailDispatch.doc_num}/print?branch_id={detailDispatch.sede_id || filterSede || data.selectedBranchId}"
             target="_blank"
             class="px-6 py-3 rounded-2xl bg-brand-600 hover:bg-brand-500 text-white text-xs font-black transition-all flex items-center gap-2 shadow-lg shadow-brand-500/20 active:scale-95"
           >

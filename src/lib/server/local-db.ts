@@ -29,3 +29,5 @@ export async function queryLocalDb(text: string, params?: any[]) {
   const pool = getLocalPool();
   return pool.query(text, params);
 }
+
+export const queryLocal = queryLocalDb;

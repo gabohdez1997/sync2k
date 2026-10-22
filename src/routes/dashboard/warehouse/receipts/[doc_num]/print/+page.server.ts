@@ -1,5 +1,5 @@
 // src/routes/dashboard/warehouse/receipts/[doc_num]/print/+page.server.ts
-import { protectLoad, hasPermission } from '$lib/server/permissions';
+import { protectLoad } from '$lib/server/permissions';
 import { AgentClient } from '$lib/server/agent';
 import { supabaseAdmin } from '$lib/server/supabase';
 import { error } from '@sveltejs/kit';
@@ -9,39 +9,67 @@ export const load: PageServerLoad = protectLoad('inv_receipts', async ({ params,
     const { doc_num } = params;
     const branchId = url.searchParams.get('branch_id');
 
-    if (!doc_num || !branchId) {
-        throw error(400, 'Faltan parámetros de documento o sucursal.');
+    if (!doc_num) {
+        throw error(400, 'Falta el número de documento de nota de recepción.');
     }
 
     try {
-        // 1. Obtener datos de la sucursal desde Supabase
-        const { data: branch, error: branchErr } = await supabaseAdmin
-            .from('branches')
-            .select('*')
-            .eq('id', branchId)
-            .single();
+        // 1. Obtener datos de la sucursal: priorizar allowed_branches del perfil, luego Supabase y local DB
+        const allowedBranches = locals.profile?.allowed_branches || [];
+        let branch = allowedBranches.find(
+            (b: any) => b.id === branchId || b.profit_server_id === branchId || b.name === branchId
+        );
 
-        if (branchErr || !branch) {
+        if (!branch && branchId) {
+            try {
+                const { data, error: branchErr } = await supabaseAdmin
+                    .from('branches')
+                    .select('*')
+                    .eq('id', branchId)
+                    .single();
+                if (!branchErr && data) branch = data;
+            } catch (e) {
+                console.warn('[PRINT-RECEIPT] Supabase branch query warning:', e);
+            }
+        }
+
+        if (!branch && branchId) {
+            try {
+                const { queryLocalDb } = await import('$lib/server/local-db');
+                const res = await queryLocalDb('SELECT * FROM branches WHERE id = $1 OR profit_server_id = $1', [branchId]);
+                if (res.rows.length > 0) branch = res.rows[0];
+            } catch (e) {
+                console.warn('[PRINT-RECEIPT] Local DB branch query warning:', e);
+            }
+        }
+
+        // Fallback a la primera sucursal autorizada si no se encontró por ID
+        if (!branch && allowedBranches.length > 0) {
+            branch = allowedBranches[0];
+        }
+
+        if (!branch) {
             throw error(404, 'No se encontró la configuración de la sucursal.');
         }
 
         // 2. Obtener datos de la nota de recepción desde el Agente
-        const agentClient = new AgentClient(branch, locals.profile || undefined, fetch);
-        const res = await agentClient.getReceivingNote(doc_num);
+        const agentClient = new AgentClient({ slug: branch.id, ...branch } as any, locals.profile || undefined, fetch);
+        const res = await agentClient.getReceivingNote(doc_num, branch.profit_server_id || branch.id);
         
         if (!res.success || !res.data) {
-            throw error(404, 'No se pudo obtener el detalle de la nota de recepción desde el agente.');
+            throw error(404, res?.message || 'No se pudo obtener el detalle de la nota de recepción desde el agente.');
         }
 
-        const receipt = Array.isArray(res.data) ? res.data[0] : res.data;
+        const rawData = res.data;
+        let receipt: any = null;
+        if (Array.isArray(rawData)) {
+            receipt = rawData.find((item: any) => item && !item.error && (item.doc_num || item.renglones)) || rawData[0];
+        } else {
+            receipt = rawData;
+        }
 
-        const canSeeOthers = hasPermission(locals.profile, 'inv_receipts', 'others');
-        if (!canSeeOthers) {
-            const userCode = (locals.profile?.profit_user || '').trim().toUpperCase();
-            const receiptUser = (receipt?.co_us_in || '').trim().toUpperCase();
-            if (!userCode || (receiptUser && receiptUser !== userCode)) {
-                throw error(403, 'No tienes permiso para ver notas de recepción de terceros.');
-            }
+        if (!receipt || receipt.error) {
+            throw error(404, receipt?.error || 'No se encontró la nota de recepción solicitada.');
         }
 
         // 3. Enriquecer con datos del proveedor
@@ -108,8 +136,14 @@ export const load: PageServerLoad = protectLoad('inv_receipts', async ({ params,
         receipt.has_editor = !!editorName;
         receipt.buyer_name = buyerName;
 
-        // 5. Obtener branding global
-        const { data: settings } = await supabaseAdmin.from('system_settings').select('*').single();
+        // 5. Obtener branding global (tolerante a fallos)
+        let settings: any = {};
+        try {
+            const { data: sysSettings } = await supabaseAdmin.from('system_settings').select('*').single();
+            if (sysSettings) settings = sysSettings;
+        } catch (e) {
+            console.warn('[PRINT-RECEIPT] Warning fetching system_settings:', e);
+        }
 
         return {
             receipt,

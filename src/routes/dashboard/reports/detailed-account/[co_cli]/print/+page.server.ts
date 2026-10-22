@@ -7,22 +7,52 @@ import type { PageServerLoad } from './$types';
 
 export const load: PageServerLoad = protectLoad('reports_detailed_account', async ({ params, url, locals, fetch }) => {
     const { co_cli } = params;
-    const branchId = url.searchParams.get('branch_id');
     const profile = (locals as any).profile;
+    const allowedBranches = profile?.allowed_branches || [];
+    let branchId = url.searchParams.get('branch_id');
+
+    if (!branchId && allowedBranches.length > 0) {
+        branchId = allowedBranches[0].id;
+    }
 
     if (!co_cli || !branchId) {
         throw error(400, 'Faltan parámetros de cliente o sucursal.');
     }
 
     try {
-        // 1. Obtener datos de la sucursal desde Supabase
-        const { data: branch, error: branchErr } = await supabaseAdmin
-            .from('branches')
-            .select('*')
-            .eq('id', branchId)
-            .single();
+        // 1. Obtener datos de la sucursal (revisar primero en allowed_branches, luego Supabase, luego DB local)
+        let branch = allowedBranches.find((b: any) => String(b.id) === String(branchId));
 
-        if (branchErr || !branch) {
+        if (!branch) {
+            try {
+                const { data: bData, error: branchErr } = await supabaseAdmin
+                    .from('branches')
+                    .select('*')
+                    .eq('id', branchId)
+                    .single();
+                if (!branchErr && bData) branch = bData;
+            } catch (e) {
+                console.warn('[PRINT-DETAILED-ACCOUNT] Supabase branch fetch failed, falling back to local DB:', e);
+            }
+        }
+
+        if (!branch) {
+            try {
+                const { queryLocal } = await import('$lib/server/local-db');
+                const localBranches = await queryLocal('SELECT * FROM branches WHERE id = $1', [branchId]);
+                if (localBranches.rows?.length) {
+                    branch = localBranches.rows[0];
+                }
+            } catch (e) {
+                console.warn('[PRINT-DETAILED-ACCOUNT] Local DB branch fetch failed:', e);
+            }
+        }
+
+        if (!branch && allowedBranches.length > 0) {
+            branch = allowedBranches[0];
+        }
+
+        if (!branch) {
             throw error(404, 'No se encontró la configuración de la sucursal.');
         }
 
@@ -30,14 +60,14 @@ export const load: PageServerLoad = protectLoad('reports_detailed_account', asyn
         const agentClient = new AgentClient({
             slug: branch.id, 
             agent_url: branch.agent_url, 
-            agent_api_key: branch.agent_token
+            agent_api_key: branch.agent_token || branch.agent_api_key
         }, profile, fetch);
 
         const hasOthers = hasPermission(profile, 'reports_detailed_account', 'others');
         const query = new URLSearchParams();
         query.set('search', co_cli.trim());
         query.set('limit', '1000');
-        if (!hasOthers && profile.profit_user) {
+        if (!hasOthers && profile?.profit_user) {
             query.set('co_ven', profile.profit_user.trim().toUpperCase());
             query.set('co_us_in', profile.profit_user.trim().toUpperCase());
         }
@@ -68,7 +98,7 @@ export const load: PageServerLoad = protectLoad('reports_detailed_account', asyn
         };
 
         try {
-            const clientRes = await agentClient.request<any>(`/clientes/${co_cli.trim()}`);
+            const clientRes = await agentClient.request<any>(`/clientes/${encodeURIComponent(co_cli.trim())}`);
             if (clientRes && clientRes.success && clientRes.data) {
                 const cData = Array.isArray(clientRes.data) ? clientRes.data[0] : clientRes.data;
                 if (cData) {
@@ -86,13 +116,19 @@ export const load: PageServerLoad = protectLoad('reports_detailed_account', asyn
         }
 
         // 4. Obtener ajustes del sistema (branding / logos)
-        const { data: settings } = await supabaseAdmin.from('system_settings').select('*').single();
+        let settings = {};
+        try {
+            const { data: sData } = await supabaseAdmin.from('system_settings').select('*').single();
+            if (sData) settings = sData;
+        } catch (e) {
+            console.warn('[PRINT-DETAILED-ACCOUNT] Could not fetch system_settings:', e);
+        }
 
         return {
             client: clientInfo,
             documents,
             branch,
-            settings: settings || {},
+            settings,
             title: `Cuenta Detallada - ${clientInfo.cli_des}`
         };
 

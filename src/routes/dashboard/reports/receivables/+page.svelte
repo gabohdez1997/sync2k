@@ -671,7 +671,7 @@
                 <!-- Modal Footer -->
                 <div class="px-8 py-5 border-t border-slate-200 dark:border-border-subtle flex justify-end gap-3 bg-slate-50 dark:bg-surface-soft/50 font-bold text-xs">
                     <a 
-                        href="/dashboard/reports/receivables/{client.co_cli}/print?branch_id={data.selectedBranchId}"
+                        href="/dashboard/reports/receivables/{encodeURIComponent(client.co_cli)}/print?branch_id={client.sede_id || client._branch_id || data.selectedBranchId}"
                         target="_blank"
                         class="flex items-center justify-center gap-2 bg-brand-600 hover:bg-brand-500 text-white px-6 py-2.5 rounded-xl transition-all shadow-lg shadow-brand-500/20"
                     >

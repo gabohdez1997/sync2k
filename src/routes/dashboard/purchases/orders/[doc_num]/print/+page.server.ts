@@ -52,7 +52,7 @@ export const load: PageServerLoad = protectLoad('pur_orders', async ({ params, u
         }
 
         // 2. Obtener datos de la orden de compra desde el Agente
-        const agentClient = new AgentClient(branch, locals.profile || undefined, fetch);
+        const agentClient = new AgentClient({ slug: branch.id, ...branch } as any, locals.profile || undefined, fetch);
         const res = await agentClient.getPurchaseOrder(doc_num, branch.profit_server_id || branch.id);
         
         if (!res.success || !res.data) {

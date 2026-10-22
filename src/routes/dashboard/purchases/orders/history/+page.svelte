@@ -309,7 +309,7 @@
                 <td class="px-6 py-5 text-center whitespace-nowrap">
                   <div class="flex items-center justify-center gap-2">
                     <a
-                      href={`/dashboard/purchases/orders/${encodeURIComponent(order.doc_num)}/print?branch_id=${order.sede_id || order._branch_id || data.selectedBranchId}`}
+                      href={`/dashboard/purchases/orders/${encodeURIComponent(order.doc_num)}/print?branch_id=${order.sede_id || order._branch_id || filterSede || data.selectedBranchId}`}
                       target="_blank"
                       class="p-2 text-text-muted hover:text-brand-500 hover:bg-brand-500/10 rounded-xl transition-all cursor-pointer flex items-center justify-center"
                       title="Imprimir / PDF"
@@ -319,7 +319,7 @@
 
                     {#if data.canUpdate && canEditOrder(order)}
                       <a
-                        href={`/dashboard/purchases/orders?doc_num=${encodeURIComponent(order.doc_num)}&branch_id=${order.sede_id || order._branch_id || data.selectedBranchId}`}
+                        href={`/dashboard/purchases/orders?doc_num=${encodeURIComponent(order.doc_num)}&branch_id=${order.sede_id || order._branch_id || filterSede || data.selectedBranchId}`}
                         class="p-2 text-text-muted hover:text-brand-500 hover:bg-brand-500/10 rounded-xl transition-all cursor-pointer flex items-center justify-center"
                         title="Editar Orden"
                       >

@@ -329,7 +329,7 @@
                                     <div class="flex items-center justify-center gap-2 whitespace-nowrap">
                                         <!-- Imprimir / Reporte -->
                                         <button 
-                                            onclick={() => window.open(`/dashboard/sales/orders/${quote.doc_num}/print?branch_id=${data.selectedBranchId}`, '_blank')}
+                                            onclick={() => window.open(`/dashboard/sales/orders/${encodeURIComponent(quote.doc_num)}/print?branch_id=${quote.sede_id || quote._branch_id || filterSede || data.selectedBranchId}`, '_blank')}
                                             class="p-2 text-text-muted hover:text-brand-500 hover:bg-brand-500/10 rounded-xl transition-all cursor-pointer" title="Imprimir Reporte"
                                         >
                                             <Printer size={18} />
@@ -338,7 +338,7 @@
                                         <!-- Editar -->
                                         {#if data.canUpdate && canEditOrder(quote)}
                                             <button 
-                                                onclick={() => goto(`/dashboard/sales/orders?doc_num=${quote.doc_num}&branch_id=${data.selectedBranchId}`)}
+                                                onclick={() => goto(`/dashboard/sales/orders?doc_num=${encodeURIComponent(quote.doc_num)}&branch_id=${quote.sede_id || quote._branch_id || filterSede || data.selectedBranchId}`)}
                                                 class="p-2 text-text-muted hover:text-brand-500 hover:bg-brand-500/10 rounded-xl transition-all cursor-pointer" title="Editar"
                                             >
                                                 <Pen size={18} />

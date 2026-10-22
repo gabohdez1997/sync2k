@@ -1242,7 +1242,7 @@
                 >
                     {#if supplier.documents.some((d) => d.tasa_proveedor && d.tasa_proveedor > 0)}
                         <a
-                            href="/dashboard/reports/payables/{supplier.co_prov}/print?branch_id={data.selectedBranchId}&only_provider_rates=true"
+                            href="/dashboard/reports/payables/{encodeURIComponent(supplier.co_prov)}/print?branch_id={supplier.sede_id || supplier._branch_id || data.selectedBranchId}&only_provider_rates=true"
                             target="_blank"
                             class="flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white px-6 py-2.5 rounded-xl transition-all shadow-lg shadow-emerald-500/20"
                         >
@@ -1252,7 +1252,7 @@
                     {/if}
 
                     <a
-                        href="/dashboard/reports/payables/{supplier.co_prov}/print?branch_id={data.selectedBranchId}"
+                        href="/dashboard/reports/payables/{encodeURIComponent(supplier.co_prov)}/print?branch_id={supplier.sede_id || supplier._branch_id || data.selectedBranchId}"
                         target="_blank"
                         class="flex items-center justify-center gap-2 bg-brand-600 hover:bg-brand-500 text-white px-6 py-2.5 rounded-xl transition-all shadow-lg shadow-brand-500/20"
                     >

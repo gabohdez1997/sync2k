@@ -7,22 +7,52 @@ import type { PageServerLoad } from './$types';
 
 export const load: PageServerLoad = protectLoad('reports_receivables', async ({ params, url, locals, fetch }) => {
     const { co_cli } = params;
-    const branchId = url.searchParams.get('branch_id');
     const profile = (locals as any).profile;
+    const allowedBranches = profile?.allowed_branches || [];
+    let branchId = url.searchParams.get('branch_id');
+
+    if (!branchId && allowedBranches.length > 0) {
+        branchId = allowedBranches[0].id;
+    }
 
     if (!co_cli || !branchId) {
         throw error(400, 'Faltan parámetros de cliente o sucursal.');
     }
 
     try {
-        // 1. Obtener datos de la sucursal desde Supabase
-        const { data: branch, error: branchErr } = await supabaseAdmin
-            .from('branches')
-            .select('*')
-            .eq('id', branchId)
-            .single();
+        // 1. Obtener datos de la sucursal (revisar primero en allowed_branches, luego Supabase, luego DB local)
+        let branch = allowedBranches.find((b: any) => String(b.id) === String(branchId));
 
-        if (branchErr || !branch) {
+        if (!branch) {
+            try {
+                const { data: bData, error: branchErr } = await supabaseAdmin
+                    .from('branches')
+                    .select('*')
+                    .eq('id', branchId)
+                    .single();
+                if (!branchErr && bData) branch = bData;
+            } catch (e) {
+                console.warn('[PRINT-CXC] Supabase branch fetch failed, falling back to local DB:', e);
+            }
+        }
+
+        if (!branch) {
+            try {
+                const { queryLocal } = await import('$lib/server/local-db');
+                const localBranches = await queryLocal('SELECT * FROM branches WHERE id = $1', [branchId]);
+                if (localBranches.rows?.length) {
+                    branch = localBranches.rows[0];
+                }
+            } catch (e) {
+                console.warn('[PRINT-CXC] Local DB branch fetch failed:', e);
+            }
+        }
+
+        if (!branch && allowedBranches.length > 0) {
+            branch = allowedBranches[0];
+        }
+
+        if (!branch) {
             throw error(404, 'No se encontró la configuración de la sucursal.');
         }
 
@@ -30,14 +60,14 @@ export const load: PageServerLoad = protectLoad('reports_receivables', async ({ 
         const hasOthers = hasPermission(profile, 'reports_receivables', 'others');
         let coVenFilter = '';
         if (!hasOthers) {
-            coVenFilter = profile.profit_user || '';
+            coVenFilter = profile?.profit_user || '';
         }
 
         // 3. Crear cliente del agente y solicitar documentos de este cliente (limit=1000)
         const agentClient = new AgentClient({
             slug: branch.id, 
             agent_url: branch.agent_url, 
-            agent_api_key: branch.agent_token
+            agent_api_key: branch.agent_token || branch.agent_api_key
         }, profile, fetch);
 
         const query = new URLSearchParams();
@@ -71,7 +101,7 @@ export const load: PageServerLoad = protectLoad('reports_receivables', async ({ 
         };
 
         try {
-            const clientRes = await agentClient.request<any>(`/clientes/${co_cli.trim()}`);
+            const clientRes = await agentClient.request<any>(`/clientes/${encodeURIComponent(co_cli.trim())}`);
             if (clientRes && clientRes.success && clientRes.data) {
                 const cData = Array.isArray(clientRes.data) ? clientRes.data[0] : clientRes.data;
                 clientInfo = {
@@ -87,13 +117,19 @@ export const load: PageServerLoad = protectLoad('reports_receivables', async ({ 
         }
 
         // 5. Obtener ajustes del sistema (branding / logos)
-        const { data: settings } = await supabaseAdmin.from('system_settings').select('*').single();
+        let settings = {};
+        try {
+            const { data: sData } = await supabaseAdmin.from('system_settings').select('*').single();
+            if (sData) settings = sData;
+        } catch (e) {
+            console.warn('[PRINT-CXC] Could not fetch system_settings:', e);
+        }
 
         return {
             client: clientInfo,
             documents,
             branch,
-            settings: settings || {},
+            settings,
             title: `Estado de Cuenta - ${clientInfo.cli_des}`
         };
 

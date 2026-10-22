@@ -9,14 +9,32 @@ export const load: PageServerLoad = protectLoad('pur_articles', async ({ url, lo
 
         // 1. CARGAR SUCURSALES
         let allBranches: any[] = [];
-        const { data: dbBranches } = await supabaseAdmin
-            .from('branches')
-            .select('id, name, agent_url, agent_token, active, sort_order, business_name, rif, address, phone, logo_url')
-            .eq('active', true)
-            .order('sort_order');
+        try {
+            const { data: dbBranches } = await supabaseAdmin
+                .from('branches')
+                .select('id, name, agent_url, agent_token, active, sort_order, business_name, rif, address, phone, logo_url')
+                .eq('active', true)
+                .order('sort_order');
 
-        if (dbBranches) {
-            allBranches = dbBranches;
+            if (dbBranches) {
+                allBranches = dbBranches;
+            }
+        } catch (e) {
+            console.warn('[ARTICLES REPORT] Error loading branches from supabase:', e);
+        }
+
+        if (allBranches.length === 0 && userProfile?.allowed_branches?.length) {
+            allBranches = userProfile.allowed_branches;
+        }
+
+        if (allBranches.length === 0) {
+            try {
+                const { queryLocal } = await import('$lib/server/local-db');
+                const localRes = await queryLocal('SELECT * FROM branches WHERE active = true ORDER BY sort_order');
+                if (localRes.rows?.length) allBranches = localRes.rows;
+            } catch (e) {
+                console.warn('[ARTICLES REPORT] Local DB branch fetch failed:', e);
+            }
         }
 
         const profileAllowed = userProfile?.allowed_branches || [];
@@ -113,7 +131,13 @@ export const load: PageServerLoad = protectLoad('pur_articles', async ({ url, lo
             console.error('[PURCHASES ARTICLES REPORT] Fetch error:', e);
         }
 
-        const { data: settingsData } = await supabaseAdmin.from('settings').select('*').single();
+        let settingsData = null;
+        try {
+            const { data } = await supabaseAdmin.from('settings').select('*').single();
+            settingsData = data;
+        } catch (e) {
+            console.warn('[PURCHASES ARTICLES REPORT] Settings fetch error:', e);
+        }
 
         return {
             articles,
