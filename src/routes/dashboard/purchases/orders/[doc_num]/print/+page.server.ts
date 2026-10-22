@@ -1,4 +1,4 @@
-import { protectLoad, hasPermission } from '$lib/server/permissions';
+import { protectLoad } from '$lib/server/permissions';
 import { AgentClient } from '$lib/server/agent';
 import { supabaseAdmin } from '$lib/server/supabase';
 import { error } from '@sveltejs/kit';
@@ -8,39 +8,67 @@ export const load: PageServerLoad = protectLoad('pur_orders', async ({ params, u
     const { doc_num } = params;
     const branchId = url.searchParams.get('branch_id');
 
-    if (!doc_num || !branchId) {
-        throw error(400, 'Faltan parámetros de documento o sucursal.');
+    if (!doc_num) {
+        throw error(400, 'Falta el número de documento de orden de compra.');
     }
 
     try {
-        // 1. Obtener datos de la sucursal desde Supabase
-        const { data: branch, error: branchErr } = await supabaseAdmin
-            .from('branches')
-            .select('*')
-            .eq('id', branchId)
-            .single();
+        // 1. Obtener datos de la sucursal: priorizar allowed_branches del perfil, luego Supabase y local DB
+        const allowedBranches = locals.profile?.allowed_branches || [];
+        let branch = allowedBranches.find(
+            (b: any) => b.id === branchId || b.profit_server_id === branchId || b.name === branchId
+        );
 
-        if (branchErr || !branch) {
+        if (!branch && branchId) {
+            try {
+                const { data, error: branchErr } = await supabaseAdmin
+                    .from('branches')
+                    .select('*')
+                    .eq('id', branchId)
+                    .single();
+                if (!branchErr && data) branch = data;
+            } catch (e) {
+                console.warn('[PRINT-ORDER] Supabase branch query warning:', e);
+            }
+        }
+
+        if (!branch && branchId) {
+            try {
+                const { queryLocalDb } = await import('$lib/server/local-db');
+                const res = await queryLocalDb('SELECT * FROM branches WHERE id = $1 OR profit_server_id = $1', [branchId]);
+                if (res.rows.length > 0) branch = res.rows[0];
+            } catch (e) {
+                console.warn('[PRINT-ORDER] Local DB branch query warning:', e);
+            }
+        }
+
+        // Fallback a la primera sucursal autorizada si no se encontró por ID
+        if (!branch && allowedBranches.length > 0) {
+            branch = allowedBranches[0];
+        }
+
+        if (!branch) {
             throw error(404, 'No se encontró la configuración de la sucursal.');
         }
 
         // 2. Obtener datos de la orden de compra desde el Agente
         const agentClient = new AgentClient(branch, locals.profile || undefined, fetch);
-        const res = await agentClient.getPurchaseOrder(doc_num);
+        const res = await agentClient.getPurchaseOrder(doc_num, branch.profit_server_id || branch.id);
         
         if (!res.success || !res.data) {
-            throw error(404, 'No se pudo obtener el detalle de la orden de compra desde el agente.');
+            throw error(404, res?.message || 'No se pudo obtener el detalle de la orden de compra desde el agente.');
         }
 
-        const order = Array.isArray(res.data) ? res.data[0] : res.data;
+        const rawData = res.data;
+        let order: any = null;
+        if (Array.isArray(rawData)) {
+            order = rawData.find((item: any) => item && !item.error && (item.doc_num || item.renglones)) || rawData[0];
+        } else {
+            order = rawData;
+        }
 
-        const canSeeOthers = hasPermission(locals.profile, 'pur_orders', 'others');
-        if (!canSeeOthers) {
-            const userCode = (locals.profile?.profit_user || '').trim().toUpperCase();
-            const orderUser = (order?.co_us_in || '').trim().toUpperCase();
-            if (!userCode || (orderUser && orderUser !== userCode)) {
-                throw error(403, 'No tienes permiso para ver órdenes de compra de terceros.');
-            }
+        if (!order || order.error) {
+            throw error(404, order?.error || 'No se encontró la orden de compra solicitada.');
         }
 
         // 3. Enriquecer con datos del proveedor
@@ -104,8 +132,14 @@ export const load: PageServerLoad = protectLoad('pur_orders', async ({ params, u
         order.editor_name = editorName;
         order.has_editor = !!editorName;
 
-        // 5. Obtener branding global
-        const { data: settings } = await supabaseAdmin.from('system_settings').select('*').single();
+        // 5. Obtener branding global (tolerante a fallos)
+        let settings: any = {};
+        try {
+            const { data: sysSettings } = await supabaseAdmin.from('system_settings').select('*').single();
+            if (sysSettings) settings = sysSettings;
+        } catch (e) {
+            console.warn('[PRINT-ORDER] Warning fetching system_settings:', e);
+        }
 
         return {
             order,
