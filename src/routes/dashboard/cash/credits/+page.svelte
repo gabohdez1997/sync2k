@@ -10,6 +10,7 @@
     User,
     Store,
     ChevronLeft,
+    ChevronRight,
     ChevronDown,
     Check,
     Loader2,
@@ -36,6 +37,8 @@
   import { page } from "$app/stores";
   import dayjs from "dayjs";
   import ImportItemCard from "$lib/components/ui/ImportItemCard.svelte";
+  import SearchBar from "$lib/components/ui/SearchBar.svelte";
+  import Combobox from "$lib/components/ui/Combobox.svelte";
 
   let { data } = $props();
 
@@ -67,6 +70,8 @@
   let historyList = $state<any[]>([]);
   let isLoadingHistory = $state(false);
   let historySearchQuery = $state("");
+  let filterFecD = $state("");
+  let filterFecH = $state("");
   let historyPage = $state(1);
   let historyTotalPages = $state(1);
   let historyTotalCount = $state(0);
@@ -478,16 +483,21 @@
     historyPage = page;
 
     try {
-      const q = encodeURIComponent(historySearchQuery.trim());
-      const res = await fetch(
-        `/api/agent/credits?branch_id=${filterSede}&search=${q}&page=${page}&limit=15`,
-      );
+      const qParams = new URLSearchParams();
+      qParams.set("branch_id", filterSede);
+      qParams.set("page", String(page));
+      qParams.set("limit", "15");
+      if (historySearchQuery.trim()) qParams.set("search", historySearchQuery.trim());
+      if (filterFecD) qParams.set("fec_d", filterFecD);
+      if (filterFecH) qParams.set("fec_h", filterFecH);
+
+      const res = await fetch(`/api/agent/credits?${qParams.toString()}`);
       const json = await res.json();
 
       if (json.success) {
         historyList = json.data || [];
         if (json.pagination) {
-          historyTotalPages = json.pagination.pages || 1;
+          historyTotalPages = json.pagination.pages || json.pagination.totalPages || 1;
           historyTotalCount = json.pagination.total || historyList.length;
         } else {
           historyTotalPages = 1;
@@ -621,42 +631,34 @@
 {:else}
   <div class="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
     <!-- TOP HEADER -->
-    <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+    <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
       <div>
-        <h1 class="text-4xl font-black tracking-tight flex items-center gap-3">
+        <h1 class="text-4xl font-black tracking-tight flex items-center gap-3 text-text-base">
           <RotateCcw size={40} class="text-brand-500" />
           Devolución de Venta
         </h1>
         <p class="text-text-muted mt-2 text-lg">
-          Importación de facturas y emisión de notas de crédito.
+          {activeTab === 'history'
+            ? 'Historial de devoluciones de venta y notas de crédito en la sede.'
+            : 'Importación de facturas y emisión de notas de crédito.'}
         </p>
       </div>
 
-      <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full md:w-auto">
-        <!-- Sede Selector -->
-        {#if data.branches && data.branches.length > 1}
-          <div class="w-full sm:w-56 relative group">
-            <Store
-              size={16}
-              class="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted group-focus-within:text-brand-500 transition-colors pointer-events-none"
-            />
-            <select
-              bind:value={filterSede}
-              onchange={handleBranchChange}
-              class="w-full h-14 pl-10 pr-10 bg-surface-soft border border-border-subtle rounded-2xl focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none transition-all font-medium text-sm appearance-none cursor-pointer text-text-base"
-            >
-              {#each data.branches as branch}
-                <option value={branch.id}>{branch.name}</option>
-              {/each}
-            </select>
-            <ChevronDown
-              size={16}
-              class="absolute right-4 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none"
-            />
-          </div>
-        {/if}
-
+      <div class="flex flex-wrap items-center gap-4">
         {#if activeTab === "create"}
+          {#if data.branches && data.branches.length > 1}
+            <div class="w-full sm:w-56">
+              <Combobox
+                options={data.branches.map((b: any) => ({ value: b.id, label: b.name }))}
+                bind:value={filterSede}
+                placeholder="Sucursal..."
+                icon={Store}
+                class="w-full h-14"
+                onchange={handleBranchChange}
+              />
+            </div>
+          {/if}
+
           <button
             onclick={openImportModal}
             class="flex items-center justify-center gap-2 px-6 h-14 rounded-2xl bg-brand-500/10 hover:bg-brand-500/20 text-brand-400 border border-brand-500/30 transition-all font-bold active:scale-95 shadow-sm shrink-0 cursor-pointer w-full sm:w-auto"
@@ -670,17 +672,17 @@
               activeTab = "history";
               loadHistory(1);
             }}
-            class="flex items-center justify-center gap-2 px-6 h-14 rounded-2xl bg-surface-strong hover:bg-surface-base text-text-base border border-border-subtle transition-all font-bold active:scale-95 shadow-sm shrink-0 cursor-pointer w-full sm:w-auto"
+            class="flex items-center justify-center gap-3 bg-surface-strong hover:bg-surface-base text-text-base border border-border-subtle h-14 px-8 rounded-2xl font-black shadow-sm transition-all active:scale-95 shrink-0 w-full sm:w-auto cursor-pointer"
           >
-            <Clock size={18} class="text-brand-400" />
+            <Clock size={20} class="text-brand-400" />
             Ver Historial
           </button>
         {:else}
           <button
             onclick={() => (activeTab = "create")}
-            class="flex items-center justify-center gap-2 px-6 h-14 rounded-2xl bg-brand-600 hover:bg-brand-500 text-white transition-all font-bold active:scale-95 shadow-lg shadow-brand-500/20 shrink-0 cursor-pointer w-full sm:w-auto"
+            class="flex items-center justify-center gap-3 bg-brand-600 hover:bg-brand-500 text-white h-14 px-8 rounded-2xl font-black shadow-xl shadow-brand-500/20 transition-all active:scale-95 shrink-0 w-full md:w-auto cursor-pointer"
           >
-            <RotateCcw size={18} />
+            <RotateCcw size={20} />
             Volver a Devolución
           </button>
         {/if}
@@ -1169,45 +1171,60 @@
     {:else}
     <!-- TAB: HISTORIAL DE DEVOLUCIONES -->
     <div class="space-y-6" in:fade>
-      <!-- History Search & Filter Bar -->
-      <div class="glass p-6 rounded-3xl border border-border-subtle flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4">
-        <div class="relative flex-1">
-          <Search size={16} class="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted" />
-          <input
-            type="text"
+      <!-- FILTROS (Estilo Historial de Cobros) -->
+      <div
+        class="glass p-4 rounded-3xl border border-border-subtle shadow-2xl grid grid-cols-1 md:grid-cols-4 gap-4 items-center mb-6 w-full relative z-20"
+      >
+        {#if data.branches && data.branches.length > 1}
+          <div class="w-full">
+            <Combobox
+              options={data.branches.map((b: any) => ({ value: b.id, label: b.name }))}
+              bind:value={filterSede}
+              placeholder="Sucursal..."
+              icon={Store}
+              class="w-full h-12"
+              onchange={() => loadHistory(1)}
+            />
+          </div>
+        {/if}
+
+        <div class="w-full {!(data.branches && data.branches.length > 1) ? 'md:col-span-2' : ''}">
+          <SearchBar
             bind:value={historySearchQuery}
-            onkeydown={(e) => e.key === "Enter" && loadHistory(1)}
-            placeholder="Buscar por N° Devolución, Nota de Crédito, Cliente o RIF..."
-            class="w-full h-11 pl-11 pr-4 bg-surface-base border border-border-subtle rounded-xl text-xs text-text-base placeholder:text-text-muted focus:border-brand-500 outline-none transition-all"
+            isSearching={isLoadingHistory}
+            onsubmit={() => loadHistory(1)}
+            placeholder="Buscar por cliente, RIF, devolución o nota de crédito..."
+            className="w-full h-12"
           />
         </div>
-        <div class="flex items-center gap-3">
-          <button
-            onclick={() => loadHistory(1)}
-            disabled={isLoadingHistory}
-            class="px-5 h-11 bg-brand-600 hover:bg-brand-500 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-brand-500/20 flex items-center gap-2 cursor-pointer disabled:opacity-50"
-          >
-            {#if isLoadingHistory}
-              <Loader2 size={14} class="animate-spin" />
-            {:else}
-              <Search size={14} />
-            {/if}
-            Buscar
-          </button>
-          <button
-            onclick={() => {
-              historySearchQuery = "";
-              loadHistory(1);
-            }}
-            class="px-4 h-11 bg-surface-soft hover:bg-surface-soft/80 border border-border-subtle text-text-muted hover:text-text-base rounded-xl text-xs font-bold transition-all cursor-pointer"
-          >
-            Limpiar
-          </button>
+
+        <!-- Date From -->
+        <div class="w-full">
+          <input
+            type="date"
+            bind:value={filterFecD}
+            onchange={() => loadHistory(1)}
+            placeholder="Desde"
+            class="w-full h-12 px-4 bg-surface-soft border border-border-subtle rounded-2xl text-xs font-bold text-text-base focus:border-brand-500 outline-none transition-all"
+            title="Fecha Devolución Desde"
+          />
+        </div>
+
+        <!-- Date To -->
+        <div class="w-full">
+          <input
+            type="date"
+            bind:value={filterFecH}
+            onchange={() => loadHistory(1)}
+            placeholder="Hasta"
+            class="w-full h-12 px-4 bg-surface-soft border border-border-subtle rounded-2xl text-xs font-bold text-text-base focus:border-brand-500 outline-none transition-all"
+            title="Fecha Devolución Hasta"
+          />
         </div>
       </div>
 
-      <!-- History Table -->
-      <div class="glass border border-border-subtle rounded-3xl overflow-hidden shadow-xl">
+      <!-- TABLA DE MOVIMIENTOS (Estilo Historial de Cobros) -->
+      <div class="glass rounded-[32px] border border-white/5 overflow-hidden shadow-2xl">
         {#if isLoadingHistory}
           <div class="p-20 text-center flex flex-col items-center justify-center gap-3">
             <Loader2 size={36} class="animate-spin text-brand-500" />
@@ -1223,88 +1240,110 @@
           </div>
         {:else}
           <div class="overflow-x-auto">
-            <table class="w-full text-left border-collapse text-xs">
+            <table class="w-full text-left border-collapse">
               <thead>
-                <tr class="bg-surface-soft/80 border-b border-border-subtle text-[11px] font-black uppercase tracking-wider text-text-muted">
-                  <th class="px-6 py-4">Devolución #</th>
-                  <th class="px-6 py-4">Nota de Crédito #</th>
-                  <th class="px-6 py-4">Fecha</th>
-                  <th class="px-6 py-4">Cliente</th>
-                  <th class="px-6 py-4 text-right">Total {showUSD ? 'USD' : 'Bs'}</th>
-                  <th class="px-6 py-4 text-center">Estado</th>
-                  <th class="px-6 py-4 text-center">Acciones</th>
+                <tr class="border-b border-white/5 bg-white/[0.02] text-text-muted text-xs font-bold uppercase tracking-wider">
+                  <th class="px-6 py-5">Fecha</th>
+                  <th class="px-6 py-5">Nro. Devolución</th>
+                  <th class="px-6 py-5">Nota de Crédito</th>
+                  <th class="px-6 py-5">Cliente</th>
+                  <th class="px-6 py-5 text-right">Monto</th>
+                  <th class="px-6 py-5 text-center">Estado</th>
+                  <th class="px-6 py-5 text-center">Acciones</th>
                 </tr>
               </thead>
-              <tbody class="divide-y divide-border-subtle">
+              <tbody class="divide-y divide-white/5 text-sm text-text-base">
                 {#each historyList as dev}
                   {@const totalUSD = Number(dev.total_neto || 0) / (Number(dev.tasa || 1) > 0 ? Number(dev.tasa || 1) : 1)}
                   {@const totalBs = Number(dev.total_neto || 0)}
-                  <tr class="hover:bg-surface-soft/40 transition-colors {dev.anulado ? 'opacity-50 bg-red-500/[0.02]' : ''}">
-                    <!-- Doc Num -->
-                    <td class="px-6 py-4 font-mono font-black text-brand-500">
-                      {dev.doc_num}
-                    </td>
-
-                    <!-- N/CR -->
-                    <td class="px-6 py-4 font-mono font-bold text-emerald-400">
-                      {dev.nro_doc || '---'}
-                    </td>
-
+                  <tr class="hover:bg-white/[0.02] transition-colors group {dev.anulado ? 'opacity-50 bg-red-500/[0.02]' : ''}">
                     <!-- Fecha -->
-                    <td class="px-6 py-4 text-text-muted">
-                      {dayjs(dev.fec_emis).format("DD/MM/YYYY")}
+                    <td class="px-6 py-5">
+                      <div class="font-bold text-text-base">{new Date(dev.fec_emis).toLocaleDateString('es-VE')}</div>
+                      <div class="text-xs text-text-muted/60 mt-0.5">{dayjs(dev.fec_emis).format('HH:mm')}</div>
                     </td>
 
-                    <!-- Cliente -->
-                    <td class="px-6 py-4">
-                      <div class="flex flex-col gap-0.5 max-w-[200px]">
-                        <span class="font-bold text-text-base truncate" title={dev.cli_des}>
-                          {dev.cli_des || dev.co_cli}
-                        </span>
-                        <span class="text-[10px] text-text-muted font-mono">{dev.rif || dev.co_cli}</span>
-                      </div>
-                    </td>
-
-                    <!-- Total -->
-                    <td class="px-6 py-4 text-right font-black text-text-base">
-                      {#if showUSD}
-                        ${totalUSD.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                      {:else}
-                        {totalBs.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Bs
+                    <!-- Nro. Devolución -->
+                    <td class="px-6 py-5">
+                      <span
+                        class="px-2.5 py-1 rounded-lg bg-surface-soft border border-border-subtle text-xs font-black text-brand-500 group-hover:bg-brand-500 group-hover:border-brand-500 group-hover:text-white transition-all inline-block font-mono"
+                      >
+                        {dev.doc_num}
+                      </span>
+                      {#if dev.descrip && dev.descrip.trim()}
+                        <div class="text-xs text-text-muted/60 mt-1 truncate max-w-[180px]" title={dev.descrip}>
+                          {dev.descrip}
+                        </div>
                       {/if}
                     </td>
 
+                    <!-- Nota de Crédito -->
+                    <td class="px-6 py-5">
+                      {#if dev.nro_doc}
+                        <span
+                          class="px-2.5 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-xs font-black text-emerald-400 group-hover:bg-emerald-500 group-hover:border-emerald-500 group-hover:text-white transition-all inline-block font-mono"
+                        >
+                          {dev.nro_doc}
+                        </span>
+                      {:else}
+                        <span class="text-xs text-text-muted/50 font-mono">---</span>
+                      {/if}
+                    </td>
+
+                    <!-- Cliente -->
+                    <td class="px-6 py-5 max-w-xs">
+                      <div class="font-bold truncate" title={dev.cli_des || dev.co_cli}>
+                        {dev.cli_des || dev.co_cli}
+                      </div>
+                      <div class="text-xs text-text-muted/60 mt-0.5 font-mono">{dev.rif || dev.co_cli}</div>
+                    </td>
+
+                    <!-- Monto -->
+                    <td class="px-6 py-5 text-right font-bold">
+                      <div class="text-base text-text-base">
+                        <span class="text-text-muted text-xs font-medium mr-1">USD</span>
+                        ${totalUSD.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </div>
+                      <div class="text-xs text-text-muted/60 mt-0.5">
+                        <span>Bs. </span>
+                        {totalBs.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        <span class="text-[10px] text-text-muted/40 ml-1">(Tasa: {Number(dev.tasa || 1).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})</span>
+                      </div>
+                    </td>
+
                     <!-- Estado -->
-                    <td class="px-6 py-4 text-center">
+                    <td class="px-6 py-5 text-center">
                       {#if dev.anulado}
-                        <span class="px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-red-500/10 text-red-400 border border-red-500/20">
+                        <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold bg-red-500/10 text-red-400 border border-red-500/20">
                           Anulada
                         </span>
                       {:else}
-                        <span class="px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                        <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold bg-green-500/10 text-green-400 border border-green-500/20">
                           Procesada
                         </span>
                       {/if}
                     </td>
 
                     <!-- Acciones -->
-                    <td class="px-6 py-4 text-center">
+                    <td class="px-6 py-5 text-center">
                       <div class="flex items-center justify-center gap-2">
+                        <!-- Ver Detalle -->
                         <button
                           onclick={() => openDevDetail(dev)}
-                          class="p-2 rounded-xl bg-surface-soft hover:bg-brand-500/10 text-text-muted hover:text-brand-400 transition-colors cursor-pointer"
-                          title="Ver detalle de devolución"
+                          class="p-2 text-text-muted hover:text-brand-500 hover:bg-brand-500/10 rounded-xl transition-all cursor-pointer"
+                          title="Ver Detalle"
                         >
-                          <Eye size={15} />
+                          <Eye size={18} />
                         </button>
 
+                        <!-- Anular -->
                         {#if !dev.anulado && data.permissions?.canVoid}
                           <button
                             onclick={() => promptVoidDev(dev)}
-                            class="p-2 rounded-xl bg-surface-soft hover:bg-red-500/10 text-text-muted hover:text-red-400 transition-colors cursor-pointer"
-                            title="Anular devolución"
+                            class="p-2 text-text-muted hover:text-amber-500 hover:bg-amber-500/10 rounded-xl transition-all cursor-pointer"
+                            title="Anular Devolución"
                           >
-                            <Ban size={15} />
+                            <Ban size={18} />
                           </button>
                         {/if}
                       </div>
@@ -1315,24 +1354,32 @@
             </table>
           </div>
 
-          <!-- Pagination Bar -->
+          <!-- PAGINACIÓN (Estilo Historial de Cobros) -->
           {#if historyTotalPages > 1}
-            <div class="p-4 border-t border-border-subtle bg-surface-soft/40 flex items-center justify-between text-xs text-text-muted">
-              <span>Página {historyPage} de {historyTotalPages} ({historyTotalCount} registros)</span>
+            <div
+              class="px-8 py-6 bg-white/[0.02] border-t border-white/5 flex items-center justify-between"
+            >
+              <p class="text-[10px] font-black uppercase tracking-[0.2em] text-text-muted">
+                Página <span class="text-text-base">{historyPage}</span> de
+                <span class="text-text-base">{historyTotalPages}</span> (Total: {historyTotalCount})
+              </p>
+
               <div class="flex items-center gap-2">
                 <button
-                  disabled={historyPage <= 1}
+                  disabled={historyPage === 1}
                   onclick={() => loadHistory(historyPage - 1)}
-                  class="px-3 py-1.5 rounded-lg bg-surface-soft border border-border-subtle disabled:opacity-40 cursor-pointer"
+                  class="h-10 w-10 flex items-center justify-center rounded-xl bg-white/5 hover:bg-white/10 disabled:opacity-30 disabled:pointer-events-none transition-all border border-white/5 text-text-muted cursor-pointer"
+                  title="Página anterior"
                 >
-                  Anterior
+                  <ChevronLeft size={20} />
                 </button>
                 <button
                   disabled={historyPage >= historyTotalPages}
                   onclick={() => loadHistory(historyPage + 1)}
-                  class="px-3 py-1.5 rounded-lg bg-surface-soft border border-border-subtle disabled:opacity-40 cursor-pointer"
+                  class="h-10 w-10 flex items-center justify-center rounded-xl bg-white/5 hover:bg-white/10 disabled:opacity-30 disabled:pointer-events-none transition-all border border-white/5 text-text-muted cursor-pointer"
+                  title="Página siguiente"
                 >
-                  Siguiente
+                  <ChevronRight size={20} />
                 </button>
               </div>
             </div>
