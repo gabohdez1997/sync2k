@@ -599,6 +599,109 @@
       isVoiding = false;
     }
   }
+
+  function isDocumentoFiscal(co_sucu_in: string, monto_imp: number, sede_id: string) {
+    if (Number(monto_imp) > 0) return true;
+    
+    const bConfig = data.branches?.find(
+      (b: any) => String(b.id).toLowerCase() === String(sede_id).toLowerCase()
+    );
+    if (!bConfig) return false;
+    
+    let codes = bConfig.profit_branch_codes;
+    if (typeof codes === "string") {
+      try {
+        codes = JSON.parse(codes);
+      } catch (e) {}
+    }
+    if (!Array.isArray(codes)) return false;
+    
+    const found = codes.find(
+      (c: any) =>
+        c.is_default === true ||
+        String(c.is_default) === "true" ||
+        c.default === true
+    );
+    if (!found) return false;
+    
+    return (
+      String(co_sucu_in || "").trim().toUpperCase() ===
+      String(found.code).trim().toUpperCase()
+    );
+  }
+
+  function getDocTypeBadge(co_tipo_doc: string, isFiscal: boolean) {
+    const t = (co_tipo_doc || "").trim().toUpperCase();
+    if (t === "FACT" || !t) {
+      return {
+        label: isFiscal ? "Factura" : "Nota de Entrega",
+        class: isFiscal
+          ? "bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20"
+          : "bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/20",
+      };
+    }
+    if (t === "N/CR" || t === "NCR") {
+      return {
+        label: "Nota de Crédito",
+        class: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20",
+      };
+    }
+    if (t === "DEVO") {
+      return {
+        label: "Devolución",
+        class: "bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20",
+      };
+    }
+    return {
+      label: isFiscal ? "Factura" : "Nota de Entrega",
+      class: isFiscal
+        ? "bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20"
+        : "bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/20",
+    };
+  }
+
+  function getOriginDoc(dev: any) {
+    if (!dev) return null;
+    const num = (
+      dev.num_doc_orig ||
+      dev.factura_origen ||
+      dev.nro_orig ||
+      dev.num_doc_factura ||
+      (dev.renglones?.find((r: any) => r.num_doc)?.num_doc) ||
+      ""
+    ).trim();
+
+    if (num) {
+      const isFiscal = isDocumentoFiscal(
+        dev.co_sucu_in_orig || dev.co_sucu_in,
+        Number(dev.monto_imp_orig !== undefined ? dev.monto_imp_orig : dev.monto_imp || 0),
+        dev.sede_id || filterSede
+      );
+      return {
+        num,
+        isFiscal,
+        tipo: dev.tipo_doc_orig || "FACT",
+      };
+    }
+
+    if (dev.descrip) {
+      const match = dev.descrip.match(/(?:FAC(?:TURA)?|PEDIDO)[:\s#-]+([A-Za-z0-9_-]+)/i);
+      if (match && match[1]) {
+        const isFiscal = isDocumentoFiscal(
+          dev.co_sucu_in,
+          Number(dev.monto_imp || 0),
+          dev.sede_id || filterSede
+        );
+        return {
+          num: match[1],
+          isFiscal,
+          tipo: "FACT",
+        };
+      }
+    }
+
+    return null;
+  }
 </script>
 
 {#if saveSuccess}
@@ -1459,7 +1562,7 @@
                   >
                     <th class="px-6 py-5">Fecha</th>
                     <th class="px-6 py-5">Nro. Devolución</th>
-                    <th class="px-6 py-5">Nota de Crédito</th>
+                    <th class="px-6 py-5">Documento Origen</th>
                     <th class="px-6 py-5">Cliente</th>
                     <th class="px-6 py-5 text-right">Monto</th>
                     <th class="px-6 py-5 text-center">Estado</th>
@@ -1472,6 +1575,7 @@
                       Number(dev.total_neto || 0) /
                       (Number(dev.tasa || 1) > 0 ? Number(dev.tasa || 1) : 1)}
                     {@const totalBs = Number(dev.total_neto || 0)}
+                    {@const orig = getOriginDoc(dev)}
                     <tr
                       class="hover:bg-white/[0.02] transition-colors group {dev.anulado
                         ? 'opacity-50 bg-red-500/[0.02]'
@@ -1487,35 +1591,59 @@
                         </div>
                       </td>
 
-                      <!-- Nro. Devolución -->
+                      <!-- Nro. Devolución y Nota de Crédito -->
                       <td class="px-6 py-5">
-                        <span
-                          class="px-2.5 py-1 rounded-lg bg-surface-soft border border-border-subtle text-xs font-black text-brand-500 group-hover:bg-brand-500 group-hover:border-brand-500 group-hover:text-white transition-all inline-block font-mono"
-                        >
-                          {dev.doc_num}
-                        </span>
-                        {#if dev.descrip && dev.descrip.trim()}
-                          <div
-                            class="text-xs text-text-muted/60 mt-1 truncate max-w-[180px]"
-                            title={dev.descrip}
-                          >
-                            {dev.descrip}
+                        <div class="flex flex-col gap-1.5 items-start">
+                          <!-- Devolución -->
+                          <div class="flex flex-col gap-1 items-start">
+                            <span
+                              class="px-2.5 py-1 rounded-lg bg-surface-soft border border-border-subtle text-xs font-black text-brand-500 group-hover:bg-brand-500 group-hover:border-brand-500 group-hover:text-white transition-all inline-block font-mono"
+                            >
+                              {dev.doc_num}
+                            </span>
+                            <span
+                              class="text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded-md bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20"
+                            >
+                              Devolución
+                            </span>
                           </div>
-                        {/if}
+
+                          <!-- Nota de Crédito -->
+                          {#if dev.nro_doc}
+                            <div class="flex flex-col gap-1 items-start">
+                              <span
+                                class="px-2.5 py-1 rounded-lg bg-surface-soft border border-border-subtle text-xs font-black text-emerald-500 group-hover:bg-emerald-500 group-hover:border-emerald-500 group-hover:text-white transition-all inline-block font-mono"
+                              >
+                                {dev.nro_doc}
+                              </span>
+                              <span
+                                class="text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded-md bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20"
+                              >
+                                Nota de Crédito
+                              </span>
+                            </div>
+                          {/if}
+                        </div>
                       </td>
 
-                      <!-- Nota de Crédito -->
+                      <!-- Documento Origen -->
                       <td class="px-6 py-5">
-                        {#if dev.nro_doc}
-                          <span
-                            class="px-2.5 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-xs font-black text-emerald-400 group-hover:bg-emerald-500 group-hover:border-emerald-500 group-hover:text-white transition-all inline-block font-mono"
-                          >
-                            {dev.nro_doc}
-                          </span>
+                        {#if orig}
+                          {@const badge = getDocTypeBadge(orig.tipo, orig.isFiscal)}
+                          <div class="flex flex-col gap-1 items-start">
+                            <span
+                              class="px-2.5 py-1 rounded-lg bg-surface-soft border border-border-subtle text-xs font-black text-brand-500 group-hover:bg-brand-500 group-hover:border-brand-500 group-hover:text-white transition-all inline-block font-mono"
+                            >
+                              {orig.num}
+                            </span>
+                            <span
+                              class="text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded-md {badge.class}"
+                            >
+                              {badge.label}
+                            </span>
+                          </div>
                         {:else}
-                          <span class="text-xs text-text-muted/50 font-mono"
-                            >---</span
-                          >
+                          <span class="text-xs text-text-muted/50 font-mono">---</span>
                         {/if}
                       </td>
 
@@ -1845,10 +1973,15 @@
               >{selectedDetailDev.nro_doc || "---"}</strong
             >
             • Emisión: {dayjs(selectedDetailDev.fec_emis).format("DD/MM/YYYY")}
-            {#if selectedDetailDev.factura_origen || selectedDetailDev.renglones?.find((r) => r.num_doc)?.num_doc}
-              • Factura Origen: <strong class="text-blue-400 font-mono"
-                >{selectedDetailDev.factura_origen || selectedDetailDev.renglones?.find((r) => r.num_doc)?.num_doc}</strong
+            {#if getOriginDoc(selectedDetailDev)}
+              {@const orig = getOriginDoc(selectedDetailDev)}
+              {@const badge = getDocTypeBadge(orig.tipo, orig.isFiscal)}
+              • Doc. Origen: <strong class="text-brand-400 font-mono">{orig.num}</strong>
+              <span
+                class="text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded-md {badge.class} ml-1"
               >
+                {badge.label}
+              </span>
             {/if}
           </span>
         </div>
