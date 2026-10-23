@@ -31,6 +31,7 @@
     Calendar,
     Sparkles,
     ShoppingBag,
+    Printer,
   } from "lucide-svelte";
   import { toast } from "svelte-sonner";
   import { goto } from "$app/navigation";
@@ -155,7 +156,7 @@
       if (ratio >= 0.9999 || Math.abs(subtotalBs - facBruto) <= 0.05) {
         igtfBs = facOtros1;
       } else {
-        igtfBs = Math.round((facOtros1 * ratio) * 100) / 100;
+        igtfBs = Math.round(facOtros1 * ratio * 100) / 100;
       }
     }
     const igtfUSD = igtfBs / tasa;
@@ -181,7 +182,8 @@
   });
 
   const checkedLinesCount = $derived(
-    returnLines.filter((l) => l.checked && Number(l.cantidad_devolver) > 0).length,
+    returnLines.filter((l) => l.checked && Number(l.cantidad_devolver) > 0)
+      .length,
   );
 
   const hasInvalidQuantities = $derived(
@@ -262,13 +264,16 @@
 
         // Validar que la factura NO esté anulada
         if (fac.anulado) {
-          toast.error(`La factura ${fac.doc_num} se encuentra anulada. No se pueden procesar devoluciones.`);
+          toast.error(
+            `La factura ${fac.doc_num} se encuentra anulada. No se pueden procesar devoluciones.`,
+          );
           return;
         }
 
         const lines = fac.renglones || [];
         const facTasa = Number(fac.tasa || 1);
-        const resolvedTasa = facTasa > 1 ? facTasa : Number(fac.tasa_actual || activeTasa || 1);
+        const resolvedTasa =
+          facTasa > 1 ? facTasa : Number(fac.tasa_actual || activeTasa || 1);
         if (resolvedTasa > 1) {
           activeTasa = resolvedTasa;
         }
@@ -313,7 +318,9 @@
         });
 
         if (!hasAvailableItems) {
-          toast.error(`La factura ${fac.doc_num} ya tiene todos sus artículos devueltos al 100%.`);
+          toast.error(
+            `La factura ${fac.doc_num} ya tiene todos sus artículos devueltos al 100%.`,
+          );
           return;
         }
 
@@ -323,7 +330,9 @@
         showImportModal = false;
         toast.success(`Factura ${fac.doc_num.trim()} cargada exitosamente.`);
       } else {
-        toast.error(json.message || "No se pudo obtener el detalle de la factura.");
+        toast.error(
+          json.message || "No se pudo obtener el detalle de la factura.",
+        );
       }
     } catch (err: any) {
       toast.error("Error al cargar factura: " + err.message);
@@ -333,14 +342,18 @@
   }
 
   // --- QUANTITY ADJUSTMENT & VALIDATION (ESTILO NOTAS DE RECEPCIÓN) ---
-  function updateReturnQty(line: any, val: number, inputEl?: HTMLInputElement | null) {
+  function updateReturnQty(
+    line: any,
+    val: number,
+    inputEl?: HTMLInputElement | null,
+  ) {
     if (!line || line.disponible <= 0) return;
     const maxAllowed = Number(line.disponible || 0);
     let clamped = Math.max(0, isNaN(val) ? 0 : val);
     if (maxAllowed > 0 && clamped > maxAllowed) {
       clamped = maxAllowed;
       toast.warning(
-        `La cantidad no puede superar lo facturado disponible (${maxAllowed}).`
+        `La cantidad no puede superar lo facturado disponible (${maxAllowed}).`,
       );
     }
     line.cantidad_devolver = clamped;
@@ -379,8 +392,6 @@
     });
   }
 
-
-
   function removeLine(idx: number) {
     returnLines = returnLines.filter((_, i) => i !== idx);
     if (returnLines.length === 0) {
@@ -413,12 +424,16 @@
     );
 
     if (activeLines.length === 0) {
-      toast.error("Debe seleccionar al menos un artículo con cantidad mayor a cero.");
+      toast.error(
+        "Debe seleccionar al menos un artículo con cantidad mayor a cero.",
+      );
       return;
     }
 
     if (hasInvalidQuantities) {
-      toast.error("Hay renglones con cantidades inválidas o que superan lo facturado.");
+      toast.error(
+        "Hay renglones con cantidades inválidas o que superan lo facturado.",
+      );
       return;
     }
 
@@ -429,7 +444,9 @@
         co_cli: selectedInvoice.co_cli,
         factura_origen: selectedInvoice.doc_num.trim(),
         descrip: `DEV. FACT ${selectedInvoice.doc_num.trim()}`.substring(0, 60),
-        comentario: comentarioDevolucion.trim() || `Devolución s/ Factura N° ${selectedInvoice.doc_num.trim()}`,
+        comentario:
+          comentarioDevolucion.trim() ||
+          `Devolución s/ Factura N° ${selectedInvoice.doc_num.trim()}`,
         co_ven: selectedInvoice.co_ven,
         co_cond: selectedInvoice.co_cond,
         co_tran: selectedInvoice.co_tran,
@@ -462,7 +479,8 @@
 
       if (json.success) {
         toast.success(
-          json.message || `Devolución registrada con éxito: ${json.data?.doc_num}`,
+          json.message ||
+            `Devolución registrada con éxito: ${json.data?.doc_num}`,
         );
         generatedResult = json.data;
         saveSuccess = true;
@@ -487,7 +505,8 @@
       qParams.set("branch_id", filterSede);
       qParams.set("page", String(page));
       qParams.set("limit", "15");
-      if (historySearchQuery.trim()) qParams.set("search", historySearchQuery.trim());
+      if (historySearchQuery.trim())
+        qParams.set("search", historySearchQuery.trim());
       if (filterFecD) qParams.set("fec_d", filterFecD);
       if (filterFecH) qParams.set("fec_h", filterFecH);
 
@@ -497,14 +516,17 @@
       if (json.success) {
         historyList = json.data || [];
         if (json.pagination) {
-          historyTotalPages = json.pagination.pages || json.pagination.totalPages || 1;
+          historyTotalPages =
+            json.pagination.pages || json.pagination.totalPages || 1;
           historyTotalCount = json.pagination.total || historyList.length;
         } else {
           historyTotalPages = 1;
           historyTotalCount = historyList.length;
         }
       } else {
-        toast.error(json.message || "Error al cargar historial de devoluciones.");
+        toast.error(
+          json.message || "Error al cargar historial de devoluciones.",
+        );
       }
     } catch (err: any) {
       toast.error("Error de conexión: " + err.message);
@@ -559,7 +581,9 @@
       const json = await res.json();
 
       if (json.success) {
-        toast.success(`Devolución ${devToVoid.doc_num.trim()} anulada con éxito.`);
+        toast.success(
+          `Devolución ${devToVoid.doc_num.trim()} anulada con éxito.`,
+        );
         showVoidConfirmModal = false;
         devToVoid = null;
         if (showDetailModal) {
@@ -590,26 +614,43 @@
     <div class="space-y-2">
       <h2 class="text-3xl font-black text-text-base">¡Devolución Procesada!</h2>
       <p class="text-text-muted">
-        La devolución de mercancía y la Nota de Crédito han sido generadas exitosamente en Profit Plus.
+        La devolución de mercancía y la Nota de Crédito han sido generadas
+        exitosamente en Profit Plus.
       </p>
     </div>
 
     <div class="grid grid-cols-2 gap-4 w-full">
       <div class="bg-white/5 p-4 rounded-2xl border border-white/5">
-        <span class="text-xs text-text-muted/60 uppercase font-bold tracking-wider">Devolución N°</span>
+        <span
+          class="text-xs text-text-muted/60 uppercase font-bold tracking-wider"
+          >Devolución N°</span
+        >
         <div class="text-xl font-black text-brand-500 mt-1 font-mono">
           {generatedResult?.doc_num}
         </div>
       </div>
       <div class="bg-white/5 p-4 rounded-2xl border border-white/5">
-        <span class="text-xs text-text-muted/60 uppercase font-bold tracking-wider">Nota de Crédito N°</span>
+        <span
+          class="text-xs text-text-muted/60 uppercase font-bold tracking-wider"
+          >Nota de Crédito N°</span
+        >
         <div class="text-xl font-black text-emerald-400 mt-1 font-mono">
           {generatedResult?.nro_doc}
         </div>
       </div>
     </div>
 
-    <div class="flex gap-4 w-full">
+    <div class="flex flex-col sm:flex-row gap-3 w-full">
+      {#if generatedResult?.doc_num}
+        <a
+          href="/dashboard/cash/credits/{encodeURIComponent(generatedResult.doc_num.trim())}/print?branch_id={filterSede || data.selectedBranchId}"
+          target="_blank"
+          class="flex-1 bg-blue-600 hover:bg-blue-500 text-white px-6 py-3.5 rounded-2xl font-bold transition-all shadow-lg shadow-blue-500/20 text-sm flex items-center justify-center gap-2 cursor-pointer"
+        >
+          <Printer size={18} />
+          <span>Imprimir PDF</span>
+        </a>
+      {/if}
       <button
         onclick={() => {
           saveSuccess = false;
@@ -631,16 +672,22 @@
 {:else}
   <div class="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
     <!-- TOP HEADER -->
-    <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+    <div
+      class="flex flex-col lg:flex-row lg:items-center justify-between gap-6"
+    >
       <div>
-        <h1 class="text-4xl font-black tracking-tight flex items-center gap-3 text-text-base">
+        <h1
+          class="text-4xl font-black tracking-tight flex items-center gap-3 text-text-base"
+        >
           <RotateCcw size={40} class="text-brand-500" />
-          Devolución de Venta
+          {activeTab === "history"
+            ? "Historial de Devoluciones"
+            : "Devolución de Venta"}
         </h1>
         <p class="text-text-muted mt-2 text-lg">
-          {activeTab === 'history'
-            ? 'Historial de devoluciones de venta y notas de crédito en la sede.'
-            : 'Importación de facturas y emisión de notas de crédito.'}
+          {activeTab === "history"
+            ? "Consulta las devoluciones de venta emitidas."
+            : "Importación de facturas y emisión de notas de crédito."}
         </p>
       </div>
 
@@ -649,7 +696,10 @@
           {#if data.branches && data.branches.length > 1}
             <div class="w-full sm:w-56">
               <Combobox
-                options={data.branches.map((b: any) => ({ value: b.id, label: b.name }))}
+                options={data.branches.map((b: any) => ({
+                  value: b.id,
+                  label: b.name,
+                }))}
                 bind:value={filterSede}
                 placeholder="Sucursal..."
                 icon={Store}
@@ -682,8 +732,8 @@
             onclick={() => (activeTab = "create")}
             class="flex items-center justify-center gap-3 bg-brand-600 hover:bg-brand-500 text-white h-14 px-8 rounded-2xl font-black shadow-xl shadow-brand-500/20 transition-all active:scale-95 shrink-0 w-full md:w-auto cursor-pointer"
           >
-            <RotateCcw size={20} />
-            Volver a Devolución
+            <Plus size={20} />
+            Nueva Devolución
           </button>
         {/if}
       </div>
@@ -711,8 +761,8 @@
               >
                 <User size={32} class="text-text-muted/30" />
                 <p class="text-xs text-text-muted font-bold">
-                  No hay ninguna factura cargada. Haz clic en "Importar Factura" para
-                  iniciar.
+                  No hay ninguna factura cargada. Haz clic en "Importar Factura"
+                  para iniciar.
                 </p>
               </div>
             {:else}
@@ -753,7 +803,9 @@
                     {selectedInvoice.telefonos || "---"}
                   </p>
                 </div>
-                <div class="md:col-span-3 grid grid-cols-1 md:grid-cols-3 gap-4 pt-2 border-t border-border-subtle/30">
+                <div
+                  class="md:col-span-3 grid grid-cols-1 md:grid-cols-3 gap-4 pt-2 border-t border-border-subtle/30"
+                >
                   <div class="space-y-1">
                     <span
                       class="text-[9px] font-black uppercase tracking-widest text-text-muted"
@@ -761,7 +813,9 @@
                     >
                     <p class="text-xs font-black text-brand-400 font-mono">
                       {selectedInvoice.doc_num.trim()}
-                      <span class="text-[10px] text-text-muted font-normal font-sans ml-1">
+                      <span
+                        class="text-[10px] text-text-muted font-normal font-sans ml-1"
+                      >
                         ({dayjs(selectedInvoice.fec_emis).format("DD/MM/YYYY")})
                       </span>
                     </p>
@@ -772,7 +826,9 @@
                       >Vendedor</span
                     >
                     <p class="text-xs font-bold text-text-base">
-                      {selectedInvoice.ven_des || selectedInvoice.co_ven || "Sin asignar"}
+                      {selectedInvoice.ven_des ||
+                        selectedInvoice.co_ven ||
+                        "Sin asignar"}
                     </p>
                   </div>
                   <div class="space-y-1">
@@ -781,26 +837,50 @@
                       >Condición</span
                     >
                     <p class="text-xs font-bold text-text-base">
-                      {selectedInvoice.cond_des || selectedInvoice.co_cond || "Contado"}
+                      {selectedInvoice.cond_des ||
+                        selectedInvoice.co_cond ||
+                        "Contado"}
                     </p>
                   </div>
                 </div>
 
                 {#if Number(selectedInvoice.otros1 || 0) > 0}
-                  <div class="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-xs flex flex-wrap items-center justify-between gap-3">
+                  <div
+                    class="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-xs flex flex-wrap items-center justify-between gap-3"
+                  >
                     <div class="flex items-center gap-2.5">
-                      <div class="h-7 w-7 rounded-lg bg-amber-500/20 flex items-center justify-center shrink-0">
+                      <div
+                        class="h-7 w-7 rounded-lg bg-amber-500/20 flex items-center justify-center shrink-0"
+                      >
                         <AlertTriangle size={15} class="text-amber-500" />
                       </div>
                       <div>
-                        <p class="text-amber-300 font-bold">Factura con IGTF (3%) Incluido</p>
+                        <p class="text-amber-300 font-bold">
+                          Factura con IGTF (3%) Incluido
+                        </p>
                         <p class="text-[11px] text-amber-400/80 font-mono">
-                          Monto IGTF Original: ${(Number(selectedInvoice.otros1) / Number(selectedInvoice.tasa || 1)).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                          <span class="text-text-muted">({Number(selectedInvoice.otros1).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Bs)</span>
+                          Monto IGTF Original: ${(
+                            Number(selectedInvoice.otros1) /
+                            Number(selectedInvoice.tasa || 1)
+                          ).toLocaleString("de-DE", {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2,
+                          })}
+                          <span class="text-text-muted"
+                            >({Number(selectedInvoice.otros1).toLocaleString(
+                              "de-DE",
+                              {
+                                minimumFractionDigits: 2,
+                                maximumFractionDigits: 2,
+                              },
+                            )} Bs)</span
+                          >
                         </p>
                       </div>
                     </div>
-                    <span class="text-[10px] uppercase font-black text-amber-400 bg-amber-500/20 px-2.5 py-1 rounded-xl border border-amber-500/30">
+                    <span
+                      class="text-[10px] uppercase font-black text-amber-400 bg-amber-500/20 px-2.5 py-1 rounded-xl border border-amber-500/30"
+                    >
                       Abono automático en Nota de Crédito
                     </span>
                   </div>
@@ -828,10 +908,16 @@
               <div
                 class="p-20 text-center flex flex-col items-center justify-center gap-3"
               >
-                <ShoppingBag size={48} class="text-text-muted/30 animate-pulse" />
-                <h4 class="text-lg font-bold text-text-muted">Devolución vacía</h4>
+                <ShoppingBag
+                  size={48}
+                  class="text-text-muted/30 animate-pulse"
+                />
+                <h4 class="text-lg font-bold text-text-muted">
+                  Devolución vacía
+                </h4>
                 <p class="text-xs text-text-muted/50 max-w-xs">
-                  Los artículos importados de la factura seleccionada aparecerán aquí.
+                  Los artículos importados de la factura seleccionada aparecerán
+                  aquí.
                 </p>
               </div>
             {:else}
@@ -842,17 +928,29 @@
                       class="bg-surface-strong border-b border-border-subtle text-xs font-black uppercase tracking-wider text-text-muted"
                     >
                       <th class="px-6 py-4 w-12 text-center">
-                        <label class="group relative inline-flex items-center cursor-pointer justify-center" title="Seleccionar Todos">
+                        <label
+                          class="group relative inline-flex items-center cursor-pointer justify-center"
+                          title="Seleccionar Todos"
+                        >
                           <input
                             type="checkbox"
-                            checked={returnLines.length > 0 && returnLines.filter(l => l.disponible > 0).every((l) => l.checked && Number(l.cantidad_devolver) > 0)}
+                            checked={returnLines.length > 0 &&
+                              returnLines
+                                .filter((l) => l.disponible > 0)
+                                .every(
+                                  (l) =>
+                                    l.checked &&
+                                    Number(l.cantidad_devolver) > 0,
+                                )}
                             onchange={handleMasterCheckbox}
                             class="sr-only peer"
                           />
                           <div
                             class="w-6 h-6 bg-surface-base border-2 border-border-subtle rounded-lg peer-checked:bg-brand-500 peer-checked:border-brand-500 transition-all flex items-center justify-center shadow-inner group-hover:border-brand-500/30"
                           >
-                            {#if returnLines.length > 0 && returnLines.filter(l => l.disponible > 0).every((l) => l.checked && Number(l.cantidad_devolver) > 0)}
+                            {#if returnLines.length > 0 && returnLines
+                                .filter((l) => l.disponible > 0)
+                                .every((l) => l.checked && Number(l.cantidad_devolver) > 0)}
                               <div in:fade={{ duration: 100 }}>
                                 <Check
                                   size={14}
@@ -867,19 +965,33 @@
                       <th class="px-6 py-4">Artículo</th>
                       <th class="px-6 py-4 text-center">Facturado / Disp.</th>
                       <th class="px-6 py-4 text-center">Cant. a Devolver</th>
-                      <th class="px-6 py-4 text-right">Precio {showUSD ? 'USD' : 'Bs'}</th>
-                      <th class="px-6 py-4 text-right">Total {showUSD ? 'USD' : 'Bs'}</th>
+                      <th class="px-6 py-4 text-right"
+                        >Precio {showUSD ? "USD" : "Bs"}</th
+                      >
+                      <th class="px-6 py-4 text-right"
+                        >Total {showUSD ? "USD" : "Bs"}</th
+                      >
                     </tr>
                   </thead>
                   <tbody class="divide-y divide-border-subtle text-xs">
                     {#each returnLines as line, idx (line.co_art + idx)}
                       {@const isRowDisabled = line.disponible <= 0}
-                      <tr class="transition-all {line.checked && Number(line.cantidad_devolver) > 0 ? 'bg-emerald-500/10 hover:bg-emerald-500/15 border-l-4 border-l-emerald-500' : 'opacity-50 hover:bg-surface-soft/60'}">
+                      <tr
+                        class="transition-all {line.checked &&
+                        Number(line.cantidad_devolver) > 0
+                          ? 'bg-emerald-500/10 hover:bg-emerald-500/15 border-l-4 border-l-emerald-500'
+                          : 'opacity-50 hover:bg-surface-soft/60'}"
+                      >
                         <td class="px-6 py-4 text-center">
-                          <label class="group relative inline-flex items-center {isRowDisabled ? 'cursor-not-allowed opacity-30' : 'cursor-pointer'} justify-center">
+                          <label
+                            class="group relative inline-flex items-center {isRowDisabled
+                              ? 'cursor-not-allowed opacity-30'
+                              : 'cursor-pointer'} justify-center"
+                          >
                             <input
                               type="checkbox"
-                              checked={line.checked && Number(line.cantidad_devolver) > 0}
+                              checked={line.checked &&
+                                Number(line.cantidad_devolver) > 0}
                               disabled={isRowDisabled}
                               onchange={(e) => handleRowCheckbox(line, e)}
                               class="sr-only peer"
@@ -901,35 +1013,62 @@
                         </td>
                         <td class="px-6 py-4 min-w-[220px]">
                           <div class="flex flex-col gap-1 max-w-md">
-                            <span class="font-black text-text-base leading-snug break-words">
+                            <span
+                              class="font-black text-text-base leading-snug break-words"
+                            >
                               {line.art_des}
                             </span>
                             <div class="flex items-center gap-2 flex-wrap">
-                              <span class="text-[10px] text-text-muted font-mono font-bold">{line.co_art.trim()}</span>
-                              <span class="text-[10px] text-emerald-400 font-bold uppercase">({line.unidad?.trim() || line.co_uni?.trim() || "UND"})</span>
+                              <span
+                                class="text-[10px] text-text-muted font-mono font-bold"
+                                >{line.co_art.trim()}</span
+                              >
+                              <span
+                                class="text-[10px] text-emerald-400 font-bold uppercase"
+                                >({line.unidad?.trim() ||
+                                  line.co_uni?.trim() ||
+                                  "UND"})</span
+                              >
                             </div>
                           </div>
                         </td>
-                        <td class="px-6 py-4 text-center font-bold text-text-muted font-mono text-sm">
-                          {Number(line.cantidad_facturada).toFixed(2)} <span class="text-text-muted/40">/</span> <strong class="text-amber-400 font-black">{Number(line.disponible).toFixed(2)}</strong>
+                        <td
+                          class="px-6 py-4 text-center font-bold text-text-muted font-mono text-sm"
+                        >
+                          {Number(line.cantidad_facturada).toFixed(2)}
+                          <span class="text-text-muted/40">/</span>
+                          <strong class="text-amber-400 font-black"
+                            >{Number(line.disponible).toFixed(2)}</strong
+                          >
                           {#if Number(line.total_dev) > 0}
-                            <span class="block text-[10px] text-amber-400 font-normal">
+                            <span
+                              class="block text-[10px] text-amber-400 font-normal"
+                            >
                               (Dev: {Number(line.total_dev).toFixed(2)})
                             </span>
                           {/if}
                         </td>
                         <td class="px-6 py-4 text-center">
                           {#if isRowDisabled}
-                            <span class="text-[10px] font-bold text-red-400 uppercase tracking-wider">
+                            <span
+                              class="text-[10px] font-bold text-red-400 uppercase tracking-wider"
+                            >
                               Agotado
                             </span>
                           {:else}
-                            <div class="inline-flex items-center gap-1.5 bg-surface-base border border-border-subtle rounded-2xl p-1.5 shadow-inner">
+                            <div
+                              class="inline-flex items-center gap-1.5 bg-surface-base border border-border-subtle rounded-2xl p-1.5 shadow-inner"
+                            >
                               <button
                                 type="button"
-                                onclick={() => updateReturnQty(line, Number(line.cantidad_devolver || 0) - 1)}
+                                onclick={() =>
+                                  updateReturnQty(
+                                    line,
+                                    Number(line.cantidad_devolver || 0) - 1,
+                                  )}
                                 class="h-8 w-8 rounded-xl bg-surface-strong hover:bg-surface-soft text-text-base font-black flex items-center justify-center transition-all disabled:opacity-30 cursor-pointer"
-                                disabled={Number(line.cantidad_devolver || 0) <= 0}
+                                disabled={Number(line.cantidad_devolver || 0) <=
+                                  0}
                               >
                                 -
                               </button>
@@ -940,44 +1079,79 @@
                                 step="any"
                                 value={line.cantidad_devolver}
                                 oninput={(e) => {
-                                  const target = e.currentTarget as HTMLInputElement;
+                                  const target =
+                                    e.currentTarget as HTMLInputElement;
                                   const parsed = parseFloat(target.value);
-                                  updateReturnQty(line, isNaN(parsed) ? 0 : parsed, target);
+                                  updateReturnQty(
+                                    line,
+                                    isNaN(parsed) ? 0 : parsed,
+                                    target,
+                                  );
                                 }}
                                 onchange={(e) => {
-                                  const target = e.currentTarget as HTMLInputElement;
+                                  const target =
+                                    e.currentTarget as HTMLInputElement;
                                   const parsed = parseFloat(target.value);
-                                  updateReturnQty(line, isNaN(parsed) ? 0 : parsed, target);
+                                  updateReturnQty(
+                                    line,
+                                    isNaN(parsed) ? 0 : parsed,
+                                    target,
+                                  );
                                 }}
                                 onblur={(e) => {
-                                  const target = e.currentTarget as HTMLInputElement;
+                                  const target =
+                                    e.currentTarget as HTMLInputElement;
                                   const parsed = parseFloat(target.value);
-                                  updateReturnQty(line, isNaN(parsed) ? 0 : parsed, target);
+                                  updateReturnQty(
+                                    line,
+                                    isNaN(parsed) ? 0 : parsed,
+                                    target,
+                                  );
                                 }}
                                 class="w-20 bg-transparent text-center font-mono font-black text-sm text-text-base focus:outline-none"
                               />
                               <button
                                 type="button"
-                                onclick={() => updateReturnQty(line, Number(line.cantidad_devolver || 0) + 1)}
+                                onclick={() =>
+                                  updateReturnQty(
+                                    line,
+                                    Number(line.cantidad_devolver || 0) + 1,
+                                  )}
                                 class="h-8 w-8 rounded-xl bg-surface-strong hover:bg-surface-soft text-text-base font-black flex items-center justify-center transition-all disabled:opacity-30 cursor-pointer"
-                                disabled={Number(line.cantidad_devolver || 0) >= Number(line.disponible)}
+                                disabled={Number(line.cantidad_devolver || 0) >=
+                                  Number(line.disponible)}
                               >
                                 +
                               </button>
                             </div>
                           {/if}
                         </td>
-                        <td class="px-6 py-4 text-right font-bold text-text-muted">
-                          {totals.symbol} {(
-                            Number(line.precio_usd) * (showUSD ? 1 : Number(activeTasa || 1))
-                          ).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                        </td>
-                        <td class="px-6 py-4 text-right font-black text-brand-500">
-                          {totals.symbol} {(
-                            (line.checked ? Number(line.cantidad_devolver || 0) : 0) *
+                        <td
+                          class="px-6 py-4 text-right font-bold text-text-muted"
+                        >
+                          {totals.symbol}
+                          {(
                             Number(line.precio_usd) *
                             (showUSD ? 1 : Number(activeTasa || 1))
-                          ).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          ).toLocaleString("de-DE", {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2,
+                          })}
+                        </td>
+                        <td
+                          class="px-6 py-4 text-right font-black text-brand-500"
+                        >
+                          {totals.symbol}
+                          {(
+                            (line.checked
+                              ? Number(line.cantidad_devolver || 0)
+                              : 0) *
+                            Number(line.precio_usd) *
+                            (showUSD ? 1 : Number(activeTasa || 1))
+                          ).toLocaleString("de-DE", {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2,
+                          })}
                         </td>
                       </tr>
                     {/each}
@@ -1027,7 +1201,8 @@
               >
                 <span>Sub-Total</span>
                 <span class="font-mono text-text-base"
-                  >{totals.symbol} {totals.activeSubtotal.toLocaleString("de-DE", {
+                  >{totals.symbol}
+                  {totals.activeSubtotal.toLocaleString("de-DE", {
                     minimumFractionDigits: 2,
                     maximumFractionDigits: 2,
                   })}</span
@@ -1039,7 +1214,8 @@
               >
                 <span>I.V.A</span>
                 <span class="font-mono text-brand-400"
-                  >{totals.symbol} {totals.activeTax.toLocaleString("de-DE", {
+                  >{totals.symbol}
+                  {totals.activeTax.toLocaleString("de-DE", {
                     minimumFractionDigits: 2,
                     maximumFractionDigits: 2,
                   })}</span
@@ -1052,10 +1228,14 @@
                 >
                   <span class="flex items-center gap-1.5">
                     <span>IGTF (3%)</span>
-                    <span class="text-[9px] bg-amber-500/15 text-amber-400 border border-amber-500/30 px-1.5 py-0.5 rounded-md font-black uppercase tracking-wider">Abono</span>
+                    <span
+                      class="text-[9px] bg-amber-500/15 text-amber-400 border border-amber-500/30 px-1.5 py-0.5 rounded-md font-black uppercase tracking-wider"
+                      >Abono</span
+                    >
                   </span>
                   <span class="font-mono"
-                    >{totals.symbol} {totals.activeIgtf.toLocaleString("de-DE", {
+                    >{totals.symbol}
+                    {totals.activeIgtf.toLocaleString("de-DE", {
                       minimumFractionDigits: 2,
                       maximumFractionDigits: 2,
                     })}</span
@@ -1067,15 +1247,19 @@
                 class="flex justify-between items-center text-base font-bold text-text-muted border-t border-border-subtle/50 pt-4"
               >
                 <span>Total Devolución</span>
-                <span class="font-mono text-text-base text-lg font-black text-brand-400"
-                  >{totals.symbol} {totals.activeTotal.toLocaleString("de-DE", {
+                <span
+                  class="font-mono text-text-base text-lg font-black text-brand-400"
+                  >{totals.symbol}
+                  {totals.activeTotal.toLocaleString("de-DE", {
                     minimumFractionDigits: 2,
                     maximumFractionDigits: 2,
                   })}</span
                 >
               </div>
 
-              <div class="flex justify-between items-center text-xs text-text-muted border-t border-border-subtle/30 pt-3">
+              <div
+                class="flex justify-between items-center text-xs text-text-muted border-t border-border-subtle/30 pt-3"
+              >
                 <span>Tasa de Cambio</span>
                 <span class="font-mono font-bold text-text-base">
                   {Number(activeTasa).toFixed(2)} Bs/$
@@ -1084,7 +1268,10 @@
 
               <!-- Motivo / Comentario -->
               <div class="space-y-2 border-t border-border-subtle/50 pt-4">
-                <label for="comentarioDevolucion" class="text-[10px] font-black uppercase tracking-wider text-text-muted">
+                <label
+                  for="comentarioDevolucion"
+                  class="text-[10px] font-black uppercase tracking-wider text-text-muted"
+                >
                   Motivo / Comentario
                 </label>
                 <textarea
@@ -1097,9 +1284,7 @@
               </div>
 
               <!-- Big Total Display identical to Billing -->
-              <div
-                class="pt-8 border-t border-border-bold flex flex-col gap-2"
-              >
+              <div class="pt-8 border-t border-border-bold flex flex-col gap-2">
                 <div class="flex justify-between items-end">
                   <div>
                     <span
@@ -1109,7 +1294,8 @@
                     <div
                       class="text-5xl font-black text-text-base drop-shadow-[0_4px_12px_rgba(var(--brand-rgb),0.3)] tracking-tight leading-none text-brand-400"
                     >
-                      {totals.symbol} {totals.activeTotal.toLocaleString("de-DE", {
+                      {totals.symbol}
+                      {totals.activeTotal.toLocaleString("de-DE", {
                         minimumFractionDigits: 2,
                         maximumFractionDigits: 2,
                       })}
@@ -1126,8 +1312,11 @@
                 <AlertTriangle size={16} class="shrink-0 mt-0.5" />
                 <div>
                   <p class="font-bold">Cantidades Inválidas</p>
-                  <p class="text-[10px] text-red-500/70 mt-1 font-medium leading-relaxed font-mono">
-                    Corrige las cantidades que superan el máximo facturado o son menores o iguales a cero.
+                  <p
+                    class="text-[10px] text-red-500/70 mt-1 font-medium leading-relaxed font-mono"
+                  >
+                    Corrige las cantidades que superan el máximo facturado o son
+                    menores o iguales a cero.
                   </p>
                 </div>
               </div>
@@ -1139,14 +1328,19 @@
               <button
                 type="button"
                 onclick={handleSaveReturn}
-                disabled={isSavingReturn || checkedLinesCount === 0 || hasInvalidQuantities || !selectedInvoice}
+                disabled={isSavingReturn ||
+                  checkedLinesCount === 0 ||
+                  hasInvalidQuantities ||
+                  !selectedInvoice}
                 class="w-full h-20 bg-brand-600 hover:bg-brand-500 text-white rounded-[24px] font-black text-xl uppercase tracking-[0.2em] shadow-[0_20px_40px_-10px_rgba(var(--brand-rgb),0.3)] active:scale-[0.97] transition-all flex items-center justify-center gap-4 disabled:opacity-50 disabled:grayscale group cursor-pointer border-none"
               >
                 {#if isSavingReturn}
                   <RefreshCw size={28} class="animate-spin text-brand-400/40" />
                   <span class="animate-pulse">Guardando Devolución...</span>
                 {:else}
-                  <div class="bg-surface-strong/50 p-2.5 rounded-xl group-hover:scale-110 transition-transform">
+                  <div
+                    class="bg-surface-strong/50 p-2.5 rounded-xl group-hover:scale-110 transition-transform"
+                  >
                     <Check size={28} />
                   </div>
                   <span>Guardar Devolución</span>
@@ -1169,226 +1363,301 @@
         </div>
       </div>
     {:else}
-    <!-- TAB: HISTORIAL DE DEVOLUCIONES -->
-    <div class="space-y-6" in:fade>
-      <!-- FILTROS (Estilo Historial de Cobros) -->
-      <div
-        class="glass p-4 rounded-3xl border border-border-subtle shadow-2xl grid grid-cols-1 md:grid-cols-4 gap-4 items-center mb-6 w-full relative z-20"
-      >
-        {#if data.branches && data.branches.length > 1}
-          <div class="w-full">
-            <Combobox
-              options={data.branches.map((b: any) => ({ value: b.id, label: b.name }))}
-              bind:value={filterSede}
-              placeholder="Sucursal..."
-              icon={Store}
-              class="w-full h-12"
-              onchange={() => loadHistory(1)}
-            />
-          </div>
-        {/if}
-
-        <div class="w-full {!(data.branches && data.branches.length > 1) ? 'md:col-span-2' : ''}">
-          <SearchBar
-            bind:value={historySearchQuery}
-            isSearching={isLoadingHistory}
-            onsubmit={() => loadHistory(1)}
-            placeholder="Buscar por cliente, RIF, devolución o nota de crédito..."
-            className="w-full h-12"
-          />
-        </div>
-
-        <!-- Date From -->
-        <div class="w-full">
-          <input
-            type="date"
-            bind:value={filterFecD}
-            onchange={() => loadHistory(1)}
-            placeholder="Desde"
-            class="w-full h-12 px-4 bg-surface-soft border border-border-subtle rounded-2xl text-xs font-bold text-text-base focus:border-brand-500 outline-none transition-all"
-            title="Fecha Devolución Desde"
-          />
-        </div>
-
-        <!-- Date To -->
-        <div class="w-full">
-          <input
-            type="date"
-            bind:value={filterFecH}
-            onchange={() => loadHistory(1)}
-            placeholder="Hasta"
-            class="w-full h-12 px-4 bg-surface-soft border border-border-subtle rounded-2xl text-xs font-bold text-text-base focus:border-brand-500 outline-none transition-all"
-            title="Fecha Devolución Hasta"
-          />
-        </div>
-      </div>
-
-      <!-- TABLA DE MOVIMIENTOS (Estilo Historial de Cobros) -->
-      <div class="glass rounded-[32px] border border-white/5 overflow-hidden shadow-2xl">
-        {#if isLoadingHistory}
-          <div class="p-20 text-center flex flex-col items-center justify-center gap-3">
-            <Loader2 size={36} class="animate-spin text-brand-500" />
-            <span class="text-xs text-text-muted font-bold">Cargando devoluciones...</span>
-          </div>
-        {:else if historyList.length === 0}
-          <div class="p-20 text-center flex flex-col items-center justify-center gap-3">
-            <History size={48} class="text-text-muted/30" />
-            <h4 class="text-lg font-bold text-text-muted">No se encontraron devoluciones</h4>
-            <p class="text-xs text-text-muted/50 max-w-sm">
-              Las devoluciones emitidas en esta sede aparecerán aquí con su respectiva Nota de Crédito.
-            </p>
-          </div>
-        {:else}
-          <div class="overflow-x-auto">
-            <table class="w-full text-left border-collapse">
-              <thead>
-                <tr class="border-b border-white/5 bg-white/[0.02] text-text-muted text-xs font-bold uppercase tracking-wider">
-                  <th class="px-6 py-5">Fecha</th>
-                  <th class="px-6 py-5">Nro. Devolución</th>
-                  <th class="px-6 py-5">Nota de Crédito</th>
-                  <th class="px-6 py-5">Cliente</th>
-                  <th class="px-6 py-5 text-right">Monto</th>
-                  <th class="px-6 py-5 text-center">Estado</th>
-                  <th class="px-6 py-5 text-center">Acciones</th>
-                </tr>
-              </thead>
-              <tbody class="divide-y divide-white/5 text-sm text-text-base">
-                {#each historyList as dev}
-                  {@const totalUSD = Number(dev.total_neto || 0) / (Number(dev.tasa || 1) > 0 ? Number(dev.tasa || 1) : 1)}
-                  {@const totalBs = Number(dev.total_neto || 0)}
-                  <tr class="hover:bg-white/[0.02] transition-colors group {dev.anulado ? 'opacity-50 bg-red-500/[0.02]' : ''}">
-                    <!-- Fecha -->
-                    <td class="px-6 py-5">
-                      <div class="font-bold text-text-base">{new Date(dev.fec_emis).toLocaleDateString('es-VE')}</div>
-                      <div class="text-xs text-text-muted/60 mt-0.5">{dayjs(dev.fec_emis).format('HH:mm')}</div>
-                    </td>
-
-                    <!-- Nro. Devolución -->
-                    <td class="px-6 py-5">
-                      <span
-                        class="px-2.5 py-1 rounded-lg bg-surface-soft border border-border-subtle text-xs font-black text-brand-500 group-hover:bg-brand-500 group-hover:border-brand-500 group-hover:text-white transition-all inline-block font-mono"
-                      >
-                        {dev.doc_num}
-                      </span>
-                      {#if dev.descrip && dev.descrip.trim()}
-                        <div class="text-xs text-text-muted/60 mt-1 truncate max-w-[180px]" title={dev.descrip}>
-                          {dev.descrip}
-                        </div>
-                      {/if}
-                    </td>
-
-                    <!-- Nota de Crédito -->
-                    <td class="px-6 py-5">
-                      {#if dev.nro_doc}
-                        <span
-                          class="px-2.5 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-xs font-black text-emerald-400 group-hover:bg-emerald-500 group-hover:border-emerald-500 group-hover:text-white transition-all inline-block font-mono"
-                        >
-                          {dev.nro_doc}
-                        </span>
-                      {:else}
-                        <span class="text-xs text-text-muted/50 font-mono">---</span>
-                      {/if}
-                    </td>
-
-                    <!-- Cliente -->
-                    <td class="px-6 py-5 max-w-xs">
-                      <div class="font-bold truncate" title={dev.cli_des || dev.co_cli}>
-                        {dev.cli_des || dev.co_cli}
-                      </div>
-                      <div class="text-xs text-text-muted/60 mt-0.5 font-mono">{dev.rif || dev.co_cli}</div>
-                    </td>
-
-                    <!-- Monto -->
-                    <td class="px-6 py-5 text-right font-bold">
-                      <div class="text-base text-text-base">
-                        <span class="text-text-muted text-xs font-medium mr-1">USD</span>
-                        ${totalUSD.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                      </div>
-                      <div class="text-xs text-text-muted/60 mt-0.5">
-                        <span>Bs. </span>
-                        {totalBs.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                        <span class="text-[10px] text-text-muted/40 ml-1">(Tasa: {Number(dev.tasa || 1).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})</span>
-                      </div>
-                    </td>
-
-                    <!-- Estado -->
-                    <td class="px-6 py-5 text-center">
-                      {#if dev.anulado}
-                        <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold bg-red-500/10 text-red-400 border border-red-500/20">
-                          Anulada
-                        </span>
-                      {:else}
-                        <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold bg-green-500/10 text-green-400 border border-green-500/20">
-                          Procesada
-                        </span>
-                      {/if}
-                    </td>
-
-                    <!-- Acciones -->
-                    <td class="px-6 py-5 text-center">
-                      <div class="flex items-center justify-center gap-2">
-                        <!-- Ver Detalle -->
-                        <button
-                          onclick={() => openDevDetail(dev)}
-                          class="p-2 text-text-muted hover:text-brand-500 hover:bg-brand-500/10 rounded-xl transition-all cursor-pointer"
-                          title="Ver Detalle"
-                        >
-                          <Eye size={18} />
-                        </button>
-
-                        <!-- Anular -->
-                        {#if !dev.anulado && data.permissions?.canVoid}
-                          <button
-                            onclick={() => promptVoidDev(dev)}
-                            class="p-2 text-text-muted hover:text-amber-500 hover:bg-amber-500/10 rounded-xl transition-all cursor-pointer"
-                            title="Anular Devolución"
-                          >
-                            <Ban size={18} />
-                          </button>
-                        {/if}
-                      </div>
-                    </td>
-                  </tr>
-                {/each}
-              </tbody>
-            </table>
-          </div>
-
-          <!-- PAGINACIÓN (Estilo Historial de Cobros) -->
-          {#if historyTotalPages > 1}
-            <div
-              class="px-8 py-6 bg-white/[0.02] border-t border-white/5 flex items-center justify-between"
-            >
-              <p class="text-[10px] font-black uppercase tracking-[0.2em] text-text-muted">
-                Página <span class="text-text-base">{historyPage}</span> de
-                <span class="text-text-base">{historyTotalPages}</span> (Total: {historyTotalCount})
-              </p>
-
-              <div class="flex items-center gap-2">
-                <button
-                  disabled={historyPage === 1}
-                  onclick={() => loadHistory(historyPage - 1)}
-                  class="h-10 w-10 flex items-center justify-center rounded-xl bg-white/5 hover:bg-white/10 disabled:opacity-30 disabled:pointer-events-none transition-all border border-white/5 text-text-muted cursor-pointer"
-                  title="Página anterior"
-                >
-                  <ChevronLeft size={20} />
-                </button>
-                <button
-                  disabled={historyPage >= historyTotalPages}
-                  onclick={() => loadHistory(historyPage + 1)}
-                  class="h-10 w-10 flex items-center justify-center rounded-xl bg-white/5 hover:bg-white/10 disabled:opacity-30 disabled:pointer-events-none transition-all border border-white/5 text-text-muted cursor-pointer"
-                  title="Página siguiente"
-                >
-                  <ChevronRight size={20} />
-                </button>
-              </div>
+      <!-- TAB: HISTORIAL DE DEVOLUCIONES -->
+      <div class="space-y-6" in:fade>
+        <!-- FILTROS (Estilo Historial de Cobros) -->
+        <div
+          class="glass p-4 rounded-3xl border border-border-subtle shadow-2xl grid grid-cols-1 md:grid-cols-4 gap-4 items-center mb-6 w-full relative z-20"
+        >
+          {#if data.branches && data.branches.length > 1}
+            <div class="w-full">
+              <Combobox
+                options={data.branches.map((b: any) => ({
+                  value: b.id,
+                  label: b.name,
+                }))}
+                bind:value={filterSede}
+                placeholder="Sucursal..."
+                icon={Store}
+                class="w-full h-12"
+                onchange={() => loadHistory(1)}
+              />
             </div>
           {/if}
-        {/if}
+
+          <div
+            class="w-full {!(data.branches && data.branches.length > 1)
+              ? 'md:col-span-2'
+              : ''}"
+          >
+            <SearchBar
+              bind:value={historySearchQuery}
+              isSearching={isLoadingHistory}
+              onsubmit={() => loadHistory(1)}
+              placeholder="Buscar por cliente, RIF, devolución o nota de crédito..."
+              className="w-full h-12"
+            />
+          </div>
+
+          <!-- Date From -->
+          <div class="w-full">
+            <input
+              type="date"
+              bind:value={filterFecD}
+              onchange={() => loadHistory(1)}
+              placeholder="Desde"
+              class="w-full h-12 px-4 bg-surface-soft border border-border-subtle rounded-2xl text-xs font-bold text-text-base focus:border-brand-500 outline-none transition-all"
+              title="Fecha Devolución Desde"
+            />
+          </div>
+
+          <!-- Date To -->
+          <div class="w-full">
+            <input
+              type="date"
+              bind:value={filterFecH}
+              onchange={() => loadHistory(1)}
+              placeholder="Hasta"
+              class="w-full h-12 px-4 bg-surface-soft border border-border-subtle rounded-2xl text-xs font-bold text-text-base focus:border-brand-500 outline-none transition-all"
+              title="Fecha Devolución Hasta"
+            />
+          </div>
+        </div>
+
+        <!-- TABLA DE MOVIMIENTOS (Estilo Historial de Cobros) -->
+        <div
+          class="glass rounded-[32px] border border-white/5 overflow-hidden shadow-2xl"
+        >
+          {#if isLoadingHistory}
+            <div
+              class="p-20 text-center flex flex-col items-center justify-center gap-3"
+            >
+              <Loader2 size={36} class="animate-spin text-brand-500" />
+              <span class="text-xs text-text-muted font-bold"
+                >Cargando devoluciones...</span
+              >
+            </div>
+          {:else if historyList.length === 0}
+            <div
+              class="p-20 text-center flex flex-col items-center justify-center gap-3"
+            >
+              <History size={48} class="text-text-muted/30" />
+              <h4 class="text-lg font-bold text-text-muted">
+                No se encontraron devoluciones
+              </h4>
+              <p class="text-xs text-text-muted/50 max-w-sm">
+                Las devoluciones emitidas en esta sede aparecerán aquí con su
+                respectiva Nota de Crédito.
+              </p>
+            </div>
+          {:else}
+            <div class="overflow-x-auto">
+              <table class="w-full text-left border-collapse">
+                <thead>
+                  <tr
+                    class="border-b border-white/5 bg-white/[0.02] text-text-muted text-xs font-bold uppercase tracking-wider"
+                  >
+                    <th class="px-6 py-5">Fecha</th>
+                    <th class="px-6 py-5">Nro. Devolución</th>
+                    <th class="px-6 py-5">Nota de Crédito</th>
+                    <th class="px-6 py-5">Cliente</th>
+                    <th class="px-6 py-5 text-right">Monto</th>
+                    <th class="px-6 py-5 text-center">Estado</th>
+                    <th class="px-6 py-5 text-center">Acciones</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-white/5 text-sm text-text-base">
+                  {#each historyList as dev}
+                    {@const totalUSD =
+                      Number(dev.total_neto || 0) /
+                      (Number(dev.tasa || 1) > 0 ? Number(dev.tasa || 1) : 1)}
+                    {@const totalBs = Number(dev.total_neto || 0)}
+                    <tr
+                      class="hover:bg-white/[0.02] transition-colors group {dev.anulado
+                        ? 'opacity-50 bg-red-500/[0.02]'
+                        : ''}"
+                    >
+                      <!-- Fecha -->
+                      <td class="px-6 py-5">
+                        <div class="font-bold text-text-base">
+                          {new Date(dev.fec_emis).toLocaleDateString("es-VE")}
+                        </div>
+                        <div class="text-xs text-text-muted/60 mt-0.5">
+                          {dayjs(dev.fec_emis).format("HH:mm")}
+                        </div>
+                      </td>
+
+                      <!-- Nro. Devolución -->
+                      <td class="px-6 py-5">
+                        <span
+                          class="px-2.5 py-1 rounded-lg bg-surface-soft border border-border-subtle text-xs font-black text-brand-500 group-hover:bg-brand-500 group-hover:border-brand-500 group-hover:text-white transition-all inline-block font-mono"
+                        >
+                          {dev.doc_num}
+                        </span>
+                        {#if dev.descrip && dev.descrip.trim()}
+                          <div
+                            class="text-xs text-text-muted/60 mt-1 truncate max-w-[180px]"
+                            title={dev.descrip}
+                          >
+                            {dev.descrip}
+                          </div>
+                        {/if}
+                      </td>
+
+                      <!-- Nota de Crédito -->
+                      <td class="px-6 py-5">
+                        {#if dev.nro_doc}
+                          <span
+                            class="px-2.5 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-xs font-black text-emerald-400 group-hover:bg-emerald-500 group-hover:border-emerald-500 group-hover:text-white transition-all inline-block font-mono"
+                          >
+                            {dev.nro_doc}
+                          </span>
+                        {:else}
+                          <span class="text-xs text-text-muted/50 font-mono"
+                            >---</span
+                          >
+                        {/if}
+                      </td>
+
+                      <!-- Cliente -->
+                      <td class="px-6 py-5 max-w-xs">
+                        <div
+                          class="font-bold truncate"
+                          title={dev.cli_des || dev.co_cli}
+                        >
+                          {dev.cli_des || dev.co_cli}
+                        </div>
+                        <div
+                          class="text-xs text-text-muted/60 mt-0.5 font-mono"
+                        >
+                          {dev.rif || dev.co_cli}
+                        </div>
+                      </td>
+
+                      <!-- Monto -->
+                      <td class="px-6 py-5 text-right font-bold">
+                        <div class="text-base text-text-base">
+                          <span class="text-text-muted text-xs font-medium mr-1"
+                            >USD</span
+                          >
+                          ${totalUSD.toLocaleString("de-DE", {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2,
+                          })}
+                        </div>
+                        <div class="text-xs text-text-muted/60 mt-0.5">
+                          <span>Bs. </span>
+                          {totalBs.toLocaleString("de-DE", {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2,
+                          })}
+                          <span class="text-[10px] text-text-muted/40 ml-1"
+                            >(Tasa: {Number(dev.tasa || 1).toLocaleString(
+                              "de-DE",
+                              {
+                                minimumFractionDigits: 2,
+                                maximumFractionDigits: 2,
+                              },
+                            )})</span
+                          >
+                        </div>
+                      </td>
+
+                      <!-- Estado -->
+                      <td class="px-6 py-5 text-center">
+                        {#if dev.anulado}
+                          <span
+                            class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold bg-red-500/10 text-red-400 border border-red-500/20"
+                          >
+                            Anulada
+                          </span>
+                        {:else}
+                          <span
+                            class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold bg-green-500/10 text-green-400 border border-green-500/20"
+                          >
+                            Procesada
+                          </span>
+                        {/if}
+                      </td>
+
+                      <!-- Acciones -->
+                      <td class="px-6 py-5 text-center">
+                        <div class="flex items-center justify-center gap-2">
+                          <!-- Imprimir Devolución PDF -->
+                          <a
+                            href="/dashboard/cash/credits/{encodeURIComponent(dev.doc_num.trim())}/print?branch_id={dev.sede_id || dev._branch_id || filterSede || data.selectedBranchId}"
+                            target="_blank"
+                            class="p-2 text-text-muted hover:text-blue-500 hover:bg-blue-500/10 rounded-xl transition-all cursor-pointer flex items-center justify-center"
+                            title="Imprimir PDF Devolución"
+                          >
+                            <Printer size={18} />
+                          </a>
+
+                          <!-- Ver Detalle -->
+                          <button
+                            onclick={() => openDevDetail(dev)}
+                            class="p-2 text-text-muted hover:text-brand-500 hover:bg-brand-500/10 rounded-xl transition-all cursor-pointer"
+                            title="Ver Detalle"
+                          >
+                            <Eye size={18} />
+                          </button>
+
+                          <!-- Anular -->
+                          {#if !dev.anulado && data.permissions?.canVoid}
+                            <button
+                              onclick={() => promptVoidDev(dev)}
+                              class="p-2 text-text-muted hover:text-amber-500 hover:bg-amber-500/10 rounded-xl transition-all cursor-pointer"
+                              title="Anular Devolución"
+                            >
+                              <Ban size={18} />
+                            </button>
+                          {/if}
+                        </div>
+                      </td>
+                    </tr>
+                  {/each}
+                </tbody>
+              </table>
+            </div>
+
+            <!-- PAGINACIÓN (Estilo Historial de Cobros) -->
+            {#if historyTotalPages > 1}
+              <div
+                class="px-8 py-6 bg-white/[0.02] border-t border-white/5 flex items-center justify-between"
+              >
+                <p
+                  class="text-[10px] font-black uppercase tracking-[0.2em] text-text-muted"
+                >
+                  Página <span class="text-text-base">{historyPage}</span> de
+                  <span class="text-text-base">{historyTotalPages}</span>
+                  (Total: {historyTotalCount})
+                </p>
+
+                <div class="flex items-center gap-2">
+                  <button
+                    disabled={historyPage === 1}
+                    onclick={() => loadHistory(historyPage - 1)}
+                    class="h-10 w-10 flex items-center justify-center rounded-xl bg-white/5 hover:bg-white/10 disabled:opacity-30 disabled:pointer-events-none transition-all border border-white/5 text-text-muted cursor-pointer"
+                    title="Página anterior"
+                  >
+                    <ChevronLeft size={20} />
+                  </button>
+                  <button
+                    disabled={historyPage >= historyTotalPages}
+                    onclick={() => loadHistory(historyPage + 1)}
+                    class="h-10 w-10 flex items-center justify-center rounded-xl bg-white/5 hover:bg-white/10 disabled:opacity-30 disabled:pointer-events-none transition-all border border-white/5 text-text-muted cursor-pointer"
+                    title="Página siguiente"
+                  >
+                    <ChevronRight size={20} />
+                  </button>
+                </div>
+              </div>
+            {/if}
+          {/if}
+        </div>
       </div>
-    </div>
-  {/if}
-</div>
+    {/if}
+  </div>
 {/if}
 
 <!-- MODAL: BUSCAR FACTURAS ACTIVAS (anulado = 0) -->
@@ -1432,13 +1701,18 @@
       </div>
 
       <!-- Contenido Modal -->
-      <div class="flex-1 overflow-y-auto p-6 space-y-6 no-scrollbar min-h-[300px] custom-scrollbar">
+      <div
+        class="flex-1 overflow-y-auto p-6 space-y-6 no-scrollbar min-h-[300px] custom-scrollbar"
+      >
         <!-- Buscador -->
         <div class="relative">
-          <Search size={18} class="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted" />
-          <input 
-            type="text" 
-            placeholder="Buscar por nro. factura, RIF o nombre de cliente..." 
+          <Search
+            size={18}
+            class="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted"
+          />
+          <input
+            type="text"
+            placeholder="Buscar por nro. factura, RIF o nombre de cliente..."
             bind:value={importSearchQuery}
             oninput={handleImportSearchInput}
             onkeydown={(e) => {
@@ -1450,48 +1724,61 @@
             class="w-full bg-surface-soft border border-border-subtle pl-12 pr-4 py-3.5 rounded-2xl text-sm text-text-base placeholder-text-muted/50 focus:border-brand-500/50 focus:ring-0 focus:outline-hidden transition-all font-medium"
           />
           {#if isSearchingInvoices}
-            <RefreshCw size={16} class="animate-spin absolute right-4 top-1/2 -translate-y-1/2 text-brand-500" />
+            <RefreshCw
+              size={16}
+              class="animate-spin absolute right-4 top-1/2 -translate-y-1/2 text-brand-500"
+            />
           {/if}
         </div>
 
         <!-- Resultados -->
         <div class="space-y-3">
-        {#if isSearchingInvoices}
-          <div class="flex flex-col items-center justify-center py-20 gap-4">
-            <Loader2 size={40} class="animate-spin text-brand-500" />
-            <p class="text-text-muted font-bold animate-pulse">
-              Buscando facturas...
-            </p>
-          </div>
-        {:else if foundInvoices.length === 0}
-          <div
-            class="flex flex-col items-center justify-center py-20 gap-3 text-text-muted opacity-50 bg-surface-base"
-          >
-            <Receipt size={48} />
-            <p class="font-bold">No se encontraron facturas activas</p>
-          </div>
-        {:else}
-          {#each foundInvoices as fac (fac.doc_num)}
-            {@const facTasa = Number(fac.tasa || 1) > 1 ? Number(fac.tasa) : Number(fac.tasa_actual || activeTasa || 1)}
-            {@const rawUsd = Number(fac.total_neto || 0) / (facTasa > 0 ? facTasa : 1)}
-            {@const formattedUsd = rawUsd.toLocaleString('de-DE', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
-            {@const formattedBs = Number(fac.total_neto || 0).toLocaleString('de-DE', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
-            
-            <ImportItemCard
-              docType="FAC"
-              docNum={fac.doc_num.trim()}
-              statusLabel="Activa"
-              statusClass="bg-brand-500/10 text-brand-400 border-brand-500/20"
-              clientName={fac.cli_des || fac.co_cli}
-              clientRif={fac.rif || fac.co_cli}
-              dateEmis={dayjs(fac.fec_emis).format("DD/MM/YYYY")}
-              amountUsd={formattedUsd}
-              amountBs={formattedBs}
-              branchName={getBranchName(filterSede)}
-              onclick={() => selectAndLoadInvoice(fac.doc_num)}
-            />
-          {/each}
-        {/if}
+          {#if isSearchingInvoices}
+            <div class="flex flex-col items-center justify-center py-20 gap-4">
+              <Loader2 size={40} class="animate-spin text-brand-500" />
+              <p class="text-text-muted font-bold animate-pulse">
+                Buscando facturas...
+              </p>
+            </div>
+          {:else if foundInvoices.length === 0}
+            <div
+              class="flex flex-col items-center justify-center py-20 gap-3 text-text-muted opacity-50 bg-surface-base"
+            >
+              <Receipt size={48} />
+              <p class="font-bold">No se encontraron facturas activas</p>
+            </div>
+          {:else}
+            {#each foundInvoices as fac (fac.doc_num)}
+              {@const facTasa =
+                Number(fac.tasa || 1) > 1
+                  ? Number(fac.tasa)
+                  : Number(fac.tasa_actual || activeTasa || 1)}
+              {@const rawUsd =
+                Number(fac.total_neto || 0) / (facTasa > 0 ? facTasa : 1)}
+              {@const formattedUsd = rawUsd.toLocaleString("de-DE", {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2,
+              })}
+              {@const formattedBs = Number(fac.total_neto || 0).toLocaleString(
+                "de-DE",
+                { minimumFractionDigits: 2, maximumFractionDigits: 2 },
+              )}
+
+              <ImportItemCard
+                docType="FAC"
+                docNum={fac.doc_num.trim()}
+                statusLabel="Activa"
+                statusClass="bg-brand-500/10 text-brand-400 border-brand-500/20"
+                clientName={fac.cli_des || fac.co_cli}
+                clientRif={fac.rif || fac.co_cli}
+                dateEmis={dayjs(fac.fec_emis).format("DD/MM/YYYY")}
+                amountUsd={formattedUsd}
+                amountBs={formattedBs}
+                branchName={getBranchName(filterSede)}
+                onclick={() => selectAndLoadInvoice(fac.doc_num)}
+              />
+            {/each}
+          {/if}
         </div>
       </div>
     </div>
@@ -1524,59 +1811,118 @@
     class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-md"
     in:fade={{ duration: 150 }}
   >
+    <!-- svelte-ignore a11y_click_events_have_key_events -->
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <div class="fixed inset-0" onclick={() => (showDetailModal = false)}></div>
     <div
-      class="bg-surface-raised border border-border-subtle rounded-[32px] max-w-3xl w-full max-h-[85vh] flex flex-col shadow-2xl overflow-hidden"
+      class="bg-surface-raised border border-border-subtle rounded-[32px] max-w-3xl w-full max-h-[85vh] flex flex-col shadow-2xl overflow-hidden relative z-10"
       in:scale={{ start: 0.95, duration: 200 }}
     >
-      <div class="p-6 border-b border-border-subtle flex items-center justify-between bg-surface-soft/40">
+      <div
+        class="p-6 border-b border-border-subtle flex items-center justify-between bg-surface-soft/40"
+      >
         <div>
           <div class="flex items-center gap-3">
             <h3 class="text-lg font-black text-text-base">
               Devolución {selectedDetailDev.doc_num}
             </h3>
             {#if selectedDetailDev.anulado}
-              <span class="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-red-500/10 text-red-400 border border-red-500/20">
+              <span
+                class="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-red-500/10 text-red-400 border border-red-500/20"
+              >
                 Anulada
               </span>
             {:else}
-              <span class="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+              <span
+                class="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+              >
                 Procesada
               </span>
             {/if}
           </div>
           <span class="text-xs text-text-muted">
-            Nota de Crédito: <strong>{selectedDetailDev.nro_doc || '---'}</strong> • Emisión: {dayjs(selectedDetailDev.fec_emis).format("DD/MM/YYYY")}
+            Nota de Crédito: <strong
+              >{selectedDetailDev.nro_doc || "---"}</strong
+            >
+            • Emisión: {dayjs(selectedDetailDev.fec_emis).format("DD/MM/YYYY")}
+            {#if selectedDetailDev.factura_origen || selectedDetailDev.renglones?.find((r) => r.num_doc)?.num_doc}
+              • Factura Origen: <strong class="text-blue-400 font-mono"
+                >{selectedDetailDev.factura_origen || selectedDetailDev.renglones?.find((r) => r.num_doc)?.num_doc}</strong
+              >
+            {/if}
           </span>
         </div>
-        <button
-          onclick={() => (showDetailModal = false)}
-          class="p-2 rounded-xl hover:bg-surface-soft text-text-muted hover:text-text-base transition-colors cursor-pointer"
-        >
-          <X size={20} />
-        </button>
+        <div class="flex items-center gap-2">
+          <a
+            href="/dashboard/cash/credits/{encodeURIComponent(selectedDetailDev.doc_num.trim())}/print?branch_id={selectedDetailDev.sede_id || selectedDetailDev._branch_id || filterSede || data.selectedBranchId}"
+            target="_blank"
+            class="p-2 rounded-xl bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 hover:text-blue-300 transition-colors cursor-pointer flex items-center gap-1.5 text-xs font-bold px-3 border border-blue-500/20"
+            title="Imprimir Reporte PDF"
+          >
+            <Printer size={16} />
+            <span>Imprimir PDF</span>
+          </a>
+          <button
+            onclick={() => (showDetailModal = false)}
+            class="p-2 rounded-xl hover:bg-surface-soft text-text-muted hover:text-text-base transition-colors cursor-pointer"
+          >
+            <X size={20} />
+          </button>
+        </div>
       </div>
 
       <div class="p-6 overflow-y-auto space-y-6">
         <!-- Client info -->
-        <div class="p-4 rounded-2xl bg-surface-soft/40 border border-border-subtle grid grid-cols-2 sm:grid-cols-3 gap-4 text-xs">
+        <div
+          class="p-4 rounded-2xl bg-surface-soft/40 border border-border-subtle grid grid-cols-2 sm:grid-cols-3 gap-4 text-xs"
+        >
           <div>
-            <span class="text-[10px] font-bold text-text-muted uppercase">Cliente</span>
-            <p class="font-bold text-text-base">{selectedDetailDev.cli_des || selectedDetailDev.co_cli}</p>
-            <p class="text-[10px] text-text-muted font-mono">{selectedDetailDev.rif}</p>
+            <span class="text-[10px] font-bold text-text-muted uppercase"
+              >Cliente</span
+            >
+            <p class="font-bold text-text-base">
+              {selectedDetailDev.cli_des || selectedDetailDev.co_cli}
+            </p>
+            <p class="text-[10px] text-text-muted font-mono">
+              {selectedDetailDev.rif}
+            </p>
           </div>
           <div>
-            <span class="text-[10px] font-bold text-text-muted uppercase">Vendedor</span>
-            <p class="font-bold text-text-base">{selectedDetailDev.ven_des || selectedDetailDev.co_ven || '---'}</p>
+            <span class="text-[10px] font-bold text-text-muted uppercase"
+              >Vendedor</span
+            >
+            <p class="font-bold text-text-base">
+              {selectedDetailDev.ven_des || selectedDetailDev.co_ven || "---"}
+            </p>
           </div>
           <div>
-            <span class="text-[10px] font-bold text-text-muted uppercase">Total Devolución</span>
+            <span class="text-[10px] font-bold text-text-muted uppercase"
+              >Total Devolución</span
+            >
             <p class="font-black text-brand-500 text-sm">
-              ${(Number(selectedDetailDev.total_neto) / Number(selectedDetailDev.tasa || 1)).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-              <span class="text-xs font-normal text-text-muted">({Number(selectedDetailDev.total_neto).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Bs)</span>
+              ${(
+                Number(selectedDetailDev.total_neto) /
+                Number(selectedDetailDev.tasa || 1)
+              ).toLocaleString("de-DE", {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2,
+              })}
+              <span class="text-xs font-normal text-text-muted"
+                >({Number(selectedDetailDev.total_neto).toLocaleString(
+                  "de-DE",
+                  { minimumFractionDigits: 2, maximumFractionDigits: 2 },
+                )} Bs)</span
+              >
             </p>
             {#if Number(selectedDetailDev.otros1 || 0) > 0}
               <p class="text-[10px] text-amber-400 font-bold mt-0.5">
-                Incluye IGTF (3%): ${(Number(selectedDetailDev.otros1) / Number(selectedDetailDev.tasa || 1)).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                Incluye IGTF (3%): ${(
+                  Number(selectedDetailDev.otros1) /
+                  Number(selectedDetailDev.tasa || 1)
+                ).toLocaleString("de-DE", {
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2,
+                })}
               </p>
             {/if}
           </div>
@@ -1584,17 +1930,27 @@
 
         <!-- Renglones Table -->
         <div>
-          <h4 class="text-xs font-black uppercase text-text-muted tracking-wider mb-3">Renglones Devueltos</h4>
+          <h4
+            class="text-xs font-black uppercase text-text-muted tracking-wider mb-3"
+          >
+            Renglones Devueltos
+          </h4>
           {#if isLoadingDetail}
-            <div class="py-10 text-center flex flex-col items-center justify-center gap-2">
+            <div
+              class="py-10 text-center flex flex-col items-center justify-center gap-2"
+            >
               <Loader2 size={24} class="animate-spin text-brand-500" />
               <span class="text-xs text-text-muted">Cargando renglones...</span>
             </div>
           {:else}
-            <div class="border border-border-subtle rounded-2xl overflow-hidden">
+            <div
+              class="border border-border-subtle rounded-2xl overflow-hidden"
+            >
               <table class="w-full text-left border-collapse text-xs">
                 <thead>
-                  <tr class="bg-surface-soft border-b border-border-subtle text-[10px] font-black uppercase text-text-muted">
+                  <tr
+                    class="bg-surface-soft border-b border-border-subtle text-[10px] font-black uppercase text-text-muted"
+                  >
                     <th class="px-4 py-3">#</th>
                     <th class="px-4 py-3">Artículo</th>
                     <th class="px-4 py-3 text-center">Cantidad</th>
@@ -1605,19 +1961,39 @@
                 <tbody class="divide-y divide-border-subtle">
                   {#each selectedDetailDev.renglones || [] as r}
                     <tr class="hover:bg-surface-soft/20">
-                      <td class="px-4 py-3 font-mono text-text-muted">{r.reng_num}</td>
+                      <td class="px-4 py-3 font-mono text-text-muted"
+                        >{r.reng_num}</td
+                      >
                       <td class="px-4 py-3 font-bold text-text-base">
                         {r.art_des}
-                        <span class="block text-[9px] text-text-muted font-mono">{r.co_art}</span>
+                        <span class="block text-[9px] text-text-muted font-mono"
+                          >{r.co_art}</span
+                        >
                       </td>
-                      <td class="px-4 py-3 text-center font-bold text-text-base">
-                        {Number(r.cantidad).toFixed(2)} {r.unidad || r.co_uni}
+                      <td
+                        class="px-4 py-3 text-center font-bold text-text-base"
+                      >
+                        {Number(r.cantidad).toFixed(2)}
+                        {r.unidad || r.co_uni}
                       </td>
-                      <td class="px-4 py-3 text-right font-medium text-text-muted">
-                        ${Number(r.prec_vta_om || (r.precio / (selectedDetailDev.tasa || 1))).toFixed(2)}
+                      <td
+                        class="px-4 py-3 text-right font-medium text-text-muted"
+                      >
+                        ${Number(
+                          r.prec_vta_om ||
+                            r.precio / (selectedDetailDev.tasa || 1),
+                        ).toFixed(2)}
                       </td>
-                      <td class="px-4 py-3 text-right font-black text-brand-500">
-                        ${(Number(r.cantidad) * Number(r.prec_vta_om || (r.precio / (selectedDetailDev.tasa || 1)))).toFixed(2)}
+                      <td
+                        class="px-4 py-3 text-right font-black text-brand-500"
+                      >
+                        ${(
+                          Number(r.cantidad) *
+                          Number(
+                            r.prec_vta_om ||
+                              r.precio / (selectedDetailDev.tasa || 1),
+                          )
+                        ).toFixed(2)}
                       </td>
                     </tr>
                   {/each}
@@ -1626,26 +2002,6 @@
             </div>
           {/if}
         </div>
-      </div>
-
-      <div class="p-6 border-t border-border-subtle bg-surface-soft/40 flex items-center justify-between">
-        {#if !selectedDetailDev.anulado && data.permissions?.canVoid}
-          <button
-            onclick={() => promptVoidDev(selectedDetailDev)}
-            class="px-5 py-2.5 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-400 font-bold text-xs border border-red-500/20 transition-all cursor-pointer flex items-center gap-2"
-          >
-            <Ban size={15} />
-            Anular Devolución
-          </button>
-        {:else}
-          <div></div>
-        {/if}
-        <button
-          onclick={() => (showDetailModal = false)}
-          class="px-6 py-2.5 bg-surface-soft hover:bg-surface-soft/80 text-text-base rounded-xl text-xs font-bold border border-border-subtle transition-all cursor-pointer"
-        >
-          Cerrar
-        </button>
       </div>
     </div>
   </div>
@@ -1662,23 +2018,33 @@
       in:scale={{ start: 0.95, duration: 200 }}
     >
       <div class="flex items-center gap-3 text-red-400">
-        <div class="h-12 w-12 rounded-2xl bg-red-500/10 flex items-center justify-center shrink-0">
+        <div
+          class="h-12 w-12 rounded-2xl bg-red-500/10 flex items-center justify-center shrink-0"
+        >
           <AlertTriangle size={24} />
         </div>
         <div>
           <h3 class="text-lg font-black text-text-base">¿Anular Devolución?</h3>
-          <p class="text-xs text-text-muted">Esta acción no se puede deshacer.</p>
+          <p class="text-xs text-text-muted">
+            Esta acción no se puede deshacer.
+          </p>
         </div>
       </div>
 
-      <div class="p-4 rounded-2xl bg-surface-soft/60 border border-border-subtle text-xs space-y-2">
+      <div
+        class="p-4 rounded-2xl bg-surface-soft/60 border border-border-subtle text-xs space-y-2"
+      >
         <p class="text-text-muted">
           Al anular la devolución <strong>{devToVoid.doc_num}</strong>:
         </p>
         <ul class="list-disc list-inside space-y-1 text-text-muted text-[11px]">
-          <li>La devolución y la Nota de Crédito quedarán marcadas como ANULADAS.</li>
+          <li>
+            La devolución y la Nota de Crédito quedarán marcadas como ANULADAS.
+          </li>
           <li>El stock regresado al inventario será descontado nuevamente.</li>
-          <li>Las cantidades devueltas en la factura original se revertirán.</li>
+          <li>
+            Las cantidades devueltas en la factura original se revertirán.
+          </li>
         </ul>
       </div>
 
