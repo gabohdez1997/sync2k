@@ -116,11 +116,13 @@ export const POST: RequestHandler = async ({ request, locals, fetch: svelteFetch
             method: 'POST',
             body: JSON.stringify(credit)
         });
-        if (response && response.success !== false) {
+        const resAny = response as any;
+        const isSuccess = response && response.success !== false && (!response.results || response.results.some((r: any) => r.success));
+        const docNum = response?.data?.doc_num || resAny?.doc_num || '';
+        const nroDoc = response?.data?.nro_doc || resAny?.nro_doc || '';
+
+        if (isSuccess && docNum) {
             try {
-                const resAny = response as any;
-                const docNum = response.data?.doc_num || resAny.doc_num || '';
-                const nroDoc = response.data?.nro_doc || resAny.nro_doc || '';
                 await supabaseAdmin.from('audit_log').insert({
                     action: 'CREATE',
                     module: 'cash_credits',
@@ -141,7 +143,7 @@ export const POST: RequestHandler = async ({ request, locals, fetch: svelteFetch
             }
         }
 
-        return json(response);
+        return json(response, { status: isSuccess ? 200 : 400 });
     } catch (err: any) {
         console.error('[API CREDITS POST ERROR]:', err);
         return json({ success: false, message: 'Error de servidor: ' + err.message }, { status: 500 });

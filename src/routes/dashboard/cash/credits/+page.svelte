@@ -299,7 +299,7 @@
             reng_num: l.reng_num || idx + 1,
             co_art: (l.co_art || "").trim(),
             art_des: (l.art_des || "").trim(),
-            co_alma: (l.co_alma || "01").trim(),
+            co_alma: (l.co_alma || "").trim(),
             co_uni: (l.co_uni || "01").trim(),
             unidad: (l.unidad || l.co_uni || "UND").trim(),
             co_precio: (l.co_precio || "01").trim(),
