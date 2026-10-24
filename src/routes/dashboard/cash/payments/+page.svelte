@@ -40,6 +40,19 @@
   const isDebitDoc = (t: string | undefined | null) =>
     DEBIT_DOC_TYPES.includes((t || "").trim().toUpperCase());
 
+  // Prioridad de consumo de créditos para amortizar deudas:
+  // 1. Notas de Crédito comerciales / devoluciones (N/CR, NCR) -> DEBEN liquidarse primero ("matar la NCR")
+  // 2. Ajustes negativos directos sobre ventas (AJNA)
+  // 3. Anticipos / Adelantos generales de dinero (ADEL, AJNM)
+  // Dentro del mismo nivel de prioridad: FIFO por fecha más antigua (fec_emis)
+  function getCreditDocPriority(tipo: string | undefined | null): number {
+    const t = (tipo || "").trim().toUpperCase();
+    if (t === "N/CR" || t === "NCR") return 1;
+    if (t === "AJNA") return 2;
+    if (t === "AJNM" || t === "ADEL") return 3;
+    return 4;
+  }
+
   function getDocTypeBadge(co_tipo_doc: string) {
     const t = (co_tipo_doc || "").trim().toUpperCase();
     if (t === "FACT") {
@@ -102,6 +115,7 @@
   // Documentos cargados del cliente
   let documentos = $state<any[]>([]);
   let checkedDocs = $state<Record<string, boolean>>({});
+  let selectedDocOrder = $state<string[]>([]);
 
   // Datos de retenciones y abonos por documento
   let docInputs = $state<
@@ -188,12 +202,33 @@
     let totalCreditAppliedBs = 0;
     let totalCreditAppliedUsd = 0;
 
-    for (const doc of documentos) {
+    // Ordenar los créditos según el orden en que el usuario los fue seleccionando
+    // Quien se seleccionó primero se consume primero ("la prioridad deberia ser segun se vayan seleccionando los documentos")
+    // Fallback: N/CR primero si no se tiene orden registrado
+    const sortedCreditDocs = documentos
+      .filter((d) => isCreditDoc(d.co_tipo_doc))
+      .slice()
+      .sort((a, b) => {
+        const nroA = a.nro_doc.trim();
+        const nroB = b.nro_doc.trim();
+        const idxA = selectedDocOrder.indexOf(nroA);
+        const idxB = selectedDocOrder.indexOf(nroB);
+        if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+        if (idxA !== -1) return -1;
+        if (idxB !== -1) return 1;
+        const pA = getCreditDocPriority(a.co_tipo_doc);
+        const pB = getCreditDocPriority(b.co_tipo_doc);
+        if (pA !== pB) return pA - pB;
+        const timeA = new Date(a.fec_emis || 0).getTime();
+        const timeB = new Date(b.fec_emis || 0).getTime();
+        if (timeA !== timeB) return timeA - timeB;
+        return nroA.localeCompare(nroB);
+      });
+
+    for (const doc of sortedCreditDocs) {
       const nro = doc.nro_doc.trim();
       const inp = docInputs[nro];
       if (!inp) continue;
-
-      if (!isCreditDoc(doc.co_tipo_doc)) continue;
 
       const docTasa = doc.tasa > 0 ? doc.tasa : 1;
       const docSaldoUsd = Math.round((doc.saldo / docTasa) * 100) / 100;
@@ -229,7 +264,7 @@
       inp.mont_cob = -Math.round(appliedUsd * 100) / 100;
       inp.saldo_remanente_bs = remanenteBs;
       inp.saldo_remanente_usd = remanenteUsd;
-      inp.es_abono_parcial = remanenteUsd >= 0.01 && remanenteBs > 0.05;
+      inp.es_abono_parcial = appliedUsd > 0.005 && remanenteUsd >= 0.01 && remanenteBs > 0.05;
 
       totalCreditAppliedBs += appliedBs;
       totalCreditAppliedUsd += appliedUsd;
@@ -242,8 +277,25 @@
     let remainingPaymentBs = Math.round((totalInstrumentosPagoBs + totalCreditAppliedBs) * 100) / 100;
     let remainingPaymentUsd = Math.round((totalInstrumentosPago + totalCreditAppliedUsd) * 100) / 100;
 
-    // 4. Distribuir a los documentos de débito (Facturas, Ajustes Positivos, etc.)
-    for (const doc of documentos) {
+    // 4. Distribuir a los documentos de débito (Facturas, Ajustes Positivos, etc.) según orden de selección
+    const sortedDebitDocs = documentos
+      .filter((d) => !isCreditDoc(d.co_tipo_doc))
+      .slice()
+      .sort((a, b) => {
+        const nroA = a.nro_doc.trim();
+        const nroB = b.nro_doc.trim();
+        const idxA = selectedDocOrder.indexOf(nroA);
+        const idxB = selectedDocOrder.indexOf(nroB);
+        if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+        if (idxA !== -1) return -1;
+        if (idxB !== -1) return 1;
+        const timeA = new Date(a.fec_emis || 0).getTime();
+        const timeB = new Date(b.fec_emis || 0).getTime();
+        if (timeA !== timeB) return timeA - timeB;
+        return nroA.localeCompare(nroB);
+      });
+
+    for (const doc of sortedDebitDocs) {
       const nro = doc.nro_doc.trim();
       const inp = docInputs[nro];
       if (!inp) continue;
@@ -704,6 +756,7 @@
     loadingDocs = true;
     documentos = [];
     docInputs = {};
+    selectedDocOrder = [];
     try {
       const res = await fetch(
         `/api/agent/customers/${encodeURIComponent(co_cli)}/documentos?branch_id=${selectedBranch}`,
@@ -732,6 +785,9 @@
           const montoRetIslrPrevioUsd = Math.round((montoRetIslrPrevioBs / docTasa) * 100) / 100;
 
           checkedDocs[doc.nro_doc.trim()] = isTargetDoc;
+          if (isTargetDoc) {
+            selectedDocOrder.push(doc.nro_doc.trim());
+          }
 
           const baseImpBs = doc.total_neto - doc.monto_imp - (doc.otros1 || 0);
           docInputs[doc.nro_doc.trim()] = {
@@ -789,6 +845,13 @@
 
   function toggleDocSelection(nroDoc: string, doc: any, checked: boolean) {
     checkedDocs[nroDoc] = checked;
+    if (checked) {
+      if (!selectedDocOrder.includes(nroDoc)) {
+        selectedDocOrder = [...selectedDocOrder, nroDoc];
+      }
+    } else {
+      selectedDocOrder = selectedDocOrder.filter((n) => n !== nroDoc);
+    }
     recalculateDocAmounts(nroDoc, doc, true);
   }
 
@@ -1242,13 +1305,39 @@
     saving = true;
     saveError = null;
 
-    const tasaCobro = currentExchangeRate;
-    const checkedDebitDocs = documentos.filter(
-      (d) => checkedDocs[d.nro_doc.trim()] && isDebitDoc(d.co_tipo_doc),
-    );
-    const checkedCreditDocs = documentos.filter(
-      (d) => checkedDocs[d.nro_doc.trim()] && isCreditDoc(d.co_tipo_doc),
-    );
+    const checkedDebitDocs = documentos
+      .filter((d) => checkedDocs[d.nro_doc.trim()] && isDebitDoc(d.co_tipo_doc))
+      .sort((a, b) => {
+        const nroA = a.nro_doc.trim();
+        const nroB = b.nro_doc.trim();
+        const idxA = selectedDocOrder.indexOf(nroA);
+        const idxB = selectedDocOrder.indexOf(nroB);
+        if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+        if (idxA !== -1) return -1;
+        if (idxB !== -1) return 1;
+        const timeA = new Date(a.fec_emis || 0).getTime();
+        const timeB = new Date(b.fec_emis || 0).getTime();
+        if (timeA !== timeB) return timeA - timeB;
+        return nroA.localeCompare(nroB);
+      });
+    const checkedCreditDocs = documentos
+      .filter((d) => checkedDocs[d.nro_doc.trim()] && isCreditDoc(d.co_tipo_doc))
+      .sort((a, b) => {
+        const nroA = a.nro_doc.trim();
+        const nroB = b.nro_doc.trim();
+        const idxA = selectedDocOrder.indexOf(nroA);
+        const idxB = selectedDocOrder.indexOf(nroB);
+        if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+        if (idxA !== -1) return -1;
+        if (idxB !== -1) return 1;
+        const pA = getCreditDocPriority(a.co_tipo_doc);
+        const pB = getCreditDocPriority(b.co_tipo_doc);
+        if (pA !== pB) return pA - pB;
+        const timeA = new Date(a.fec_emis || 0).getTime();
+        const timeB = new Date(b.fec_emis || 0).getTime();
+        if (timeA !== timeB) return timeA - timeB;
+        return nroA.localeCompare(nroB);
+      });
     const firstSelectedParent = checkedDebitDocs[0];
     const parentDocNo = firstSelectedParent
       ? firstSelectedParent.nro_doc.trim()
@@ -1302,14 +1391,16 @@
       remainingDebtForCreditsBs = Math.max(0, Math.round((remainingDebtForCreditsBs - appliedBs) * 100) / 100);
       totalCreditAmortizedBs += appliedBs;
 
-      creditRenglones.push({
-        co_tipo_doc: doc.co_tipo_doc,
-        nro_doc: doc.nro_doc,
-        mont_cob: appliedBs,
-        monto_retencion_iva: 0,
-        monto_retencion: 0,
-        parent_doc: parentDocNo,
-      });
+      if (appliedBs > 0.005) {
+        creditRenglones.push({
+          co_tipo_doc: doc.co_tipo_doc,
+          nro_doc: doc.nro_doc,
+          mont_cob: appliedBs,
+          monto_retencion_iva: 0,
+          monto_retencion: 0,
+          parent_doc: parentDocNo,
+        });
+      }
     }
 
     // Fondos totales disponibles para liquidar débitos = Créditos aplicados + Instrumentos de pago
@@ -1786,6 +1877,17 @@
                         />
                         <div>
                           <div class="flex items-center gap-2">
+                            {#if checkedDocs[doc.nro_doc.trim()]}
+                              {@const orderIdx = selectedDocOrder.indexOf(doc.nro_doc.trim()) + 1}
+                              {#if orderIdx > 0}
+                                <span
+                                  class="text-[10px] font-black px-1.5 py-0.5 rounded-full bg-brand-500/20 text-brand-600 dark:text-brand-300 border border-brand-500/40"
+                                  title="Prioridad de amortización #{orderIdx}"
+                                >
+                                  #{orderIdx}
+                                </span>
+                              {/if}
+                            {/if}
                             <span
                               class="{badge.class} px-2 py-0.5 rounded-md font-bold text-xs uppercase"
                               >{badge.label}</span
@@ -1836,10 +1938,20 @@
                             minimumFractionDigits: 2,
                           })}
                         </span>
-                        {#if isCreditDoc(doc.co_tipo_doc) && checkedDocs[doc.nro_doc.trim()] && input.es_abono_parcial}
-                          <span class="inline-block text-[10px] bg-amber-500/15 dark:bg-amber-500/25 text-amber-800 dark:text-amber-200 border border-amber-500/40 px-2.5 py-0.5 rounded-full font-bold mt-1.5">
-                            Aplica: -${Math.abs(input.mont_cob || 0).toFixed(2)} | Queda: +${(input.saldo_remanente_usd || 0).toFixed(2)}
-                          </span>
+                        {#if isCreditDoc(doc.co_tipo_doc) && checkedDocs[doc.nro_doc.trim()]}
+                          {#if input.es_abono_parcial}
+                            <span class="inline-block text-[10px] bg-amber-500/15 dark:bg-amber-500/25 text-amber-800 dark:text-amber-200 border border-amber-500/40 px-2.5 py-0.5 rounded-full font-bold mt-1.5">
+                              Aplica: -${Math.abs(input.mont_cob || 0).toFixed(2)} | Queda: +${(input.saldo_remanente_usd || 0).toFixed(2)}
+                            </span>
+                          {:else if Math.abs(input.mont_cob || 0) > 0.005}
+                            <span class="inline-block text-[10px] bg-emerald-500/15 dark:bg-emerald-500/25 text-emerald-800 dark:text-emerald-200 border border-emerald-500/40 px-2.5 py-0.5 rounded-full font-bold mt-1.5">
+                              Aplica: -${Math.abs(input.mont_cob || 0).toFixed(2)} (Total)
+                            </span>
+                          {:else}
+                            <span class="inline-block text-[10px] bg-blue-500/15 dark:bg-blue-500/25 text-blue-800 dark:text-blue-200 border border-blue-500/40 px-2.5 py-0.5 rounded-full font-bold mt-1.5">
+                              No requerido
+                            </span>
+                          {/if}
                         {/if}
                       </div>
                     </div>
@@ -1852,9 +1964,27 @@
                         {@const remanenteUsd = input.saldo_remanente_usd || 0}
                         {@const remanenteBs = input.saldo_remanente_bs || 0}
                         {@const isParcial = input.es_abono_parcial}
+                        {@const isNotApplied = appliedUsd <= 0.005}
 
                         <div class="border-t border-border-subtle/50 pt-3 space-y-3">
-                          {#if isParcial}
+                          {#if isNotApplied}
+                            <div
+                              class="bg-blue-500/10 dark:bg-blue-500/15 border border-blue-500/30 p-4 rounded-2xl text-xs space-y-2 animate-in fade-in duration-150"
+                            >
+                              <div class="flex items-center justify-between">
+                                <span class="font-bold text-blue-800 dark:text-blue-300 flex items-center gap-1.5">
+                                  <Info size={16} class="text-blue-600 dark:text-blue-400 shrink-0" />
+                                  Crédito no requerido en este cobro
+                                </span>
+                                <span class="text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full bg-blue-500/20 text-blue-900 dark:text-blue-200 border border-blue-500/40">
+                                  Sin Aplicar
+                                </span>
+                              </div>
+                              <p class="text-text-muted leading-relaxed">
+                                La deuda de las facturas seleccionadas ya fue saldada por completo con los otros créditos seleccionados previamente. El saldo total de este crédito permanecerá intacto para futuras compras.
+                              </p>
+                            </div>
+                          {:else if isParcial}
                             <div
                               class="bg-amber-500/10 dark:bg-amber-500/15 border border-amber-500/30 p-4 rounded-2xl text-xs space-y-3 animate-in fade-in duration-150"
                             >
@@ -1868,7 +1998,7 @@
                                 </span>
                               </div>
                               <p class="text-text-muted leading-relaxed">
-                                El monto de este crédito supera la deuda seleccionada. Se aplicará únicamente lo necesario para saldar la factura y el remanente quedará como saldo a favor en Profit Plus para futuras compras.
+                                El monto de este crédito supera la deuda restante. Se aplicará únicamente lo necesario para saldar la factura y el remanente quedará como saldo a favor en Profit Plus para futuras compras.
                               </p>
                               <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-amber-500/20">
                                 <div class="bg-surface-base dark:bg-black/40 p-3.5 rounded-xl border border-border-subtle dark:border-white/10 shadow-xs">
