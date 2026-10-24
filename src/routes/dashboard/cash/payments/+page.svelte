@@ -1305,6 +1305,7 @@
     saving = true;
     saveError = null;
 
+    const tasaCobro = currentExchangeRate;
     const checkedDebitDocs = documentos
       .filter((d) => checkedDocs[d.nro_doc.trim()] && isDebitDoc(d.co_tipo_doc))
       .sort((a, b) => {
