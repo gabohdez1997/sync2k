@@ -168,6 +168,9 @@
     });
   }
 
+  const CREDIT_DOC_TYPES = ['N/CR', 'NCR', 'AJNA', 'AJNM', 'ADEL'];
+  const isCreditDoc = (t: string | undefined | null) => CREDIT_DOC_TYPES.includes((t || '').trim().toUpperCase());
+
   function getDocTypeBadge(co_tipo_doc: string, isFiscal: boolean) {
     const t = (co_tipo_doc || '').trim().toUpperCase();
     if (t === 'FACT') {
@@ -271,12 +274,26 @@
   let editTasa = $state(1);
   let isSavingEdit = $state(false);
 
-  // Reactivo: Auto-distribuir el total de instrumentos de pago a las facturas seleccionadas en la edición
+  // Reactivo: Auto-distribuir el total de instrumentos de pago y créditos a las facturas seleccionadas en la edición
   $effect(() => {
-    let remainingPaymentBs = editTotalInstrumentosBs;
-    let remainingPaymentUsd = editTotalInstrumentos;
+    // 1. Extraer el crédito total de documentos de crédito presentes en la edición (N/CR, AJNM, etc.)
+    let totalCreditsBs = 0;
+    let totalCreditsUsd = 0;
 
     for (const r of editRenglones) {
+      if (isCreditDoc(r.co_tipo_doc)) {
+        totalCreditsBs += Number(r.mont_cob_bs) || 0;
+        totalCreditsUsd += Number(r.mont_cob) || 0;
+      }
+    }
+
+    // 2. Fondos totales disponibles para amortizar débitos = Instrumentos de pago + Créditos
+    let remainingPaymentBs = Math.round((editTotalInstrumentosBs + totalCreditsBs) * 100) / 100;
+    let remainingPaymentUsd = Math.round((editTotalInstrumentos + totalCreditsUsd) * 100) / 100;
+
+    for (const r of editRenglones) {
+      if (isCreditDoc(r.co_tipo_doc)) continue; // Los créditos son amortizadores, no se les distribuye instrumentos
+
       const docTasa = editTasa > 0 ? editTasa : 1;
 
       const retIvaBs = Number(r.reten_iva_bs) || 0;
@@ -556,11 +573,19 @@
 
   // Derived variables for Edit mode
   let editTotalCobrado = $derived(
-    editRenglones.reduce((acc, r) => acc + (Number(r.mont_cob) || 0), 0)
+    editRenglones.reduce((acc, r) => {
+      const isCredit = isCreditDoc(r.co_tipo_doc);
+      const val = Number(r.mont_cob) || 0;
+      return isCredit ? acc - val : acc + val;
+    }, 0)
   );
 
   let editTotalCobradoBs = $derived(
-    editRenglones.reduce((acc, r) => acc + (Number(r.mont_cob_bs) || 0), 0)
+    editRenglones.reduce((acc, r) => {
+      const isCredit = isCreditDoc(r.co_tipo_doc);
+      const val = Number(r.mont_cob_bs) || 0;
+      return isCredit ? acc - val : acc + val;
+    }, 0)
   );
 
   let editTotalRetenidoIva = $derived(
@@ -651,14 +676,20 @@
 
     isSavingEdit = true;
 
+    const firstParentDoc = editRenglones.find((r: any) =>
+      ['FACT', 'NDEB', 'N/DB', 'GIRO', 'AJPA', 'AJPM'].includes((r.co_tipo_doc || '').trim().toUpperCase())
+    );
+    const firstParentDocNo = firstParentDoc ? firstParentDoc.nro_doc?.trim() : null;
+
     const renglones = editRenglones.map(r => {
+      const isParent = ['FACT', 'NDEB', 'N/DB', 'GIRO', 'AJPA', 'AJPM'].includes((r.co_tipo_doc || '').trim().toUpperCase());
       return {
         co_tipo_doc: r.co_tipo_doc,
         nro_doc: r.nro_doc,
         mont_cob: r.mont_cob_bs,
         monto_retencion_iva: r.reten_iva_bs,
         monto_retencion: r.reten_islr_bs,
-        parent_doc: null
+        parent_doc: isParent ? null : (r.parent_doc ? r.parent_doc.trim() : firstParentDocNo)
       };
     });
 
@@ -1602,11 +1633,11 @@
                         </td>
                         <td class="px-4 py-3.5 font-bold text-brand-500">{r.nro_doc}</td>
                         <td class="px-4 py-3.5 text-right">
-                          <div class="font-black text-text-base">
-                            {Number(r.mont_cob / (detailData.tasa > 0 ? detailData.tasa : 1)).toLocaleString('de-DE', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+                          <div class="font-black {isCreditDoc(r.co_tipo_doc) ? 'text-emerald-600 dark:text-emerald-400' : 'text-text-base'}">
+                            {isCreditDoc(r.co_tipo_doc) ? '-' : ''}$ {Number(r.mont_cob / (detailData.tasa > 0 ? detailData.tasa : 1)).toLocaleString('de-DE', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
                           </div>
-                          <div class="text-[10px] text-text-muted/60">
-                            Bs. {Number(r.mont_cob).toLocaleString('de-DE', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+                          <div class="text-[10px] {isCreditDoc(r.co_tipo_doc) ? 'text-emerald-700 dark:text-emerald-500 font-bold' : 'text-text-muted/60'}">
+                            {isCreditDoc(r.co_tipo_doc) ? '-' : ''}Bs. {Number(r.mont_cob).toLocaleString('de-DE', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
                           </div>
                         </td>
                         <td class="px-4 py-3.5 text-right">
