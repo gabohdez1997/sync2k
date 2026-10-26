@@ -13,6 +13,7 @@
     import Combobox from '$lib/components/ui/Combobox.svelte';
     import dayjs from 'dayjs';
     import 'dayjs/locale/es';
+    import * as XLSX from 'xlsx';
 
     let { data } = $props();
 
@@ -64,13 +65,104 @@
         return formatter.format(val);
     }
 
-    function handleExport(format: 'pdf' | 'excel') {
+    function exportToExcel() {
+        if (exporting) return;
+        if (groupedClients.length === 0) {
+            toast.warning('No hay clientes con saldos pendientes para exportar.');
+            return;
+        }
+
         exporting = true;
-        toast.info(`Simulando exportación a ${format.toUpperCase()}...`);
-        setTimeout(() => {
+        try {
+            const branchName = data.branches?.find((b: any) => b.id === (filterSede || data.selectedBranchId))?.name || 'Consolidado';
+
+            // 1. Hoja Principal: Clientes con su Saldo
+            const clientRows = groupedClients.map((client: any) => {
+                const hasOverdue = client.saldo_vencido_usd < 0;
+                return {
+                    'Código / RIF': client.co_cli,
+                    'Cliente / Razón Social': client.cli_des,
+                    'Documentos Pendientes': client.doc_count,
+                    'Saldo Total (USD)': Number(client.saldo_usd.toFixed(2)),
+                    'Saldo Total (Bs.)': Number(client.saldo_bs.toFixed(2)),
+                    'Saldo Vencido (USD)': Number(client.saldo_vencido_usd.toFixed(2)),
+                    'Saldo Vencido (Bs.)': Number(client.saldo_vencido_bs.toFixed(2)),
+                    'Saldo Por Vencer (USD)': Number(client.saldo_por_vencer_usd.toFixed(2)),
+                    'Saldo Por Vencer (Bs.)': Number(client.saldo_por_vencer_bs.toFixed(2)),
+                    'Máx. Días Mora': client.max_dias_retraso,
+                    'Estatus': hasOverdue ? 'VENCIDO' : 'AL DÍA'
+                };
+            });
+
+            const wsClients = XLSX.utils.json_to_sheet(clientRows);
+            wsClients['!cols'] = [
+                { wch: 16 }, // Código / RIF
+                { wch: 42 }, // Cliente
+                { wch: 22 }, // Docs
+                { wch: 18 }, // Saldo Total USD
+                { wch: 20 }, // Saldo Total Bs
+                { wch: 18 }, // Saldo Vencido USD
+                { wch: 20 }, // Saldo Vencido Bs
+                { wch: 20 }, // Saldo Por Vencer USD
+                { wch: 22 }, // Saldo Por Vencer Bs
+                { wch: 16 }, // Máx Días Mora
+                { wch: 14 }  // Estatus
+            ];
+
+            // 2. Hoja Secundaria: Desglose de Documentos
+            const docRows: any[] = [];
+            groupedClients.forEach((client: any) => {
+                (client.documents || []).forEach((doc: any) => {
+                    docRows.push({
+                        'Código / RIF': client.co_cli,
+                        'Cliente': client.cli_des,
+                        'Tipo Doc': doc.co_tipo_doc,
+                        'Nro. Documento': doc.nro_doc,
+                        'Fecha Emisión': doc.fec_emis ? dayjs(doc.fec_emis).format('YYYY-MM-DD') : '',
+                        'Fecha Vencimiento': doc.fec_venc ? dayjs(doc.fec_venc).format('YYYY-MM-DD') : '',
+                        'Tasa (Bs/$)': doc.tasa || 1,
+                        'Monto Original (Bs.)': Number((doc.total_original || doc.total_bs || 0).toFixed(2)),
+                        'Saldo Pendiente (USD)': Number((doc.saldo_usd || 0).toFixed(2)),
+                        'Saldo Pendiente (Bs.)': Number((doc.saldo_bs || 0).toFixed(2)),
+                        'Días Mora': doc.vencido ? doc.dias_vencidos : 0,
+                        'Condición': doc.vencido ? 'Vencido' : 'Por Vencer',
+                        'Doc. Origen': doc.doc_orig ? `${doc.doc_orig} ${doc.nro_orig || ''}`.trim() : ''
+                    });
+                });
+            });
+
+            const wsDocs = XLSX.utils.json_to_sheet(docRows);
+            wsDocs['!cols'] = [
+                { wch: 16 },
+                { wch: 38 },
+                { wch: 12 },
+                { wch: 18 },
+                { wch: 14 },
+                { wch: 16 },
+                { wch: 12 },
+                { wch: 18 },
+                { wch: 20 },
+                { wch: 20 },
+                { wch: 12 },
+                { wch: 14 },
+                { wch: 20 }
+            ];
+
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, wsClients, 'Clientes CxC');
+            XLSX.utils.book_append_sheet(wb, wsDocs, 'Detalle Documentos');
+
+            const safeBranch = branchName.replace(/[^a-zA-Z0-9áéíóúÁÉÍÓÚñÑ_-]/g, '_');
+            const fileName = `CxC_Clientes_${safeBranch}_${dayjs().format('YYYY-MM-DD_HHmm')}.xlsx`;
+            XLSX.writeFile(wb, fileName);
+
+            toast.success(`Se exportaron exitosamente ${clientRows.length} clientes a Excel.`);
+        } catch (err: any) {
+            console.error('[RECEIVABLES EXPORT ERROR]:', err);
+            toast.error('Error al exportar a Excel: ' + (err.message || err));
+        } finally {
             exporting = false;
-            toast.success(`Reporte exportado exitosamente en formato ${format.toUpperCase()}!`);
-        }, 1500);
+        }
     }
 
     // Tipo de documentos badges
@@ -310,11 +402,18 @@
         </div>
 
         <button 
-            onclick={() => applyFilters()} 
-            class="h-12 w-full xl:w-auto px-6 bg-surface-soft border border-border-subtle hover:bg-surface-strong text-text-base font-black rounded-xl transition-all flex items-center justify-center gap-2 cursor-pointer"
+            onclick={exportToExcel} 
+            disabled={exporting || groupedClients.length === 0}
+            class="h-12 w-full xl:w-auto px-6 bg-emerald-600 hover:bg-emerald-500 text-white font-black rounded-xl shadow-lg shadow-emerald-600/20 transition-all flex items-center justify-center gap-2.5 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+            title="Exportar listado de clientes con saldo a Excel (.xlsx)"
         >
-            <RefreshCw size={16} class={isSearching ? 'animate-spin' : ''} />
-            Actualizar
+            {#if exporting}
+                <Loader2 size={18} class="animate-spin" />
+                <span>Exportando...</span>
+            {:else}
+                <FileSpreadsheet size={18} />
+                <span>Exportar</span>
+            {/if}
         </button>
 
     </div>
