@@ -358,7 +358,7 @@
 {#if showDetailModal && selectedLog}
   <div class="fixed inset-0 z-50 flex items-center justify-center p-4" in:fade>
     <div 
-      class="absolute inset-0 bg-black/90 backdrop-blur-md"
+      class="absolute inset-0 bg-black/60 backdrop-blur-sm"
       onclick={() => (showDetailModal = false)}
       onkeydown={(e) => e.key === 'Escape' && (showDetailModal = false)}
       role="button"
@@ -366,21 +366,24 @@
     ></div>
 
     <div 
-      class="glass w-full max-w-3xl rounded-[40px] border border-white/10 shadow-2xl relative z-10 overflow-hidden flex flex-col max-h-[90vh]"
+      class="bg-surface-raised w-full max-w-3xl rounded-[40px] border border-border-subtle shadow-2xl relative z-10 overflow-hidden flex flex-col max-h-[90vh]"
       in:fly={{ y: 20, duration: 400 }}
     >
       <!-- Header -->
-      <div class="p-8 border-b border-white/5 flex justify-between items-center bg-brand-500/5">
+      <div class="p-8 border-b border-border-subtle flex justify-between items-center bg-brand-500/[0.03]">
         <div class="flex items-center gap-4">
-          <div class="h-12 w-12 rounded-2xl bg-brand-500/10 flex items-center justify-center text-brand-400">
+          <div class="h-12 w-12 rounded-2xl bg-brand-500/10 flex items-center justify-center text-brand-600 dark:text-brand-400">
             <Info size={24} />
           </div>
           <div>
-            <h2 class="text-2xl font-black tracking-tight">Detalles de la Acción</h2>
+            <h2 class="text-2xl font-black tracking-tight text-text-base">Detalles de la Acción</h2>
             <p class="text-text-muted text-sm">ID de Auditoría: {selectedLog.id}</p>
           </div>
         </div>
-        <button onclick={() => (showDetailModal = false)} class="p-3 hover:bg-white/10 rounded-full text-text-muted transition-colors">
+        <button 
+          onclick={() => (showDetailModal = false)} 
+          class="p-3 hover:bg-surface-soft rounded-full text-text-muted hover:text-text-base transition-colors"
+        >
           <X size={24} />
         </button>
       </div>
@@ -389,15 +392,15 @@
       <div class="flex-1 overflow-auto p-8 space-y-8 custom-scrollbar">
         <!-- Action Summary -->
         <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div class="p-6 rounded-3xl bg-white/5 border border-white/10 space-y-1">
+          <div class="p-6 rounded-3xl bg-surface-soft border border-border-subtle space-y-1">
             <p class="text-[10px] font-black uppercase tracking-widest text-text-muted">Acción</p>
-            <p class="text-lg font-black text-brand-400">{selectedLog.action}</p>
+            <p class="text-lg font-black text-brand-600 dark:text-brand-400">{selectedLog.action}</p>
           </div>
-          <div class="p-6 rounded-3xl bg-white/5 border border-white/10 space-y-1">
+          <div class="p-6 rounded-3xl bg-surface-soft border border-border-subtle space-y-1">
             <p class="text-[10px] font-black uppercase tracking-widest text-text-muted">Usuario</p>
-            <p class="text-sm font-bold text-text-base truncate">{selectedLog.user_email}</p>
+            <p class="text-sm font-bold text-text-base truncate" title={selectedLog.user_email}>{selectedLog.user_email}</p>
           </div>
-          <div class="p-6 rounded-3xl bg-white/5 border border-white/10 space-y-1">
+          <div class="p-6 rounded-3xl bg-surface-soft border border-border-subtle space-y-1">
             <p class="text-[10px] font-black uppercase tracking-widest text-text-muted">Fecha</p>
             <p class="text-sm font-bold text-text-base">{formatDate(selectedLog.created_at)}</p>
           </div>
@@ -405,7 +408,7 @@
 
         <!-- Data Change (The "Diff" view) -->
         <div class="space-y-4">
-          <div class="flex items-center gap-3 text-brand-400">
+          <div class="flex items-center gap-3 text-brand-600 dark:text-brand-400">
             <Database size={18} />
             <h3 class="text-xs uppercase font-black tracking-widest">Cambios en los Datos</h3>
           </div>
@@ -414,13 +417,13 @@
              <!-- OLD DATA -->
              <div class="space-y-2">
                <span class="block text-[10px] font-black uppercase tracking-widest text-text-muted ml-4">Estado Anterior</span>
-               <div class="bg-black/40 rounded-[32px] p-6 border border-white/5 min-h-[200px] font-mono text-[11px] overflow-auto max-h-60 custom-scrollbar leading-relaxed">
+               <div class="bg-surface-soft dark:bg-black/40 rounded-[32px] p-6 border border-border-subtle min-h-[200px] font-mono text-[11px] overflow-auto max-h-60 custom-scrollbar leading-relaxed">
                   {#if selectedLog.old_data}
-                    <pre class="text-red-400/80">{formatJSON(selectedLog.old_data)}</pre>
+                    <pre class="text-rose-600 dark:text-rose-400 font-semibold">{formatJSON(selectedLog.old_data)}</pre>
                   {:else}
-                    <div class="h-full flex flex-col items-center justify-center text-text-muted/20">
+                    <div class="h-full flex flex-col items-center justify-center text-text-muted/40 py-8">
                       <Minus size={32} />
-                      <p>Sin datos previos</p>
+                      <p class="text-xs font-semibold mt-1">Sin datos previos</p>
                     </div>
                   {/if}
                </div>
@@ -429,15 +432,15 @@
              <!-- NEW DATA -->
              <div class="space-y-2">
                <span class="block text-[10px] font-black uppercase tracking-widest text-text-muted ml-4">Nuevo Estado</span>
-               <div class="bg-brand-500/[0.03] rounded-[32px] p-6 border border-brand-500/10 min-h-[200px] font-mono text-[11px] overflow-auto max-h-60 custom-scrollbar leading-relaxed">
+               <div class="bg-emerald-500/[0.04] dark:bg-emerald-500/[0.08] rounded-[32px] p-6 border border-emerald-500/20 dark:border-emerald-500/30 min-h-[200px] font-mono text-[11px] overflow-auto max-h-60 custom-scrollbar leading-relaxed">
                   {#if selectedLog.new_data}
-                    <pre class="text-emerald-400/90">{formatJSON(selectedLog.new_data)}</pre>
+                    <pre class="text-emerald-700 dark:text-emerald-400 font-semibold">{formatJSON(selectedLog.new_data)}</pre>
                   {:else if selectedLog.metadata}
-                    <pre class="text-blue-400/90">{formatJSON(selectedLog.metadata)}</pre>
+                    <pre class="text-blue-700 dark:text-blue-400 font-semibold">{formatJSON(selectedLog.metadata)}</pre>
                   {:else}
-                    <div class="h-full flex flex-col items-center justify-center text-text-muted/20">
+                    <div class="h-full flex flex-col items-center justify-center text-text-muted/40 py-8">
                       <Minus size={32} />
-                      <p>Sin cambios registrados</p>
+                      <p class="text-xs font-semibold mt-1">Sin cambios registrados</p>
                     </div>
                   {/if}
                </div>
@@ -446,9 +449,9 @@
         </div>
 
         <!-- Additional Info -->
-        <div class="p-6 rounded-3xl bg-brand-500/5 border border-brand-500/10 flex items-center justify-between">
+        <div class="p-6 rounded-3xl bg-surface-soft border border-border-subtle flex items-center justify-between">
           <div class="flex items-center gap-4">
-             <div class="h-10 w-10 rounded-xl bg-brand-500/10 flex items-center justify-center text-brand-400">
+             <div class="h-10 w-10 rounded-xl bg-brand-500/10 flex items-center justify-center text-brand-600 dark:text-brand-400">
                <Shield size={20} />
              </div>
              <div>
@@ -458,16 +461,16 @@
           </div>
           <div class="text-right">
              <p class="text-xs font-bold text-text-base">Módulo</p>
-             <p class="text-[10px] text-brand-400 font-black uppercase tracking-widest">{selectedLog.module}</p>
+             <p class="text-[10px] text-brand-600 dark:text-brand-400 font-black uppercase tracking-widest">{selectedLog.module}</p>
           </div>
         </div>
       </div>
 
       <!-- Footer -->
-      <div class="p-8 border-t border-white/5 bg-black/20">
+      <div class="p-6 border-t border-border-subtle bg-surface-raised">
         <button 
           onclick={() => (showDetailModal = false)}
-          class="w-full h-16 rounded-2xl font-bold bg-white/5 hover:bg-white/10 transition-all active:scale-95 text-text-base border border-transparent hover:border-white/10"
+          class="w-full h-14 rounded-2xl font-bold bg-surface-soft hover:bg-border-subtle/50 transition-all active:scale-95 text-text-base border border-border-subtle"
         >
           Cerrar Detalles
         </button>
