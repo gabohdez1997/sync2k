@@ -100,8 +100,14 @@ export const load: PageServerLoad = protectLoad('cash_billing', async ({ url, lo
 
         invoices = invoices.map((inv: any) => {
             const code = (inv.co_us_in || '').trim().toLowerCase();
+            const rawTasa = Number(inv.tasa || 1);
+            const tasaFecha = Number(inv.tasa_fecha || 0);
+            const effectiveTasa = rawTasa > 1 ? rawTasa : (tasaFecha > 1 ? tasaFecha : rawTasa);
             return {
                 ...inv,
+                tasa: effectiveTasa,
+                tasa_origen: inv.tasa_origen ?? rawTasa,
+                tasa_fecha: tasaFecha || effectiveTasa,
                 cashier_name: cashiersMap[code] || inv.co_us_in
             };
         });

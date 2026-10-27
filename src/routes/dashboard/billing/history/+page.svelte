@@ -480,6 +480,7 @@
             </tr>
           {:else}
             {#each sortedInvoices as invoice}
+              {@const effectiveTasa = Number(invoice.tasa) > 1 ? Number(invoice.tasa) : (Number(invoice.tasa_fecha) > 1 ? Number(invoice.tasa_fecha) : 1)}
               <tr class="hover:bg-brand-500/5 transition-colors group">
                 <td class="px-6 py-5">
                   <div class="text-xs font-bold text-text-base">
@@ -514,12 +515,12 @@
                 <td class="px-6 py-5 text-right font-bold">
                   <div class="text-base text-text-base">
                     <span class="text-text-muted text-xs font-medium mr-1">USD</span>
-                    {(Number(invoice.total_neto) / Number(invoice.tasa || 1)).toLocaleString('de-DE', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+                    {(Number(invoice.total_neto) / effectiveTasa).toLocaleString('de-DE', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
                   </div>
                   <div class="text-xs text-text-muted/60 mt-0.5">
                     <span>Bs. </span>
                     {Number(invoice.total_neto).toLocaleString('de-DE', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
-                    <span class="text-[10px] text-text-muted/40 ml-1">(Tasa: {Number(invoice.tasa || 1).toLocaleString('de-DE', {minimumFractionDigits: 2, maximumFractionDigits: 2})})</span>
+                    <span class="text-[10px] text-text-muted/40 ml-1">(Tasa: {effectiveTasa.toLocaleString('de-DE', {minimumFractionDigits: 2, maximumFractionDigits: 2})})</span>
                   </div>
                 </td>
                 <td class="px-6 py-5 text-right font-bold">
@@ -534,7 +535,7 @@
                   {:else}
                     <div class="text-sm font-black text-amber-400">
                       <span class="text-amber-500/70 text-xs font-medium mr-1">USD</span>
-                      {(Number(invoice.saldo) / Number(invoice.tasa || 1)).toLocaleString('de-DE', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+                      {(Number(invoice.saldo) / effectiveTasa).toLocaleString('de-DE', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
                     </div>
                     <div class="text-xs text-amber-400/70 font-semibold mt-0.5">
                       <span>Bs. </span>
