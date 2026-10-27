@@ -33,7 +33,8 @@
     Users,
     ShoppingCart,
     Inbox,
-    Truck
+    Truck,
+    Percent
   } from "lucide-svelte";
   import Combobox from "$lib/components/ui/Combobox.svelte";
   import type { PageData } from "./$types";
@@ -62,6 +63,8 @@
     'pur_lines':       { label: 'Líneas', icon: Layers, color: 'text-teal-400' },
     'pur_sublines':    { label: 'Sub-Líneas', icon: GitBranch, color: 'text-cyan-400' },
     'pur_categories':  { label: 'Categorías', icon: Tag, color: 'text-amber-400' },
+    'pur_margins':     { label: 'Márgenes y Precios', icon: Percent, color: 'text-rose-400' },
+    'MARGENES':        { label: 'Márgenes y Precios', icon: Percent, color: 'text-rose-400' },
     'cash_exchange':   { label: 'Tasa de Cambio', icon: DollarSign, color: 'text-yellow-400' },
     'sec_users':       { label: 'Usuarios', icon: UserCog, color: 'text-indigo-400' },
     'sec_roles':       { label: 'Permisos y Roles', icon: Key, color: 'text-orange-400' },

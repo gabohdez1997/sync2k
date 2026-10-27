@@ -52,6 +52,7 @@
     BarChart2,
     Inbox,
     Boxes,
+    Percent,
   } from "lucide-svelte";
   import { slide, fade } from "svelte/transition";
 
@@ -216,6 +217,12 @@
           label: "Categorías",
           href: "/dashboard/purchases/categories",
           icon: Tag,
+        },
+        {
+          id: "pur_margins",
+          label: "Márgenes y Precios",
+          href: "/dashboard/purchases/margins",
+          icon: Percent,
         },
         {
           id: "pur_quotes",
