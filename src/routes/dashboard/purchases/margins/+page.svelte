@@ -223,17 +223,7 @@
         Simulador en Vivo
       </div>
 
-      <div class="grid grid-cols-3 gap-3">
-        <div>
-          <label class="text-[10px] font-bold uppercase text-text-muted block mb-1" for="sim-price">Precio Actual</label>
-          <input
-            id="sim-price"
-            type="number"
-            bind:value={simPrice}
-            class="w-full h-11 bg-surface-raised border border-border-subtle rounded-xl px-3 font-mono font-bold text-sm text-text-base outline-none focus:border-brand-500"
-          />
-        </div>
-
+      <div class="grid grid-cols-2 gap-3">
         <div>
           <label class="text-[10px] font-bold uppercase text-text-muted block mb-1" for="sim-cur-margin">% Margen Actual</label>
           <input
@@ -255,15 +245,29 @@
         </div>
       </div>
 
-      <div class="p-4 bg-surface-raised border border-border-subtle rounded-2xl flex items-center justify-between">
-        <div>
-          <div class="text-[11px] text-text-muted">Costo Base Implícito:</div>
-          <div class="text-sm font-mono font-bold text-text-base">${simCost.toFixed(2)}</div>
+      <div class="p-4 bg-surface-raised border border-border-subtle rounded-2xl flex items-center justify-between gap-4">
+        <div class="flex-1">
+          <label class="text-[10px] font-bold uppercase text-text-muted block mb-1" for="sim-price">Precio Actual</label>
+          <div class="relative">
+            <span class="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted font-bold text-sm">$</span>
+            <input
+              id="sim-price"
+              type="number"
+              bind:value={simPrice}
+              class="w-full h-11 bg-surface-soft border border-border-subtle rounded-xl pl-7 pr-3 font-mono font-bold text-sm text-text-base outline-none focus:border-brand-500"
+            />
+          </div>
         </div>
-        <ArrowRight size={18} class="text-brand-500" />
-        <div class="text-right">
-          <div class="text-[11px] text-text-muted">Resultado Nuevo Precio:</div>
-          <div class="text-base font-mono font-black text-emerald-600 dark:text-emerald-400">${simNewPrice.toFixed(2)}</div>
+
+        <div class="pt-5">
+          <ArrowRight size={20} class="text-brand-500 shrink-0" />
+        </div>
+
+        <div class="text-right flex-1 pt-1">
+          <div class="text-[10px] font-bold uppercase text-text-muted">Nuevo Precio:</div>
+          <div class="text-xl font-mono font-black text-emerald-600 dark:text-emerald-400 mt-1">
+            ${simNewPrice.toFixed(2)}
+          </div>
         </div>
       </div>
     </div>
