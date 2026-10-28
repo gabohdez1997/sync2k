@@ -84,17 +84,46 @@ export const GET: RequestHandler = async ({ params, url, locals, fetch }) => {
 					       RTRIM(ISNULL(d.doc_orig, '')) AS doc_orig,
 					       RTRIM(ISNULL(d.nro_orig, '')) AS nro_orig,
 					       COALESCE(NULLIF(RTRIM(d.impfisfac), ''), RTRIM(ISNULL(d.impfis, ''))) AS impfisfac,
-					       orig_info.num_doc_orig,
-					       orig_info.tipo_doc_orig,
-					       orig_info.n_control_orig,
-					       orig_info.monto_imp_orig,
-					       orig_info.co_sucu_in_orig,
-					       orig_info.impfisfac_orig
+					       orig_doc.num_doc_orig,
+					       orig_doc.tipo_doc_orig,
+					       orig_meta.n_control_orig,
+					       orig_meta.monto_imp_orig,
+					       orig_meta.co_sucu_in_orig,
+					       orig_meta.impfisfac_orig
 					FROM saDocumentoVenta d
 					OUTER APPLY (
 						SELECT TOP 1
-							orig_src.num_doc_orig,
-							orig_src.tipo_doc_orig,
+							LTRIM(RTRIM(r_orig.num_doc)) AS num_doc_orig,
+							ISNULL(NULLIF(LTRIM(RTRIM(r_orig.tipo_doc)), ''), 'FACT') AS tipo_doc_orig
+						FROM saDevolucionCliente dc
+						INNER JOIN saDevolucionClienteReng r_orig ON dc.doc_num = r_orig.doc_num
+						WHERE dc.anulado = 0
+						  AND (
+							  (UPPER(RTRIM(d.doc_orig)) = 'DEVO' AND dc.doc_num = d.nro_orig)
+							  OR dc.nro_doc = d.nro_doc
+						  )
+						  AND NULLIF(LTRIM(RTRIM(r_orig.num_doc)), '') IS NOT NULL
+						ORDER BY r_orig.reng_num ASC
+					) devo_orig
+					OUTER APPLY (
+						SELECT
+							COALESCE(
+								devo_orig.num_doc_orig,
+								CASE WHEN UPPER(RTRIM(d.doc_orig)) IN ('FACT', 'N/DB', 'NDEB')
+									 THEN NULLIF(LTRIM(RTRIM(d.nro_orig)), '')
+									 ELSE NULL
+								END
+							) AS num_doc_orig,
+							COALESCE(
+								devo_orig.tipo_doc_orig,
+								CASE WHEN UPPER(RTRIM(d.doc_orig)) IN ('FACT', 'N/DB', 'NDEB')
+									 THEN NULLIF(LTRIM(RTRIM(d.doc_orig)), '')
+									 ELSE NULL
+								END
+							) AS tipo_doc_orig
+					) orig_doc
+					OUTER APPLY (
+						SELECT TOP 1
 							COALESCE(NULLIF(RTRIM(dv_orig.n_control), ''), RTRIM(ISNULL(fv_orig.n_control, ''))) AS n_control_orig,
 							COALESCE(fv_orig.monto_imp, dv_orig.monto_imp, 0) AS monto_imp_orig,
 							COALESCE(NULLIF(RTRIM(fv_orig.co_sucu_in), ''), RTRIM(ISNULL(dv_orig.co_sucu_in, ''))) AS co_sucu_in_orig,
@@ -104,33 +133,14 @@ export const GET: RequestHandler = async ({ params, url, locals, fetch }) => {
 								NULLIF(RTRIM(dv_orig.impfisfac), ''),
 								RTRIM(ISNULL(dv_orig.impfis, ''))
 							) AS impfisfac_orig
-						FROM (
-							SELECT TOP 1
-								LTRIM(RTRIM(r_orig.num_doc)) AS num_doc_orig,
-								ISNULL(NULLIF(LTRIM(RTRIM(r_orig.tipo_doc)), ''), 'FACT') AS tipo_doc_orig
-							FROM saDevolucionCliente dc
-							INNER JOIN saDevolucionClienteReng r_orig ON dc.doc_num = r_orig.doc_num
-							WHERE dc.anulado = 0
-							  AND (
-								  (UPPER(LTRIM(RTRIM(d.doc_orig))) = 'DEVO' AND LTRIM(RTRIM(dc.doc_num)) = LTRIM(RTRIM(d.nro_orig)))
-								  OR LTRIM(RTRIM(dc.nro_doc)) = LTRIM(RTRIM(d.nro_doc))
-							  )
-							  AND NULLIF(LTRIM(RTRIM(r_orig.num_doc)), '') IS NOT NULL
-							UNION ALL
-							SELECT
-								LTRIM(RTRIM(d.nro_orig)) AS num_doc_orig,
-								LTRIM(RTRIM(d.doc_orig)) AS tipo_doc_orig
-							FROM (SELECT 1 AS _) AS direct_orig
-							WHERE UPPER(LTRIM(RTRIM(d.doc_orig))) IN ('FACT', 'N/DB', 'NDEB')
-							  AND NULLIF(LTRIM(RTRIM(d.nro_orig)), '') IS NOT NULL
-						) orig_src
-						LEFT JOIN saDocumentoVenta dv_orig
-							ON LTRIM(RTRIM(dv_orig.co_tipo_doc)) = orig_src.tipo_doc_orig
-						   AND LTRIM(RTRIM(dv_orig.nro_doc)) = orig_src.num_doc_orig
+						FROM saDocumentoVenta dv_orig
 						LEFT JOIN saFacturaVenta fv_orig
-							ON orig_src.tipo_doc_orig = 'FACT'
-						   AND LTRIM(RTRIM(fv_orig.doc_num)) = orig_src.num_doc_orig
-					) orig_info
+							ON orig_doc.tipo_doc_orig = 'FACT'
+						   AND fv_orig.doc_num = orig_doc.num_doc_orig
+						WHERE orig_doc.num_doc_orig IS NOT NULL
+						  AND dv_orig.co_tipo_doc = orig_doc.tipo_doc_orig
+						  AND dv_orig.nro_doc = orig_doc.num_doc_orig
+					) orig_meta
 					WHERE UPPER(LTRIM(RTRIM(d.co_tipo_doc))) IN ('N/CR', 'NCR')
 					  AND LTRIM(RTRIM(d.nro_doc)) IN (${ncrNums})
 				`;
