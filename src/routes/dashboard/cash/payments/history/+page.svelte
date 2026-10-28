@@ -11,6 +11,11 @@
   import { fade } from 'svelte/transition';
   import SearchBar from "$lib/components/ui/SearchBar.svelte";
   import Combobox from "$lib/components/ui/Combobox.svelte";
+  import {
+    isContribuyenteEspecialClient,
+    getEffectivePorcEsp,
+    canClientRetainIslr,
+  } from "$lib/retention-eligibility";
 
   let { data } = $props();
 
@@ -129,7 +134,8 @@
     }
   }
 
-  function isDocumentoFiscal(co_sucu_in: string, monto_imp: number, sede_id: string) {
+  function isDocumentoFiscal(co_sucu_in: string, monto_imp: number, sede_id: string, impfis?: string | null) {
+    if (Boolean((impfis || '').trim())) return true;
     if (monto_imp > 0) return true;
     
     const bConfig = data.branches?.find((b: any) => String(b.id).toLowerCase() === String(sede_id).toLowerCase());
@@ -169,7 +175,47 @@
   }
 
   const CREDIT_DOC_TYPES = ['N/CR', 'NCR', 'AJNA', 'AJNM', 'ADEL'];
+  const DEBIT_RETENTION_DOC_TYPES = ['FACT', 'NDEB', 'N/DB'];
   const isCreditDoc = (t: string | undefined | null) => CREDIT_DOC_TYPES.includes((t || '').trim().toUpperCase());
+  const isCreditNote = (t: string | undefined | null) => ['N/CR', 'NCR'].includes((t || '').trim().toUpperCase());
+  const isDebitRetentionDocType = (t: string | undefined | null) => DEBIT_RETENTION_DOC_TYPES.includes((t || '').trim().toUpperCase());
+
+  function isEditNcrOriginFiscal(r: any): boolean {
+    if (!r || !isCreditNote(r.co_tipo_doc)) return false;
+    const sedeId = detailData?.sede_id || selectedBranch;
+    const origNum = String(r.num_doc_orig || r.numero_documento_afectado || '').trim();
+    if (!origNum || origNum === '0') {
+      if (String(r.nro_orig || '').trim()) {
+        return isDocumentoFiscal(r.co_sucu_in || '', Number(r.monto_imp || 0), sedeId, r.impfis);
+      }
+      return false;
+    }
+    if (r.co_sucu_in_orig !== undefined || r.monto_imp_orig !== undefined || r.impfisfac_orig !== undefined) {
+      return isDocumentoFiscal(r.co_sucu_in_orig || '', Number(r.monto_imp_orig || 0), sedeId, r.impfisfac_orig);
+    }
+    return isDocumentoFiscal(r.co_sucu_in || '', Number(r.monto_imp || 0), sedeId, r.impfis);
+  }
+
+  function canApplyEditIvaRetention(r: any): boolean {
+    if (!r || !detailData) return false;
+    if (!isContribuyenteEspecialClient(detailData)) return false;
+    if (Number(r.monto_imp || 0) <= 0) return false;
+    const sedeId = detailData?.sede_id || selectedBranch;
+    if (isCreditDoc(r.co_tipo_doc)) {
+      if (!isCreditNote(r.co_tipo_doc)) return false;
+      return isEditNcrOriginFiscal(r);
+    }
+    if (!isDebitRetentionDocType(r.co_tipo_doc)) return false;
+    return isDocumentoFiscal(r.co_sucu_in || '', Number(r.monto_imp || 0), sedeId, r.impfis);
+  }
+
+  function canApplyEditIslrRetention(r: any): boolean {
+    if (!r || !detailData) return false;
+    if (!canClientRetainIslr(detailData)) return false;
+    if (!isDebitRetentionDocType(r.co_tipo_doc)) return false;
+    const sedeId = detailData?.sede_id || selectedBranch;
+    return isDocumentoFiscal(r.co_sucu_in || '', Number(r.monto_imp || 0), sedeId, r.impfis);
+  }
 
   function getDocTypeBadge(co_tipo_doc: string, isFiscal: boolean) {
     const t = (co_tipo_doc || '').trim().toUpperCase();
@@ -417,9 +463,14 @@
         total_neto: Number(r.total_neto) || (rawNetoBs + Number(r.monto_retencion_iva) + Number(r.monto_retencion)),
         otros1: Number(r.otros1) || 0,
         
+        impfis: r.impfis || r.impfisfac || "",
+        doc_orig: r.doc_orig || "",
+        nro_orig: r.nro_orig || "",
         n_control: r.n_control || retIvaMatch?.numero_control_documento || "",
         num_doc_orig: r.num_doc_orig || "",
         numero_documento_afectado: retIvaMatch?.numero_documento_afectado?.trim() || r.num_doc_orig?.trim() || "",
+        hadSavedIva: hasIva,
+        hadSavedIslr: hasIslr,
         showIvaDetails: hasIva,
         manual_override_iva: hasIva,
         reten_iva: Math.round((Number(r.monto_retencion_iva) / editTasa) * 100) / 100,
@@ -457,6 +508,11 @@
           
           return {
             ...r,
+            impfis: r.impfis || matchedDoc?.impfisfac || "",
+            num_doc_orig: r.num_doc_orig || matchedDoc?.num_doc_orig || "",
+            co_sucu_in_orig: matchedDoc?.co_sucu_in_orig,
+            monto_imp_orig: matchedDoc?.monto_imp_orig,
+            impfisfac_orig: matchedDoc?.impfisfac_orig,
             maxBalanceBs: maxFactBalanceBs,
             maxBalanceUsd: maxFactBalanceUsd
           };
@@ -562,14 +618,24 @@
     const r = editRenglones[index];
     if (!r) return;
 
-    if (r.showIvaDetails) {
+    const allowIva = canApplyEditIvaRetention(r) || Boolean(r.hadSavedIva);
+    const allowIslr = canApplyEditIslrRetention(r) || Boolean(r.hadSavedIslr);
+
+    if (!allowIva) {
+      r.showIvaDetails = false;
+    }
+    if (!allowIslr) {
+      r.showIslrDetails = false;
+    }
+
+    if (r.showIvaDetails && allowIva) {
       if (!r.manual_override_iva && r.reten_iva === 0) {
         const totalNetoBs = r.total_neto > 0 ? r.total_neto : r.maxBalanceBs;
         const montoImpBs = r.total_neto > 0 ? r.monto_imp : Math.round((totalNetoBs - (totalNetoBs / 1.16)) * 100) / 100;
         
         r.base_imponible_iva_bs = r.base_imponible_iva_bs || Math.round((totalNetoBs - montoImpBs - (r.otros1 || 0)) * 100) / 100;
         r.base_imponible_iva = Math.round((r.base_imponible_iva_bs / editTasa) * 100) / 100;
-        const porc = Number(detailData.porc_esp || 75);
+        const porc = getEffectivePorcEsp(detailData) || 75;
         r.reten_iva_bs = Math.round(montoImpBs * (porc / 100) * 100) / 100;
         r.reten_iva = Math.round((r.reten_iva_bs / editTasa) * 100) / 100;
       } else if (r.manual_override_iva) {
@@ -581,7 +647,7 @@
       r.num_comprobante_iva = "";
     }
 
-    if (r.showIslrDetails) {
+    if (r.showIslrDetails && allowIslr) {
       if (!r.manual_override_islr && r.reten_islr === 0) {
         const totalNetoBs = r.total_neto > 0 ? r.total_neto : r.maxBalanceBs;
         const baseBs = r.base_imponible_islr_bs > 0 ? r.base_imponible_islr_bs : (totalNetoBs - (r.monto_imp || 0));
@@ -623,11 +689,11 @@
 
   let editTotalRetenidoIvaVista = $derived(
     editRenglones.reduce((acc, r) => {
-      if (isCreditDoc(r.co_tipo_doc)) {
+      if (isCreditDoc(r.co_tipo_doc) || !canApplyEditIvaRetention(r)) {
         return acc + (r.showIvaDetails ? (Number(r.reten_iva) || 0) : 0);
       }
       const docTasa = editTasa > 0 ? editTasa : 1;
-      const porcIva = detailData ? (Number(detailData.porc_esp) || 0) : 0;
+      const porcIva = getEffectivePorcEsp(detailData);
       const theoreticalRetIvaBs = Math.round((r.monto_imp || 0) * (porcIva / 100) * 100) / 100;
       const theoreticalRetIvaUsd = Math.round((theoreticalRetIvaBs / docTasa) * 100) / 100;
       return acc + Math.max(r.reten_iva || 0, theoreticalRetIvaUsd);
@@ -648,7 +714,7 @@
       editRenglones.reduce((acc, r) => {
         if (isCreditDoc(r.co_tipo_doc)) return acc;
         const docTasa = editTasa > 0 ? editTasa : 1;
-        const porcIva = detailData ? (Number(detailData.porc_esp) || 0) : 0;
+        const porcIva = canApplyEditIvaRetention(r) ? getEffectivePorcEsp(detailData) : 0;
         const theoreticalRetIvaBs = Math.round((r.monto_imp || 0) * (porcIva / 100) * 100) / 100;
         const theoreticalRetIvaUsd = Math.round((theoreticalRetIvaBs / docTasa) * 100) / 100;
         
@@ -665,7 +731,7 @@
       0,
       editRenglones.reduce((acc, r) => {
         if (isCreditDoc(r.co_tipo_doc)) return acc;
-        const porcIva = detailData ? (Number(detailData.porc_esp) || 0) : 0;
+        const porcIva = canApplyEditIvaRetention(r) ? getEffectivePorcEsp(detailData) : 0;
         const theoreticalRetIvaBs = Math.round((r.monto_imp || 0) * (porcIva / 100) * 100) / 100;
         
         const appliedRetIvaBs = r.showIvaDetails ? Math.max(r.reten_iva_bs || 0, theoreticalRetIvaBs) : 0;
@@ -678,12 +744,15 @@
 
   let hasPendingIvaVoucher = $derived(
     editRenglones.some(r => {
-      if (isCreditDoc(r.co_tipo_doc)) {
-        return r.showIvaDetails && (Number(r.reten_iva_bs) || 0) > 0 && !r.num_comprobante_iva;
+      if (r.showIvaDetails && (Number(r.reten_iva_bs) || 0) > 0) {
+        return !String(r.num_comprobante_iva || '').trim();
       }
-      const porcIva = detailData ? (Number(detailData.porc_esp) || 0) : 0;
+      if (!canApplyEditIvaRetention(r) || isCreditDoc(r.co_tipo_doc)) {
+        return false;
+      }
+      const porcIva = getEffectivePorcEsp(detailData);
       const theoreticalRetIvaBs = Math.round((r.monto_imp || 0) * (porcIva / 100) * 100) / 100;
-      return theoreticalRetIvaBs > 0 && !r.num_comprobante_iva;
+      return theoreticalRetIvaBs > 0 && !String(r.num_comprobante_iva || '').trim();
     })
   );
 
@@ -705,9 +774,19 @@
   async function saveEditPayment() {
     for (const r of editRenglones) {
       if (r.showIvaDetails && r.reten_iva_bs > 0) {
+        if (!canApplyEditIvaRetention(r) && !r.hadSavedIva) {
+          toast.error(`El cliente o el documento ${r.nro_doc} no califica para retención de IVA.`);
+          return;
+        }
         const compNum = (r.num_comprobante_iva || "").trim();
         if (!compNum || compNum.toUpperCase() === "S/N" || compNum.toUpperCase() === "SN") {
           toast.error(`Debe ingresar el número de comprobante para la retención de IVA del documento ${r.nro_doc}.`);
+          return;
+        }
+      }
+      if (r.showIslrDetails && r.reten_islr_bs > 0) {
+        if (!canApplyEditIslrRetention(r) && !r.hadSavedIslr) {
+          toast.error(`El cliente o el documento ${r.nro_doc} no califica para retención de ISLR.`);
           return;
         }
       }
@@ -1189,7 +1268,9 @@
                 
                 <div class="space-y-4">
                   {#each editRenglones as r, idx}
-                    {@const badge = getDocTypeBadge(r.co_tipo_doc, isDocumentoFiscal(r.co_sucu_in, Number(r.monto_imp), detailData?.sede_id || selectedBranch))}
+                    {@const badge = getDocTypeBadge(r.co_tipo_doc, isDocumentoFiscal(r.co_sucu_in, Number(r.monto_imp), detailData?.sede_id || selectedBranch, r.impfis))}
+                    {@const showEditIva = canApplyEditIvaRetention(r) || Boolean(r.hadSavedIva)}
+                    {@const showEditIslr = canApplyEditIslrRetention(r) || Boolean(r.hadSavedIslr)}
                     <div class="bg-surface-soft/20 rounded-2xl border border-border-subtle p-5 hover:border-white/10 transition-all space-y-4">
                       <!-- Fila Superior -->
                       <div class="flex items-center justify-between">
@@ -1206,7 +1287,7 @@
                       </div>
                       
                       <!-- Controles de Abono e Impuestos -->
-                      <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                      <div class="grid grid-cols-1 {showEditIva && showEditIslr ? 'md:grid-cols-4' : (showEditIva || showEditIslr ? 'md:grid-cols-3' : 'md:grid-cols-2')} gap-4">
                         <!-- Total Factura ($) (Solo Lectura) -->
                         <div>
                           <label class="block text-xs font-black text-text-muted uppercase mb-1.5">Total Factura</label>
@@ -1230,7 +1311,7 @@
                         </div>
 
                         <!-- Retención de IVA ($) -->
-                        {#if Number(detailData?.porc_esp) > 0}
+                        {#if showEditIva}
                         <div>
                           <div class="flex justify-between items-center mb-1.5">
                             <label class="block text-xs font-black text-text-muted uppercase">Reten. IVA ($)</label>
@@ -1256,7 +1337,7 @@
                             type="number"
                             step="0.01"
                             value={r.showIvaDetails ? r.reten_iva : (() => {
-                              const porcIva = detailData ? (Number(detailData.porc_esp) || 0) : 0;
+                              const porcIva = canApplyEditIvaRetention(r) ? getEffectivePorcEsp(detailData) : 0;
                               const theoreticalRetIvaBs = Math.round((r.monto_imp || 0) * (porcIva / 100) * 100) / 100;
                               return Math.round((theoreticalRetIvaBs / (editTasa > 0 ? editTasa : 1)) * 100) / 100;
                             })()}
@@ -1271,7 +1352,7 @@
                           <span class="block text-xs text-green-500 font-black text-right mt-1.5">
                             Bs. {(
                               r.showIvaDetails ? (r.reten_iva_bs || 0) : (() => {
-                                const porcIva = detailData ? (Number(detailData.porc_esp) || 0) : 0;
+                                const porcIva = canApplyEditIvaRetention(r) ? getEffectivePorcEsp(detailData) : 0;
                                 return Math.round((r.monto_imp || 0) * (porcIva / 100) * 100) / 100;
                               })()
                             ).toLocaleString("de-DE", { minimumFractionDigits: 2 })}
@@ -1280,6 +1361,7 @@
                         {/if}
 
                         <!-- Retención de ISLR ($) -->
+                        {#if showEditIslr}
                         <div>
                           <div class="flex justify-between items-center mb-1.5">
                             <label class="block text-xs font-black text-text-muted uppercase">Reten. ISLR ($)</label>
@@ -1316,10 +1398,11 @@
                             Bs. {(r.reten_islr_bs || 0).toLocaleString("de-DE", { minimumFractionDigits: 2 })}
                           </span>
                         </div>
+                        {/if}
                       </div>
 
                       <!-- Subpanel Comprobante IVA -->
-                      {#if r.showIvaDetails && Number(detailData?.porc_esp) > 0}
+                      {#if r.showIvaDetails && showEditIva}
                         <div class="bg-green-500/5 border border-green-500/20 p-4 rounded-2xl space-y-3 text-xs">
                           <span class="font-bold text-green-400">Datos Comprobante Retención IVA</span>
                           <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -1356,7 +1439,7 @@
                       {/if}
 
                       <!-- Subpanel ISLR -->
-                      {#if r.showIslrDetails}
+                      {#if r.showIslrDetails && showEditIslr}
                         <div class="bg-amber-500/5 border border-amber-500/20 p-4 rounded-2xl space-y-3 text-xs">
                           <span class="font-bold text-amber-300">Datos Retención ISLR / Municipal</span>
                           <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">

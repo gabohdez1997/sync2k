@@ -5,6 +5,7 @@ import { hasPermission } from '$lib/server/auth';
 import { fail } from '@sveltejs/kit';
 import { supabaseAdmin } from '$lib/server/supabase';
 import { logAction } from '$lib/server/audit';
+import { isPersonaNaturalClient, inferTipoPerFromRif } from '$lib/retention-eligibility';
 import type { Actions, PageServerLoad } from './$types';
 
 export const load: PageServerLoad = protectLoad('sales_customers', async ({ locals, url, fetch }) => {
@@ -252,11 +253,27 @@ export const actions: Actions = {
         }
 
         const customerData = Object.fromEntries(formData);
-        const payload = {
+        const rawRif = String(formData.get('rif') || customerData.co_cli || '').trim();
+        const normalizedTipoPer = inferTipoPerFromRif(rawRif, String(formData.get('tipo_per') || '1'));
+        const isContribuyente = formData.has('contribuyente');
+        const rawPorcEsp = Math.max(0, Math.min(100, parseFloat(formData.get('porc_esp') as string) || 0));
+        const isNat = isPersonaNaturalClient({
+            rif: rawRif,
+            co_cli: String(customerData.co_cli || ''),
+            tipo_per: normalizedTipoPer
+        });
+        const isEspecial = Boolean(
+            isContribuyente &&
+            !isNat &&
+            rawPorcEsp > 0 &&
+            (formData.has('contribu_e') || formData.has('contribuu_e') || rawPorcEsp > 0)
+        );
+        const payload: Record<string, any> = {
             ...customerData,
-            contribuyente: formData.has('contribuyente'),
-            contribu_e: formData.has('contribu_e') || formData.has('contribuu_e'),
-            porc_esp: parseFloat(formData.get('porc_esp') as string) || 0
+            tipo_per: normalizedTipoPer,
+            contribuyente: isContribuyente,
+            contribu_e: isEspecial,
+            porc_esp: isEspecial ? rawPorcEsp : 0
         };
 
         // 2. Ejecución del Broadcast

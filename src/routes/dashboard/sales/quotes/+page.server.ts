@@ -3,6 +3,7 @@ import { AgentClient } from '$lib/server/agent';
 import { hasPermission } from '$lib/server/auth';
 import { logAction } from '$lib/server/audit';
 import { supabaseAdmin } from '$lib/server/supabase';
+import { isPersonaNaturalClient, inferTipoPerFromRif } from '$lib/retention-eligibility';
 import { redirect, fail, type Actions } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
 
@@ -133,7 +134,14 @@ export const actions: Actions = {
 	saveCustomer: protectAction('sales_quotes', async ({ request, locals, fetch }) => {
 		const profile = locals.profile;
 		const formData = await request.formData();
-		const payload = { ...Object.fromEntries(formData), contribuyente: formData.has('contribuyente'), contribu_e: formData.has('contribu_e') || formData.has('contribuu_e'), porc_esp: parseFloat(formData.get('porc_esp') as string) || 0 };
+		const rawEntries = Object.fromEntries(formData);
+		const rawRif = String(formData.get('rif') || rawEntries.co_cli || '').trim();
+		const normalizedTipoPer = inferTipoPerFromRif(rawRif, String(formData.get('tipo_per') || '1'));
+		const isContribuyente = formData.has('contribuyente');
+		const rawPorcEsp = Math.max(0, Math.min(100, parseFloat(formData.get('porc_esp') as string) || 0));
+		const isNat = isPersonaNaturalClient({ rif: rawRif, co_cli: String(rawEntries.co_cli || ''), tipo_per: normalizedTipoPer });
+		const isEspecial = Boolean(isContribuyente && !isNat && rawPorcEsp > 0 && (formData.has('contribu_e') || formData.has('contribuu_e') || rawPorcEsp > 0));
+		const payload: Record<string, any> = { ...rawEntries, tipo_per: normalizedTipoPer, contribuyente: isContribuyente, contribu_e: isEspecial, porc_esp: isEspecial ? rawPorcEsp : 0 };
 
 		// Broadcast: obtener TODAS las sucursales activas desde Supabase para replicación universal
 		const { data: branchesData } = await supabaseAdmin.from('branches').select('*').eq('active', true);

@@ -32,6 +32,12 @@
   import { toast } from "svelte-sonner";
   import Combobox from "$lib/components/ui/Combobox.svelte";
   import SearchBar from "$lib/components/ui/SearchBar.svelte";
+  import {
+    isPersonaNaturalClient,
+    inferTipoPerFromRif,
+    isContribuyenteEspecialClient,
+    getEffectivePorcEsp,
+  } from "$lib/retention-eligibility";
   import type { PageData, ActionData } from "./$types";
 
   let { data, form }: { data: PageData; form: ActionData } = $props();
@@ -68,7 +74,11 @@
   let contribuyente = $state(false);
   let tipo_per = $state("1"); // 1 = PNR by default
   let contribu_e = $state(false);
-  let porc_esp = $state(75);
+  let porc_esp = $state(0);
+
+  let isNaturalFormClient = $derived(
+    isPersonaNaturalClient({ rif, co_cli: isEditing ? co_cli : rif, tipo_per }),
+  );
 
   let selectedTenant = $state("");
   let selectedBranch = $state("");
@@ -88,7 +98,21 @@
   });
 
   $effect(() => {
-    contribu_e = contribuyente;
+    if (!isEditing && rif) {
+      const inferred = inferTipoPerFromRif(rif, tipo_per);
+      if (inferred !== tipo_per) {
+        tipo_per = inferred;
+      }
+    }
+  });
+
+  $effect(() => {
+    if (isNaturalFormClient && Number(porc_esp) !== 0) {
+      porc_esp = 0;
+    }
+    contribu_e = Boolean(
+      contribuyente && !isNaturalFormClient && Number(porc_esp) > 0,
+    );
   });
 
   let localCustomers = $state(data.customers || []);
@@ -147,7 +171,7 @@
     contribuyente = false;
     tipo_per = "1";
     contribu_e = false;
-    porc_esp = 75;
+    porc_esp = 0;
     showModal = true;
   }
 
@@ -162,11 +186,15 @@
     ciudad = customer.ciudad;
     co_zon = customer.co_zon || "";
     tip_cli = customer.tip_cli || "";
-    contribuyente =
-      customer.contrib ?? customer.bContrib ?? customer.contribuyente ?? false;
-    tipo_per = customer.sTipo_Per || customer.tipo_per || "1";
-    contribu_e = customer.bContribu_E ?? customer.contribu_e ?? false;
-    porc_esp = customer.dePorc_Esp ?? customer.porc_esp ?? 100;
+    contribuyente = Boolean(
+      customer.contrib ?? customer.bContrib ?? customer.contribuyente ?? false,
+    );
+    tipo_per = inferTipoPerFromRif(
+      customer.rif,
+      customer.sTipo_Per || customer.tipo_per || "1",
+    );
+    contribu_e = isContribuyenteEspecialClient(customer);
+    porc_esp = getEffectivePorcEsp(customer);
     showModal = true;
     selectedBranch = data.selectedBranchId || data.context?.branchId || "";
   }
@@ -764,7 +792,9 @@
             <div
               class="space-y-6 pt-2 animate-in fade-in slide-in-from-top-2 duration-300"
             >
-              <input type="hidden" name="contribu_e" value="true" />
+              {#if !isNaturalFormClient && Number(porc_esp) > 0}
+                <input type="hidden" name="contribu_e" value="true" />
+              {/if}
               
               <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <!-- Tipo de Persona -->
@@ -802,8 +832,9 @@
                       step="0.01"
                       min="0"
                       max="100"
+                      disabled={isNaturalFormClient}
                       bind:value={porc_esp}
-                      class="w-full bg-surface-base border border-border-subtle rounded-2xl px-5 py-4 focus:outline-none focus:ring-2 focus:ring-brand-500/50 transition-all"
+                      class="w-full bg-surface-base border border-border-subtle rounded-2xl px-5 py-4 focus:outline-none focus:ring-2 focus:ring-brand-500/50 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                     />
                     <span
                       class="absolute right-5 top-1/2 -translate-y-1/2 font-bold text-text-muted"

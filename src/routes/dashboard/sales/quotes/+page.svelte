@@ -50,6 +50,12 @@
   import ImageViewer from "$lib/components/ui/ImageViewer.svelte";
   import dayjs from "dayjs";
   import "dayjs/locale/es";
+  import {
+    isPersonaNaturalClient,
+    inferTipoPerFromRif,
+    isContribuyenteEspecialClient,
+    getEffectivePorcEsp,
+  } from "$lib/retention-eligibility";
   import type { PageData } from "./$types";
   import { PUBLIC_SUPABASE_URL } from "$env/static/public";
 
@@ -222,9 +228,11 @@
           email: String(q.email || "N/A").trim(),
           co_zon: String(q.co_zon || "").trim(),
           zon_des: String(q.zon_des || "").trim(),
-          contribu_e: !!q.contribu_e,
-          contribuyente: !!q.contribu_e,
-          porc_esp: Number(q.porc_esp || 0),
+          tipo_per: String(q.tipo_per || "").trim(),
+          contrib: Boolean(q.contrib ?? q.contribuyente ?? q.contribu_e),
+          contribu_e: isContribuyenteEspecialClient(q),
+          contribuyente: Boolean(q.contrib ?? q.contribuyente ?? q.contribu_e),
+          porc_esp: getEffectivePorcEsp(q),
           co_ven: String(q.co_ven || "").trim(),
           ven_des: String(q.ven_des || "").trim(),
           co_mone: String(q.co_mone || "BS").trim(),
@@ -491,18 +499,40 @@
     co_zon: "",
     contribuyente: false,
     contribu_e: false,
-    porc_esp: 75,
+    porc_esp: 0,
     tipo_per: "1",
     tip_cli: "",
     id_precio: "01",
   });
+
+  let isNaturalNewClient = $derived(
+    isPersonaNaturalClient({
+      rif: newClient.rif,
+      co_cli: newClient.rif,
+      tipo_per: newClient.tipo_per,
+    }),
+  );
 
   $effect(() => {
     newClient.cli_des = newClient.descripcion;
   });
 
   $effect(() => {
-    newClient.contribu_e = newClient.contribuyente;
+    if (newClient.rif) {
+      const inferred = inferTipoPerFromRif(newClient.rif, newClient.tipo_per);
+      if (inferred !== newClient.tipo_per) {
+        newClient.tipo_per = inferred;
+      }
+    }
+  });
+
+  $effect(() => {
+    if (isNaturalNewClient && Number(newClient.porc_esp) !== 0) {
+      newClient.porc_esp = 0;
+    }
+    newClient.contribu_e = Boolean(
+      newClient.contribuyente && !isNaturalNewClient && Number(newClient.porc_esp) > 0,
+    );
   });
 
   // Estandarizar rifInput reactivamente
@@ -879,7 +909,7 @@
       ivaBS += baseBS * (rate / 100);
     });
 
-    const porcEsp = selectedClient?.porc_esp ? Number(selectedClient.porc_esp) : 0;
+    const porcEsp = getEffectivePorcEsp(selectedClient);
     const retencionUSD = ivaUSD * (porcEsp / 100);
     const retencionBS = ivaBS * (porcEsp / 100);
 
@@ -1259,13 +1289,13 @@
                         >Estatus Fiscal</span
                       >
                       <span class="font-bold text-text-base">
-                        {selectedClient.porc_esp > 0
-                          ? `Contribuyente Especial (${selectedClient.porc_esp}%)`
-                          : selectedClient.contribuyente
-                            ? selectedClient.contribu_e
-                              ? "Contribuyente Especial"
-                              : "Contribuyente Ordinario"
-                            : "No Contribuyente"}
+                        {isPersonaNaturalClient(selectedClient)
+                          ? "Persona Natural (Sin retención)"
+                          : isContribuyenteEspecialClient(selectedClient)
+                            ? `Contribuyente Especial (${getEffectivePorcEsp(selectedClient)}%)`
+                            : (selectedClient.contrib || selectedClient.contribuyente)
+                              ? "Contribuyente Ordinario"
+                              : "No Contribuyente"}
                       </span>
                     </div>
                   </div>
@@ -1565,7 +1595,9 @@
 
                   {#if newClient.contribuyente}
                     <div class="md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-6 animate-in fade-in slide-in-from-top-2 duration-300">
-                      <input type="hidden" name="contribu_e" value="true" />
+                      {#if !isNaturalNewClient && Number(newClient.porc_esp) > 0}
+                        <input type="hidden" name="contribu_e" value="true" />
+                      {/if}
                       <!-- Tipo Persona -->
                       <div class="space-y-2">
                         <label
@@ -1616,10 +1648,11 @@
                             type="number"
                             name="porc_esp"
                             step="0.01"
+                            disabled={isNaturalNewClient}
                             bind:value={newClient.porc_esp}
                             min="0"
                             max="100"
-                            class="w-full h-14 bg-surface-soft border border-border-bold rounded-2xl px-5 outline-none focus:border-brand-500/50 font-bold"
+                            class="w-full h-14 bg-surface-soft border border-border-bold rounded-2xl px-5 outline-none focus:border-brand-500/50 font-bold disabled:opacity-50 disabled:cursor-not-allowed"
                           />
                           <span
                             class="absolute right-5 top-1/2 -translate-y-1/2 font-bold text-text-muted"
@@ -2246,13 +2279,13 @@
                       >Estatus Fiscal</span
                     >
                     <span class="text-sm font-bold text-text-base">
-                      {selectedClient.porc_esp > 0
-                        ? `Contribuyente Especial (${selectedClient.porc_esp}%)`
-                        : selectedClient.contribuyente
-                          ? selectedClient.contribu_e
-                            ? "Contribuyente Especial"
-                            : "Contribuyente Ordinario"
-                          : "No Contribuyente"}
+                      {isPersonaNaturalClient(selectedClient)
+                        ? "Persona Natural (Sin retención)"
+                        : isContribuyenteEspecialClient(selectedClient)
+                          ? `Contribuyente Especial (${getEffectivePorcEsp(selectedClient)}%)`
+                          : (selectedClient.contrib || selectedClient.contribuyente)
+                            ? "Contribuyente Ordinario"
+                            : "No Contribuyente"}
                     </span>
                   </div>
                   <div class="space-y-1">

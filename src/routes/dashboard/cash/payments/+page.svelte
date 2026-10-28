@@ -29,6 +29,12 @@
   } from "lucide-svelte";
   import { toast } from "svelte-sonner";
   import ImportItemCard from "$lib/components/ui/ImportItemCard.svelte";
+  import {
+    isPersonaNaturalClient,
+    isContribuyenteEspecialClient,
+    getEffectivePorcEsp,
+    canClientRetainIslr,
+  } from "$lib/retention-eligibility";
 
   let { data } = $props();
 
@@ -41,6 +47,9 @@
     ["N/CR", "NCR"].includes((t || "").trim().toUpperCase());
   const isDebitDoc = (t: string | undefined | null) =>
     DEBIT_DOC_TYPES.includes((t || "").trim().toUpperCase());
+  const DEBIT_RETENTION_DOC_TYPES = ["FACT", "NDEB", "N/DB"];
+  const isDebitRetentionDocType = (t: string | undefined | null) =>
+    DEBIT_RETENTION_DOC_TYPES.includes((t || "").trim().toUpperCase());
 
   function isDocumentoFiscal(
     co_sucu_in: string | undefined | null,
@@ -130,10 +139,32 @@
   }
 
   function canApplyIvaRetentionOnDoc(doc: any): boolean {
-    if (!doc) return false;
-    if (!isCreditDoc(doc.co_tipo_doc)) return true;
-    if (!isCreditNote(doc.co_tipo_doc)) return false;
-    return isNcrOriginFiscal(doc) && Number(doc.monto_imp || 0) > 0;
+    if (!doc || !selectedClient) return false;
+    if (!isContribuyenteEspecialClient(selectedClient)) return false;
+    if (Number(doc.monto_imp || 0) <= 0) return false;
+    if (isCreditDoc(doc.co_tipo_doc)) {
+      if (!isCreditNote(doc.co_tipo_doc)) return false;
+      return isNcrOriginFiscal(doc);
+    }
+    if (!isDebitRetentionDocType(doc.co_tipo_doc)) return false;
+    return isDocumentoFiscal(
+      doc.co_sucu_in,
+      Number(doc.monto_imp || 0),
+      doc.sede_id || selectedBranch,
+      doc.impfisfac,
+    );
+  }
+
+  function canApplyIslrRetentionOnDoc(doc: any): boolean {
+    if (!doc || !selectedClient) return false;
+    if (!canClientRetainIslr(selectedClient)) return false;
+    if (!isDebitRetentionDocType(doc.co_tipo_doc)) return false;
+    return isDocumentoFiscal(
+      doc.co_sucu_in,
+      Number(doc.monto_imp || 0),
+      doc.sede_id || selectedBranch,
+      doc.impfisfac,
+    );
   }
 
   // Prioridad de consumo de créditos para amortizar deudas:
@@ -828,12 +859,22 @@
   }
 
   async function selectInvoice(inv: any) {
-    selectedClient = {
+    const initialClientRef = {
       co_cli: inv.co_cli ? inv.co_cli.trim() : "",
-      descripcion: inv.cli_des ? inv.cli_des.trim() : "",
       rif: inv.rif ? inv.rif.trim() : "",
-      contribu_e: !!inv.contribu_e,
-      porc_esp: inv.contribu_e ? (inv.porc_esp || 75) : 0,
+      tipo_per: inv.tipo_per ? String(inv.tipo_per).trim() : "",
+      contrib: inv.contrib,
+      contribu_e: inv.contribu_e,
+      porc_esp: inv.porc_esp,
+    };
+    selectedClient = {
+      co_cli: initialClientRef.co_cli,
+      descripcion: inv.cli_des ? inv.cli_des.trim() : "",
+      rif: initialClientRef.rif,
+      tipo_per: initialClientRef.tipo_per,
+      contrib: Boolean(inv.contrib),
+      contribu_e: isContribuyenteEspecialClient(initialClientRef),
+      porc_esp: getEffectivePorcEsp(initialClientRef),
       co_ven: inv.co_ven ? inv.co_ven.trim() : "",
       co_mone: inv.co_mone ? inv.co_mone.trim() : "USD",
       direc1: "",
@@ -844,7 +885,7 @@
     checkedDocs = {};
     formasPago = [];
 
-    // Fetch full client details for address/phone mapping
+    // Fetch full client details for address/phone and authoritative fiscal status
     fetch(
       `/api/agent/customers?search=${encodeURIComponent(co_cli)}&branch_id=${selectedBranch}`,
     )
@@ -854,10 +895,33 @@
           const cDetail = resJson.data.find(
             (c: any) => c.co_cli.trim() === co_cli,
           );
-          if (cDetail) {
+          if (cDetail && selectedClient && selectedClient.co_cli === co_cli) {
+            const prevEligible = selectedClient.contribu_e;
+            const prevPorc = selectedClient.porc_esp;
             selectedClient.direc1 = cDetail.direc1 || "";
             selectedClient.telefonos = cDetail.telefonos || "";
             selectedClient.email = cDetail.email || "";
+            if (cDetail.rif) selectedClient.rif = String(cDetail.rif).trim();
+            selectedClient.tipo_per = String(cDetail.sTipo_Per ?? cDetail.tipo_per ?? selectedClient.tipo_per ?? "").trim();
+            selectedClient.contrib = Boolean(cDetail.contrib ?? cDetail.bContrib ?? cDetail.contribuyente ?? selectedClient.contrib);
+            selectedClient.contribu_e = isContribuyenteEspecialClient(cDetail);
+            selectedClient.porc_esp = getEffectivePorcEsp(cDetail);
+
+            if (
+              documentos.length > 0 &&
+              (prevEligible !== selectedClient.contribu_e || prevPorc !== selectedClient.porc_esp)
+            ) {
+              for (const d of documentos) {
+                const nro = d.nro_doc.trim();
+                if (docInputs[nro]) {
+                  docInputs[nro].porc_ret_iva = getEffectivePorcEsp(selectedClient) || 75;
+                  if (checkedDocs[nro]) {
+                    recalculateDocAmounts(nro, d, false);
+                  }
+                }
+              }
+              syncSinglePaymentInstrument();
+            }
           }
         }
       })
@@ -911,7 +975,7 @@
             base_imponible_iva: baseImpUsd,
             base_imponible_iva_bs: baseImpBs,
             alicuota_iva: Number(doc.porc_imp) > 0 ? Number(doc.porc_imp) : 16,
-            porc_ret_iva: (selectedClient && selectedClient.contribu_e) ? (Number(selectedClient.porc_esp) || 75) : 75,
+            porc_ret_iva: getEffectivePorcEsp(selectedClient) || 75,
             reten_islr: 0,
             reten_islr_bs: 0,
             co_islr: "072",
@@ -975,16 +1039,17 @@
 
     if (checkedDocs[nroDoc]) {
       const canRetainIva = canApplyIvaRetentionOnDoc(doc);
+      const canRetainIslr = canApplyIslrRetentionOnDoc(doc);
 
-      // Si es documento de crédito sin origen fiscal elegible, asegurar que no quede retención activa
-      if (isCreditDoc(doc.co_tipo_doc) && !canRetainIva) {
+      if (!canRetainIva) {
         input.showIvaDetails = false;
       }
+      if (!canRetainIslr) {
+        input.showIslrDetails = false;
+      }
 
-      // Auto-enable retenciones si es contribuyente especial, tiene IVA y el documento aplica (FACT o N/CR con origen fiscal)
+      // Auto-habilitar retención IVA únicamente cuando cliente y documento califican
       if (
-        selectedClient?.contribu_e &&
-        doc.monto_imp > 0 &&
         canRetainIva &&
         !input.yaTieneRetIva &&
         !input.manual_override_iva &&
@@ -999,7 +1064,7 @@
         input.reten_iva_bs = 0;
         input.reten_iva = 0;
       } else if (input.showIvaDetails && canRetainIva) {
-        const porc = Number(input.porc_ret_iva) || ((selectedClient && selectedClient.contribu_e) ? (Number(selectedClient.porc_esp) || 75) : 75);
+        const porc = Number(input.porc_ret_iva) || getEffectivePorcEsp(selectedClient) || 75;
         input.porc_ret_iva = porc;
         input.reten_iva_bs = Math.round(doc.monto_imp * (porc / 100) * 100) / 100;
         input.reten_iva = Math.round((input.reten_iva_bs / docTasa) * 100) / 100;
@@ -1022,7 +1087,7 @@
         input.showIslrDetails = false;
         input.reten_islr_bs = 0;
         input.reten_islr = 0;
-      } else if (input.showIslrDetails) {
+      } else if (input.showIslrDetails && canRetainIslr) {
         const baseImpBs = Number(input.base_imponible_islr_bs) > 0 ? Number(input.base_imponible_islr_bs) : (Number(doc.base_islr_default) > 0 ? Number(doc.base_islr_default) : (doc.total_neto - doc.monto_imp));
         input.base_imponible_islr_bs = baseImpBs;
         input.base_imponible_islr = Math.round((baseImpBs / docTasa) * 100) / 100;
@@ -1310,14 +1375,20 @@
         if (!inp) continue;
 
         if (inp.showIvaDetails && (inp.reten_iva_bs || 0) > 0) {
+          if (!canApplyIvaRetentionOnDoc(doc)) {
+            const reason = isPersonaNaturalClient(selectedClient)
+              ? "el cliente es Persona Natural y no aplica retenciones"
+              : !isContribuyenteEspecialClient(selectedClient)
+                ? "el cliente no es Contribuyente Especial"
+                : isCreditNote(doc.co_tipo_doc)
+                  ? `la Nota de Crédito ${nroTrim} no posee documento de origen fiscal con IVA`
+                  : `el documento ${nroTrim} no es fiscal o está exento de IVA`;
+            toast.error(`No se puede registrar retención de IVA: ${reason}.`);
+            saving = false;
+            return;
+          }
+
           if (isCreditNote(doc.co_tipo_doc)) {
-            if (!canApplyIvaRetentionOnDoc(doc)) {
-              toast.error(
-                `La Nota de Crédito ${nroTrim} no posee un documento de origen fiscal elegible para retención de IVA.`
-              );
-              saving = false;
-              return;
-            }
             const affectedOrig = (inp.numero_documento_afectado_iva || getNcrOriginDocNum(doc) || "").trim();
             if (!affectedOrig || affectedOrig === "0" || affectedOrig === nroTrim) {
               toast.error(
@@ -1345,7 +1416,17 @@
           }
         }
 
-        if (!inp.showIslrDetails) {
+        if (inp.showIslrDetails && (inp.reten_islr_bs || 0) > 0) {
+          if (!canApplyIslrRetentionOnDoc(doc)) {
+            toast.error(
+              isPersonaNaturalClient(selectedClient)
+                ? "Las Personas Naturales no aplican retención de ISLR."
+                : `El documento ${nroTrim} no es fiscal elegible para retención de ISLR.`
+            );
+            saving = false;
+            return;
+          }
+        } else if (!inp.showIslrDetails) {
           if (inp.reten_islr_bs > 0 || inp.reten_islr > 0) {
             inp.reten_islr_bs = 0;
             inp.reten_islr = 0;
@@ -1969,8 +2050,12 @@
                   >Estatus Fiscal</span
                 >
                 <p class="text-xs font-bold text-brand-400">
-                  {#if selectedClient.contribu_e}
-                    Contribuyente Especial ({selectedClient.porc_esp}% Ret. IVA)
+                  {#if isPersonaNaturalClient(selectedClient)}
+                    Persona Natural (No aplica retenciones)
+                  {:else if isContribuyenteEspecialClient(selectedClient)}
+                    Contribuyente Especial ({getEffectivePorcEsp(selectedClient)}% Ret. IVA)
+                  {:else if selectedClient.contrib || selectedClient.contribuyente}
+                    Contribuyente Ordinario (Sin retención de IVA)
                   {:else}
                     No Contribuyente
                   {/if}
@@ -2154,7 +2239,7 @@
                         {@const isNotApplied = appliedUsd <= 0.005}
                         {@const activeNcrRetIvaUsd = (!input.yaTieneRetIva && input.showIvaDetails) ? (Number(input.reten_iva) || 0) : 0}
                         {@const activeNcrRetIvaBs = (!input.yaTieneRetIva && input.showIvaDetails) ? (Number(input.reten_iva_bs) || 0) : 0}
-                        {@const showNcrIvaSection = isCreditNote(doc.co_tipo_doc) && (canApplyIvaRetentionOnDoc(doc) || input.yaTieneRetIva) && (Number(selectedClient?.porc_esp) > 0 || input.yaTieneRetIva)}
+                        {@const showNcrIvaSection = isCreditNote(doc.co_tipo_doc) && (canApplyIvaRetentionOnDoc(doc) || Boolean(input.yaTieneRetIva))}
 
                         <div class="border-t border-border-subtle/50 pt-3 space-y-4">
                           {#if isNotApplied}
@@ -2364,7 +2449,7 @@
                               </div>
                             </div>
 
-                            {#if input.showIvaDetails && !input.yaTieneRetIva}
+                            {#if input.showIvaDetails && !input.yaTieneRetIva && canApplyIvaRetentionOnDoc(doc)}
                               <div
                                 class="bg-green-500/5 border border-green-500/20 p-4 rounded-2xl space-y-3 text-xs animate-in slide-in-from-top-2 duration-150"
                               >
@@ -2471,10 +2556,12 @@
                           {/if}
                         </div>
                       {:else}
+                        {@const showDebitIvaCol = canApplyIvaRetentionOnDoc(doc) || Boolean(input.yaTieneRetIva)}
+                        {@const showDebitIslrCol = canApplyIslrRetentionOnDoc(doc) || Boolean(input.yaTieneRetIslr)}
                         <div
                           class="border-t border-border-subtle/50 pt-4 space-y-4 transition-all duration-200"
                         >
-                        <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <div class="grid grid-cols-2 {showDebitIvaCol && showDebitIslrCol ? 'md:grid-cols-4' : (showDebitIvaCol || showDebitIslrCol ? 'md:grid-cols-3' : 'md:grid-cols-2')} gap-4">
                           <div>
                             <label
                               class="block text-xs font-black text-text-muted uppercase mb-1.5"
@@ -2524,7 +2611,7 @@
                             </span>
                           </div>
 
-                          {#if Number(selectedClient?.porc_esp) > 0}
+                          {#if showDebitIvaCol}
                           <div>
                             <div
                               class="flex justify-between items-center mb-1.5"
@@ -2540,8 +2627,9 @@
                                 >
                                   Ya Aplicada
                                 </span>
-                              {:else}
+                              {:else if canApplyIvaRetentionOnDoc(doc)}
                                 <button
+                                  type="button"
                                   onclick={() => {
                                     input.showIvaDetails = !input.showIvaDetails;
                                     if (!input.showIvaDetails) {
@@ -2580,6 +2668,7 @@
                             </span>
                           </div>
                           {/if}
+                          {#if showDebitIslrCol}
                           <div>
                             <div
                               class="flex justify-between items-center mb-1.5"
@@ -2595,8 +2684,9 @@
                                 >
                                   Ya Aplicada
                                 </span>
-                              {:else}
+                              {:else if canApplyIslrRetentionOnDoc(doc)}
                                 <button
+                                  type="button"
                                   onclick={() => {
                                     input.showIslrDetails = !input.showIslrDetails;
                                     if (!input.showIslrDetails) {
@@ -2634,10 +2724,11 @@
                               {/if}
                             </span>
                           </div>
+                          {/if}
                         </div>
 
                         <!-- Detalles Retención IVA -->
-                        {#if input.showIvaDetails && !input.yaTieneRetIva}
+                        {#if input.showIvaDetails && !input.yaTieneRetIva && canApplyIvaRetentionOnDoc(doc)}
                           <div
                             class="bg-green-500/5 border border-green-500/20 p-4 rounded-2xl space-y-3 text-xs animate-in slide-in-from-top-2 duration-150"
                           >
@@ -2729,7 +2820,7 @@
                         {/if}
 
                         <!-- Detalles Retención ISLR -->
-                        {#if input.showIslrDetails && !input.yaTieneRetIslr}
+                        {#if input.showIslrDetails && !input.yaTieneRetIslr && canApplyIslrRetentionOnDoc(doc)}
                           <div
                             class="bg-amber-500/5 border border-amber-500/20 p-4 rounded-2xl space-y-3 text-xs animate-in slide-in-from-top-2 duration-150"
                           >
@@ -3409,8 +3500,8 @@
                   amountBs={formattedBs}
                   branchName={inv.sede_nombre}
                   cashierName={inv.cashier_name}
-                  statusLabel={inv.contribu_e ? "Esp." : null}
-                  statusClass={inv.contribu_e
+                  statusLabel={isContribuyenteEspecialClient(inv) ? "Esp." : null}
+                  statusClass={isContribuyenteEspecialClient(inv)
                     ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
                     : null}
                   onclick={() => selectInvoice(inv)}
