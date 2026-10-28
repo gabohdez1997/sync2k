@@ -217,6 +217,24 @@
         class: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20'
       };
     }
+    if (t === 'IVAN') {
+      return {
+        label: 'Ret. IVA',
+        class: 'bg-green-500/10 text-green-600 dark:text-green-400 border border-green-500/20'
+      };
+    }
+    if (t === 'IVAP') {
+      return {
+        label: 'Ret. IVA (N/CR)',
+        class: 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20'
+      };
+    }
+    if (t === 'ISLR') {
+      return {
+        label: 'Ret. ISLR',
+        class: 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20'
+      };
+    }
     return {
       label: t || (isFiscal ? 'Factura' : 'Nota de Entrega'),
       class: isFiscal
@@ -367,11 +385,15 @@
 
     editRenglones = detailData.renglones.filter((r: any) => {
       const type = r.co_tipo_doc?.trim()?.toUpperCase();
-      const isAutoDoc = ['IVAN', 'ISLR'].includes(type) || 
+      const isAutoDoc = ['IVAN', 'IVAP', 'ISLR'].includes(type) || 
                         (r.doc_orig?.trim()?.toUpperCase() === 'COBRO' && r.nro_orig?.trim() === detailData.cob_num?.trim());
       return !isAutoDoc;
     }).map((r: any) => {
-      const retIvaMatch = detailData.retenciones_iva?.find((ri: any) => ri.rowguid_reng_cob === r.rowguid || ri.numero_documento_afectado?.trim() === r.nro_doc?.trim());
+      const retIvaMatch = detailData.retenciones_iva?.find((ri: any) =>
+        ri.rowguid_reng_cob === r.rowguid ||
+        ri.nro_doc?.trim() === r.nro_doc?.trim() ||
+        ri.numero_documento?.trim() === r.nro_doc?.trim()
+      );
       const retIslrMatch = detailData.retenciones_islr?.find((rn: any) => rn.rowguid_reng_cob === r.rowguid);
 
       const rawNetoBs = Number(r.mont_cob) - Number(r.monto_retencion_iva) - Number(r.monto_retencion);
@@ -395,6 +417,9 @@
         total_neto: Number(r.total_neto) || (rawNetoBs + Number(r.monto_retencion_iva) + Number(r.monto_retencion)),
         otros1: Number(r.otros1) || 0,
         
+        n_control: r.n_control || retIvaMatch?.numero_control_documento || "",
+        num_doc_orig: r.num_doc_orig || "",
+        numero_documento_afectado: retIvaMatch?.numero_documento_afectado?.trim() || r.num_doc_orig?.trim() || "",
         showIvaDetails: hasIva,
         manual_override_iva: hasIva,
         reten_iva: Math.round((Number(r.monto_retencion_iva) / editTasa) * 100) / 100,
@@ -598,6 +623,9 @@
 
   let editTotalRetenidoIvaVista = $derived(
     editRenglones.reduce((acc, r) => {
+      if (isCreditDoc(r.co_tipo_doc)) {
+        return acc + (r.showIvaDetails ? (Number(r.reten_iva) || 0) : 0);
+      }
       const docTasa = editTasa > 0 ? editTasa : 1;
       const porcIva = detailData ? (Number(detailData.porc_esp) || 0) : 0;
       const theoreticalRetIvaBs = Math.round((r.monto_imp || 0) * (porcIva / 100) * 100) / 100;
@@ -615,33 +643,44 @@
   );
 
   let editSaldoPendiente = $derived(
-    editRenglones.reduce((acc, r) => {
-      const docTasa = editTasa > 0 ? editTasa : 1;
-      const porcIva = detailData ? (Number(detailData.porc_esp) || 0) : 0;
-      const theoreticalRetIvaBs = Math.round((r.monto_imp || 0) * (porcIva / 100) * 100) / 100;
-      const theoreticalRetIvaUsd = Math.round((theoreticalRetIvaBs / docTasa) * 100) / 100;
-      
-      const appliedRetIva = r.showIvaDetails ? Math.max(r.reten_iva || 0, theoreticalRetIvaUsd) : 0;
-      const appliedRetIslr = r.showIslrDetails ? (r.reten_islr || 0) : 0;
-      
-      return acc + (Number(r.maxBalanceUsd) || 0) - appliedRetIva - appliedRetIslr;
-    }, 0) - editTotalCobrado
+    Math.max(
+      0,
+      editRenglones.reduce((acc, r) => {
+        if (isCreditDoc(r.co_tipo_doc)) return acc;
+        const docTasa = editTasa > 0 ? editTasa : 1;
+        const porcIva = detailData ? (Number(detailData.porc_esp) || 0) : 0;
+        const theoreticalRetIvaBs = Math.round((r.monto_imp || 0) * (porcIva / 100) * 100) / 100;
+        const theoreticalRetIvaUsd = Math.round((theoreticalRetIvaBs / docTasa) * 100) / 100;
+        
+        const appliedRetIva = r.showIvaDetails ? Math.max(r.reten_iva || 0, theoreticalRetIvaUsd) : 0;
+        const appliedRetIslr = r.showIslrDetails ? (r.reten_islr || 0) : 0;
+        
+        return acc + (Number(r.maxBalanceUsd) || 0) - appliedRetIva - appliedRetIslr - (Number(r.mont_cob) || 0);
+      }, 0)
+    )
   );
 
   let editSaldoPendienteBs = $derived(
-    editRenglones.reduce((acc, r) => {
-      const porcIva = detailData ? (Number(detailData.porc_esp) || 0) : 0;
-      const theoreticalRetIvaBs = Math.round((r.monto_imp || 0) * (porcIva / 100) * 100) / 100;
-      
-      const appliedRetIvaBs = r.showIvaDetails ? Math.max(r.reten_iva_bs || 0, theoreticalRetIvaBs) : 0;
-      const appliedRetIslrBs = r.showIslrDetails ? (r.reten_islr_bs || 0) : 0;
-      
-      return acc + (Number(r.maxBalanceBs) || 0) - appliedRetIvaBs - appliedRetIslrBs;
-    }, 0) - editTotalCobradoBs
+    Math.max(
+      0,
+      editRenglones.reduce((acc, r) => {
+        if (isCreditDoc(r.co_tipo_doc)) return acc;
+        const porcIva = detailData ? (Number(detailData.porc_esp) || 0) : 0;
+        const theoreticalRetIvaBs = Math.round((r.monto_imp || 0) * (porcIva / 100) * 100) / 100;
+        
+        const appliedRetIvaBs = r.showIvaDetails ? Math.max(r.reten_iva_bs || 0, theoreticalRetIvaBs) : 0;
+        const appliedRetIslrBs = r.showIslrDetails ? (r.reten_islr_bs || 0) : 0;
+        
+        return acc + (Number(r.maxBalanceBs) || 0) - appliedRetIvaBs - appliedRetIslrBs - (Number(r.mont_cob_bs) || 0);
+      }, 0)
+    )
   );
 
   let hasPendingIvaVoucher = $derived(
     editRenglones.some(r => {
+      if (isCreditDoc(r.co_tipo_doc)) {
+        return r.showIvaDetails && (Number(r.reten_iva_bs) || 0) > 0 && !r.num_comprobante_iva;
+      }
       const porcIva = detailData ? (Number(detailData.porc_esp) || 0) : 0;
       const theoreticalRetIvaBs = Math.round((r.monto_imp || 0) * (porcIva / 100) * 100) / 100;
       return theoreticalRetIvaBs > 0 && !r.num_comprobante_iva;
@@ -696,18 +735,23 @@
     const retenciones_iva = editRenglones.filter(r => r.reten_iva_bs > 0).map(r => {
       const today = new Date();
       const periodStr = today.getFullYear() + String(today.getMonth() + 1).padStart(2, "0");
+      const isNc = ['N/CR', 'NCR'].includes((r.co_tipo_doc || '').trim().toUpperCase());
+      const affectedDoc = isNc
+        ? ((r.numero_documento_afectado || r.num_doc_orig || '').trim() || '0')
+        : '0';
       return {
         nro_doc_asoc: r.nro_doc,
+        tipo_documento: isNc ? 'N/CR' : (r.co_tipo_doc?.trim()?.substring(0, 4) || 'FACT'),
         rif_contribuyente: detailData.rif,
         periodo_impositivo: Number(periodStr),
         fecha_documento: new Date().toISOString(),
         rif_comprador: "J000000000",
         numero_documento: r.nro_doc,
-        numero_control_documento: "",
-        monto_documento: r.maxBalanceBs,
+        numero_control_documento: r.n_control || "",
+        monto_documento: r.total_neto || r.maxBalanceBs,
         base_imponible: r.base_imponible_iva_bs || 0,
         monto_ret_imp: r.reten_iva_bs || 0,
-        numero_documento_afectado: r.nro_doc,
+        numero_documento_afectado: affectedDoc,
         num_comprobante: r.num_comprobante_iva ? r.num_comprobante_iva.trim() : "",
         monto_excento: 0,
         alicuota: r.alicuota_iva
@@ -1764,7 +1808,13 @@
                           </div>
                           <div class="flex justify-between text-text-muted/70 mt-1">
                             <span>Base Imponible: USD {Number(ri.base_imponible / (detailData.tasa > 0 ? detailData.tasa : 1)).toFixed(2)} ({ri.alicuota}%)</span>
-                            <span>Doc. Afectado: {ri.numero_documento_afectado}</span>
+                            <span>
+                              {#if ri.tipo_documento?.trim() === 'N/CR'}
+                                N/CR: {ri.numero_documento || ri.nro_doc} → Origen: {ri.numero_documento_afectado}
+                              {:else}
+                                Doc: {ri.nro_doc || ri.numero_documento || ri.numero_documento_afectado}
+                              {/if}
+                            </span>
                           </div>
                           <div class="flex justify-between text-[10px] text-text-muted/50 mt-0.5">
                             <span>Base Imp. Bs: {Number(ri.base_imponible).toLocaleString('de-DE', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>

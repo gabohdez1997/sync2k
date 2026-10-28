@@ -177,7 +177,7 @@ export function organizeDetailedAccountDocs(docs: DetailedAccountDoc[]): Detaile
             const typeWeight = (t: any) => {
                 const norm = normalizeDocType(t);
                 if (norm === 'N/CR') return 1;
-                if (norm === 'ISLR' || norm === 'IVAN') return 2;
+                if (norm === 'ISLR' || norm === 'IVAN' || norm === 'IVAP') return 2;
                 if (norm === 'COBR') return 3;
                 return 4;
             };
