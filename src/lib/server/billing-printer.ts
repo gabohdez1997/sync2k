@@ -223,3 +223,254 @@ export async function sendCancellationNotificationTicket(
         failed
     };
 }
+
+export interface SendCreditTicketOptions {
+    branch_id: string;
+    credit: any;
+    user_email?: string;
+    profile?: any;
+    agentClient?: AgentClient;
+    fetchFn?: typeof fetch;
+}
+
+export interface CreditPrintResult {
+    success: boolean;
+    message: string;
+    targetPrinters: string[];
+    succeeded: string[];
+    failed: { printerName: string; error: string }[];
+}
+
+/**
+ * Envía el ticket de devolución de venta a las impresoras térmicas de pre-despacho
+ * enrutando por sublíneas de los artículos devueltos (comportamiento idéntico al pre-despacho de facturación).
+ */
+export async function sendCreditTicket(
+    options: SendCreditTicketOptions
+): Promise<CreditPrintResult> {
+    const { branch_id, credit: inputCredit, user_email, profile, fetchFn } = options;
+
+    if (!branch_id || !inputCredit) {
+        return {
+            success: false,
+            message: 'Faltan parámetros obligatorios (branch_id, credit).',
+            targetPrinters: [],
+            succeeded: [],
+            failed: []
+        };
+    }
+
+    // 1. Obtener datos de la sucursal
+    const { data: branch, error: bErr } = await supabaseAdmin
+        .from('branches')
+        .select('*')
+        .eq('id', branch_id)
+        .single();
+
+    if (bErr || !branch || !branch.agent_url) {
+        return {
+            success: false,
+            message: 'Sucursal no válida o agente no configurado.',
+            targetPrinters: [],
+            succeeded: [],
+            failed: []
+        };
+    }
+
+    const client = options.agentClient || new AgentClient({
+        slug: branch.id,
+        agent_url: branch.agent_url,
+        agent_api_key: branch.agent_token
+    }, profile, fetchFn || fetch);
+
+    // 2. Si no vienen renglones pero viene doc_num, consultar el detalle completo con el agente
+    let credit = { ...inputCredit };
+    const docNum = (credit.doc_num || '').trim();
+    if ((!credit.renglones || credit.renglones.length === 0) && docNum) {
+        try {
+            const getRes = await client.request<any>(`/devoluciones-ventas/${docNum}?sede=${branch_id}`);
+            const fetchedData = Array.isArray(getRes?.data) ? getRes.data[0] : getRes?.data;
+            if (fetchedData) {
+                credit = {
+                    ...fetchedData,
+                    ...credit,
+                    renglones: fetchedData.renglones || credit.renglones || []
+                };
+            }
+        } catch (err: any) {
+            console.warn('[CREDIT-PRINTER] No se pudo obtener detalle previo de la devolución:', err.message);
+        }
+    }
+
+    // 3. Obtener impresoras activas de esta sede
+    const { data: rawPrinters, error: pErr } = await supabaseAdmin
+        .from('printers')
+        .select('id, name, ip_address, port, sublines')
+        .eq('branch_id', branch_id)
+        .eq('is_active', true);
+
+    if (pErr || !rawPrinters || rawPrinters.length === 0) {
+        return {
+            success: false,
+            message: 'No hay impresoras activas configuradas para esta sucursal.',
+            targetPrinters: [],
+            succeeded: [],
+            failed: []
+        };
+    }
+
+    // AISLAMIENTO ESTRICTO: Solo impresoras TYPE:THERMAL con DOC:PRE_DESPACHO activas en la sede
+    const printers = (rawPrinters || []).filter((p: any) => {
+        const subs = (p.sublines || []).map((s: any) => String(s).trim().toUpperCase());
+        const isThermal = subs.includes('TYPE:THERMAL') || (!subs.some((s: string) => s.startsWith('TYPE:')) && String(p.port || '') === '9100');
+        const isPreDespacho = subs.includes('DOC:PRE_DESPACHO') || 
+            (!subs.some((s: string) => s.startsWith('DOC:')) && !subs.some((s: string) => s.includes('NOTA_ENTREGA') || s.includes('FISCAL')));
+        const isExcluded = subs.includes('DOC:NOTA_ENTREGA') || subs.includes('DOC:FACTURA_FISCAL') || subs.includes('TYPE:MATRIX_NETWORK') || subs.includes('TYPE:FISCAL');
+
+        return isThermal && isPreDespacho && !isExcluded;
+    });
+
+    if (printers.length === 0) {
+        return {
+            success: false,
+            message: 'No hay impresoras térmicas de pre-despacho (TYPE:THERMAL con DOC:PRE_DESPACHO) activas en esta sucursal.',
+            targetPrinters: [],
+            succeeded: [],
+            failed: []
+        };
+    }
+
+    // 4. Enrutamiento por sublíneas de los renglones devueltos (idéntico a pre-despacho)
+    const creditLines = credit.renglones || [];
+    const allDefinedSublines = new Set<string>();
+
+    const printersNormalized = printers.map((p: any) => {
+        const subs = (p.sublines || []).map((s: any) => String(s).trim().toUpperCase());
+        subs.forEach((s: string) => allDefinedSublines.add(s));
+        return {
+            ...p,
+            sublinesNormalized: subs
+        };
+    });
+
+    const printerItemsMap = new Map<string, any[]>();
+
+    for (const line of creditLines) {
+        const subline = (line.co_subl || '').trim().toUpperCase();
+        const isDefinedAnywhere = allDefinedSublines.has(subline);
+
+        if (!isDefinedAnywhere) {
+            for (const p of printersNormalized) {
+                if (!printerItemsMap.has(p.id)) {
+                    printerItemsMap.set(p.id, []);
+                }
+                printerItemsMap.get(p.id)!.push(line);
+            }
+        } else {
+            for (const p of printersNormalized) {
+                if (p.sublinesNormalized.includes(subline)) {
+                    if (!printerItemsMap.has(p.id)) {
+                        printerItemsMap.set(p.id, []);
+                    }
+                    printerItemsMap.get(p.id)!.push(line);
+                }
+            }
+        }
+    }
+
+    const targetPrintersArray = printersNormalized.filter((p: any) => {
+        const items = printerItemsMap.get(p.id);
+        return items && items.length > 0;
+    });
+
+    const printersToPrint = targetPrintersArray.length > 0 ? targetPrintersArray : printersNormalized;
+
+    // Resolver nombre del cajero a partir de profit_user si no viene en credit
+    let cashierName = credit.cashier_name || credit.cajero || '';
+    if (!cashierName && credit.co_us_in) {
+        try {
+            const { data: prof } = await supabaseAdmin
+                .from('profiles')
+                .select('full_name')
+                .ilike('profit_user', String(credit.co_us_in).trim())
+                .limit(1)
+                .maybeSingle();
+            if (prof?.full_name) {
+                cashierName = prof.full_name;
+            }
+        } catch (e) {
+            console.warn('[CREDIT-PRINTER] No se pudo buscar perfil del cajero:', e);
+        }
+    }
+
+    const baseDecoratedCredit = {
+        ...credit,
+        cashier_name: cashierName || credit.co_us_in || profile?.full_name || '',
+        cajero: cashierName || credit.co_us_in || profile?.full_name || '',
+        branch_name: branch.business_name || branch.name,
+        branch_rif: branch.rif,
+        branch_phone: branch.phone,
+        branch_address: branch.address,
+        user_email
+    };
+
+    // 5. Enviar a cada impresora destino con sus renglones filtrados
+    const printPromises = printersToPrint.map(async (printer: any) => {
+        const filteredLines = printerItemsMap.get(printer.id) || creditLines;
+        const decoratedCredit = {
+            ...baseDecoratedCredit,
+            renglones: filteredLines
+        };
+
+        try {
+            const res = await client.request<any>('/impresion/imprimir-devolucion', {
+                method: 'POST',
+                body: JSON.stringify({
+                    ip: printer.ip_address,
+                    port: parseInt(printer.port || '9100'),
+                    sede: branch_id,
+                    credit: decoratedCredit
+                })
+            });
+
+            return {
+                printerName: printer.name,
+                success: !!(res && res.success),
+                message: res?.message || 'Error desconocido'
+            };
+        } catch (err: any) {
+            return {
+                printerName: printer.name,
+                success: false,
+                message: err.message
+            };
+        }
+    });
+
+    const printResults = await Promise.all(printPromises);
+    const succeeded = printResults.filter(r => r.success).map(r => r.printerName);
+    const failed = printResults.filter(r => !r.success).map(r => ({ printerName: r.printerName, error: r.message }));
+
+    if (succeeded.length === 0) {
+        return {
+            success: false,
+            message: 'No se pudo conectar con las impresoras destinatarias: ' + 
+                failed.map(f => `${f.printerName} (${f.error})`).join(', '),
+            targetPrinters: printersToPrint.map((p: any) => p.name),
+            succeeded,
+            failed
+        };
+    }
+
+    const successMsg = `Ticket de devolución enviado a: ${succeeded.join(', ')}.` +
+        (failed.length > 0 ? ` (Falló en: ${failed.map(f => `${f.printerName} (${f.error})`).join(', ')})` : '');
+
+    return {
+        success: true,
+        message: successMsg,
+        targetPrinters: printersToPrint.map((p: any) => p.name),
+        succeeded,
+        failed
+    };
+}
+

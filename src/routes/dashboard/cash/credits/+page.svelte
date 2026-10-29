@@ -299,6 +299,7 @@
             reng_num: l.reng_num || idx + 1,
             co_art: (l.co_art || "").trim(),
             art_des: (l.art_des || "").trim(),
+            co_subl: (l.co_subl || "").trim(),
             co_alma: (l.co_alma || "").trim(),
             co_uni: (l.co_uni || "01").trim(),
             unidad: (l.unidad || l.co_uni || "UND").trim(),
@@ -484,6 +485,49 @@
         );
         generatedResult = json.data;
         saveSuccess = true;
+
+        // Imprimir ticket de almacén automáticamente (como pre-despacho)
+        const newDevNum = (json.data?.doc_num || "").trim();
+        toast.info("Enviando ticket de devolución a almacén...");
+        try {
+          const printRes = await fetch("/api/agent/credits/print", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              branch_id: filterSede,
+              doc_num: newDevNum,
+              credit: {
+                doc_num: newDevNum,
+                nro_doc: json.data?.nro_doc,
+                factura_origen: selectedInvoice.doc_num.trim(),
+                cli_des: selectedInvoice.cli_des,
+                rif: selectedInvoice.rif,
+                vendedor: selectedInvoice.ven_des || selectedInvoice.vendedor || "",
+                cajero: data.userProfile?.full_name || data.userProfile?.profit_user || "",
+                comentario:
+                  comentarioDevolucion.trim() ||
+                  `Devolución s/ Factura N° ${selectedInvoice.doc_num.trim()}`,
+                renglones: activeLines.map((l) => ({
+                  co_art: l.co_art,
+                  art_des: l.art_des,
+                  co_subl: l.co_subl || "",
+                  co_alma: l.co_alma,
+                  cantidad: Number(l.cantidad_devolver),
+                  co_uni: l.co_uni || l.unidad || "UND",
+                })),
+              },
+            }),
+          });
+          const printJson = await printRes.json();
+          if (printJson.success) {
+            toast.success(printJson.message || "Ticket de devolución enviado a almacén.");
+          } else {
+            toast.warning(`Devolución guardada, pero ticket no impreso: ${printJson.message}`);
+          }
+        } catch (printErr: any) {
+          console.error("Error al imprimir ticket de devolución:", printErr);
+          toast.warning(`Devolución guardada, pero ocurrió un error al imprimir ticket: ${printErr.message}`);
+        }
       } else {
         toast.error(json.message || "Error al procesar la devolución.");
       }
@@ -491,6 +535,42 @@
       toast.error("Error de servidor: " + err.message);
     } finally {
       isSavingReturn = false;
+    }
+  }
+
+  // --- REIMPRIMIR TICKET DE ALMACÉN ---
+  let printingCreditDoc = $state<string | null>(null);
+
+  async function handlePrintCreditTicket(dev: any) {
+    if (printingCreditDoc) return;
+    const docNum = (dev.doc_num || "").trim();
+    if (!docNum) return;
+
+    printingCreditDoc = docNum;
+    toast.info(`Enviando ticket de devolución ${docNum} a almacén...`);
+
+    try {
+      const branchId = dev.sede_id || dev._branch_id || filterSede || data.selectedBranchId;
+      const response = await fetch("/api/agent/credits/print", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          branch_id: branchId,
+          doc_num: docNum,
+          credit: dev,
+        }),
+      });
+      const res = await response.json();
+      if (res.success) {
+        toast.success(res.message || "Ticket de devolución enviado a almacén.");
+      } else {
+        toast.error(res.message || "Error al enviar ticket a almacén.");
+      }
+    } catch (err: any) {
+      console.error("Error al reimprimir ticket de devolución:", err);
+      toast.error("Error al conectar con el servicio de impresión: " + err.message);
+    } finally {
+      printingCreditDoc = null;
     }
   }
 
@@ -753,6 +833,27 @@
           <Printer size={18} />
           <span>Imprimir PDF</span>
         </a>
+
+        <button
+          type="button"
+          onclick={() =>
+            handlePrintCreditTicket({
+              doc_num: generatedResult.doc_num,
+              nro_doc: generatedResult.nro_doc,
+              sede_id: filterSede || data.selectedBranchId,
+            })}
+          disabled={printingCreditDoc === generatedResult.doc_num}
+          class="flex-1 bg-amber-500/10 hover:bg-amber-500/20 text-amber-500 border border-amber-500/20 px-6 py-3.5 rounded-2xl font-bold transition-all text-sm flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+          title="Reimprimir Ticket de Devolución en Almacén"
+        >
+          {#if printingCreditDoc === generatedResult.doc_num}
+            <Loader2 size={18} class="animate-spin text-amber-500" />
+            <span>Enviando...</span>
+          {:else}
+            <Receipt size={18} />
+            <span>Reimprimir Ticket</span>
+          {/if}
+        </button>
       {/if}
       <button
         onclick={() => {
@@ -1720,6 +1821,20 @@
                           >
                             <Printer size={18} />
                           </a>
+
+                          <!-- Reimprimir Ticket Devolución Almacén -->
+                          <button
+                            onclick={() => handlePrintCreditTicket(dev)}
+                            disabled={printingCreditDoc === dev.doc_num}
+                            class="p-2 text-text-muted hover:text-amber-500 hover:bg-amber-500/10 rounded-xl transition-all cursor-pointer disabled:opacity-50 flex items-center justify-center"
+                            title="Reimprimir Ticket de Devolución en Almacén"
+                          >
+                            {#if printingCreditDoc === dev.doc_num}
+                              <Loader2 size={18} class="animate-spin text-amber-500" />
+                            {:else}
+                              <Receipt size={18} />
+                            {/if}
+                          </button>
 
                           <!-- Ver Detalle -->
                           <button

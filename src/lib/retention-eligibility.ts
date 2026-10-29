@@ -251,7 +251,8 @@ export function calculateOrderServicesIslr(
 			porcFlete: 3,
 			hasCorte: false,
 			corteBase: 0,
-			retencionCorte: 2,
+			retencionCorte: 0,
+			porcCorte: 2,
 			totalRetencionIslr: 0,
 		};
 	}
