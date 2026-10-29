@@ -508,9 +508,31 @@
         </div>
 
         <!-- COSTOS Y PRECIOS -->
-        <div class="grid grid-cols-2 gap-3 mt-2">
+        <div class="grid grid-cols-2 gap-2 mt-2">
           <div
-            class="bg-surface-base/50 p-3 rounded-2xl border border-white/5 flex flex-col gap-1"
+            class="bg-surface-base/50 p-2.5 rounded-2xl border border-white/5 flex flex-col gap-0.5"
+          >
+            <span
+              class="text-[9px] uppercase font-black tracking-widest text-text-muted"
+              >Precio 1</span
+            >
+            <span class="text-sm font-bold text-brand-400"
+              >${Number(article.prec1 || 0).toLocaleString()}</span
+            >
+          </div>
+          <div
+            class="bg-surface-base/50 p-2.5 rounded-2xl border border-white/5 flex flex-col gap-0.5"
+          >
+            <span
+              class="text-[9px] uppercase font-black tracking-widest text-text-muted"
+              >Margen 1</span
+            >
+            <span class="text-sm font-bold text-brand-400"
+              >{Number(article.margen1 || 0)}%</span
+            >
+          </div>
+          <div
+            class="bg-surface-base/50 p-2.5 rounded-2xl border border-white/5 flex flex-col gap-0.5"
           >
             <span
               class="text-[9px] uppercase font-black tracking-widest text-text-muted"
@@ -521,7 +543,7 @@
             >
           </div>
           <div
-            class="bg-surface-base/50 p-3 rounded-2xl border border-white/5 flex flex-col gap-1"
+            class="bg-surface-base/50 p-2.5 rounded-2xl border border-white/5 flex flex-col gap-0.5"
           >
             <span
               class="text-[9px] uppercase font-black tracking-widest text-text-muted"
