@@ -58,6 +58,9 @@ export const load: PageServerLoad = protectLoad('sales_orders', async ({ params,
                 if (clientRes.success && clientRes.data) {
                     const clientData = Array.isArray(clientRes.data) ? clientRes.data[0] : clientRes.data;
                     order.cli_dir = clientData.direc1 || clientData.direc2 || order.cli_dir;
+                    order.rif = clientData.rif || order.rif;
+                    order.tipo_per = clientData.tipo_per ?? order.tipo_per;
+                    order.contrib = clientData.contrib ?? order.contrib;
                     order.contribu_e = clientData.contribu_e;
                     order.porc_esp = clientData.porc_esp;
                 }

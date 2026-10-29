@@ -4,7 +4,7 @@ import { hasPermission } from '$lib/server/auth';
 import { logAction } from '$lib/server/audit';
 import { getActiveBranches } from '$lib/server/branches';
 import { supabaseAdmin } from '$lib/server/supabase';
-import { isPersonaNaturalClient, inferTipoPerFromRif } from '$lib/retention-eligibility';
+import { isPersonaNaturalClient, inferTipoPerFromRif, isFleteServiceItem, isCorteOrService09Item } from '$lib/retention-eligibility';
 import { redirect, fail, type Actions } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
 
@@ -207,6 +207,17 @@ export const actions: Actions = {
 			const isEdit = !!orderData?.doc_num;
 			if (isEdit && !hasPermission(profile, 'sales_orders', 'update')) return fail(403, { message: 'Sin permiso update' });
 			if (!isEdit && !hasPermission(profile, 'sales_orders', 'create')) return fail(403, { message: 'Sin permiso create' });
+
+			// Validar que no se mezclen servicios de Flete y Corte
+			if (Array.isArray(orderData.renglones)) {
+				const hasFlete = orderData.renglones.some((r: any) => isFleteServiceItem(r));
+				const hasCorte = orderData.renglones.some((r: any) => isCorteOrService09Item(r));
+				if (hasFlete && hasCorte) {
+					return fail(400, {
+						message: 'No se puede mezclar servicio de Flete con servicio de Corte en un mismo pedido. Debe facturarse en pedidos separados debido a la retención de ISLR.'
+					});
+				}
+			}
 			const enrichedorderData = { ...orderData, co_ven: profile.profit_user, co_cta_ingr_egr: "", isUSD: orderData.showUSD };
 			const res: any = await agentClient.request('/pedidos', { method: 'POST', body: JSON.stringify(enrichedorderData) });
 			if (res.success || (res.results && res.results[0]?.success)) {

@@ -2,6 +2,12 @@
     import dayjs from "dayjs";
     import "dayjs/locale/es";
     import { onMount } from "svelte";
+    import {
+        isContribuyenteEspecialClient,
+        getEffectivePorcEsp,
+        isFleteServiceItem,
+        isCorteOrService09Item,
+    } from "$lib/retention-eligibility";
     import type { PageData } from "./$types";
 
     dayjs.locale("es");
@@ -47,9 +53,9 @@
         return tasa > 0 ? bs / tasa : om;
     }
 
-    // --- CÁLCULO DE RETENCIÓN DE IVA ---
-    const porcEsp = Number(order?.porc_esp || 0);
-    const isContribEspecial = Boolean(order?.contribu_e) || porcEsp > 0;
+    // --- CÁLCULO DE RETENCIONES (IVA E ISLR DESGLOSADO) ---
+    const porcEsp = getEffectivePorcEsp(order);
+    const isContribEspecial = isContribuyenteEspecialClient(order);
 
     const rawBruto = Number(order?.total_bruto || 0);
     const rawImp = Number(order?.monto_imp || 0);
@@ -62,25 +68,65 @@
             : order?.tasa || 1,
     );
 
+    // Un pedido es fiscal si tiene IVA (> 0) o si todos sus renglones son exclusivamente flete (0901, exento de IVA)
+    const hasNonFleteItems = allItems.some((it: any) => !isFleteServiceItem(it));
+    const isFiscalOrder =
+        allItems.length > 0 &&
+        (rawImp > 0 || !hasNonFleteItems) &&
+        !(order?.contrib === false || order?.contrib === 0);
+
+    const canRetain = isFiscalOrder && isContribEspecial;
+
+    // Calcular bases de servicios 09 para retención de ISLR por renglón
+    let fleteBaseUSD = 0;
+    let fleteBaseBS = 0;
+    let corteBaseUSD = 0;
+    let corteBaseBS = 0;
+
+    allItems.forEach((item: any) => {
+        const unitPrice = getItemUnitPrice(item);
+        const lineUSD = Number(item.cantidad || 0) * unitPrice;
+        const lineBS = Number(item.total_renglon) || (lineUSD * tasaDoc);
+
+        if (isFleteServiceItem(item)) {
+            fleteBaseUSD += lineUSD;
+            fleteBaseBS += lineBS;
+        } else if (isCorteOrService09Item(item)) {
+            corteBaseUSD += lineUSD;
+            corteBaseBS += lineBS;
+        }
+    });
+
     // USD Mode
     const subtotalUSD = rawBruto / tasaDoc;
     const ivaUSD = rawImp / tasaDoc;
     const totalFacturaUSD = rawNeto / tasaDoc;
-    const hasRetention = isContribEspecial && porcEsp > 0 && rawImp > 0;
-    const retencionUSD = hasRetention ? (ivaUSD * porcEsp) / 100 : 0;
-    const totalAPagarUSD = totalFacturaUSD - retencionUSD;
+    const hasIvaRetention = canRetain && porcEsp > 0 && rawImp > 0;
+    const retencionUSD = hasIvaRetention ? (ivaUSD * porcEsp) / 100 : 0;
+
+    const hasFleteRetention = canRetain && fleteBaseUSD > 0;
+    const retencionFleteUSD = hasFleteRetention ? (fleteBaseUSD * 0.03) : 0;
+
+    const hasCorteRetention = canRetain && corteBaseUSD > 0;
+    const retencionCorteUSD = hasCorteRetention ? (corteBaseUSD * 0.02) : 0;
+
+    const hasIslrRetention = hasFleteRetention || hasCorteRetention;
+    const hasRetention = hasIvaRetention || hasIslrRetention;
+    const totalAPagarUSD = totalFacturaUSD - retencionUSD - retencionFleteUSD - retencionCorteUSD;
 
     // Bs Mode
     const subtotalBS = rawBruto;
     const ivaBS = rawImp;
     const totalFacturaBS = rawNeto;
-    const retencionBS = hasRetention ? (ivaBS * porcEsp) / 100 : 0;
-    const totalAPagarBS = totalFacturaBS - retencionBS;
+    const retencionBS = hasIvaRetention ? (ivaBS * porcEsp) / 100 : 0;
+    const retencionFleteBS = hasFleteRetention ? (fleteBaseBS * 0.03) : 0;
+    const retencionCorteBS = hasCorteRetention ? (corteBaseBS * 0.02) : 0;
+    const totalAPagarBS = totalFacturaBS - retencionBS - retencionFleteBS - retencionCorteBS;
     const totalAPagarUSDRef = totalAPagarBS / tasaRef;
 
     // --- LÓGICA DE PAGINACIÓN DINÁMICA CALIBRADA ---
-    // Capacidad óptima calibrada para hoja Letter (27.94cm) idéntica a órdenes de compra
-    const CAPACITY_WITH_TOTALS = 28; // Capacidad holgada en hoja con totales
+    const retentionRowsCount = (hasIvaRetention ? 1 : 0) + (hasFleteRetention ? 1 : 0) + (hasCorteRetention ? 1 : 0);
+    const CAPACITY_WITH_TOTALS = retentionRowsCount >= 2 ? 26 : (retentionRowsCount === 1 ? 27 : 28);
     const CAPACITY_WITHOUT_TOTALS = 40; // Capacidad en hojas intermedias sin totales
 
     function getItemWeight(item: any): number {
@@ -461,16 +507,46 @@
                                                 )}</span
                                             >
                                         </div>
-                                        <div
-                                            class="total-row text-amber-600 font-bold"
-                                        >
-                                            <span>Retención ({porcEsp}%)</span>
-                                            <span
-                                                >- {formatCurrency(
-                                                    retencionUSD,
-                                                )}</span
+                                        {#if hasIvaRetention}
+                                            <div
+                                                class="total-row text-amber-600 font-bold"
                                             >
-                                        </div>
+                                                <span
+                                                    >{hasIslrRetention
+                                                        ? `Retención IVA (${porcEsp}%)`
+                                                        : `Retención (${porcEsp}%)`}</span
+                                                >
+                                                <span
+                                                    >- {formatCurrency(
+                                                        retencionUSD,
+                                                    )}</span
+                                                >
+                                            </div>
+                                        {/if}
+                                        {#if hasFleteRetention}
+                                            <div
+                                                class="total-row text-amber-600 font-bold"
+                                            >
+                                                <span>Ret. ISLR (3% Flete)</span>
+                                                <span
+                                                    >- {formatCurrency(
+                                                        retencionFleteUSD,
+                                                    )}</span
+                                                >
+                                            </div>
+                                        {/if}
+                                        {#if hasCorteRetention}
+                                            <div
+                                                class="total-row text-amber-600 font-bold"
+                                            >
+                                                <span>Ret. ISLR (2% Corte)</span>
+                                                <span
+                                                    >- {formatCurrency(
+                                                        retencionCorteUSD,
+                                                    )}</span
+                                                >
+                                            </div>
+                                        {/if}
                                         <div class="grand-total-outline">
                                             <div class="bs-total">
                                                 <span class="label"
@@ -518,16 +594,46 @@
                                                 )}</span
                                             >
                                         </div>
-                                        <div
-                                            class="total-row text-amber-600 font-bold"
-                                        >
-                                            <span>Retención ({porcEsp}%)</span>
-                                            <span
-                                                >- {formatCurrency(
-                                                    retencionBS,
-                                                )}</span
+                                        {#if hasIvaRetention}
+                                            <div
+                                                class="total-row text-amber-600 font-bold"
                                             >
-                                        </div>
+                                                <span
+                                                    >{hasIslrRetention
+                                                        ? `Retención IVA (${porcEsp}%)`
+                                                        : `Retención (${porcEsp}%)`}</span
+                                                >
+                                                <span
+                                                    >- {formatCurrency(
+                                                        retencionBS,
+                                                    )}</span
+                                                >
+                                            </div>
+                                        {/if}
+                                        {#if hasFleteRetention}
+                                            <div
+                                                class="total-row text-amber-600 font-bold"
+                                            >
+                                                <span>Ret. ISLR (3% Flete)</span>
+                                                <span
+                                                    >- {formatCurrency(
+                                                        retencionFleteBS,
+                                                    )}</span
+                                                >
+                                            </div>
+                                        {/if}
+                                        {#if hasCorteRetention}
+                                            <div
+                                                class="total-row text-amber-600 font-bold"
+                                            >
+                                                <span>Ret. ISLR (2% Corte)</span>
+                                                <span
+                                                    >- {formatCurrency(
+                                                        retencionCorteBS,
+                                                    )}</span
+                                                >
+                                            </div>
+                                        {/if}
                                         <div class="grand-total-outline">
                                             <div class="bs-total">
                                                 <span class="label"
@@ -899,6 +1005,9 @@
     .total-row {
         display: flex;
         justify-content: space-between;
+        align-items: center;
+        gap: 6px;
+        white-space: nowrap;
         padding: 3px 8px;
         border-bottom: 1px solid #e2e8f0;
         font-size: 10px;

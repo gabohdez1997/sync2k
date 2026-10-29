@@ -104,3 +104,188 @@ export function canClientRetainIslr(client: ClientTaxLike | null | undefined): b
 	if (!client) return false;
 	return !isPersonaNaturalClient(client);
 }
+
+export interface ServiceItemLike {
+	co_art?: string | null;
+	codigo?: string | null;
+	co_lin?: string | null;
+	co_subl?: string | null;
+	art_des?: string | null;
+	descripcion?: string | null;
+}
+
+export interface OrderIslrRetentionInfo {
+	applies: boolean;
+	porcIslr: number;
+	serviceKind: 'flete' | 'corte' | null;
+	serviceLabel: string;
+}
+
+export interface OrderItemizedIslrRetention {
+	applies: boolean;
+	hasFlete: boolean;
+	fleteBase: number;
+	retencionFlete: number;
+	porcFlete: number;
+	hasCorte: boolean;
+	corteBase: number;
+	retencionCorte: number;
+	porcCorte: number;
+	totalRetencionIslr: number;
+}
+
+/**
+ * Determina si un renglón corresponde a servicio de Flete (sublínea 0901 / código 0901*).
+ * El flete es el único servicio 09 exento de IVA y aplica 3% de retención ISLR.
+ */
+export function isFleteServiceItem(item: ServiceItemLike | null | undefined): boolean {
+	if (!item) return false;
+	const coArt = String(item.co_art ?? item.codigo ?? '')
+		.trim()
+		.toUpperCase();
+	const coSubl = String(item.co_subl ?? '')
+		.trim()
+		.toUpperCase();
+	const coLin = String(item.co_lin ?? '')
+		.trim()
+		.toUpperCase();
+	const desc = String(item.art_des ?? item.descripcion ?? '')
+		.trim()
+		.toUpperCase();
+
+	if (coSubl === '0901' || coArt.startsWith('0901') || coArt.startsWith('901001')) {
+		return true;
+	}
+	if ((coArt.startsWith('09') || coLin === '09') && desc.includes('FLETE')) {
+		return true;
+	}
+	return false;
+}
+
+/**
+ * Determina si un renglón corresponde a Corte u otro servicio de línea 09 distinto de Flete (ej. 0902*).
+ * Estos servicios sí llevan IVA (cuando el documento es fiscal) y aplican 2% de retención ISLR.
+ */
+export function isCorteOrService09Item(item: ServiceItemLike | null | undefined): boolean {
+	if (!item || isFleteServiceItem(item)) return false;
+	const coArt = String(item.co_art ?? item.codigo ?? '')
+		.trim()
+		.toUpperCase();
+	const coSubl = String(item.co_subl ?? '')
+		.trim()
+		.toUpperCase();
+	const coLin = String(item.co_lin ?? '')
+		.trim()
+		.toUpperCase();
+
+	return (
+		coArt.startsWith('09') ||
+		coLin === '09' ||
+		coSubl.startsWith('09') ||
+		coArt.startsWith('902001') ||
+		coArt.startsWith('902002')
+	);
+}
+
+/**
+ * Evalúa si un pedido aplica retención de ISLR para un Contribuyente Especial
+ * cuando incluye algún servicio cuyo código inicia por 09 (-3% Flete / -2% Corte).
+ */
+export function getOrderServiceIslrInfo(
+	client: ClientTaxLike | null | undefined,
+	items: ServiceItemLike[] | null | undefined,
+	isFiscalOrder = true
+): OrderIslrRetentionInfo {
+	if (
+		!isFiscalOrder ||
+		!isContribuyenteEspecialClient(client) ||
+		!Array.isArray(items) ||
+		items.length === 0
+	) {
+		return { applies: false, porcIslr: 0, serviceKind: null, serviceLabel: '' };
+	}
+
+	let hasFlete = false;
+	let hasCorte = false;
+
+	for (const item of items) {
+		if (isFleteServiceItem(item)) {
+			hasFlete = true;
+		} else if (isCorteOrService09Item(item)) {
+			hasCorte = true;
+		}
+	}
+
+	if (hasFlete) {
+		return { applies: true, porcIslr: 3, serviceKind: 'flete', serviceLabel: 'Flete' };
+	}
+	if (hasCorte) {
+		return { applies: true, porcIslr: 2, serviceKind: 'corte', serviceLabel: 'Corte' };
+	}
+
+	return { applies: false, porcIslr: 0, serviceKind: null, serviceLabel: '' };
+}
+
+/**
+ * Calcula las retenciones de ISLR desglosadas por renglón de servicio:
+ * - 3% sobre el monto base del Flete (0901*)
+ * - 2% sobre el monto base del Corte u otro servicio (0902*)
+ * No aplica a bienes ni materiales (cemento, arena, etc.).
+ */
+export function calculateOrderServicesIslr(
+	client: ClientTaxLike | null | undefined,
+	itemsWithAmounts: Array<{ item: ServiceItemLike; baseAmount: number }> | null | undefined,
+	isFiscalOrder = true
+): OrderItemizedIslrRetention {
+	if (
+		!isFiscalOrder ||
+		!isContribuyenteEspecialClient(client) ||
+		!Array.isArray(itemsWithAmounts) ||
+		itemsWithAmounts.length === 0
+	) {
+		return {
+			applies: false,
+			hasFlete: false,
+			fleteBase: 0,
+			retencionFlete: 0,
+			porcFlete: 3,
+			hasCorte: false,
+			corteBase: 0,
+			retencionCorte: 2,
+			totalRetencionIslr: 0,
+		};
+	}
+
+	let fleteBase = 0;
+	let corteBase = 0;
+
+	for (const entry of itemsWithAmounts) {
+		const it = entry?.item;
+		const amt = Number(entry?.baseAmount || 0);
+		if (amt <= 0) continue;
+
+		if (isFleteServiceItem(it)) {
+			fleteBase += amt;
+		} else if (isCorteOrService09Item(it)) {
+			corteBase += amt;
+		}
+	}
+
+	const retencionFlete = fleteBase > 0 ? fleteBase * 0.03 : 0;
+	const retencionCorte = corteBase > 0 ? corteBase * 0.02 : 0;
+	const totalRetencionIslr = retencionFlete + retencionCorte;
+
+	return {
+		applies: totalRetencionIslr > 0,
+		hasFlete: fleteBase > 0,
+		fleteBase,
+		retencionFlete,
+		porcFlete: 3,
+		hasCorte: corteBase > 0,
+		corteBase,
+		retencionCorte,
+		porcCorte: 2,
+		totalRetencionIslr,
+	};
+}
+

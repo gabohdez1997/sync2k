@@ -59,6 +59,8 @@
     inferTipoPerFromRif,
     isContribuyenteEspecialClient,
     getEffectivePorcEsp,
+    isFleteServiceItem,
+    isCorteOrService09Item,
   } from "$lib/retention-eligibility";
   import type { PageData } from "./$types";
   import { PUBLIC_SUPABASE_URL } from "$env/static/public";
@@ -372,9 +374,23 @@
     showUSD = String(q.co_mone || "")
       .toUpperCase()
       .includes("US");
-    quoteTaxRate = (Number(q.monto_imp) || 0) === 0 ? 0 : 16;
+    const hasNonFleteQuoteLines =
+      Array.isArray(selectedLines) &&
+      selectedLines.some((r: any) => !isFleteServiceItem(r));
+    quoteTaxRate =
+      hasNonFleteQuoteLines && (Number(q.monto_imp) || 0) === 0 ? 0 : 16;
     quoteDescription =
       `Ref: Cotización ${q.doc_num} - ` + String(q.descrip || "").trim();
+
+    // Validar que no se mezclen Flete y Corte
+    const hasFleteInQuote = selectedLines.some((r: any) => isFleteServiceItem(r));
+    const hasCorteInQuote = selectedLines.some((r: any) => isCorteOrService09Item(r));
+    if (hasFleteInQuote && hasCorteInQuote) {
+      toast.error(
+        "La cotización contiene servicios de Flete y Corte a la vez. No se pueden mezclar en un mismo pedido debido a que solo se permite un concepto de retención de ISLR por documento.",
+      );
+      return;
+    }
 
     // 3. Cargar Renglones Seleccionados al Carrito con datos de vinculación
     cart = selectedLines.map((r: any) => {
@@ -454,7 +470,11 @@
         showUSD = String(q.co_mone || "")
           .toUpperCase()
           .includes("US");
-        quoteTaxRate = (Number(q.monto_imp) || 0) === 0 ? 0 : 16;
+        const hasNonFleteOrderLines =
+          Array.isArray(q.renglones) &&
+          q.renglones.some((r: any) => !isFleteServiceItem(r));
+        quoteTaxRate =
+          hasNonFleteOrderLines && (Number(q.monto_imp) || 0) === 0 ? 0 : 16;
         quoteDescription = String(q.descrip || q.comentario || "").trim();
 
         // 2. Cliente (Campos Críticos)
@@ -934,6 +954,26 @@
     // Identify if it's a service (Linea 09 or code starts with 09)
     const isService = article.co_lin?.trim() === "09" || (co_art || "").startsWith("09");
 
+    // Validar que no se mezcle Flete (0901) con Corte (0902)
+    const addingFlete = isFleteServiceItem(article);
+    const addingCorte = isCorteOrService09Item(article);
+
+    if (addingFlete && cart.some((i) => isCorteOrService09Item(i))) {
+      toast.error(
+        "No se puede agregar servicio de Flete: el pedido ya contiene servicio de Corte. En Profit Plus y en Cobros solo se permite un único concepto de ISLR por documento.",
+        { duration: 5000 }
+      );
+      return;
+    }
+
+    if (addingCorte && cart.some((i) => isFleteServiceItem(i))) {
+      toast.error(
+        "No se puede agregar servicio de Corte: el pedido ya contiene servicio de Flete. En Profit Plus y en Cobros solo se permite un único concepto de ISLR por documento.",
+        { duration: 5000 }
+      );
+      return;
+    }
+
     // Obtener almacén seleccionado
     let almId =
       selectedItemWarehouse[co_art] ||
@@ -1117,17 +1157,27 @@
     );
   }
 
+  const hasConflictingServices = $derived(() => {
+    const hasFlete = cart.some((i) => isFleteServiceItem(i));
+    const hasCorte = cart.some((i) => isCorteOrService09Item(i));
+    return hasFlete && hasCorte;
+  });
+
   const totals = $derived(() => {
     let subUSD = 0;
     let subBS = 0;
     let ivaUSD = 0;
     let ivaBS = 0;
 
+    let fleteBaseUSD = 0;
+    let fleteBaseBS = 0;
+    let corteBaseUSD = 0;
+    let corteBaseBS = 0;
+
     cart.forEach((item) => {
       // Un ítem es estrictamente exento SOLO si es de la sublinea 0901 (Fletes)
-      const isStrictlyExempt =
-        (item.co_subl || "").trim() === "0901" ||
-        (item.co_art || "").startsWith("0901");
+      const isFlete = isFleteServiceItem(item);
+      const isStrictlyExempt = isFlete;
 
       const rate = isStrictlyExempt ? 0 : quoteTaxRate;
 
@@ -1143,29 +1193,71 @@
       subBS += baseBS;
       ivaUSD += baseUSD * (rate / 100);
       ivaBS += baseBS * (rate / 100);
+
+      if (isFlete) {
+        fleteBaseUSD += baseUSD;
+        fleteBaseBS += baseBS;
+      } else if (isCorteOrService09Item(item)) {
+        corteBaseUSD += baseUSD;
+        corteBaseBS += baseBS;
+      }
     });
 
-    const porcEsp = getEffectivePorcEsp(selectedClient);
+    const isFiscalOrder = quoteTaxRate > 0;
+    const canRetain = isFiscalOrder && isContribuyenteEspecialClient(selectedClient);
+    const porcEsp = isFiscalOrder ? getEffectivePorcEsp(selectedClient) : 0;
     const retencionUSD = ivaUSD * (porcEsp / 100);
     const retencionBS = ivaBS * (porcEsp / 100);
+
+    const retencionFleteUSD = canRetain && fleteBaseUSD > 0 ? fleteBaseUSD * 0.03 : 0;
+    const retencionFleteBS = canRetain && fleteBaseBS > 0 ? fleteBaseBS * 0.03 : 0;
+
+    const retencionCorteUSD = canRetain && corteBaseUSD > 0 ? corteBaseUSD * 0.02 : 0;
+    const retencionCorteBS = canRetain && corteBaseBS > 0 ? corteBaseBS * 0.02 : 0;
+
+    const retencionIslrUSD = retencionFleteUSD + retencionCorteUSD;
+    const retencionIslrBS = retencionFleteBS + retencionCorteBS;
 
     const totalFacturaUSD = subUSD + ivaUSD;
     const totalFacturaBS = subBS + ivaBS;
 
-    const totalUSD = totalFacturaUSD - retencionUSD;
-    const totalBS = totalFacturaBS - retencionBS;
+    const totalUSD = totalFacturaUSD - retencionUSD - retencionIslrUSD;
+    const totalBS = totalFacturaBS - retencionBS - retencionIslrBS;
 
     return {
       subtotal: showUSD ? subUSD : subBS,
       iva: showUSD ? ivaUSD : ivaBS,
       retencion: showUSD ? retencionUSD : retencionBS,
+      retencionIslr: showUSD ? retencionIslrUSD : retencionIslrBS,
+      retencionFlete: showUSD ? retencionFleteUSD : retencionFleteBS,
+      retencionCorte: showUSD ? retencionCorteUSD : retencionCorteBS,
+      fleteBase: showUSD ? fleteBaseUSD : fleteBaseBS,
+      corteBase: showUSD ? corteBaseUSD : corteBaseBS,
       porc_esp: porcEsp,
       totalFactura: showUSD ? totalFacturaUSD : totalFacturaBS,
       total: showUSD ? totalUSD : totalBS,
       symbol: showUSD ? "$" : "Bs.",
       raw: {
-        usd: { sub: subUSD, iva: ivaUSD, retencion: retencionUSD, totalFactura: totalFacturaUSD, total: totalUSD },
-        bs: { sub: subBS, iva: ivaBS, retencion: retencionBS, totalFactura: totalFacturaBS, total: totalBS },
+        usd: {
+          sub: subUSD,
+          iva: ivaUSD,
+          retencion: retencionUSD,
+          retencionIslr: retencionIslrUSD,
+          retencionFlete: retencionFleteUSD,
+          retencionCorte: retencionCorteUSD,
+          totalFactura: totalFacturaUSD,
+          total: totalUSD,
+        },
+        bs: {
+          sub: subBS,
+          iva: ivaBS,
+          retencion: retencionBS,
+          retencionIslr: retencionIslrBS,
+          retencionFlete: retencionFleteBS,
+          retencionCorte: retencionCorteBS,
+          totalFactura: totalFacturaBS,
+          total: totalBS,
+        },
       },
     };
   });
@@ -2897,10 +2989,46 @@
                     class="flex justify-between items-center text-base font-bold text-amber-500/90"
                     transition:slide
                   >
-                    <span>Retención ({totals().porc_esp}%)</span>
+                    <span
+                      >{totals().retencionIslr > 0
+                        ? `Retención IVA (${totals().porc_esp}%)`
+                        : `Retención (${totals().porc_esp}%)`}</span
+                    >
                     <span class="font-mono"
                       >- {totals().symbol}
                       {totals().retencion.toLocaleString("de-DE", {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                      })}</span
+                    >
+                  </div>
+                {/if}
+
+                {#if totals().retencionFlete > 0}
+                  <div
+                    class="flex justify-between items-center text-base font-bold text-amber-500/90"
+                    transition:slide
+                  >
+                    <span>Retención ISLR (3% - Flete)</span>
+                    <span class="font-mono"
+                      >- {totals().symbol}
+                      {totals().retencionFlete.toLocaleString("de-DE", {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                      })}</span
+                    >
+                  </div>
+                {/if}
+
+                {#if totals().retencionCorte > 0}
+                  <div
+                    class="flex justify-between items-center text-base font-bold text-amber-500/90"
+                    transition:slide
+                  >
+                    <span>Retención ISLR (2% - Corte)</span>
+                    <span class="font-mono"
+                      >- {totals().symbol}
+                      {totals().retencionCorte.toLocaleString("de-DE", {
                         minimumFractionDigits: 2,
                         maximumFractionDigits: 2,
                       })}</span
@@ -2930,6 +3058,21 @@
                   </div>
                 </div>
               </div>
+
+              {#if hasConflictingServices()}
+                <div
+                  class="mt-4 p-4 rounded-2xl bg-red-500/10 border border-red-500/20 text-red-400 text-xs font-bold flex items-center gap-3 relative z-10"
+                  transition:slide
+                >
+                  <AlertCircle size={22} class="shrink-0 text-red-400" />
+                  <div>
+                    <p class="font-black uppercase tracking-wider text-[11px] text-red-300">Conflicto de servicios detectado</p>
+                    <p class="text-text-muted mt-0.5 leading-relaxed">
+                      Este pedido contiene servicios de <strong>Flete</strong> y <strong>Corte</strong> juntos. En Profit Plus y en Cobros solo se puede aplicar un único concepto de retención de ISLR por factura. Por favor elimine uno de los dos servicios para poder guardar el pedido.
+                    </p>
+                  </div>
+                </div>
+              {/if}
 
               <div class="pt-6 space-y-4 relative z-10">
                 <form
@@ -2981,9 +3124,7 @@
                         quoteDescription || "Pedido registrado vía portal web.",
                       showUSD: showUSD,
                       renglones: cart.map((item) => {
-                        const isStrictlyExempt =
-                          (item.co_subl || "").trim() === "0901" ||
-                          (item.co_art || "").startsWith("0901");
+                        const isStrictlyExempt = isFleteServiceItem(item);
                         const rate = isStrictlyExempt ? 0 : quoteTaxRate;
                         const taxType = rate === 16 ? "1" : "5";
                         return {
@@ -3011,7 +3152,7 @@
                   />
                   <button
                     type="submit"
-                    disabled={isSearching || cart.length === 0}
+                    disabled={isSearching || cart.length === 0 || hasConflictingServices()}
                     class="w-full h-20 bg-brand-600 hover:bg-brand-500 text-white rounded-[24px] font-black text-xl uppercase tracking-[0.2em] shadow-[0_20px_40px_-10px_rgba(var(--brand-rgb),0.3)] active:scale-[0.97] transition-all flex items-center justify-center gap-4 disabled:opacity-50 disabled:grayscale group"
                   >
                     {#if isSearching}
