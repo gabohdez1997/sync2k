@@ -36,18 +36,23 @@
   let crud = $derived(data.crud || { create: true, update: true });
 
   // ─── Estado de Edición de Márgenes ─────────────────────────────
-  // Inicializamos los nuevos márgenes copiando el margen actual
+  // Inicializamos los márgenes actuales y nuevos a partir de la BD
+  let editableCurrentMargins = $state<Record<string, number>>({});
   let editableMargins = $state<Record<string, number>>({});
   let selectedPrices = $state<Record<string, boolean>>({});
 
   $effect(() => {
-    const map: Record<string, number> = {};
+    const mapCur: Record<string, number> = {};
+    const mapNew: Record<string, number> = {};
     const sel: Record<string, boolean> = {};
     marginsSummary.forEach((m: any) => {
-      map[m.co_precio] = Number(m.margen_actual) || 0;
+      const cur = Number(m.margen_actual) || 0;
+      mapCur[m.co_precio] = cur;
+      mapNew[m.co_precio] = cur;
       sel[m.co_precio] = true; // Por defecto todos seleccionados para ajuste
     });
-    editableMargins = map;
+    editableCurrentMargins = mapCur;
+    editableMargins = mapNew;
     selectedPrices = sel;
   });
 
@@ -90,15 +95,20 @@
   let preparedUpdates = $derived(
     marginsSummary
       .filter((m: any) => selectedPrices[m.co_precio])
-      .map((m: any) => ({
-        co_precio: m.co_precio,
-        des_precio: m.des_precio,
-        margen_actual: m.margen_actual,
-        nuevo_margen: Number(editableMargins[m.co_precio] ?? m.margen_actual),
-        variacion: Number(editableMargins[m.co_precio] ?? m.margen_actual) - Number(m.margen_actual),
-        total_articulos: m.total_articulos,
-        total_con_precio: m.total_con_precio
-      }))
+      .map((m: any) => {
+        const curM = Number(editableCurrentMargins[m.co_precio] ?? m.margen_actual);
+        const newM = Number(editableMargins[m.co_precio] ?? m.margen_actual);
+        return {
+          co_precio: m.co_precio,
+          des_precio: m.des_precio,
+          margen_actual: curM,
+          margen_frecuente_bd: Number(m.margen_actual) || 0,
+          nuevo_margen: newM,
+          variacion: newM - curM,
+          total_articulos: m.total_articulos,
+          total_con_precio: m.total_con_precio
+        };
+      })
   );
 
   let hasPendingChanges = $derived(
@@ -304,8 +314,9 @@
     {:else}
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
         {#each marginsSummary as item}
+          {@const actualM = Number(editableCurrentMargins[item.co_precio] ?? item.margen_actual)}
           {@const nuevoM = Number(editableMargins[item.co_precio] ?? item.margen_actual)}
-          {@const variacion = nuevoM - Number(item.margen_actual)}
+          {@const variacion = nuevoM - actualM}
           {@const isChecked = selectedPrices[item.co_precio]}
 
           <div
@@ -345,16 +356,37 @@
 
             <!-- Comparación de Márgenes -->
             <div class="grid grid-cols-2 gap-3 pt-2 border-t border-border-subtle/60">
-              <div class="p-3 bg-surface-raised/80 border border-border-subtle rounded-2xl">
-                <span class="text-[10px] font-bold uppercase text-text-muted block">Margen Actual en Profit</span>
-                <span class="text-lg font-mono font-black text-text-base">
-                  {Number(item.margen_actual).toFixed(2)}%
-                </span>
+              <!-- Margen Actual (Editable para filtro específico) -->
+              <div class="p-3 bg-surface-raised/80 border border-border-subtle rounded-2xl focus-within:border-brand-500 transition-colors">
+                <div class="flex items-center justify-between gap-1">
+                  <label class="text-[10px] font-bold uppercase text-text-muted block truncate" for="cur-margin-{item.co_precio}">
+                    Margen Actual %
+                  </label>
+                  {#if Number(item.margen_actual) !== actualM}
+                    <span class="text-[9px] font-mono text-text-muted bg-surface-soft px-1.5 py-0.5 rounded border border-border-subtle/60" title="Margen predominante en Profit: {Number(item.margen_actual).toFixed(2)}%">
+                      BD: {Number(item.margen_actual).toFixed(2)}%
+                    </span>
+                  {/if}
+                </div>
+                <div class="flex items-center gap-1 mt-0.5">
+                  <input
+                    id="cur-margin-{item.co_precio}"
+                    type="number"
+                    step="0.01"
+                    disabled={!isChecked}
+                    bind:value={editableCurrentMargins[item.co_precio]}
+                    class="w-full bg-transparent font-mono font-black text-lg text-text-base outline-none disabled:opacity-50"
+                  />
+                  <span class="text-sm font-bold text-text-muted">%</span>
+                </div>
               </div>
 
+              <!-- Nuevo Margen -->
               <div class="p-3 bg-surface-raised/80 border border-border-subtle rounded-2xl focus-within:border-brand-500 transition-colors">
-                <label class="text-[10px] font-bold uppercase text-brand-600 dark:text-brand-400 block" for="margin-{item.co_precio}">Nuevo Margen %</label>
-                <div class="flex items-center gap-1">
+                <label class="text-[10px] font-bold uppercase text-brand-600 dark:text-brand-400 block truncate" for="margin-{item.co_precio}">
+                  Nuevo Margen %
+                </label>
+                <div class="flex items-center gap-1 mt-0.5">
                   <input
                     id="margin-{item.co_precio}"
                     type="number"
@@ -368,9 +400,38 @@
               </div>
             </div>
 
+            <!-- Chips de márgenes existentes detectados en Profit -->
+            {#if isChecked && item.distribucion_margenes && item.distribucion_margenes.length > 1}
+              <div class="space-y-1.5 pt-1">
+                <div class="text-[10px] font-bold uppercase tracking-wider text-text-muted flex items-center justify-between">
+                  <span>Márgenes detectados en Profit:</span>
+                  {#if filterOldMargin}
+                    <span class="text-brand-500 font-semibold lowercase text-[9px]">clic para fijar filtro</span>
+                  {/if}
+                </div>
+                <div class="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto custom-scrollbar p-0.5">
+                  {#each item.distribucion_margenes as dist}
+                    {@const isSelected = Math.abs(actualM - dist.margen) < 0.001}
+                    <button
+                      type="button"
+                      disabled={!isChecked}
+                      onclick={() => {
+                        editableCurrentMargins[item.co_precio] = dist.margen;
+                      }}
+                      class="px-2 py-0.5 rounded-lg text-[11px] font-mono font-bold transition-all flex items-center gap-1 {isSelected ? 'bg-brand-500 text-white shadow-sm ring-1 ring-brand-400' : 'bg-surface-soft hover:bg-surface-raised text-text-muted hover:text-text-base border border-border-subtle'}"
+                      title="Fijar margen actual a {dist.margen}% ({dist.cantidad} artículos)"
+                    >
+                      <span>{dist.margen}%</span>
+                      <span class="text-[9px] opacity-70">({dist.cantidad})</span>
+                    </button>
+                  {/each}
+                </div>
+              </div>
+            {/if}
+
             <!-- Preview del factor matemático -->
-            {#if isChecked && Number(item.margen_actual) > 0 && nuevoM > 0}
-              {@const factor = (1 + nuevoM / 100) / (1 + Number(item.margen_actual) / 100)}
+            {#if isChecked && actualM > 0 && nuevoM > 0}
+              {@const factor = (1 + nuevoM / 100) / (1 + actualM / 100)}
               <div class="text-[11px] text-text-muted flex items-center justify-between px-1">
                 <span>Factor sobre precio actual:</span>
                 <span class="font-mono font-bold {factor < 1 ? 'text-rose-500' : 'text-emerald-500'}">
@@ -427,10 +488,10 @@
         <input
           type="checkbox"
           bind:checked={filterOldMargin}
-          class="h-4 w-4 rounded border-border-subtle text-brand-500 focus:ring-brand-500"
+          class="h-4 w-4 rounded border-border-subtle text-brand-500 focus:ring-brand-500 cursor-pointer"
         />
         <span>
-          <strong>Proteger artículos personalizados:</strong> Aplicar sólo a artículos cuyo margen actual coincida exactamente con el margen registrado de la lista.
+          <strong>Proteger artículos personalizados:</strong> Aplicar sólo a artículos cuyo margen actual en Profit coincida exactamente con el <strong>Margen Actual %</strong> especificado (permite actualizar sólo artículos con un margen específico, p. ej. 30%, sin alterar los que tienen 50%).
         </span>
       </label>
     </div>
@@ -439,9 +500,15 @@
     <div class="flex items-center justify-end gap-4 pt-4 border-t border-border-subtle">
       <button
         onclick={() => {
-          const map: Record<string, number> = {};
-          marginsSummary.forEach((m: any) => { map[m.co_precio] = Number(m.margen_actual) || 0; });
-          editableMargins = map;
+          const mapCur: Record<string, number> = {};
+          const mapNew: Record<string, number> = {};
+          marginsSummary.forEach((m: any) => {
+            const cur = Number(m.margen_actual) || 0;
+            mapCur[m.co_precio] = cur;
+            mapNew[m.co_precio] = cur;
+          });
+          editableCurrentMargins = mapCur;
+          editableMargins = mapNew;
         }}
         class="h-12 px-6 rounded-2xl text-xs font-bold text-text-muted hover:text-text-base hover:bg-surface-soft transition-all"
       >
@@ -597,13 +664,19 @@
           <div class="space-y-2 border border-border-subtle rounded-2xl p-4 bg-surface-soft/40 max-h-56 overflow-y-auto custom-scrollbar">
             {#each preparedUpdates as u}
               {#if Math.abs(u.variacion) > 0.001}
-                <div class="flex items-center justify-between text-xs py-1.5 border-b border-border-subtle/50 last:border-0">
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between text-xs py-1.5 border-b border-border-subtle/50 last:border-0 gap-1">
                   <span class="font-bold text-text-base">{u.des_precio} ({u.co_precio}):</span>
-                  <span class="font-mono">
+                  <span class="font-mono flex items-center gap-1.5 flex-wrap">
                     <span class="text-text-muted">{Number(u.margen_actual).toFixed(2)}%</span>
-                    <span class="text-brand-500 mx-1">→</span>
+                    <span class="text-brand-500">→</span>
                     <strong class="text-text-base">{u.nuevo_margen.toFixed(2)}%</strong>
-                    <span class="text-text-muted text-[10px] ml-1">({u.total_articulos} arts)</span>
+                    {#if filterOldMargin}
+                      <span class="text-brand-500 dark:text-brand-400 text-[10px] bg-brand-500/10 px-1.5 py-0.5 rounded font-sans font-bold">
+                        sólo arts con {Number(u.margen_actual).toFixed(2)}%
+                      </span>
+                    {:else}
+                      <span class="text-text-muted text-[10px]">({u.total_articulos} arts)</span>
+                    {/if}
                   </span>
                 </div>
               {/if}
@@ -613,7 +686,7 @@
           <div class="text-xs text-text-muted space-y-1 p-3 bg-brand-500/5 border border-brand-500/20 rounded-2xl">
             <div>✓ Actualizar tabla <strong>saArtMargen</strong>: {updateMargenes ? 'SÍ' : 'NO'}</div>
             <div>✓ Recalcular tabla <strong>saArtPrecio</strong>: {updatePrecios ? 'SÍ' : 'NO'}</div>
-            <div>✓ Filtrar sólo artículos con margen previo exacto: {filterOldMargin ? 'SÍ' : 'NO'}</div>
+            <div>✓ Filtrar sólo artículos con el margen actual especificado: {filterOldMargin ? 'SÍ' : 'NO'}</div>
           </div>
 
           <form
