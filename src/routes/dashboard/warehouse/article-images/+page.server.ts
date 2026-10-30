@@ -141,7 +141,8 @@ export const load: PageServerLoad = protectLoad('sec_article_images', async ({ u
 		const params = new URLSearchParams();
 		params.set('page', pageIndex.toString());
 		params.set('limit', limit.toString());
-		if (showAll) params.set('in_stock', 'all');
+		// Listar todos los articulos activos sin restringir por existencia
+		params.set('in_stock', 'all');
 		if (linea) params.set('linea', linea);
 		if (categoria) params.set('categoria', categoria);
 		if (ubicacionId) params.set('co_ubicacion', ubicacionId);
@@ -184,9 +185,9 @@ export const load: PageServerLoad = protectLoad('sec_article_images', async ({ u
 				warehouses: allowedWarehousesForBranch
 			},
 			pagination: {
-				page: Number((resData as any).pagination?.currentPage || (resData as any).pagination?.page || pageIndex),
-				totalPages: Number((resData as any).pagination?.pages || (resData as any).pagination?.totalPages || 1),
-				totalItems: Number((resData as any).pagination?.total || articles.length)
+				page: Number((resData as any).pagination?.currentPage || (resData as any).pagination?.page || (resData as any).page || pageIndex),
+				totalPages: Number((resData as any).pagination?.pages || (resData as any).pagination?.totalPages || (resData as any).total_pages || (resData as any).totalPages || 1),
+				totalItems: Number((resData as any).pagination?.total || (resData as any).total_items || (resData as any).totalItems || articles.length)
 			}
 		};
 		console.log('[DEBUG PAGINATION]', JSON.stringify(returnedData.pagination));
