@@ -4,6 +4,7 @@
 import { protectLoad, protectAction } from '$lib/server/permissions';
 import { supabaseAdmin } from '$lib/server/supabase';
 import { AgentClient } from '$lib/server/agent';
+import { clearBranchesCache } from '$lib/server/branches';
 import { hasPermission } from '$lib/server/auth';
 import { fail } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
@@ -186,7 +187,14 @@ export const actions: Actions = {
     const latitude        = formData.get('latitude') ? parseFloat(formData.get('latitude') as string) : null;
     const longitude       = formData.get('longitude') ? parseFloat(formData.get('longitude') as string) : null;
     const defaultWarehouse = (formData.get('default_warehouse') as string)?.trim() || null;
-    const allowDecimalsUnits = (formData.get('allow_decimals_units') as string)?.trim() || 'MTS, MTS2, KG';
+    const rawAllowDecimals = formData.get('allow_decimals_units');
+    let allowDecimalsUnits: string[] = ['MTS', 'MTS2', 'KG'];
+    if (typeof rawAllowDecimals === 'string' && rawAllowDecimals.trim()) {
+      allowDecimalsUnits = rawAllowDecimals
+        .split(',')
+        .map(u => u.trim().toUpperCase())
+        .filter(Boolean);
+    }
     const defaultSeller = (formData.get('default_seller') as string)?.trim() || '01';
 
     // ─── Proceso de Subida de Logo ─────────────────────────────
@@ -272,6 +280,15 @@ export const actions: Actions = {
         error = retry.error;
       }
 
+      if (error && (error.message.includes('allow_decimals_units') || error.message.includes('malformed array literal'))) {
+        console.warn('[BRANCHES] Reintentando actualización con formato texto para allow_decimals_units...');
+        const textUnits = allowDecimalsUnits.join(', ');
+        const retry = await supabaseAdmin
+          .from('branches')
+          .update({ ...payload, allow_decimals_units: textUnits })
+          .eq('id', branchId);
+        error = retry.error;
+      }
       if (error) return fail(500, { message: error.message });
       savedId = branchId;
     } else {
@@ -308,6 +325,17 @@ export const actions: Actions = {
         error = retry.error;
       }
 
+      if (error && (error.message.includes('allow_decimals_units') || error.message.includes('malformed array literal'))) {
+        console.warn('[BRANCHES] Reintentando actualización con formato texto para allow_decimals_units...');
+        const textUnits = allowDecimalsUnits.join(', ');
+        const retry = await supabaseAdmin
+          .from('branches')
+          .insert({ ...payload, allow_decimals_units: textUnits })
+          .select('id')
+          .single();
+        data = retry.data;
+        error = retry.error;
+      }
       if (error) return fail(500, { message: error.message });
       savedId = data.id;
     }
@@ -323,6 +351,7 @@ export const actions: Actions = {
       p_new_data:   JSON.stringify(payload)
     });
 
+    clearBranchesCache();
     return { success: true, savedId };
   }),
 
@@ -401,6 +430,7 @@ export const actions: Actions = {
       p_branch_id:  branchId
     });
 
+    clearBranchesCache();
     return { success: true };
   }),
 

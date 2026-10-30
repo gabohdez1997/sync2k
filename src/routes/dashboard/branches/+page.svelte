@@ -136,6 +136,11 @@
 
   function openEditModal(branch: any) {
     editingBranch = { ...branch };
+    if (Array.isArray(editingBranch.allow_decimals_units)) {
+      editingBranch.allow_decimals_units = editingBranch.allow_decimals_units.join(', ');
+    } else if (!editingBranch.allow_decimals_units) {
+      editingBranch.allow_decimals_units = "MTS, MTS2, KG";
+    }
     if (!editingBranch.profit_branch_codes) {
       editingBranch.profit_branch_codes = [];
     }
@@ -499,6 +504,7 @@
             JSON.stringify(editingBranch.profit_branch_codes),
           );
           formData.set("sql_config", JSON.stringify(editingBranch.sql_config));
+          formData.set("allow_decimals_units", editingBranch.allow_decimals_units || "");
 
           isSaving = true;
           return async ({ result, update }) => {

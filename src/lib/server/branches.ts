@@ -18,7 +18,7 @@ export interface BranchRecord {
   profit_server_id?: string | null;
   local_dns_alias?: string | null;
   default_warehouse?: string | null;
-  allow_decimals_units?: boolean;
+  allow_decimals_units?: string[] | string;
   default_seller?: string | null;
   active?: boolean;
   sort_order?: number;

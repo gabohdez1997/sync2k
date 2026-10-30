@@ -55,7 +55,9 @@ export const load: PageServerLoad = protectLoad('rep_analisis_compras', async ({
     );
 
     try {
-        const allowDecimals = selectedBranch.allow_decimals_units || 'MTS, MTS2, KG, LTS, ML';
+        const allowDecimals = Array.isArray(selectedBranch.allow_decimals_units)
+            ? selectedBranch.allow_decimals_units.join(', ')
+            : (selectedBranch.allow_decimals_units || 'MTS, MTS2, KG, LTS, ML');
         const [response, lineasRes, sublineasRes, catsRes] = await Promise.all([
             agentClient.request<any>(
                 `/analisis-compras?sede=${branchId}&startDate=${startDate}&endDate=${endDate}&allow_decimals_units=${encodeURIComponent(allowDecimals)}`,
