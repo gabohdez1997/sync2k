@@ -225,12 +225,6 @@
           icon: Percent,
         },
         {
-          id: "pur_quotes",
-          label: "Cotizaciones",
-          href: "/dashboard/purchases/quotes",
-          icon: FileText,
-        },
-        {
           id: "pur_orders",
           label: "Órdenes de Compra",
           href: "/dashboard/purchases/orders",
