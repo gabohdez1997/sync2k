@@ -2496,12 +2496,27 @@
                   </div>
                 </div>
               </div>
-              <button
-                onclick={nextStep}
-                class="bg-white text-brand-600 hover:bg-brand-50 h-12 px-6 rounded-2xl font-black uppercase text-xs tracking-widest shadow-xl hover:scale-105 active:scale-95 transition-all cursor-pointer"
-              >
-                Confirmar
-              </button>
+              <div class="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onclick={() => {
+                    cart = [];
+                    toast.success("Carrito vaciado");
+                  }}
+                  class="h-12 w-12 rounded-2xl bg-white/15 hover:bg-rose-500 text-white flex items-center justify-center border border-white/10 shadow-sm hover:scale-105 active:scale-95 transition-all cursor-pointer"
+                  title="Limpiar carrito"
+                >
+                  <Trash2 size={20} />
+                </button>
+                <button
+                  type="button"
+                  onclick={nextStep}
+                  class="bg-white text-brand-600 hover:bg-brand-50 h-12 w-12 rounded-2xl flex items-center justify-center shadow-xl hover:scale-105 active:scale-95 transition-all cursor-pointer"
+                  title="Confirmar"
+                >
+                  <Check size={22} strokeWidth={2.5} />
+                </button>
+              </div>
             </div>
           </div>
         {/if}
