@@ -892,3 +892,4 @@ export function mapProfitInvoiceToHka(
     formaDePagoDescripcion: 'CONTADO / TRANSFERENCIA'
   };
 }
+

@@ -135,3 +135,4 @@ export const POST: RequestHandler = async ({ request, locals, fetch }) => {
     return json({ success: false, message: `Error interno de emisión: ${err.message}` }, { status: 500 });
   }
 };
+

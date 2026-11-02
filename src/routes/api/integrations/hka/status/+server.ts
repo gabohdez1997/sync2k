@@ -44,3 +44,4 @@ export const GET: RequestHandler = async ({ url, locals }) => {
     return json({ success: false, message: `Error al consultar estado: ${err.message}` }, { status: 500 });
   }
 };
+
