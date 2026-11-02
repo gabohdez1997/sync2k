@@ -149,13 +149,86 @@
     }
   }
 
+  function applyAldanetPreset(target: "sync" | "config" = "sync") {
+    if (target === "sync") {
+      defaultZone = "004";
+      defaultClientType = "DET";
+      defaultCtaIngrEgr = "I-001";
+      defaultSeller = "01";
+      defaultSegment = "01";
+      defaultPaymentCond = "01";
+      toast.info("Preset aplicado: Aldanet (Zona 004, Tipo DET, Cta I-001)");
+    } else if (editingItem?.options) {
+      editingItem.options.default_zone = "004";
+      editingItem.options.default_client_type = "DET";
+      editingItem.options.default_cta_ingr_egr = "I-001";
+      editingItem.options.default_seller = "01";
+      editingItem.options.default_segment = "01";
+      toast.info("Preset aplicado: Aldanet (Zona 004, Tipo DET, Cta I-001)");
+    }
+  }
+
+  function applyGalpePreset(target: "sync" | "config" = "sync") {
+    if (target === "sync") {
+      defaultZone = "01";
+      defaultClientType = "01";
+      defaultCtaIngrEgr = "01";
+      defaultSeller = "01";
+      defaultSegment = "01";
+      defaultPaymentCond = "01";
+      toast.info("Preset aplicado: Galpe (Zona 01, Tipo 01, Cta 01)");
+    } else if (editingItem?.options) {
+      editingItem.options.default_zone = "01";
+      editingItem.options.default_client_type = "01";
+      editingItem.options.default_cta_ingr_egr = "01";
+      editingItem.options.default_seller = "01";
+      editingItem.options.default_segment = "01";
+      toast.info("Preset aplicado: Galpe (Zona 01, Tipo 01, Cta 01)");
+    }
+  }
+
+  function updateBranchDefaults(branchId: string) {
+    const branch = data.branches?.find((b: any) => b.id === branchId);
+    const branchName = String(branch?.name || "").toLowerCase();
+    const isAldanet = branchName.includes("aldanet") || branchId.toLowerCase().includes("aldanet");
+
+    const wisp = integrations.find((i) => i.id === "wisphub");
+    const branchPreset = wisp?.options?.branch_presets?.[branchId];
+
+    if (branchPreset) {
+      if (branchPreset.default_cta_ingr_egr) defaultCtaIngrEgr = branchPreset.default_cta_ingr_egr;
+      if (branchPreset.default_client_type) defaultClientType = branchPreset.default_client_type;
+      if (branchPreset.default_zone) defaultZone = branchPreset.default_zone;
+      if (branchPreset.default_seller) defaultSeller = branchPreset.default_seller;
+      if (branchPreset.default_segment) defaultSegment = branchPreset.default_segment;
+      if (branchPreset.field_mappings?.co_cli_source) coCliSource = branchPreset.field_mappings.co_cli_source;
+      if (branchPreset.field_mappings?.campo1_source) campo1Source = branchPreset.field_mappings.campo1_source;
+      if (branchPreset.field_mappings?.campo2_source) campo2Source = branchPreset.field_mappings.campo2_source;
+      if (branchPreset.field_mappings?.campo3_source) campo3Source = branchPreset.field_mappings.campo3_source;
+    } else if (isAldanet) {
+      defaultZone = "004";
+      defaultClientType = "DET";
+      defaultCtaIngrEgr = "I-001";
+      defaultSeller = "01";
+      defaultSegment = "01";
+      defaultPaymentCond = "01";
+    } else {
+      defaultCtaIngrEgr = wisp?.options?.default_cta_ingr_egr || "01";
+      defaultZone = wisp?.options?.default_zone || "01";
+      defaultClientType = wisp?.options?.default_client_type || "01";
+      defaultSeller = wisp?.options?.default_seller || "01";
+      defaultSegment = wisp?.options?.default_segment || "01";
+      defaultPaymentCond = "01";
+    }
+  }
+
   function openConfigModal(item: any) {
     editingItem = JSON.parse(JSON.stringify(item));
     if (editingItem.id === "wisphub") {
       if (!editingItem.options) editingItem.options = {};
       if (!editingItem.options.default_cta_ingr_egr) editingItem.options.default_cta_ingr_egr = "I-001";
-      if (!editingItem.options.default_client_type) editingItem.options.default_client_type = "01";
-      if (!editingItem.options.default_zone) editingItem.options.default_zone = "01";
+      if (!editingItem.options.default_client_type) editingItem.options.default_client_type = "DET";
+      if (!editingItem.options.default_zone) editingItem.options.default_zone = "004";
       if (!editingItem.options.default_seller) editingItem.options.default_seller = "01";
       if (!editingItem.options.default_segment) editingItem.options.default_segment = "01";
       if (!editingItem.options.default_cond) editingItem.options.default_cond = "01";
@@ -186,19 +259,7 @@
     if (data.branches && data.branches.length > 0 && !syncTargetBranch) {
       syncTargetBranch = data.branches[0].id;
     }
-    const wisp = integrations.find((i) => i.id === "wisphub");
-    if (wisp?.options) {
-      if (wisp.options.default_cta_ingr_egr) defaultCtaIngrEgr = wisp.options.default_cta_ingr_egr;
-      if (wisp.options.default_client_type) defaultClientType = wisp.options.default_client_type;
-      if (wisp.options.default_zone) defaultZone = wisp.options.default_zone;
-      if (wisp.options.default_seller) defaultSeller = wisp.options.default_seller;
-      if (wisp.options.default_segment) defaultSegment = wisp.options.default_segment;
-      if (wisp.options.default_cond) defaultPaymentCond = wisp.options.default_cond;
-      if (wisp.options.field_mappings?.co_cli_source) coCliSource = wisp.options.field_mappings.co_cli_source;
-      if (wisp.options.field_mappings?.campo1_source) campo1Source = wisp.options.field_mappings.campo1_source;
-      if (wisp.options.field_mappings?.campo2_source) campo2Source = wisp.options.field_mappings.campo2_source;
-      if (wisp.options.field_mappings?.campo3_source) campo3Source = wisp.options.field_mappings.campo3_source;
-    }
+    updateBranchDefaults(syncTargetBranch);
   }
 
   function closeSyncModal() {
@@ -1023,11 +1084,34 @@
 
                 <!-- Mapeo Predeterminado a Profit Plus (saCliente) -->
                 <div class="pt-2 border-t border-border-subtle/60 space-y-3">
-                  <div class="flex items-center gap-2">
-                    <Settings2 size={15} class="text-indigo-500" />
-                    <span class="text-xs font-black uppercase tracking-wider text-text-base">
-                      Mapeo Predeterminado a Profit Plus (`saCliente`)
-                    </span>
+                  <div class="flex flex-wrap items-center justify-between gap-2">
+                    <div class="flex items-center gap-2">
+                      <Settings2 size={15} class="text-indigo-500" />
+                      <span class="text-xs font-black uppercase tracking-wider text-text-base">
+                        Mapeo Predeterminado a Profit Plus (`saCliente`)
+                      </span>
+                    </div>
+
+                    <!-- Presets Rápidos Empresa -->
+                    <div class="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onclick={() => applyAldanetPreset("config")}
+                        class="px-2.5 py-1 rounded-xl bg-indigo-500/15 hover:bg-indigo-500/25 border border-indigo-500/30 text-indigo-700 dark:text-indigo-300 text-[10px] font-black transition-all cursor-pointer flex items-center gap-1"
+                        title="Aplicar valores de Aldanet (Zona 004, Tipo DET, Cuenta I-001)"
+                      >
+                        <Sparkles size={11} />
+                        <span>Preset Aldanet</span>
+                      </button>
+                      <button
+                        type="button"
+                        onclick={() => applyGalpePreset("config")}
+                        class="px-2.5 py-1 rounded-xl bg-surface-soft hover:bg-surface-strong border border-border-subtle text-text-muted hover:text-text-base text-[10px] font-bold transition-all cursor-pointer"
+                        title="Aplicar valores de Galpe (Zona 01, Tipo 01, Cuenta 01)"
+                      >
+                        <span>Preset Galpe</span>
+                      </button>
+                    </div>
                   </div>
 
                   <!-- Cuenta Ingreso/Egreso FK -->
@@ -1391,6 +1475,7 @@
           {#if data.branches && data.branches.length > 0}
             <select
               bind:value={syncTargetBranch}
+              onchange={() => updateBranchDefaults(syncTargetBranch)}
               disabled={isSyncing}
               class="w-full bg-surface-soft border border-border-subtle px-4 py-3 rounded-2xl text-xs font-bold text-text-base focus:border-brand-500 outline-none transition-all cursor-pointer"
             >
@@ -1398,6 +1483,22 @@
                 <option value={b.id}>{b.name} ({b.id})</option>
               {/each}
             </select>
+
+            {#if syncTargetBranch}
+              {@const selectedB = data.branches?.find((b: any) => b.id === syncTargetBranch)}
+              {@const isAldanetBranch = String(selectedB?.name || "").toLowerCase().includes("aldanet")}
+              <div class="flex items-center justify-between pt-1">
+                <span class="text-[11px] text-text-muted">
+                  Empresa detectada:
+                  <strong class={isAldanetBranch ? "text-indigo-600 dark:text-indigo-400 font-bold" : "text-text-base font-bold"}>
+                    {isAldanetBranch ? "Aldanet (ISP)" : "Galpe / Estándar"}
+                  </strong>
+                </span>
+                <span class="text-[10px] font-mono font-bold px-2 py-0.5 rounded-lg {isAldanetBranch ? 'bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 border border-indigo-500/20' : 'bg-surface-soft text-text-muted border border-border-subtle'}">
+                  {isAldanetBranch ? "Zona: 004 · Tipo: DET · Cta: I-001" : "Zona: 01 · Tipo: 01 · Cta: 01"}
+                </span>
+              </div>
+            {/if}
           {:else}
             <div
               class="p-3 rounded-2xl bg-amber-500/15 border border-amber-500/30 text-amber-800 dark:text-amber-300 text-xs font-bold"
@@ -1501,6 +1602,31 @@
 
             {#if showAdvancedMappings}
               <div class="p-4 pt-2 border-t border-border-subtle space-y-4" in:slide={{ duration: 150 }}>
+                <!-- Presets Rápidos por Empresa -->
+                <div class="p-3 rounded-2xl bg-surface-soft border border-border-subtle flex flex-wrap items-center justify-between gap-2">
+                  <div class="flex items-center gap-1.5">
+                    <Sparkles size={14} class="text-indigo-500" />
+                    <span class="text-xs font-bold text-text-base">Plantillas por Empresa:</span>
+                  </div>
+                  <div class="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onclick={() => applyAldanetPreset("sync")}
+                      class="px-3 py-1.5 rounded-xl bg-indigo-500/15 hover:bg-indigo-500/25 border border-indigo-500/30 text-indigo-700 dark:text-indigo-300 text-[11px] font-black transition-all cursor-pointer flex items-center gap-1"
+                    >
+                      <Sparkles size={12} />
+                      <span>Aldanet (004 / DET / I-001)</span>
+                    </button>
+                    <button
+                      type="button"
+                      onclick={() => applyGalpePreset("sync")}
+                      class="px-3 py-1.5 rounded-xl bg-surface-base hover:bg-surface-strong border border-border-subtle text-text-muted hover:text-text-base text-[11px] font-bold transition-all cursor-pointer"
+                    >
+                      <span>Galpe (01 / 01 / 01)</span>
+                    </button>
+                  </div>
+                </div>
+
                 <!-- Cuenta de Ingresos / Egresos (FK ALDANET) -->
                 <div class="space-y-1.5 p-3 rounded-2xl bg-indigo-500/10 border border-indigo-500/20">
                   <div class="flex items-center justify-between">

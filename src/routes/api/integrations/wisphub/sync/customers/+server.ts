@@ -56,24 +56,41 @@ export const POST: RequestHandler = async ({ request, locals, fetch }) => {
       clientsToSync = listRes.results;
     }
 
+    // Determinar si la sucursal es Aldanet o Galpe para asignar presets automáticos si no vienen especificados
+    const branchNameLower = String(targetBranch.name || '').toLowerCase();
+    const branchId = String(targetBranch.id || '');
+    const isAldanet = branchNameLower.includes('aldanet') || branchId.toLowerCase().includes('aldanet');
+
+    // Recuperar configuración guardada de WispHub para ver si hay preset para esta sucursal
+    const curWisp = await getIntegration('wisphub').catch(() => null);
+    const branchPreset = curWisp?.options?.branch_presets?.[branchId] || {};
+
+    const defaultZone = (options.default_zone || branchPreset.default_zone || (isAldanet ? '004' : '01')).trim();
+    const defaultClientType = (options.default_client_type || branchPreset.default_client_type || (isAldanet ? 'DET' : '01')).trim();
+    const defaultCta = (options.default_cta_ingr_egr || branchPreset.default_cta_ingr_egr || (isAldanet ? 'I-001' : '01')).trim();
+    const defaultSeller = (options.default_seller || branchPreset.default_seller || '01').trim();
+    const defaultSegment = (options.default_segment || branchPreset.default_segment || '01').trim();
+    const defaultCurrency = (options.default_currency || branchPreset.default_currency || 'US$').trim();
+    const defaultCond = (options.default_cond || branchPreset.default_cond || '01').trim();
+
     const syncOptions: CustomerSyncOptions = {
       sedeId: targetBranch.profit_server_id || targetBranch.id,
-      default_cta_ingr_egr: (options.default_cta_ingr_egr || 'I-001').trim(),
-      default_zone: (options.default_zone || '01').trim(),
-      default_client_type: (options.default_client_type || '01').trim(),
-      default_seller: (options.default_seller || '01').trim(),
-      default_segment: (options.default_segment || '01').trim(),
-      default_currency: (options.default_currency || 'US$').trim(),
-      default_cond: (options.default_cond || '01').trim(),
+      default_cta_ingr_egr: defaultCta,
+      default_zone: defaultZone,
+      default_client_type: defaultClientType,
+      default_seller: defaultSeller,
+      default_segment: defaultSegment,
+      default_currency: defaultCurrency,
+      default_cond: defaultCond,
       overwrite_existing: options.overwrite_existing ?? true,
-      field_mappings: options.field_mappings || {}
+      field_mappings: options.field_mappings || branchPreset.field_mappings || {}
     };
 
-    // Si el usuario marcó persistir opciones, actualizar la integración de WispHub
+    // Si el usuario marcó persistir opciones, actualizar la integración de WispHub (con presets por sucursal)
     if (options.save_defaults) {
       try {
-        const curWisp = await getIntegration('wisphub');
         if (curWisp) {
+          const existingPresets = curWisp.options?.branch_presets || {};
           await saveIntegration('wisphub', {
             options: {
               ...curWisp.options,
@@ -82,7 +99,18 @@ export const POST: RequestHandler = async ({ request, locals, fetch }) => {
               default_client_type: syncOptions.default_client_type,
               default_seller: syncOptions.default_seller,
               default_segment: syncOptions.default_segment,
-              field_mappings: syncOptions.field_mappings
+              field_mappings: syncOptions.field_mappings,
+              branch_presets: {
+                ...existingPresets,
+                [branchId]: {
+                  default_cta_ingr_egr: syncOptions.default_cta_ingr_egr,
+                  default_zone: syncOptions.default_zone,
+                  default_client_type: syncOptions.default_client_type,
+                  default_seller: syncOptions.default_seller,
+                  default_segment: syncOptions.default_segment,
+                  field_mappings: syncOptions.field_mappings
+                }
+              }
             }
           }, fetch);
         }

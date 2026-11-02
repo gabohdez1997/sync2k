@@ -151,12 +151,13 @@ export function mapWisphubClientToProfit(
   const telefonos = (client.telefono || '').trim().slice(0, 30);
   const email = (client.email || '').trim().slice(0, 60);
 
-  // 6. Cuenta de Ingreso/Egreso (Obligatoria para la FK FK_saCliente_saCuentaIngEgr)
-  const co_cta_ingr_egr = (options.default_cta_ingr_egr || 'I-001').trim().slice(0, 20);
+  // 6. Cuenta de Ingreso/Egreso y Catálogos por Defecto (Parametrización Aldanet vs Galpe)
+  const isAldanet = String(options.sedeId || '').toLowerCase().includes('aldanet');
+  const co_cta_ingr_egr = (options.default_cta_ingr_egr || (isAldanet ? 'I-001' : '01')).trim().slice(0, 20);
 
-  // 7. Catálogos por defecto
-  const co_zon = (options.default_zone || '01').trim().slice(0, 6);
-  const tip_cli = (options.default_client_type || '01').trim().slice(0, 6);
+  // 7. Catálogos por defecto: Para Aldanet Zona='004' y TipoCliente='DET'; para Galpe='01'
+  const co_zon = (options.default_zone || (isAldanet ? '004' : '01')).trim().slice(0, 6);
+  const tip_cli = (options.default_client_type || (isAldanet ? 'DET' : '01')).trim().slice(0, 6);
   const co_ven = (options.default_seller || '01').trim().slice(0, 10);
   const co_seg = (options.default_segment || '01').trim().slice(0, 6);
   const co_mone = (options.default_currency || 'US$').trim().slice(0, 6);
