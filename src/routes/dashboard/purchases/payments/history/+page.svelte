@@ -736,7 +736,7 @@
                   <tbody class="divide-y divide-border-subtle">
                     {#each detailData.formas_pago as fp}
                       <tr class="hover:bg-surface-soft/40 transition-colors">
-                        <td class="p-3 font-bold text-text-base">{fp.forma_pag === 'EF' ? 'Efectivo' : fp.forma_pag === 'TP' ? 'Transferencia' : fp.forma_pag}</td>
+                        <td class="p-3 font-bold text-text-base">{fp.forma_pag === 'EF' ? 'Efectivo' : (fp.forma_pag === 'TR' || fp.forma_pag === 'TP' || fp.forma_pag === 'TE') ? 'Transferencia' : fp.forma_pag === 'CH' ? 'Cheque' : fp.forma_pag === 'DP' ? 'Depósito' : fp.forma_pag}</td>
                         <td class="p-3 text-text-muted">{fp.caja_des || fp.cta_des || fp.cod_caja || fp.cod_cta || '---'}</td>
                         <td class="p-3 font-mono text-text-base">{fp.num_doc || '---'}</td>
                         <td class="p-3 text-right font-mono font-bold text-text-base">Bs. {Number(fp.mont_doc).toLocaleString('de-DE', {minimumFractionDigits: 2})}</td>

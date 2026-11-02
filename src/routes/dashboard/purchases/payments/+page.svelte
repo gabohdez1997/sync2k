@@ -952,7 +952,7 @@
         const mone = caja?.co_mone?.trim()?.toUpperCase() || "BS";
         return mone === "VES" || mone === "BS" ? "BS" : "USD";
       }
-    } else if (fp.forma_pag === "TE" || fp.forma_pag === "DP" || fp.forma_pag === "CH") {
+    } else if (fp.forma_pag === "TE" || fp.forma_pag === "TR" || fp.forma_pag === "DP" || fp.forma_pag === "CH") {
       if (fp.cod_cta) {
         const cta = data.cuentasBancarias?.find((c: any) => c.cod_cta?.trim() === fp.cod_cta?.trim());
         const mone = cta?.co_mone?.trim()?.toUpperCase() || "BS";
@@ -2167,7 +2167,7 @@
                         class="w-full h-12 px-4 bg-surface-soft border border-border-subtle rounded-xl focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none transition-all font-medium text-xs cursor-pointer text-text-base"
                       >
                         <option value="EF">Efectivo</option>
-                        <option value="TE">Transferencia Bancaria</option>
+                        <option value="TR">Transferencia Bancaria</option>
                         <option value="DP">Depósito Bancario</option>
                         <option value="CH">Cheque</option>
                       </select>
@@ -2193,7 +2193,7 @@
                       </div>
                     {/if}
 
-                    {#if fp.forma_pag === "TE" || fp.forma_pag === "DP" || fp.forma_pag === "CH"}
+                    {#if fp.forma_pag === "TE" || fp.forma_pag === "TR" || fp.forma_pag === "DP" || fp.forma_pag === "CH"}
                       <div class="grid grid-cols-2 gap-2">
                         <div>
                           <span
