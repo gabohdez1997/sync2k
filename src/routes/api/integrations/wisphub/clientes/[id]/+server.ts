@@ -44,3 +44,4 @@ export const GET: RequestHandler = async ({ params, url, locals }) => {
     }, { status: 500 });
   }
 };
+

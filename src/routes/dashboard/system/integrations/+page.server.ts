@@ -18,9 +18,11 @@ export const load: PageServerLoad = protectLoad('sec_integrations', async ({ fet
   const canExecute = hasPermission(profile, 'sec_integrations', 'others');
 
   const integrations = await getAllIntegrations(fetch);
+  const branches = profile.allowed_branches || [];
 
   return {
     integrations,
+    branches,
     canUpdate,
     canExecute
   };
