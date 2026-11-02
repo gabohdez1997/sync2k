@@ -226,6 +226,7 @@
         { id: "sec_branches", label: "Sucursales" },
         { id: "sec_printers", label: "Impresoras" },
         { id: "sec_settings", label: "Parametrización" },
+        { id: "sec_integrations", label: "Integraciones", hasOthers: true },
         { id: "sec_audit", label: "Auditoría", onlyRead: true },
       ],
     },

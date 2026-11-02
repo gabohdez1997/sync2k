@@ -28,3 +28,6 @@ firebase/*.json
 # Scratch directories
 scratch/
 scripts/run-migration-012.js
+
+# Local data
+data/

@@ -46,6 +46,7 @@
     Search,
     Printer,
     SlidersHorizontal,
+    Blocks,
     Award,
     Image,
     TrendingUp,
@@ -357,6 +358,12 @@
           label: "Parametrización",
           href: "/dashboard/settings",
           icon: SlidersHorizontal,
+        },
+        {
+          id: "sec_integrations",
+          label: "Integraciones",
+          href: "/dashboard/system/integrations",
+          icon: Blocks,
         },
         {
           id: "sec_audit",
