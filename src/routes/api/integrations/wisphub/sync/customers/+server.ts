@@ -3,7 +3,8 @@ import { json } from '@sveltejs/kit';
 import { AgentClient } from '$lib/server/agent';
 import { logAction } from '$lib/server/audit';
 import { getWisphubClientes, getWisphubCliente, type WisphubClient } from '$lib/server/services/wisphub';
-import { syncBatchWisphubCustomers, syncWisphubCustomerToProfit } from '$lib/server/services/wisphubSync';
+import { syncBatchWisphubCustomers, type CustomerSyncOptions } from '$lib/server/services/wisphubSync';
+import { getIntegration, saveIntegration } from '$lib/server/integrations';
 import type { RequestHandler } from './$types';
 
 export const POST: RequestHandler = async ({ request, locals, fetch }) => {
@@ -48,19 +49,45 @@ export const POST: RequestHandler = async ({ request, locals, fetch }) => {
       clientsToSync = [singleRes.client];
     } else {
       // Si no vienen clientes específicos, traer los primeros activos o según filtros
-      const listRes = await getWisphubClientes({ limit: 50, estado: '1' });
+      const listRes = await getWisphubClientes({ limit: 100, estado: '1' });
       if (!listRes.success || !listRes.results) {
         return json({ success: false, message: listRes.error || 'No se pudieron consultar clientes de WispHub' }, { status: 400 });
       }
       clientsToSync = listRes.results;
     }
 
-    const syncOptions = {
+    const syncOptions: CustomerSyncOptions = {
       sedeId: targetBranch.profit_server_id || targetBranch.id,
-      default_zone: options.default_zone || '01',
-      default_client_type: options.default_client_type || '01',
-      overwrite_existing: options.overwrite_existing ?? true
+      default_cta_ingr_egr: (options.default_cta_ingr_egr || 'I-001').trim(),
+      default_zone: (options.default_zone || '01').trim(),
+      default_client_type: (options.default_client_type || '01').trim(),
+      default_seller: (options.default_seller || '01').trim(),
+      default_segment: (options.default_segment || '01').trim(),
+      default_currency: (options.default_currency || 'US$').trim(),
+      default_cond: (options.default_cond || '01').trim(),
+      overwrite_existing: options.overwrite_existing ?? true,
+      field_mappings: options.field_mappings || {}
     };
+
+    // Si el usuario marcó persistir opciones, actualizar la integración de WispHub
+    if (options.save_defaults) {
+      try {
+        const curWisp = await getIntegration('wisphub');
+        if (curWisp) {
+          await saveIntegration('wisphub', {
+            options: {
+              ...curWisp.options,
+              default_cta_ingr_egr: syncOptions.default_cta_ingr_egr,
+              default_zone: syncOptions.default_zone,
+              default_client_type: syncOptions.default_client_type,
+              default_seller: syncOptions.default_seller,
+              default_segment: syncOptions.default_segment,
+              field_mappings: syncOptions.field_mappings
+            }
+          }, fetch);
+        }
+      } catch {}
+    }
 
     const summary = await syncBatchWisphubCustomers(clientsToSync, agentClient, syncOptions);
 
@@ -77,7 +104,8 @@ export const POST: RequestHandler = async ({ request, locals, fetch }) => {
         created: summary.created,
         updated: summary.updated,
         failed: summary.failed,
-        branch_name: targetBranch.name
+        branch_name: targetBranch.name,
+        co_cta_ingr_egr: syncOptions.default_cta_ingr_egr
       }
     });
 
@@ -96,4 +124,3 @@ export const POST: RequestHandler = async ({ request, locals, fetch }) => {
     }, { status: 500 });
   }
 };
-

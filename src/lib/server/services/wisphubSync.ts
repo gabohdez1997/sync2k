@@ -4,11 +4,25 @@ import { parseClientCedula } from './hka';
 import { getExchangeRateResolver } from './exchangeRates';
 import type { WisphubClient, WisphubInvoice, WisphubPlan } from './wisphub';
 
+export interface CustomerFieldMappings {
+  co_cli_source?: 'cedula_or_id' | 'cedula_or_user' | 'id_servicio' | 'usuario';
+  cli_des_source?: 'nombre_apellido' | 'razon_social';
+  campo1_source?: 'id_servicio' | 'usuario' | 'ip' | 'plan' | 'router' | 'none';
+  campo2_source?: 'id_servicio' | 'usuario' | 'ip' | 'plan' | 'router' | 'none';
+  campo3_source?: 'id_servicio' | 'usuario' | 'ip' | 'plan' | 'router' | 'none';
+}
+
 export interface CustomerSyncOptions {
   sedeId?: string;
-  default_zone?: string;
-  default_client_type?: string;
+  default_cta_ingr_egr?: string; // Por defecto: 'I-001'
+  default_zone?: string; // Por defecto: '01'
+  default_client_type?: string; // Por defecto: '01'
+  default_seller?: string; // Por defecto: '01'
+  default_segment?: string; // Por defecto: '01'
+  default_currency?: string; // Por defecto: 'US$'
+  default_cond?: string; // Por defecto: '01'
   overwrite_existing?: boolean;
+  field_mappings?: CustomerFieldMappings;
 }
 
 export interface CustomerSyncResult {
@@ -30,6 +44,29 @@ export interface BatchSyncSummary {
   results: CustomerSyncResult[];
 }
 
+function resolveSourceValue(source: string | undefined, client: WisphubClient): string {
+  switch (source) {
+    case 'id_servicio':
+      return String(client.id_servicio || '');
+    case 'usuario':
+      return String(client.usuario || '');
+    case 'ip':
+      return String(client.ip || client.ip_local || '');
+    case 'plan':
+      return typeof client.plan_internet === 'object'
+        ? String(client.plan_internet?.nombre || '')
+        : String(client.plan_internet || '');
+    case 'router':
+      return typeof client.router === 'object'
+        ? String(client.router?.nombre || '')
+        : String(client.router || '');
+    case 'none':
+      return '';
+    default:
+      return '';
+  }
+}
+
 /**
  * Normaliza y mapea un cliente de WispHub al esquema de la tabla saCliente de Profit Plus
  */
@@ -46,49 +83,89 @@ export function mapWisphubClientToProfit(
   ciudad: string;
   co_zon: string;
   tip_cli: string;
+  co_cta_ingr_egr: string;
+  co_ven: string;
+  co_seg: string;
+  co_mone: string;
+  co_cond: string;
   tipo_per: string;
   contribuyente: boolean;
   contribu_e: boolean;
-  campo1: string; // id_servicio en WispHub
-  campo2: string; // usuario en WispHub
-  campo3: string; // IP asignada
+  campo1: string;
+  campo2: string;
+  campo3: string;
 } {
   const cedulaStr = String(client.cedula || client.rfc || '').trim();
   const parsed = parseClientCedula(cedulaStr);
 
-  // Código de cliente en Profit Plus: Si hay cédula válida se usa ej. V12345678, sino WISP-ID
+  const mappings = options.field_mappings || {};
+  const coCliSource = mappings.co_cli_source || 'cedula_or_id';
+
+  // 1. Resolver Código de Cliente en Profit Plus (co_cli)
   let co_cli = '';
-  if (parsed.cleanDoc) {
-    co_cli = `${parsed.tipo}${parsed.cleanDoc}`;
-  } else if (client.usuario && /^[a-zA-Z0-9_\-]+$/.test(client.usuario)) {
-    co_cli = client.usuario.toUpperCase().slice(0, 15);
-  } else {
+  if (coCliSource === 'id_servicio') {
     co_cli = `WISP-${client.id_servicio}`;
-  }
-
-  // Nombre o Razón Social
-  let cli_des = '';
-  if (client.razon_social && client.razon_social.trim().length > 2) {
-    cli_des = client.razon_social.trim().toUpperCase();
+  } else if (coCliSource === 'usuario') {
+    co_cli = (client.usuario || `WISP-${client.id_servicio}`).toUpperCase().slice(0, 15);
+  } else if (coCliSource === 'cedula_or_user') {
+    if (parsed.cleanDoc) {
+      co_cli = `${parsed.tipo}${parsed.cleanDoc}`;
+    } else if (client.usuario && /^[a-zA-Z0-9_\-]+$/.test(client.usuario)) {
+      co_cli = client.usuario.toUpperCase().slice(0, 15);
+    } else {
+      co_cli = `WISP-${client.id_servicio}`;
+    }
   } else {
-    const nom = (client.nombre || '').trim();
-    const ape = (client.apellido || '').trim();
-    cli_des = `${nom} ${ape}`.trim().toUpperCase() || `CLIENTE WISPHUB ${client.id_servicio}`;
+    // 'cedula_or_id' (Por defecto)
+    if (parsed.cleanDoc) {
+      co_cli = `${parsed.tipo}${parsed.cleanDoc}`;
+    } else {
+      co_cli = `WISP-${client.id_servicio}`;
+    }
   }
 
-  // RIF Formateado
+  // 2. Resolver Nombre o Razón Social (cli_des)
+  let cli_des = '';
+  const nom = (client.nombre || '').trim();
+  const ape = (client.apellido || '').trim();
+  const nomCompleto = `${nom} ${ape}`.trim().toUpperCase();
+  const razonSoc = (client.razon_social || '').trim().toUpperCase();
+
+  if (mappings.cli_des_source === 'razon_social') {
+    cli_des = razonSoc || nomCompleto || `CLIENTE WISPHUB ${client.id_servicio}`;
+  } else {
+    cli_des = nomCompleto || razonSoc || `CLIENTE WISPHUB ${client.id_servicio}`;
+  }
+
+  // 3. RIF Formateado
   const rif = parsed.formattedRif || (parsed.cleanDoc ? `${parsed.tipo}-${parsed.cleanDoc}` : co_cli);
 
-  // Tipo de persona y contribuyente según tipo de documento
+  // 4. Tipo de persona y contribuyente según tipo de documento
   const isJuridica = parsed.tipo === 'J' || parsed.tipo === 'G';
   const tipo_per = isJuridica ? '3' : '1'; // 1: Persona Natural, 3: Jurídica Domiciliada
   const contribuyente = isJuridica;
 
-  // Dirección y contacto
+  // 5. Dirección y contacto
   const direc1 = (client.direccion || client.localidad || client.ciudad || 'VALENCIA, VENEZUELA').trim().toUpperCase().slice(0, 100);
   const ciudad = (client.ciudad || 'VALENCIA').trim().toUpperCase().slice(0, 50);
   const telefonos = (client.telefono || '').trim().slice(0, 30);
   const email = (client.email || '').trim().slice(0, 60);
+
+  // 6. Cuenta de Ingreso/Egreso (Obligatoria para la FK FK_saCliente_saCuentaIngEgr)
+  const co_cta_ingr_egr = (options.default_cta_ingr_egr || 'I-001').trim().slice(0, 20);
+
+  // 7. Catálogos por defecto
+  const co_zon = (options.default_zone || '01').trim().slice(0, 6);
+  const tip_cli = (options.default_client_type || '01').trim().slice(0, 6);
+  const co_ven = (options.default_seller || '01').trim().slice(0, 10);
+  const co_seg = (options.default_segment || '01').trim().slice(0, 6);
+  const co_mone = (options.default_currency || 'US$').trim().slice(0, 6);
+  const co_cond = (options.default_cond || '01').trim().slice(0, 6);
+
+  // 8. Campos adicionales de trazabilidad (campo1, campo2, campo3)
+  const campo1 = resolveSourceValue(mappings.campo1_source || 'id_servicio', client) || String(client.id_servicio);
+  const campo2 = resolveSourceValue(mappings.campo2_source || 'usuario', client) || String(client.usuario || '');
+  const campo3 = resolveSourceValue(mappings.campo3_source || 'ip', client) || String(client.ip || client.ip_local || '');
 
   return {
     co_cli: co_cli.slice(0, 15),
@@ -98,14 +175,19 @@ export function mapWisphubClientToProfit(
     email,
     direc1,
     ciudad,
-    co_zon: (options.default_zone || '01').slice(0, 6),
-    tip_cli: (options.default_client_type || '01').slice(0, 6),
+    co_zon,
+    tip_cli,
+    co_cta_ingr_egr,
+    co_ven,
+    co_seg,
+    co_mone,
+    co_cond,
     tipo_per,
     contribuyente,
     contribu_e: false,
-    campo1: String(client.id_servicio),
-    campo2: String(client.usuario || ''),
-    campo3: String(client.ip || client.ip_local || '')
+    campo1: campo1.slice(0, 60),
+    campo2: campo2.slice(0, 60),
+    campo3: campo3.slice(0, 60)
   };
 }
 
@@ -394,4 +476,3 @@ export async function mapWisphubInvoiceToHkaEmission(
     }
   };
 }
-

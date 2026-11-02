@@ -34,7 +34,10 @@
     Database,
     Users,
     Layers,
-    ArrowRight
+    ArrowRight,
+    ChevronDown,
+    ChevronUp,
+    Settings2
   } from "lucide-svelte";
   import type { PageData, ActionData } from "./$types";
 
@@ -64,6 +67,21 @@
   let overwriteExisting = $state(true);
   let isSyncing = $state(false);
   let syncSummary = $state<any>(null);
+
+  // Opciones de mapeo Profit Plus para WispHub
+  let showAdvancedMappings = $state(false);
+  let defaultCtaIngrEgr = $state("I-001");
+  let defaultClientType = $state("01");
+  let defaultZone = $state("01");
+  let defaultSeller = $state("01");
+  let defaultSegment = $state("01");
+  let defaultPaymentCond = $state("01");
+  let coCliSource = $state<string>("cedula_or_id");
+  let campo1Source = $state<string>("id_servicio");
+  let campo2Source = $state<string>("usuario");
+  let campo3Source = $state<string>("ip");
+  let saveDefaults = $state(true);
+  let showFailuresList = $state(false);
 
   // Estados de prueba y guardado
   let testingId = $state<string | null>(null);
@@ -133,6 +151,23 @@
 
   function openConfigModal(item: any) {
     editingItem = JSON.parse(JSON.stringify(item));
+    if (editingItem.id === "wisphub") {
+      if (!editingItem.options) editingItem.options = {};
+      if (!editingItem.options.default_cta_ingr_egr) editingItem.options.default_cta_ingr_egr = "I-001";
+      if (!editingItem.options.default_client_type) editingItem.options.default_client_type = "01";
+      if (!editingItem.options.default_zone) editingItem.options.default_zone = "01";
+      if (!editingItem.options.default_seller) editingItem.options.default_seller = "01";
+      if (!editingItem.options.default_segment) editingItem.options.default_segment = "01";
+      if (!editingItem.options.default_cond) editingItem.options.default_cond = "01";
+      if (!editingItem.options.field_mappings) {
+        editingItem.options.field_mappings = {
+          co_cli_source: "cedula_or_id",
+          campo1_source: "id_servicio",
+          campo2_source: "usuario",
+          campo3_source: "ip"
+        };
+      }
+    }
     liveTestResult = null;
     showPassword = {};
     isModalOpen = true;
@@ -147,8 +182,22 @@
   function openSyncModal(item?: any) {
     isSyncModalOpen = true;
     syncSummary = null;
+    showFailuresList = false;
     if (data.branches && data.branches.length > 0 && !syncTargetBranch) {
       syncTargetBranch = data.branches[0].id;
+    }
+    const wisp = integrations.find((i) => i.id === "wisphub");
+    if (wisp?.options) {
+      if (wisp.options.default_cta_ingr_egr) defaultCtaIngrEgr = wisp.options.default_cta_ingr_egr;
+      if (wisp.options.default_client_type) defaultClientType = wisp.options.default_client_type;
+      if (wisp.options.default_zone) defaultZone = wisp.options.default_zone;
+      if (wisp.options.default_seller) defaultSeller = wisp.options.default_seller;
+      if (wisp.options.default_segment) defaultSegment = wisp.options.default_segment;
+      if (wisp.options.default_cond) defaultPaymentCond = wisp.options.default_cond;
+      if (wisp.options.field_mappings?.co_cli_source) coCliSource = wisp.options.field_mappings.co_cli_source;
+      if (wisp.options.field_mappings?.campo1_source) campo1Source = wisp.options.field_mappings.campo1_source;
+      if (wisp.options.field_mappings?.campo2_source) campo2Source = wisp.options.field_mappings.campo2_source;
+      if (wisp.options.field_mappings?.campo3_source) campo3Source = wisp.options.field_mappings.campo3_source;
     }
   }
 
@@ -156,6 +205,7 @@
     if (isSyncing) return;
     isSyncModalOpen = false;
     syncSummary = null;
+    showFailuresList = false;
   }
 
   async function executeWisphubSync() {
@@ -170,6 +220,7 @@
 
     isSyncing = true;
     syncSummary = null;
+    showFailuresList = false;
 
     try {
       let customersResult: any = null;
@@ -183,7 +234,20 @@
           body: JSON.stringify({
             branch_id: syncTargetBranch,
             options: {
-              overwrite_existing: overwriteExisting
+              overwrite_existing: overwriteExisting,
+              default_cta_ingr_egr: defaultCtaIngrEgr,
+              default_client_type: defaultClientType,
+              default_zone: defaultZone,
+              default_seller: defaultSeller,
+              default_segment: defaultSegment,
+              default_cond: defaultPaymentCond,
+              save_defaults: saveDefaults,
+              field_mappings: {
+                co_cli_source: coCliSource,
+                campo1_source: campo1Source,
+                campo2_source: campo2Source,
+                campo3_source: campo3Source
+              }
             }
           })
         });
@@ -214,7 +278,13 @@
         branch: customersResult?.branch || plansResult?.branch || null
       };
 
-      toast.success("Sincronización con Profit Plus finalizada exitosamente.");
+      if (syncSummary.customers?.failed > 0) {
+        toast.warning(
+          `Sincronización completada con observaciones: ${syncSummary.customers.failed} registros fallaron.`
+        );
+      } else {
+        toast.success("Sincronización con Profit Plus finalizada exitosamente.");
+      }
     } catch (err: any) {
       toast.error(`Error de sincronización: ${err.message}`);
     } finally {
@@ -424,15 +494,15 @@
                 class="px-2.5 py-1 rounded-xl font-black uppercase tracking-wider border flex items-center gap-1.5 {item.environment ===
                 'production'
                   ? 'bg-emerald-500/15 text-emerald-800 dark:text-emerald-300 border-emerald-500/30'
-                  : 'bg-amber-500/20 text-amber-800 dark:text-amber-300 border-amber-500/35'}"
-                title={`Entorno configurado: ${item.environment.toUpperCase()}`}
+                  : 'bg-amber-500/15 text-amber-900 dark:text-amber-300 border-amber-500/35 font-bold'}"
+                title={`Entorno de operación: ${item.environment.toUpperCase()} (Modo de pruebas o sandbox)`}
               >
                 {#if item.environment === 'production'}
                   <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block"></span>
-                  <span>PRODUCCIÓN</span>
+                  <span>MODO: PRODUCCIÓN</span>
                 {:else}
-                  <FlaskConical size={11} class="text-amber-700 dark:text-amber-300 shrink-0" />
-                  <span>{item.environment.toUpperCase()}</span>
+                  <FlaskConical size={11} class="text-amber-700 dark:text-amber-400 shrink-0" />
+                  <span>MODO: {item.environment.toUpperCase()}</span>
                 {/if}
               </span>
             {/if}
@@ -951,6 +1021,149 @@
                   </div>
                 </label>
 
+                <!-- Mapeo Predeterminado a Profit Plus (saCliente) -->
+                <div class="pt-2 border-t border-border-subtle/60 space-y-3">
+                  <div class="flex items-center gap-2">
+                    <Settings2 size={15} class="text-indigo-500" />
+                    <span class="text-xs font-black uppercase tracking-wider text-text-base">
+                      Mapeo Predeterminado a Profit Plus (`saCliente`)
+                    </span>
+                  </div>
+
+                  <!-- Cuenta Ingreso/Egreso FK -->
+                  <div class="space-y-1.5 p-3 rounded-2xl bg-indigo-500/10 border border-indigo-500/20">
+                    <div class="flex items-center justify-between">
+                      <label class="text-xs font-black uppercase tracking-wider text-indigo-700 dark:text-indigo-300">
+                        Cuenta Ingreso / Egreso (`co_cta_ingr_egr`)
+                      </label>
+                      <span class="text-[10px] font-mono font-bold text-indigo-600 dark:text-indigo-400">
+                        FK ALDANET: I-001
+                      </span>
+                    </div>
+                    <input
+                      type="text"
+                      bind:value={editingItem.options.default_cta_ingr_egr}
+                      placeholder="I-001"
+                      class="w-full bg-surface-soft border border-border-subtle px-4 py-2.5 rounded-xl text-xs font-mono font-bold text-text-base focus:border-brand-500 outline-none transition-all"
+                    />
+                    <span class="text-[10px] text-text-muted leading-tight block">
+                      Obligatorio por clave foránea FK_saCliente_saCuentaIngEgr en tabla saCuentaIngEgr.
+                    </span>
+                  </div>
+
+                  <!-- Origen del Código de Cliente -->
+                  <div class="space-y-1.5">
+                    <label class="text-xs font-black uppercase tracking-widest text-text-muted ml-1 block">
+                      Estrategia de Código de Cliente (`co_cli`)
+                    </label>
+                    <select
+                      bind:value={editingItem.options.field_mappings.co_cli_source}
+                      class="w-full bg-surface-soft border border-border-subtle px-4 py-2.5 rounded-xl text-xs font-bold text-text-base focus:border-brand-500 outline-none transition-all cursor-pointer"
+                    >
+                      <option value="cedula_or_id">Cédula/RIF si existe (ej. V12345678), o ID WispHub (WISP-775)</option>
+                      <option value="cedula_or_user">Cédula/RIF si existe, o Nombre de Usuario WispHub</option>
+                      <option value="id_servicio">Siempre ID de Servicio WispHub (WISP-775)</option>
+                      <option value="usuario">Nombre de Usuario WispHub</option>
+                    </select>
+                  </div>
+
+                  <!-- Grid de Defaults (Zona, Vendedor, Segmento, Tipo Cliente) -->
+                  <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                    <div class="space-y-1">
+                      <label class="text-[10px] font-black uppercase tracking-wider text-text-muted block">
+                        Tipo Cliente
+                      </label>
+                      <input
+                        type="text"
+                        bind:value={editingItem.options.default_client_type}
+                        placeholder="01"
+                        class="w-full bg-surface-soft border border-border-subtle px-3 py-2 rounded-xl text-xs font-mono font-bold text-text-base text-center"
+                      />
+                    </div>
+                    <div class="space-y-1">
+                      <label class="text-[10px] font-black uppercase tracking-wider text-text-muted block">
+                        Zona
+                      </label>
+                      <input
+                        type="text"
+                        bind:value={editingItem.options.default_zone}
+                        placeholder="01"
+                        class="w-full bg-surface-soft border border-border-subtle px-3 py-2 rounded-xl text-xs font-mono font-bold text-text-base text-center"
+                      />
+                    </div>
+                    <div class="space-y-1">
+                      <label class="text-[10px] font-black uppercase tracking-wider text-text-muted block">
+                        Vendedor
+                      </label>
+                      <input
+                        type="text"
+                        bind:value={editingItem.options.default_seller}
+                        placeholder="01"
+                        class="w-full bg-surface-soft border border-border-subtle px-3 py-2 rounded-xl text-xs font-mono font-bold text-text-base text-center"
+                      />
+                    </div>
+                    <div class="space-y-1">
+                      <label class="text-[10px] font-black uppercase tracking-wider text-text-muted block">
+                        Segmento
+                      </label>
+                      <input
+                        type="text"
+                        bind:value={editingItem.options.default_segment}
+                        placeholder="01"
+                        class="w-full bg-surface-soft border border-border-subtle px-3 py-2 rounded-xl text-xs font-mono font-bold text-text-base text-center"
+                      />
+                    </div>
+                  </div>
+
+                  <!-- Campos Libres -->
+                  <div class="space-y-2 pt-1 border-t border-border-subtle/50">
+                    <span class="text-[11px] font-black uppercase tracking-wider text-text-muted block">
+                      Mapeo a Campos Libres (`campo1`, `campo2`, `campo3`)
+                    </span>
+                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                      <div>
+                        <span class="text-[10px] text-text-muted font-bold block mb-1">Campo 1</span>
+                        <select
+                          bind:value={editingItem.options.field_mappings.campo1_source}
+                          class="w-full bg-surface-soft border border-border-subtle px-2.5 py-1.5 rounded-xl text-xs font-bold text-text-base"
+                        >
+                          <option value="id_servicio">ID Servicio</option>
+                          <option value="usuario">Usuario</option>
+                          <option value="ip">IP</option>
+                          <option value="plan">Plan</option>
+                          <option value="none">Vacío</option>
+                        </select>
+                      </div>
+                      <div>
+                        <span class="text-[10px] text-text-muted font-bold block mb-1">Campo 2</span>
+                        <select
+                          bind:value={editingItem.options.field_mappings.campo2_source}
+                          class="w-full bg-surface-soft border border-border-subtle px-2.5 py-1.5 rounded-xl text-xs font-bold text-text-base"
+                        >
+                          <option value="usuario">Usuario</option>
+                          <option value="id_servicio">ID Servicio</option>
+                          <option value="ip">IP</option>
+                          <option value="plan">Plan</option>
+                          <option value="none">Vacío</option>
+                        </select>
+                      </div>
+                      <div>
+                        <span class="text-[10px] text-text-muted font-bold block mb-1">Campo 3</span>
+                        <select
+                          bind:value={editingItem.options.field_mappings.campo3_source}
+                          class="w-full bg-surface-soft border border-border-subtle px-2.5 py-1.5 rounded-xl text-xs font-bold text-text-base"
+                        >
+                          <option value="ip">IP</option>
+                          <option value="id_servicio">ID Servicio</option>
+                          <option value="usuario">Usuario</option>
+                          <option value="plan">Plan</option>
+                          <option value="none">Vacío</option>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
                 <!-- Acceso directo a Sincronización Inmediata -->
                 <div class="pt-2">
                   <button
@@ -1257,6 +1470,186 @@
           </label>
         </div>
 
+        <!-- Ajustes de Mapeo y Defaults Profit Plus (saCliente) -->
+        {#if syncCustomers}
+          <div class="border border-border-subtle rounded-2xl overflow-hidden bg-surface-soft/40">
+            <button
+              type="button"
+              onclick={() => (showAdvancedMappings = !showAdvancedMappings)}
+              class="w-full p-4 flex items-center justify-between text-left hover:bg-surface-soft transition-colors cursor-pointer"
+            >
+              <div class="flex items-center gap-2.5">
+                <Settings2 size={16} class="text-indigo-500 shrink-0" />
+                <div>
+                  <span class="text-xs font-bold text-text-base block">
+                    Mapeo de Campos Profit Plus (`saCliente`)
+                  </span>
+                  <span class="text-[11px] text-text-muted block">
+                    Cuenta Ingreso/Egreso ({defaultCtaIngrEgr}), Zona, Vendedor y Campos Libres
+                  </span>
+                </div>
+              </div>
+              <div class="flex items-center gap-1.5 text-xs text-text-muted font-bold">
+                <span>{showAdvancedMappings ? "Ocultar" : "Personalizar"}</span>
+                {#if showAdvancedMappings}
+                  <ChevronUp size={14} />
+                {:else}
+                  <ChevronDown size={14} />
+                {/if}
+              </div>
+            </button>
+
+            {#if showAdvancedMappings}
+              <div class="p-4 pt-2 border-t border-border-subtle space-y-4" in:slide={{ duration: 150 }}>
+                <!-- Cuenta de Ingresos / Egresos (FK ALDANET) -->
+                <div class="space-y-1.5 p-3 rounded-2xl bg-indigo-500/10 border border-indigo-500/20">
+                  <div class="flex items-center justify-between">
+                    <label class="text-[11px] font-black uppercase tracking-wider text-indigo-700 dark:text-indigo-300">
+                      Cuenta Ingreso / Egreso (`co_cta_ingr_egr`)
+                    </label>
+                    <span class="text-[10px] font-mono font-bold text-indigo-600 dark:text-indigo-400">
+                      FK ALDANET: I-001
+                    </span>
+                  </div>
+                  <input
+                    type="text"
+                    bind:value={defaultCtaIngrEgr}
+                    placeholder="I-001"
+                    class="w-full bg-surface-base border border-border-subtle px-3 py-2 rounded-xl text-xs font-mono font-bold text-text-base focus:border-indigo-500 outline-none transition-all"
+                  />
+                  <p class="text-[10px] text-text-muted leading-tight">
+                    Código de cuenta contable requerido por la clave foránea <code class="font-mono text-indigo-600 dark:text-indigo-400">FK_saCliente_saCuentaIngEgr</code>. En Aldanet debe ser <strong>I-001</strong>.
+                  </p>
+                </div>
+
+                <!-- Origen de Código de Cliente (co_cli) -->
+                <div class="space-y-1.5">
+                  <label class="text-[11px] font-black uppercase tracking-wider text-text-muted block">
+                    Origen del Código de Cliente (`co_cli`)
+                  </label>
+                  <select
+                    bind:value={coCliSource}
+                    class="w-full bg-surface-base border border-border-subtle px-3 py-2 rounded-xl text-xs font-bold text-text-base focus:border-indigo-500 outline-none transition-all cursor-pointer"
+                  >
+                    <option value="cedula_or_id">Cédula/RIF si existe (ej. V12345678), o ID WispHub (WISP-775)</option>
+                    <option value="cedula_or_user">Cédula/RIF si existe, o Nombre de Usuario WispHub</option>
+                    <option value="id_servicio">Siempre ID de Servicio WispHub (WISP-775)</option>
+                    <option value="usuario">Nombre de Usuario WispHub</option>
+                  </select>
+                </div>
+
+                <!-- Grid de Valores Por Defecto -->
+                <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                  <div class="space-y-1">
+                    <label class="text-[10px] font-black uppercase tracking-wider text-text-muted block">
+                      Tipo Cliente
+                    </label>
+                    <input
+                      type="text"
+                      bind:value={defaultClientType}
+                      placeholder="01"
+                      class="w-full bg-surface-base border border-border-subtle px-2.5 py-1.5 rounded-xl text-xs font-mono font-bold text-text-base text-center"
+                    />
+                  </div>
+                  <div class="space-y-1">
+                    <label class="text-[10px] font-black uppercase tracking-wider text-text-muted block">
+                      Zona
+                    </label>
+                    <input
+                      type="text"
+                      bind:value={defaultZone}
+                      placeholder="01"
+                      class="w-full bg-surface-base border border-border-subtle px-2.5 py-1.5 rounded-xl text-xs font-mono font-bold text-text-base text-center"
+                    />
+                  </div>
+                  <div class="space-y-1">
+                    <label class="text-[10px] font-black uppercase tracking-wider text-text-muted block">
+                      Vendedor
+                    </label>
+                    <input
+                      type="text"
+                      bind:value={defaultSeller}
+                      placeholder="01"
+                      class="w-full bg-surface-base border border-border-subtle px-2.5 py-1.5 rounded-xl text-xs font-mono font-bold text-text-base text-center"
+                    />
+                  </div>
+                  <div class="space-y-1">
+                    <label class="text-[10px] font-black uppercase tracking-wider text-text-muted block">
+                      Segmento
+                    </label>
+                    <input
+                      type="text"
+                      bind:value={defaultSegment}
+                      placeholder="01"
+                      class="w-full bg-surface-base border border-border-subtle px-2.5 py-1.5 rounded-xl text-xs font-mono font-bold text-text-base text-center"
+                    />
+                  </div>
+                </div>
+
+                <!-- Mapeo de Campos Libres (campo1, campo2, campo3) -->
+                <div class="space-y-2 pt-1 border-t border-border-subtle/50">
+                  <span class="text-[11px] font-black uppercase tracking-wider text-text-muted block">
+                    Campos Libres en saCliente (Profit Plus)
+                  </span>
+                  <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                    <div>
+                      <span class="text-[10px] text-text-muted font-bold block mb-1">Campo 1 (Libre)</span>
+                      <select
+                        bind:value={campo1Source}
+                        class="w-full bg-surface-base border border-border-subtle px-2.5 py-1.5 rounded-xl text-xs font-bold text-text-base"
+                      >
+                        <option value="id_servicio">ID Servicio (WispHub)</option>
+                        <option value="usuario">Usuario WispHub</option>
+                        <option value="ip">Dirección IP</option>
+                        <option value="plan">Plan de Internet</option>
+                        <option value="none">No mapear (Vacío)</option>
+                      </select>
+                    </div>
+                    <div>
+                      <span class="text-[10px] text-text-muted font-bold block mb-1">Campo 2 (Libre)</span>
+                      <select
+                        bind:value={campo2Source}
+                        class="w-full bg-surface-base border border-border-subtle px-2.5 py-1.5 rounded-xl text-xs font-bold text-text-base"
+                      >
+                        <option value="usuario">Usuario WispHub</option>
+                        <option value="id_servicio">ID Servicio</option>
+                        <option value="ip">Dirección IP</option>
+                        <option value="plan">Plan de Internet</option>
+                        <option value="none">No mapear (Vacío)</option>
+                      </select>
+                    </div>
+                    <div>
+                      <span class="text-[10px] text-text-muted font-bold block mb-1">Campo 3 (Libre)</span>
+                      <select
+                        bind:value={campo3Source}
+                        class="w-full bg-surface-base border border-border-subtle px-2.5 py-1.5 rounded-xl text-xs font-bold text-text-base"
+                      >
+                        <option value="ip">Dirección IP</option>
+                        <option value="id_servicio">ID Servicio</option>
+                        <option value="usuario">Usuario WispHub</option>
+                        <option value="plan">Plan de Internet</option>
+                        <option value="none">No mapear (Vacío)</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Guardar mapeos por defecto -->
+                <label class="flex items-center gap-2 pt-1 text-xs cursor-pointer">
+                  <input
+                    type="checkbox"
+                    bind:checked={saveDefaults}
+                    class="w-3.5 h-3.5 rounded text-indigo-500 focus:ring-indigo-500"
+                  />
+                  <span class="text-text-muted font-semibold">
+                    Guardar estos mapeos como predeterminados en WispHub
+                  </span>
+                </label>
+              </div>
+            {/if}
+          </div>
+        {/if}
+
         <!-- Resultados de la Sincronización en Vivo -->
         {#if syncSummary}
           <div
@@ -1292,6 +1685,38 @@
                   <span class="text-sm font-black text-red-600 dark:text-red-400">{syncSummary.customers.failed}</span>
                 </div>
               </div>
+
+              {#if syncSummary.customers.failed > 0 && Array.isArray(syncSummary.customers.results)}
+                <div class="pt-2 border-t border-border-subtle">
+                  <button
+                    type="button"
+                    onclick={() => (showFailuresList = !showFailuresList)}
+                    class="text-[11px] font-bold text-red-600 dark:text-red-400 hover:underline flex items-center gap-1 cursor-pointer"
+                  >
+                    <span>Ver detalle de los {syncSummary.customers.failed} registros fallidos</span>
+                    {#if showFailuresList}
+                      <ChevronUp size={12} />
+                    {:else}
+                      <ChevronDown size={12} />
+                    {/if}
+                  </button>
+                  {#if showFailuresList}
+                    <div class="mt-2 max-h-48 overflow-y-auto space-y-1.5 pr-1 font-mono text-[11px]" in:slide={{ duration: 150 }}>
+                      {#each syncSummary.customers.results.filter((r: any) => !r.success) as fail}
+                        <div class="p-2.5 rounded-xl bg-red-500/10 border border-red-500/20 text-text-base">
+                          <div class="flex items-center justify-between font-bold">
+                            <span>{fail.nombre || 'Sin nombre'} ({fail.co_cli})</span>
+                            <span class="text-red-600 dark:text-red-400">ID #{fail.id_servicio}</span>
+                          </div>
+                          <p class="text-[10px] text-red-700 dark:text-red-300 mt-1 break-all">
+                            {fail.error}
+                          </p>
+                        </div>
+                      {/each}
+                    </div>
+                  {/if}
+                </div>
+              {/if}
             {/if}
 
             {#if syncSummary.plans}
