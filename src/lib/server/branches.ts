@@ -20,6 +20,11 @@ export interface BranchRecord {
   default_warehouse?: string | null;
   allow_decimals_units?: string[] | string;
   default_seller?: string | null;
+  default_zone?: string | null;
+  default_client_type?: string | null;
+  default_cta_ingr_egr?: string | null;
+  default_segment?: string | null;
+  sql_config?: any;
   active?: boolean;
   sort_order?: number;
   is_default?: boolean;
@@ -63,7 +68,7 @@ export async function getActiveBranches(fetchFn?: typeof fetch): Promise<BranchR
       const supabaseAdmin = getSupabaseAdmin(fetchFn);
       let { data: dbBranches, error } = await supabaseAdmin
         .from('branches')
-        .select('id, name, business_name, rif, address, phone, logo_url, agent_url, agent_token, profit_branch_codes, profit_server_id, local_dns_alias, default_warehouse, allow_decimals_units, default_seller, active, sort_order')
+        .select('id, name, business_name, rif, address, phone, logo_url, agent_url, agent_token, profit_branch_codes, profit_server_id, local_dns_alias, default_warehouse, allow_decimals_units, default_seller, sql_config, active, sort_order')
         .eq('active', true)
         .order('sort_order')
         .order('name');
@@ -140,9 +145,14 @@ export async function getActiveBranches(fetchFn?: typeof fetch): Promise<BranchR
           profit_branch_codes: b.profit_branch_codes,
           profit_server_id: b.profit_server_id,
           local_dns_alias: b.local_dns_alias,
-          default_warehouse: b.default_warehouse,
+          default_warehouse: b.default_warehouse || b.sql_config?.profit_defaults?.default_warehouse,
           allow_decimals_units: b.allow_decimals_units,
-          default_seller: b.default_seller,
+          default_seller: b.default_seller || b.sql_config?.profit_defaults?.default_seller,
+          default_zone: b.default_zone || b.sql_config?.profit_defaults?.default_zone || '01',
+          default_client_type: b.default_client_type || b.sql_config?.profit_defaults?.default_client_type || '01',
+          default_cta_ingr_egr: b.default_cta_ingr_egr || b.sql_config?.profit_defaults?.default_cta_ingr_egr || 'I-001',
+          default_segment: b.default_segment || b.sql_config?.profit_defaults?.default_segment || '01',
+          sql_config: b.sql_config,
           active: b.active,
           sort_order: b.sort_order,
           is_default: isDefault

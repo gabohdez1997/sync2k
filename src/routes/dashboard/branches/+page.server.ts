@@ -58,6 +58,18 @@ export const load: PageServerLoad = protectLoad('sec_branches', async ({ locals,
       return { branches: [], agentServers: [], branchStats: {}, loadError: error.message };
     }
 
+    // Normalizar defaults de clientes y Profit Plus desde sql_config.profit_defaults
+    branches = (branches ?? []).map((b: any) => {
+      const pDef = b.sql_config?.profit_defaults || {};
+      return {
+        ...b,
+        default_zone: b.default_zone || pDef.default_zone || '01',
+        default_client_type: b.default_client_type || pDef.default_client_type || '01',
+        default_cta_ingr_egr: b.default_cta_ingr_egr || pDef.default_cta_ingr_egr || 'I-001',
+        default_segment: b.default_segment || pDef.default_segment || '01'
+      };
+    });
+
     // Consultar servidores SQL y estadísticas de todas las sucursales activas en paralelo
     let agentServers: any[] = [];
     let branchStats: Record<string, { articulos: number; clientes: number; proveedores: number; condiciones_pago?: number; usuarios?: number; online: boolean }> = {};
@@ -196,6 +208,21 @@ export const actions: Actions = {
         .filter(Boolean);
     }
     const defaultSeller = (formData.get('default_seller') as string)?.trim() || '01';
+    const defaultZone = (formData.get('default_zone') as string)?.trim() || '01';
+    const defaultClientType = (formData.get('default_client_type') as string)?.trim() || '01';
+    const defaultCtaIngrEgr = (formData.get('default_cta_ingr_egr') as string)?.trim() || 'I-001';
+    const defaultSegment = (formData.get('default_segment') as string)?.trim() || '01';
+
+    if (sqlConfig && typeof sqlConfig === 'object') {
+      sqlConfig.profit_defaults = {
+        default_zone: defaultZone,
+        default_client_type: defaultClientType,
+        default_cta_ingr_egr: defaultCtaIngrEgr,
+        default_seller: defaultSeller,
+        default_segment: defaultSegment,
+        default_warehouse: defaultWarehouse
+      };
+    }
 
     // ─── Proceso de Subida de Logo ─────────────────────────────
     if (logoFile && logoFile.size > 0 && logoFile.name) {

@@ -56,20 +56,16 @@ export const POST: RequestHandler = async ({ request, locals, fetch }) => {
       clientsToSync = listRes.results;
     }
 
-    // Determinar si la sucursal es Aldanet o Galpe para asignar presets automáticos si no vienen especificados
-    const branchNameLower = String(targetBranch.name || '').toLowerCase();
-    const branchId = String(targetBranch.id || '');
-    const isAldanet = branchNameLower.includes('aldanet') || branchId.toLowerCase().includes('aldanet');
-
-    // Recuperar configuración guardada de WispHub para ver si hay preset para esta sucursal
+    // Defaults de Profit Plus obtenidos de la configuración de la Sucursal o de la integración
     const curWisp = await getIntegration('wisphub').catch(() => null);
+    const branchId = String(targetBranch.id || '');
     const branchPreset = curWisp?.options?.branch_presets?.[branchId] || {};
 
-    const defaultZone = (options.default_zone || branchPreset.default_zone || (isAldanet ? '004' : '01')).trim();
-    const defaultClientType = (options.default_client_type || branchPreset.default_client_type || (isAldanet ? 'DET' : '01')).trim();
-    const defaultCta = (options.default_cta_ingr_egr || branchPreset.default_cta_ingr_egr || (isAldanet ? 'I-001' : '01')).trim();
-    const defaultSeller = (options.default_seller || branchPreset.default_seller || '01').trim();
-    const defaultSegment = (options.default_segment || branchPreset.default_segment || '01').trim();
+    const defaultZone = (options.default_zone || branchPreset.default_zone || targetBranch.default_zone || '01').trim();
+    const defaultClientType = (options.default_client_type || branchPreset.default_client_type || targetBranch.default_client_type || '01').trim();
+    const defaultCta = (options.default_cta_ingr_egr || branchPreset.default_cta_ingr_egr || targetBranch.default_cta_ingr_egr || 'I-001').trim();
+    const defaultSeller = (options.default_seller || branchPreset.default_seller || targetBranch.default_seller || '01').trim();
+    const defaultSegment = (options.default_segment || branchPreset.default_segment || targetBranch.default_segment || '01').trim();
     const defaultCurrency = (options.default_currency || branchPreset.default_currency || 'US$').trim();
     const defaultCond = (options.default_cond || branchPreset.default_cond || '01').trim();
 

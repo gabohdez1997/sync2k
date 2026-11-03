@@ -189,8 +189,7 @@
 
   function updateBranchDefaults(branchId: string) {
     const branch = data.branches?.find((b: any) => b.id === branchId);
-    const branchName = String(branch?.name || "").toLowerCase();
-    const isAldanet = branchName.includes("aldanet") || branchId.toLowerCase().includes("aldanet");
+    if (!branch) return;
 
     const wisp = integrations.find((i) => i.id === "wisphub");
     const branchPreset = wisp?.options?.branch_presets?.[branchId];
@@ -205,19 +204,12 @@
       if (branchPreset.field_mappings?.campo1_source) campo1Source = branchPreset.field_mappings.campo1_source;
       if (branchPreset.field_mappings?.campo2_source) campo2Source = branchPreset.field_mappings.campo2_source;
       if (branchPreset.field_mappings?.campo3_source) campo3Source = branchPreset.field_mappings.campo3_source;
-    } else if (isAldanet) {
-      defaultZone = "004";
-      defaultClientType = "DET";
-      defaultCtaIngrEgr = "I-001";
-      defaultSeller = "01";
-      defaultSegment = "01";
-      defaultPaymentCond = "01";
     } else {
-      defaultCtaIngrEgr = wisp?.options?.default_cta_ingr_egr || "01";
-      defaultZone = wisp?.options?.default_zone || "01";
-      defaultClientType = wisp?.options?.default_client_type || "01";
-      defaultSeller = wisp?.options?.default_seller || "01";
-      defaultSegment = wisp?.options?.default_segment || "01";
+      defaultZone = branch.default_zone || "01";
+      defaultClientType = branch.default_client_type || "01";
+      defaultCtaIngrEgr = branch.default_cta_ingr_egr || "I-001";
+      defaultSeller = branch.default_seller || "01";
+      defaultSegment = branch.default_segment || "01";
       defaultPaymentCond = "01";
     }
   }
@@ -475,6 +467,7 @@
     {#each filteredIntegrations as item (item.id)}
       {@const CatIcon = getCategoryIcon(item.category)}
       {@const catColorClass = getCategoryColor(item.category)}
+      {@const env = item.environment || (item.base_url?.includes('demo') || item.base_url?.includes('sandbox') ? 'demo' : 'production')}
       <div
         class="bg-surface-raised p-6 rounded-3xl border border-border-subtle shadow-xl hover:border-brand-500/30 transition-all flex flex-col justify-between group relative overflow-hidden"
       >
@@ -550,23 +543,23 @@
 
           <!-- Badges de Configuración y Entorno (Alto contraste en claro/oscuro) -->
           <div class="mt-4 flex flex-wrap items-center gap-2 text-[10px]">
-            {#if item.environment}
-              <span
-                class="px-2.5 py-1 rounded-xl font-black uppercase tracking-wider border flex items-center gap-1.5 {item.environment ===
-                'production'
-                  ? 'bg-emerald-500/15 text-emerald-800 dark:text-emerald-300 border-emerald-500/30'
-                  : 'bg-amber-500/15 text-amber-900 dark:text-amber-300 border-amber-500/35 font-bold'}"
-                title={`Entorno de operación: ${item.environment.toUpperCase()} (Modo de pruebas o sandbox)`}
-              >
-                {#if item.environment === 'production'}
-                  <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block"></span>
-                  <span>MODO: PRODUCCIÓN</span>
-                {:else}
-                  <FlaskConical size={11} class="text-amber-700 dark:text-amber-400 shrink-0" />
-                  <span>MODO: {item.environment.toUpperCase()}</span>
-                {/if}
-              </span>
-            {/if}
+            <span
+              class="px-2.5 py-1 rounded-xl font-black uppercase tracking-wider border flex items-center gap-1.5 {env ===
+              'production'
+                ? 'bg-emerald-500/15 text-emerald-800 dark:text-emerald-300 border-emerald-500/30'
+                : 'bg-amber-500/15 text-amber-900 dark:text-amber-300 border-amber-500/35 font-bold'}"
+              title={env === 'production'
+                ? 'Ambiente de PRODUCCIÓN: Emisión y sincronización en vivo real'
+                : `Ambiente de PRUEBAS (${env.toUpperCase()}): Modo de certificación y ensayos sin afectación fiscal`}
+            >
+              {#if env === 'production'}
+                <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block"></span>
+                <span>PRODUCCIÓN</span>
+              {:else}
+                <FlaskConical size={11} class="text-amber-700 dark:text-amber-400 shrink-0" />
+                <span>PRUEBAS ({env.toUpperCase()})</span>
+              {/if}
+            </span>
 
             <span
               class="px-2.5 py-1 rounded-xl font-black uppercase tracking-wider border {item.is_active
@@ -1486,16 +1479,15 @@
 
             {#if syncTargetBranch}
               {@const selectedB = data.branches?.find((b: any) => b.id === syncTargetBranch)}
-              {@const isAldanetBranch = String(selectedB?.name || "").toLowerCase().includes("aldanet")}
               <div class="flex items-center justify-between pt-1">
                 <span class="text-[11px] text-text-muted">
-                  Empresa detectada:
-                  <strong class={isAldanetBranch ? "text-indigo-600 dark:text-indigo-400 font-bold" : "text-text-base font-bold"}>
-                    {isAldanetBranch ? "Aldanet (ISP)" : "Galpe / Estándar"}
+                  Valores configurados en Sucursal:
+                  <strong class="text-text-base font-bold">
+                    {selectedB?.name}
                   </strong>
                 </span>
-                <span class="text-[10px] font-mono font-bold px-2 py-0.5 rounded-lg {isAldanetBranch ? 'bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 border border-indigo-500/20' : 'bg-surface-soft text-text-muted border border-border-subtle'}">
-                  {isAldanetBranch ? "Zona: 004 · Tipo: DET · Cta: I-001" : "Zona: 01 · Tipo: 01 · Cta: 01"}
+                <span class="text-[10px] font-mono font-bold px-2 py-0.5 rounded-lg bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 border border-indigo-500/20">
+                  Zona: {selectedB?.default_zone || '01'} · Tipo: {selectedB?.default_client_type || '01'} · Cta: {selectedB?.default_cta_ingr_egr || 'I-001'}
                 </span>
               </div>
             {/if}

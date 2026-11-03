@@ -129,7 +129,11 @@
       longitude: null,
       default_warehouse: "",
       allow_decimals_units: "MTS, MTS2, KG",
-      default_seller: "01"
+      default_seller: "01",
+      default_zone: "01",
+      default_client_type: "01",
+      default_cta_ingr_egr: "I-001",
+      default_segment: "01"
     };
     showModal = true;
   }
@@ -150,6 +154,19 @@
     }
     if (!editingBranch.default_seller) {
       editingBranch.default_seller = starCode || "01";
+    }
+    const pDefaults = editingBranch.sql_config?.profit_defaults || {};
+    if (!editingBranch.default_zone) {
+      editingBranch.default_zone = pDefaults.default_zone || "01";
+    }
+    if (!editingBranch.default_client_type) {
+      editingBranch.default_client_type = pDefaults.default_client_type || "01";
+    }
+    if (!editingBranch.default_cta_ingr_egr) {
+      editingBranch.default_cta_ingr_egr = pDefaults.default_cta_ingr_egr || "I-001";
+    }
+    if (!editingBranch.default_segment) {
+      editingBranch.default_segment = pDefaults.default_segment || "01";
     }
     if (!editingBranch.sql_config) {
       editingBranch.sql_config = {
@@ -505,6 +522,12 @@
           );
           formData.set("sql_config", JSON.stringify(editingBranch.sql_config));
           formData.set("allow_decimals_units", editingBranch.allow_decimals_units || "");
+          formData.set("default_zone", editingBranch.default_zone || "01");
+          formData.set("default_client_type", editingBranch.default_client_type || "01");
+          formData.set("default_cta_ingr_egr", editingBranch.default_cta_ingr_egr || "I-001");
+          formData.set("default_segment", editingBranch.default_segment || "01");
+          formData.set("default_seller", editingBranch.default_seller || "01");
+          formData.set("default_warehouse", editingBranch.default_warehouse || "");
 
           isSaving = true;
           return async ({ result, update }) => {
@@ -677,6 +700,82 @@
               </div>
               <p class="text-[10px] text-text-muted/70 ml-2 mt-1 italic">
                 Código de vendedor general asignado automáticamente a los clientes nuevos o actualizados en esta sede (evita errores por vendedores inactivos).
+              </p>
+            </div>
+
+            <div class="space-y-2 lg:col-span-1">
+              <label class="text-xs font-bold text-text-muted ml-1" for="default_zone">
+                Zona por Defecto (saCliente)
+              </label>
+              <div class="relative">
+                <MapPin class="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted opacity-50" size={18} />
+                <input 
+                  type="text" 
+                  name="default_zone"
+                  bind:value={editingBranch.default_zone}
+                  placeholder="Ej: 004 o 01"
+                  class="w-full h-14 bg-surface-soft border border-border-subtle rounded-2xl pl-12 pr-5 text-text-base placeholder:text-text-muted/50 focus:border-brand-500 focus:bg-surface-raised outline-none transition-all font-mono uppercase"
+                />
+              </div>
+              <p class="text-[10px] text-text-muted/70 ml-2 mt-1 italic">
+                Código de zona geográfica (ej. 004 para Aldanet, 01 para Galpe).
+              </p>
+            </div>
+
+            <div class="space-y-2 lg:col-span-1">
+              <label class="text-xs font-bold text-text-muted ml-1" for="default_client_type">
+                Tipo de Cliente por Defecto (saCliente)
+              </label>
+              <div class="relative">
+                <Users class="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted opacity-50" size={18} />
+                <input 
+                  type="text" 
+                  name="default_client_type"
+                  bind:value={editingBranch.default_client_type}
+                  placeholder="Ej: DET o 01"
+                  class="w-full h-14 bg-surface-soft border border-border-subtle rounded-2xl pl-12 pr-5 text-text-base placeholder:text-text-muted/50 focus:border-brand-500 focus:bg-surface-raised outline-none transition-all font-mono uppercase"
+                />
+              </div>
+              <p class="text-[10px] text-text-muted/70 ml-2 mt-1 italic">
+                Tipo de cliente en Profit Plus (ej. DET para Aldanet, 01 para Galpe).
+              </p>
+            </div>
+
+            <div class="space-y-2 lg:col-span-1">
+              <label class="text-xs font-bold text-text-muted ml-1" for="default_cta_ingr_egr">
+                Cuenta Ingreso/Egreso por Defecto (saCliente)
+              </label>
+              <div class="relative">
+                <CreditCard class="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted opacity-50" size={18} />
+                <input 
+                  type="text" 
+                  name="default_cta_ingr_egr"
+                  bind:value={editingBranch.default_cta_ingr_egr}
+                  placeholder="Ej: I-001 o 01"
+                  class="w-full h-14 bg-surface-soft border border-border-subtle rounded-2xl pl-12 pr-5 text-text-base placeholder:text-text-muted/50 focus:border-brand-500 focus:bg-surface-raised outline-none transition-all font-mono uppercase"
+                />
+              </div>
+              <p class="text-[10px] text-text-muted/70 ml-2 mt-1 italic">
+                Requerido por FK_saCliente_saCuentaIngEgr (ej. I-001 en Aldanet).
+              </p>
+            </div>
+
+            <div class="space-y-2 lg:col-span-1">
+              <label class="text-xs font-bold text-text-muted ml-1" for="default_segment">
+                Segmento por Defecto (saCliente)
+              </label>
+              <div class="relative">
+                <Database class="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted opacity-50" size={18} />
+                <input 
+                  type="text" 
+                  name="default_segment"
+                  bind:value={editingBranch.default_segment}
+                  placeholder="Ej: 01"
+                  class="w-full h-14 bg-surface-soft border border-border-subtle rounded-2xl pl-12 pr-5 text-text-base placeholder:text-text-muted/50 focus:border-brand-500 focus:bg-surface-raised outline-none transition-all font-mono uppercase"
+                />
+              </div>
+              <p class="text-[10px] text-text-muted/70 ml-2 mt-1 italic">
+                Código de segmento comercial en Profit Plus.
               </p>
             </div>
 

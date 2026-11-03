@@ -9,6 +9,7 @@ import {
   testIntegrationConnection,
   type IntegrationConfig
 } from '$lib/server/integrations';
+import { getActiveBranches } from '$lib/server/branches';
 import { logAction } from '$lib/server/audit';
 import type { PageServerLoad, Actions } from './$types';
 
@@ -18,7 +19,11 @@ export const load: PageServerLoad = protectLoad('sec_integrations', async ({ fet
   const canExecute = hasPermission(profile, 'sec_integrations', 'others');
 
   const integrations = await getAllIntegrations(fetch);
-  const branches = profile.allowed_branches || [];
+  const allBranches = await getActiveBranches(fetch);
+  const allowedIds = new Set((profile.allowed_branches || []).map((b: any) => b.id));
+  const branches = allowedIds.size > 0 
+    ? allBranches.filter(b => allowedIds.has(b.id))
+    : allBranches;
 
   return {
     integrations,
@@ -32,7 +37,10 @@ export const actions: Actions = {
   save: protectAction('sec_integrations', async ({ request, fetch, locals }) => {
     const formData = await request.formData();
     const id = (formData.get('id') as string)?.trim();
-    const environment = formData.get('environment') as 'sandbox' | 'production' | 'demo';
+    const rawEnv = (formData.get('environment') as string)?.trim();
+    const environment = (rawEnv === 'production' || rawEnv === 'sandbox' || rawEnv === 'demo')
+      ? rawEnv
+      : undefined;
     const baseUrl = (formData.get('base_url') as string)?.trim();
     const isActive = formData.get('is_active') === 'true';
     const rawCredentials = formData.get('credentials') as string;
@@ -61,7 +69,7 @@ export const actions: Actions = {
       const updated = await saveIntegration(
         id,
         {
-          environment,
+          ...(environment ? { environment } : {}),
           base_url: baseUrl,
           is_active: isActive,
           credentials,

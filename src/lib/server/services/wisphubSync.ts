@@ -151,13 +151,12 @@ export function mapWisphubClientToProfit(
   const telefonos = (client.telefono || '').trim().slice(0, 30);
   const email = (client.email || '').trim().slice(0, 60);
 
-  // 6. Cuenta de Ingreso/Egreso y Catálogos por Defecto (Parametrización Aldanet vs Galpe)
-  const isAldanet = String(options.sedeId || '').toLowerCase().includes('aldanet');
-  const co_cta_ingr_egr = (options.default_cta_ingr_egr || (isAldanet ? 'I-001' : '01')).trim().slice(0, 20);
+  // 6. Cuenta de Ingreso/Egreso (según sucursal u opciones)
+  const co_cta_ingr_egr = (options.default_cta_ingr_egr || 'I-001').trim().slice(0, 20);
 
-  // 7. Catálogos por defecto: Para Aldanet Zona='004' y TipoCliente='DET'; para Galpe='01'
-  const co_zon = (options.default_zone || (isAldanet ? '004' : '01')).trim().slice(0, 6);
-  const tip_cli = (options.default_client_type || (isAldanet ? 'DET' : '01')).trim().slice(0, 6);
+  // 7. Catálogos por defecto según sucursal u opciones
+  const co_zon = (options.default_zone || '01').trim().slice(0, 6);
+  const tip_cli = (options.default_client_type || '01').trim().slice(0, 6);
   const co_ven = (options.default_seller || '01').trim().slice(0, 10);
   const co_seg = (options.default_segment || '01').trim().slice(0, 6);
   const co_mone = (options.default_currency || 'US$').trim().slice(0, 6);
@@ -341,7 +340,7 @@ export async function syncWisphubPlansToProfit(
       if (searchRes.success && Array.isArray(searchRes.data) && searchRes.data.length > 0) {
         matchedArticle = searchRes.data[0];
       }
-    } catch {}
+    } catch { }
 
     if (matchedArticle) {
       mappings.push({
@@ -405,40 +404,40 @@ export async function mapWisphubInvoiceToHkaEmission(
   // Renglones de factura
   const items = Array.isArray(invoice.articulos) && invoice.articulos.length > 0
     ? invoice.articulos.map((art, idx) => {
-        const itemPriceUsd = Number(art.precio || totalUsd);
-        const itemTotalUsd = Number(art.total || itemPriceUsd);
-        const itemPriceBs = Number((itemPriceUsd * rateInfo.rate).toFixed(4));
-        const itemTotalBs = Number((itemTotalUsd * rateInfo.rate).toFixed(2));
+      const itemPriceUsd = Number(art.precio || totalUsd);
+      const itemTotalUsd = Number(art.total || itemPriceUsd);
+      const itemPriceBs = Number((itemPriceUsd * rateInfo.rate).toFixed(4));
+      const itemTotalBs = Number((itemTotalUsd * rateInfo.rate).toFixed(2));
 
-        return {
-          numeroLinea: idx + 1,
-          indicadorBienoServicio: '2' as const, // Servicio
-          descripcion: (art.descripcion || `SERVICIO DE INTERNET - ${client.plan_internet || 'PLAN BÁSICO'}`).toUpperCase().slice(0, 200),
-          cantidad: 1,
-          unidadMedida: 'UND',
-          precioUnitario: itemPriceBs,
-          precioUnitarioFinal: itemPriceBs,
-          precioItem: itemTotalBs,
-          valorTotalItem: itemTotalBs,
-          tasaIva: 16,
-          montoIva: Number((itemTotalBs * 0.16).toFixed(2)),
-          codigoItem: `SRV-${art.servicio?.id_servicio || invoice.id_factura}`
-        };
-      })
-    : [{
-        numeroLinea: 1,
-        indicadorBienoServicio: '2' as const,
-        descripcion: `SERVICIO DE INTERNET - PLAN ${typeof client.plan_internet === 'object' ? client.plan_internet?.nombre : client.plan_internet || 'ISP'}`.toUpperCase().slice(0, 200),
+      return {
+        numeroLinea: idx + 1,
+        indicadorBienoServicio: '2' as const, // Servicio
+        descripcion: (art.descripcion || `SERVICIO DE INTERNET - ${client.plan_internet || 'PLAN BÁSICO'}`).toUpperCase().slice(0, 200),
         cantidad: 1,
         unidadMedida: 'UND',
-        precioUnitario: Number((subtotalBs).toFixed(4)),
-        precioUnitarioFinal: Number((subtotalBs).toFixed(4)),
-        precioItem: subtotalBs,
-        valorTotalItem: subtotalBs,
+        precioUnitario: itemPriceBs,
+        precioUnitarioFinal: itemPriceBs,
+        precioItem: itemTotalBs,
+        valorTotalItem: itemTotalBs,
         tasaIva: 16,
-        montoIva: ivaBs,
-        codigoItem: `SRV-FAC-${invoice.id_factura}`
-      }];
+        montoIva: Number((itemTotalBs * 0.16).toFixed(2)),
+        codigoItem: `SRV-${art.servicio?.id_servicio || invoice.id_factura}`
+      };
+    })
+    : [{
+      numeroLinea: 1,
+      indicadorBienoServicio: '2' as const,
+      descripcion: `SERVICIO DE INTERNET - PLAN ${typeof client.plan_internet === 'object' ? client.plan_internet?.nombre : client.plan_internet || 'ISP'}`.toUpperCase().slice(0, 200),
+      cantidad: 1,
+      unidadMedida: 'UND',
+      precioUnitario: Number((subtotalBs).toFixed(4)),
+      precioUnitarioFinal: Number((subtotalBs).toFixed(4)),
+      precioItem: subtotalBs,
+      valorTotalItem: subtotalBs,
+      tasaIva: 16,
+      montoIva: ivaBs,
+      codigoItem: `SRV-FAC-${invoice.id_factura}`
+    }];
 
   const buyerName = (client.razon_social || `${client.nombre || ''} ${client.apellido || ''}`).trim().toUpperCase();
 
