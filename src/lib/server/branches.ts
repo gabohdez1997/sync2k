@@ -3,6 +3,34 @@
 
 import { getSupabaseAdmin } from './supabase';
 
+export function normalizeAllowDecimalsUnits(val: any): string {
+  if (!val) return 'MTS, MTS2, KG';
+  if (Array.isArray(val)) {
+    return val
+      .map((u: any) => String(u).replace(/[\[\]"']/g, '').trim().toUpperCase())
+      .filter(Boolean)
+      .join(', ');
+  }
+  let str = String(val).trim();
+  if (str.startsWith('[') && str.endsWith(']')) {
+    try {
+      const parsed = JSON.parse(str);
+      if (Array.isArray(parsed)) {
+        return parsed
+          .map((u: any) => String(u).replace(/[\[\]"']/g, '').trim().toUpperCase())
+          .filter(Boolean)
+          .join(', ');
+      }
+    } catch {}
+  }
+  return str
+    .replace(/[\[\]"']/g, '')
+    .split(',')
+    .map(u => u.trim().toUpperCase())
+    .filter(Boolean)
+    .join(', ');
+}
+
 export interface BranchRecord {
   id: string;
   name: string;
@@ -146,7 +174,7 @@ export async function getActiveBranches(fetchFn?: typeof fetch): Promise<BranchR
           profit_server_id: b.profit_server_id,
           local_dns_alias: b.local_dns_alias,
           default_warehouse: b.default_warehouse || b.sql_config?.profit_defaults?.default_warehouse,
-          allow_decimals_units: b.allow_decimals_units,
+          allow_decimals_units: normalizeAllowDecimalsUnits(b.allow_decimals_units),
           default_seller: b.default_seller || b.sql_config?.profit_defaults?.default_seller,
           default_zone: b.default_zone || b.sql_config?.profit_defaults?.default_zone || '01',
           default_client_type: b.default_client_type || b.sql_config?.profit_defaults?.default_client_type || '01',
@@ -238,7 +266,8 @@ export async function getBranchById(
       const b = res.rows[0];
       return {
         ...b,
-        business_name: b.business_name || b.name
+        business_name: b.business_name || b.name,
+        allow_decimals_units: normalizeAllowDecimalsUnits(b.allow_decimals_units)
       } as BranchRecord;
     }
   } catch (e) {

@@ -676,14 +676,29 @@
   });
 
   function isDecimalAllowed(itemOrArticle: any) {
-    const configStr = String(selectedBranchConfig?.allow_decimals_units || 'MTS, MTS2, KG');
-    const allowed = configStr.split(',').map((s: string) => s.trim().toUpperCase());
-    const co_uni = String(itemOrArticle?.co_uni || '').trim().toUpperCase();
-    const unidad = String(itemOrArticle?.unidad || '').trim().toUpperCase();
-    console.log("UNIT CHECK:", { co_uni, unidad, allowed, configStr });
+    const rawConfig = selectedBranchConfig?.allow_decimals_units;
+    let allowed: string[] = [];
+    if (Array.isArray(rawConfig)) {
+      allowed = rawConfig
+        .map((u: any) => String(u).replace(/[\[\]"']/g, '').trim().toUpperCase())
+        .filter(Boolean);
+    } else {
+      const configStr = String(rawConfig || 'MTS, MTS2, KG');
+      allowed = configStr
+        .replace(/[\[\]"']/g, '')
+        .split(',')
+        .map((s: string) => s.trim().toUpperCase())
+        .filter(Boolean);
+    }
+    if (allowed.length === 0) {
+      allowed = ['MTS', 'MTS2', 'KG'];
+    }
+
+    const co_uni = String(itemOrArticle?.co_uni || '').replace(/[\[\]"']/g, '').trim().toUpperCase();
+    const unidad = String(itemOrArticle?.unidad || '').replace(/[\[\]"']/g, '').trim().toUpperCase();
     
-    // Forzar coincidencia por si acaso hay un sub-string 
-    return allowed.some(a => a && (co_uni.includes(a) || unidad.includes(a)));
+    // Coincidencia exacta o coincidencia por inclusión
+    return allowed.some(a => a && (co_uni === a || unidad === a || co_uni.includes(a) || unidad.includes(a)));
   }
 
   function getStep(itemOrArticle: any) {

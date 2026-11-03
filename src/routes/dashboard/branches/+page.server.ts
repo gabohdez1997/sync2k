@@ -3,6 +3,7 @@
 
 import { protectLoad, protectAction } from '$lib/server/permissions';
 import { supabaseAdmin } from '$lib/server/supabase';
+import { normalizeAllowDecimalsUnits } from '$lib/server/branches';
 import { AgentClient } from '$lib/server/agent';
 import { clearBranchesCache } from '$lib/server/branches';
 import { hasPermission } from '$lib/server/auth';
@@ -63,6 +64,7 @@ export const load: PageServerLoad = protectLoad('sec_branches', async ({ locals,
       const pDef = b.sql_config?.profit_defaults || {};
       return {
         ...b,
+        allow_decimals_units: normalizeAllowDecimalsUnits(b.allow_decimals_units),
         default_zone: b.default_zone || pDef.default_zone || '01',
         default_client_type: b.default_client_type || pDef.default_client_type || '01',
         default_cta_ingr_egr: b.default_cta_ingr_egr || pDef.default_cta_ingr_egr || '01',
@@ -200,13 +202,7 @@ export const actions: Actions = {
     const longitude       = formData.get('longitude') ? parseFloat(formData.get('longitude') as string) : null;
     const defaultWarehouse = (formData.get('default_warehouse') as string)?.trim() || null;
     const rawAllowDecimals = formData.get('allow_decimals_units');
-    let allowDecimalsUnits: string[] = ['MTS', 'MTS2', 'KG'];
-    if (typeof rawAllowDecimals === 'string' && rawAllowDecimals.trim()) {
-      allowDecimalsUnits = rawAllowDecimals
-        .split(',')
-        .map(u => u.trim().toUpperCase())
-        .filter(Boolean);
-    }
+    const allowDecimalsUnits = normalizeAllowDecimalsUnits(rawAllowDecimals);
     const defaultSeller = (formData.get('default_seller') as string)?.trim() || '01';
     const defaultZone = (formData.get('default_zone') as string)?.trim() || '01';
     const defaultClientType = (formData.get('default_client_type') as string)?.trim() || '01';

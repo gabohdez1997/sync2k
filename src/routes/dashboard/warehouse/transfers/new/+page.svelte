@@ -124,7 +124,7 @@
   function isDecimalAllowed(article: any): boolean {
     if (!article) return false;
     const configStr = String(currentBranchConfig?.allow_decimals_units || (data as any).selectedBranchConfig?.allow_decimals_units || 'MTS, MTS2, KG');
-    const allowedTokens = configStr.split(',').map((s: string) => s.trim().toUpperCase()).filter(Boolean);
+    const allowedTokens = configStr.replace(/[\[\]"']/g, '').split(',').map((s: string) => s.trim().toUpperCase()).filter(Boolean);
     const co_uni = String(article?.co_uni || '').trim().toUpperCase();
     const unidad = String(article?.unidad || article?.uni_venta || article?.des_uni || '').trim().toUpperCase();
     

@@ -141,8 +141,19 @@
   function openEditModal(branch: any) {
     editingBranch = { ...branch };
     if (Array.isArray(editingBranch.allow_decimals_units)) {
-      editingBranch.allow_decimals_units = editingBranch.allow_decimals_units.join(', ');
-    } else if (!editingBranch.allow_decimals_units) {
+      editingBranch.allow_decimals_units = editingBranch.allow_decimals_units
+        .map((u: any) => String(u).replace(/[\[\]"']/g, '').trim().toUpperCase())
+        .filter(Boolean)
+        .join(', ');
+    } else if (typeof editingBranch.allow_decimals_units === 'string') {
+      editingBranch.allow_decimals_units = editingBranch.allow_decimals_units
+        .replace(/[\[\]"']/g, '')
+        .split(',')
+        .map((u: string) => u.trim().toUpperCase())
+        .filter(Boolean)
+        .join(', ');
+    }
+    if (!editingBranch.allow_decimals_units) {
       editingBranch.allow_decimals_units = "MTS, MTS2, KG";
     }
     if (!editingBranch.profit_branch_codes) {
@@ -521,7 +532,7 @@
             JSON.stringify(editingBranch.profit_branch_codes),
           );
           formData.set("sql_config", JSON.stringify(editingBranch.sql_config));
-          formData.set("allow_decimals_units", editingBranch.allow_decimals_units || "");
+          formData.set("allow_decimals_units", (editingBranch.allow_decimals_units || "MTS, MTS2, KG").replace(/[\[\]"']/g, '').trim());
           formData.set("default_zone", editingBranch.default_zone || "01");
           formData.set("default_client_type", editingBranch.default_client_type || "01");
           formData.set("default_cta_ingr_egr", editingBranch.default_cta_ingr_egr || "01");
