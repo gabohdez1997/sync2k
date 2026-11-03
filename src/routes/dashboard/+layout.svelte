@@ -56,11 +56,56 @@
     Percent,
   } from "lucide-svelte";
   import { slide, fade } from "svelte/transition";
+  import { onMount } from "svelte";
 
   let { data, children }: { data: LayoutData; children: any } = $props();
 
   let profile = $derived(data.profile);
   let permissions = $derived(profile?.permissions ?? {});
+
+  // Tasa BCV Oficial
+  let currentTasa = $state<number | null>(data.tasaBcv ?? null);
+  let isLoadingTasa = $state(false);
+
+  $effect(() => {
+    if (data.tasaBcv && currentTasa === null) {
+      currentTasa = data.tasaBcv;
+    }
+  });
+
+  async function loadTasa() {
+    try {
+      isLoadingTasa = true;
+      const res = await fetch("/api/agent/tasa");
+      if (res.ok) {
+        const json = await res.json();
+        if (json.success && json.tasa) {
+          currentTasa = Number(json.tasa);
+        }
+      }
+    } catch {
+      // Ignorar error de red silencioso
+    } finally {
+      isLoadingTasa = false;
+    }
+  }
+
+  onMount(() => {
+    if (!currentTasa) {
+      loadTasa();
+    }
+    // Refrescar periódicamente cada 5 minutos
+    const interval = setInterval(loadTasa, 5 * 60 * 1000);
+    return () => clearInterval(interval);
+  });
+
+  function formatTasa(val: number | null): string {
+    if (!val) return "0,00";
+    return Number(val).toLocaleString("de-DE", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 4,
+    });
+  }
 
   // Sincronizar tema con el perfil del usuario SOLO una vez al cargar
   let hasSyncedTheme = false;
@@ -532,7 +577,7 @@
   class="h-svh bg-surface-base flex flex-col md:flex-row font-sans text-text-base transition-colors duration-500 overflow-hidden"
 >
   <!-- ── Mobile Top Bar ───────────────────────────────────── -->
-  <div class="md:hidden h-16 flex items-center px-4 glass sticky top-0 z-50">
+  <div class="md:hidden h-16 flex items-center justify-between px-4 glass sticky top-0 z-50">
     <div class="flex items-center font-black text-2xl tracking-tighter">
       <span class="text-brand-500"
         >{data.systemSettings?.app_name?.slice(0, 5) ?? "Galpe"}</span
@@ -540,6 +585,31 @@
       <span class="text-text-base"
         >{data.systemSettings?.app_name?.slice(5) ?? "App"}</span
       >
+    </div>
+
+    <div class="flex items-center gap-2">
+      {#if currentTasa}
+        <a
+          href="/dashboard/cash/exchange-rate"
+          class="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-surface-soft/80 border border-border-subtle text-xs font-bold text-text-base select-none"
+          title="Tasa BCV Oficial: {formatTasa(currentTasa)} Bs/$"
+        >
+          <span class="flex h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+          <span class="text-[9px] font-black uppercase text-brand-500">BCV</span>
+          <span class="font-mono text-xs font-bold">{formatTasa(currentTasa)}</span>
+        </a>
+      {/if}
+
+      <button
+        onclick={toggleTheme}
+        class="p-2 text-text-muted hover:text-text-base transition-colors rounded-full hover:bg-surface-soft"
+      >
+        {#if getTheme() === "dark"}
+          <Sun size={18} />
+        {:else}
+          <Moon size={18} />
+        {/if}
+      </button>
     </div>
   </div>
 
@@ -842,16 +912,36 @@
             .find((i) => isActive(i.href || ""))?.label ?? "Resumen"}
         </span>
       </div>
-      <button
-        onclick={toggleTheme}
-        class="p-2 text-text-muted hover:text-text-base transition-colors rounded-full hover:bg-surface-soft"
-      >
-        {#if getTheme() === "dark"}
-          <Sun size={20} />
-        {:else}
-          <Moon size={20} />
+      <div class="flex items-center gap-3">
+        {#if currentTasa}
+          <a
+            href="/dashboard/cash/exchange-rate"
+            class="flex items-center gap-2 px-3 py-1.5 rounded-full bg-surface-soft/80 border border-border-subtle shadow-xs text-xs font-bold text-text-base hover:border-brand-500/40 hover:bg-surface-soft transition-all select-none group cursor-pointer"
+            title="Tasa BCV Oficial: {formatTasa(currentTasa)} Bs/$ (Clic para ver módulo de tasas)"
+          >
+            <span class="flex h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span>
+            <span class="text-[10px] font-black uppercase tracking-wider text-brand-500">BCV</span>
+            <span class="font-mono font-black text-text-base tracking-tight">{formatTasa(currentTasa)}</span>
+            <span class="text-[10px] text-text-muted font-bold">Bs/$</span>
+          </a>
+        {:else if isLoadingTasa}
+          <div class="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-surface-soft/50 border border-border-subtle text-xs text-text-muted animate-pulse">
+            <span class="text-[10px] font-black uppercase tracking-wider text-brand-500/60">BCV</span>
+            <span class="text-xs">...</span>
+          </div>
         {/if}
-      </button>
+
+        <button
+          onclick={toggleTheme}
+          class="p-2 text-text-muted hover:text-text-base transition-colors rounded-full hover:bg-surface-soft"
+        >
+          {#if getTheme() === "dark"}
+            <Sun size={20} />
+          {:else}
+            <Moon size={20} />
+          {/if}
+        </button>
+      </div>
     </header>
 
     <main
