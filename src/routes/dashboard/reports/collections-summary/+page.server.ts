@@ -36,6 +36,7 @@ export const load: PageServerLoad = protectLoad('reports_collections_summary', a
         }, profile, fetch);
 
         const fecha = url.searchParams.get('fecha') || '';
+        const criterio = url.searchParams.get('criterio') || 'fe_us_in';
 
         const query = new URLSearchParams();
         if (fecha) {
@@ -43,7 +44,7 @@ export const load: PageServerLoad = protectLoad('reports_collections_summary', a
             query.set('fecha_desde', fecha); // Agente viejo fallback
             query.set('fecha_hasta', fecha); // Agente viejo fallback
         }
-        
+        query.set('criterio', criterio);
         query.set('sede', selectedBranch.id);
 
         console.log(`[COLLECTIONS SUMMARY REPORT SERVER] Requesting from agent branch ${selectedBranch.name}...`);
@@ -94,7 +95,8 @@ export const load: PageServerLoad = protectLoad('reports_collections_summary', a
                 tasa_dia: reportRes.tasa_dia || 1
             },
             branches: allowedBranches,
-            selectedBranchId: selectedBranch.id
+            selectedBranchId: selectedBranch.id,
+            selectedCriterio: criterio
         };
 
     } catch (err: any) {

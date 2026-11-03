@@ -27,11 +27,20 @@
     // Estados
     let filterBranch = $state('all');
     let filterDate = $state(today);
+    let filterCriterio = $state('fe_us_in'); // 'fe_us_in' | 'fe_us_mo' | 'fecha'
     let filterType = $state('resumen'); // 'resumen' | 'detallado'
+
+    const criterioLabels: Record<string, string> = {
+        fe_us_in: 'Creación (saCobro.fe_us_in)',
+        fe_us_mo: 'Modificación (saCobro.fe_us_mo)',
+        fecha: 'Emisión de Cobro (saCobro.fecha)'
+    };
+    const criterioLabel = $derived(criterioLabels[filterCriterio] || filterCriterio);
 
     $effect(() => {
         filterBranch = $page.url.searchParams.get("branch_id") || data.selectedBranchId || "all";
         filterDate = $page.url.searchParams.get("fecha") || today;
+        filterCriterio = $page.url.searchParams.get("criterio") || data.selectedCriterio || "fe_us_in";
         filterType = $page.url.searchParams.get("tipo") || "resumen";
     });
 
@@ -49,6 +58,12 @@
             params.set("fecha", filterDate);
         } else {
             params.delete("fecha");
+        }
+
+        if (filterCriterio) {
+            params.set("criterio", filterCriterio);
+        } else {
+            params.delete("criterio");
         }
 
         params.set("tipo", filterType);
@@ -177,7 +192,7 @@
         const link = document.createElement("a");
         const branchName = data.branches.find((b: any) => b.id === filterBranch)?.name || "general";
         const formattedBranch = branchName.toLowerCase().replace(/[^a-z0-9]+/g, "_");
-        const filename = `resumen_cobros_${filterType}_${formattedBranch}_${dayjs().format("YYYY-MM-DD_HHmmss")}.csv`;
+        const filename = `resumen_cobros_${filterCriterio}_${filterType}_${formattedBranch}_${dayjs().format("YYYY-MM-DD_HHmmss")}.csv`;
 
         link.setAttribute("href", url);
         link.setAttribute("download", filename);
@@ -218,6 +233,8 @@
                 <span>Sucursal: <strong>{data.branches.find((b: any) => b.id === filterBranch)?.name || "General"}</strong></span>
                 <span class="mx-2">|</span>
                 <span>Fecha: <strong>{dayjs(filterDate).format("DD/MM/YYYY")}</strong></span>
+                <span class="mx-2">|</span>
+                <span>Criterio: <strong>{criterioLabel}</strong></span>
                 <span class="mx-2">|</span>
                 <span>Tipo: <strong>{filterType.toUpperCase()}</strong></span>
                 <span class="mx-2">|</span>
@@ -309,6 +326,21 @@
                     onchange={applyFilters}
                     class="w-full bg-surface-base border border-border-subtle rounded-xl pl-10 pr-4 py-3 text-sm font-semibold outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 transition-all cursor-pointer"
                 />
+            </div>
+        </div>
+
+        <div class="flex-1 min-w-[200px] flex flex-col gap-2">
+            <label class="text-[10px] font-black uppercase tracking-wider text-text-muted ml-1">Criterio de Fecha</label>
+            <div class="relative group">
+                <select 
+                    bind:value={filterCriterio} 
+                    onchange={applyFilters}
+                    class="w-full bg-surface-base border border-border-subtle rounded-xl px-4 py-3 text-sm font-semibold outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 transition-all appearance-none cursor-pointer group-hover:border-border-base"
+                >
+                    <option value="fe_us_in">Creación (saCobro.fe_us_in)</option>
+                    <option value="fe_us_mo">Modificación (saCobro.fe_us_mo)</option>
+                    <option value="fecha">Emisión / Cobro (saCobro.fecha)</option>
+                </select>
             </div>
         </div>
 
