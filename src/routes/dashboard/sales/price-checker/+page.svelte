@@ -18,7 +18,6 @@
     ArrowLeft,
     Layers,
     FileText,
-    Calculator,
     Check,
     Store,
     Box,
@@ -239,15 +238,8 @@
       </h1>
     </div>
 
-    <!-- Tasa BCV y Selector de Sucursal -->
+    <!-- Selector de Sucursal -->
     <div class="flex flex-wrap items-center gap-3">
-      <div class="bg-brand-500/10 border border-brand-500/20 px-4 py-2.5 rounded-2xl flex items-center gap-2">
-        <Calculator size={16} class="text-brand-500" />
-        <span class="text-xs font-bold text-brand-400">
-          Tasa BCV: <strong class="text-text-base">{fmtVES(data.tasa)} Bs/$</strong>
-        </span>
-      </div>
-
       {#if data.branches && data.branches.length > 1}
         <div class="bg-surface-raised border border-border-subtle px-4 py-2.5 rounded-2xl flex items-center gap-3">
           <Store size={16} class="text-brand-500" />
