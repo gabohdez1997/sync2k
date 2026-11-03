@@ -132,7 +132,7 @@
       default_seller: "01",
       default_zone: "01",
       default_client_type: "01",
-      default_cta_ingr_egr: "I-001",
+      default_cta_ingr_egr: "01",
       default_segment: "01"
     };
     showModal = true;
@@ -163,7 +163,7 @@
       editingBranch.default_client_type = pDefaults.default_client_type || "01";
     }
     if (!editingBranch.default_cta_ingr_egr) {
-      editingBranch.default_cta_ingr_egr = pDefaults.default_cta_ingr_egr || "I-001";
+      editingBranch.default_cta_ingr_egr = pDefaults.default_cta_ingr_egr || "01";
     }
     if (!editingBranch.default_segment) {
       editingBranch.default_segment = pDefaults.default_segment || "01";
@@ -524,7 +524,7 @@
           formData.set("allow_decimals_units", editingBranch.allow_decimals_units || "");
           formData.set("default_zone", editingBranch.default_zone || "01");
           formData.set("default_client_type", editingBranch.default_client_type || "01");
-          formData.set("default_cta_ingr_egr", editingBranch.default_cta_ingr_egr || "I-001");
+          formData.set("default_cta_ingr_egr", editingBranch.default_cta_ingr_egr || "01");
           formData.set("default_segment", editingBranch.default_segment || "01");
           formData.set("default_seller", editingBranch.default_seller || "01");
           formData.set("default_warehouse", editingBranch.default_warehouse || "");

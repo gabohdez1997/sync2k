@@ -158,8 +158,20 @@ export const actions: Actions = {
 					const def = branch.profit_branch_codes.find((c: any) => c.is_default);
 					verifiedCoSucu = def ? def.code : branch.profit_branch_codes[0].code;
 				}
-				const branchSeller = (branch.default_seller || '01').trim();
-				const branchPayload = { ...payload, co_ven: branchSeller };
+				const pDef = branch.sql_config?.profit_defaults || {};
+				const branchSeller = (branch.default_seller || pDef.default_seller || '01').trim();
+				const branchCta = (branch.default_cta_ingr_egr || pDef.default_cta_ingr_egr || '01').trim();
+				const branchZone = (payload.co_zon || branch.default_zone || pDef.default_zone || '01').trim();
+				const branchType = (payload.tip_cli || branch.default_client_type || pDef.default_client_type || '01').trim();
+				const branchSegment = (payload.co_seg || branch.default_segment || pDef.default_segment || '01').trim();
+				const branchPayload = {
+					...payload,
+					co_ven: branchSeller,
+					co_cta_ingr_egr: payload.co_cta_ingr_egr || branchCta,
+					co_zon: branchZone,
+					tip_cli: branchType,
+					co_seg: branchSegment
+				};
 				const agent = new AgentClient({ slug: branch.id, agent_url: branch.agent_url, agent_api_key: branch.agent_token }, profile, fetch);
 				const response = await agent.saveCustomer(branchPayload, true, verifiedCoSucu || branch.id);
 				if (response.success) { successCount++; if (!createdClient) createdClient = response.data || branchPayload; }

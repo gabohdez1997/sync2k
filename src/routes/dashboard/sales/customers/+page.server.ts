@@ -298,10 +298,19 @@ export const actions: Actions = {
                 }
 
                 // Determinar el vendedor por defecto para esta sede (evita atar el cliente a un vendedor individual)
-                const branchSeller = (branch.default_seller || '01').trim();
+                const pDef = branch.sql_config?.profit_defaults || {};
+                const branchSeller = (branch.default_seller || pDef.default_seller || '01').trim();
+                const branchCta = (branch.default_cta_ingr_egr || pDef.default_cta_ingr_egr || '01').trim();
+                const branchZone = (payload.co_zon || branch.default_zone || pDef.default_zone || '01').trim();
+                const branchType = (payload.tip_cli || branch.default_client_type || pDef.default_client_type || '01').trim();
+                const branchSegment = (payload.co_seg || branch.default_segment || pDef.default_segment || '01').trim();
                 const branchPayload = {
                     ...payload,
-                    co_ven: branchSeller
+                    co_ven: branchSeller,
+                    co_cta_ingr_egr: payload.co_cta_ingr_egr || branchCta,
+                    co_zon: branchZone,
+                    tip_cli: branchType,
+                    co_seg: branchSegment
                 };
 
                 const agent = new AgentClient({

@@ -65,7 +65,7 @@ export const load: PageServerLoad = protectLoad('sec_branches', async ({ locals,
         ...b,
         default_zone: b.default_zone || pDef.default_zone || '01',
         default_client_type: b.default_client_type || pDef.default_client_type || '01',
-        default_cta_ingr_egr: b.default_cta_ingr_egr || pDef.default_cta_ingr_egr || 'I-001',
+        default_cta_ingr_egr: b.default_cta_ingr_egr || pDef.default_cta_ingr_egr || '01',
         default_segment: b.default_segment || pDef.default_segment || '01'
       };
     });
@@ -210,7 +210,7 @@ export const actions: Actions = {
     const defaultSeller = (formData.get('default_seller') as string)?.trim() || '01';
     const defaultZone = (formData.get('default_zone') as string)?.trim() || '01';
     const defaultClientType = (formData.get('default_client_type') as string)?.trim() || '01';
-    const defaultCtaIngrEgr = (formData.get('default_cta_ingr_egr') as string)?.trim() || 'I-001';
+    const defaultCtaIngrEgr = (formData.get('default_cta_ingr_egr') as string)?.trim() || '01';
     const defaultSegment = (formData.get('default_segment') as string)?.trim() || '01';
 
     if (sqlConfig && typeof sqlConfig === 'object') {

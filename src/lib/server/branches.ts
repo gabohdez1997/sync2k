@@ -150,7 +150,7 @@ export async function getActiveBranches(fetchFn?: typeof fetch): Promise<BranchR
           default_seller: b.default_seller || b.sql_config?.profit_defaults?.default_seller,
           default_zone: b.default_zone || b.sql_config?.profit_defaults?.default_zone || '01',
           default_client_type: b.default_client_type || b.sql_config?.profit_defaults?.default_client_type || '01',
-          default_cta_ingr_egr: b.default_cta_ingr_egr || b.sql_config?.profit_defaults?.default_cta_ingr_egr || 'I-001',
+          default_cta_ingr_egr: b.default_cta_ingr_egr || b.sql_config?.profit_defaults?.default_cta_ingr_egr || '01',
           default_segment: b.default_segment || b.sql_config?.profit_defaults?.default_segment || '01',
           sql_config: b.sql_config,
           active: b.active,
