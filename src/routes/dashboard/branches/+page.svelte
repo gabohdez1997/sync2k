@@ -72,7 +72,7 @@
         proveedores: Number(direct.proveedores) || 0,
         condiciones_pago: Number(direct.condiciones_pago) || 0,
         usuarios: Number(direct.usuarios) || 0,
-        online: Boolean(direct.online ?? branch?.active)
+        online: Boolean(direct.online ?? branch?.active),
       };
     }
 
@@ -93,19 +93,30 @@
         proveedores: Number(found.proveedores) || 0,
         condiciones_pago: Number(found.condiciones_pago) || 0,
         usuarios: Number(found.usuarios) || 0,
-        online: Boolean(found.online ?? branch?.active)
+        online: Boolean(found.online ?? branch?.active),
       };
     }
 
-    return { articulos: 0, clientes: 0, proveedores: 0, condiciones_pago: 0, usuarios: 0, online: Boolean(branch?.active) };
+    return {
+      articulos: 0,
+      clientes: 0,
+      proveedores: 0,
+      condiciones_pago: 0,
+      usuarios: 0,
+      online: Boolean(branch?.active),
+    };
   }
 
   // Filtro reactivo
   let filteredBranches = $derived(
     (data?.branches || []).filter((b: any) => {
-      const matchName = (b?.name || "").toLowerCase().includes((searchTerm || "").toLowerCase());
+      const matchName = (b?.name || "")
+        .toLowerCase()
+        .includes((searchTerm || "").toLowerCase());
       const matchCode = b?.profit_branch_codes?.some((c: any) =>
-        (c?.code || "").toLowerCase().includes((searchTerm || "").toLowerCase()),
+        (c?.code || "")
+          .toLowerCase()
+          .includes((searchTerm || "").toLowerCase()),
       );
       return matchName || matchCode;
     }),
@@ -133,8 +144,9 @@
       default_zone: "01",
       default_client_type: "01",
       default_cta_ingr_egr: "01",
-      default_segment: "01"
+      default_segment: "01",
     };
+    previewUrl = null;
     showModal = true;
   }
 
@@ -142,16 +154,21 @@
     editingBranch = { ...branch };
     if (Array.isArray(editingBranch.allow_decimals_units)) {
       editingBranch.allow_decimals_units = editingBranch.allow_decimals_units
-        .map((u: any) => String(u).replace(/[\[\]"']/g, '').trim().toUpperCase())
+        .map((u: any) =>
+          String(u)
+            .replace(/[\[\]"']/g, "")
+            .trim()
+            .toUpperCase(),
+        )
         .filter(Boolean)
-        .join(', ');
-    } else if (typeof editingBranch.allow_decimals_units === 'string') {
+        .join(", ");
+    } else if (typeof editingBranch.allow_decimals_units === "string") {
       editingBranch.allow_decimals_units = editingBranch.allow_decimals_units
-        .replace(/[\[\]"']/g, '')
-        .split(',')
+        .replace(/[\[\]"']/g, "")
+        .split(",")
         .map((u: string) => u.trim().toUpperCase())
         .filter(Boolean)
-        .join(', ');
+        .join(", ");
     }
     if (!editingBranch.allow_decimals_units) {
       editingBranch.allow_decimals_units = "MTS, MTS2, KG";
@@ -159,7 +176,9 @@
     if (!editingBranch.profit_branch_codes) {
       editingBranch.profit_branch_codes = [];
     }
-    const starCode = (editingBranch.profit_branch_codes || []).find((c: any) => c.is_default)?.code?.trim();
+    const starCode = (editingBranch.profit_branch_codes || [])
+      .find((c: any) => c.is_default)
+      ?.code?.trim();
     if (!editingBranch.default_warehouse) {
       editingBranch.default_warehouse = starCode || "";
     }
@@ -174,7 +193,8 @@
       editingBranch.default_client_type = pDefaults.default_client_type || "01";
     }
     if (!editingBranch.default_cta_ingr_egr) {
-      editingBranch.default_cta_ingr_egr = pDefaults.default_cta_ingr_egr || "01";
+      editingBranch.default_cta_ingr_egr =
+        pDefaults.default_cta_ingr_egr || "01";
     }
     if (!editingBranch.default_segment) {
       editingBranch.default_segment = pDefaults.default_segment || "01";
@@ -241,7 +261,8 @@
         Sucursales
       </h1>
       <p class="text-text-muted mt-2 text-lg">
-        Configura las sucursales, monitorea métricas y sincroniza datos entre sedes.
+        Configura las sucursales, monitorea métricas y sincroniza datos entre
+        sedes.
       </p>
     </div>
 
@@ -322,7 +343,15 @@
             <div
               class="h-12 w-12 rounded-2xl bg-brand-500/20 flex items-center justify-center text-brand-400 shadow-lg shadow-brand-500/10 overflow-hidden"
             >
-              <Store size={24} />
+              {#if branch.logo_url}
+                <img
+                  src={branch.logo_url}
+                  alt={branch.name}
+                  class="h-full w-full object-contain p-1.5"
+                />
+              {:else}
+                <Store size={24} />
+              {/if}
             </div>
             <!-- Botones de Acción Siempre Visibles -->
             <div class="flex gap-2">
@@ -349,11 +378,20 @@
           <h3 class="text-xl font-bold truncate">{branch.name}</h3>
 
           <!-- Métricas de Sede (Artículos, Clientes, Proveedores) -->
-          <div class="grid grid-cols-3 gap-2 my-4 p-3 bg-surface-base/60 dark:bg-surface-base/60 rounded-2xl border border-border-subtle dark:border-white/5">
+          <div
+            class="grid grid-cols-3 gap-2 my-4 p-3 bg-surface-base/60 dark:bg-surface-base/60 rounded-2xl border border-border-subtle dark:border-white/5"
+          >
             <!-- Artículos -->
-            <div class="flex flex-col items-center justify-center text-center p-2 rounded-xl bg-white/40 dark:bg-white/[0.02] border border-border-subtle/50 dark:border-transparent">
-              <div class="flex items-center gap-1 text-[11px] font-bold text-text-muted mb-0.5">
-                <Package size={13} class="text-blue-600 dark:text-blue-400 shrink-0" />
+            <div
+              class="flex flex-col items-center justify-center text-center p-2 rounded-xl bg-white/40 dark:bg-white/[0.02] border border-border-subtle/50 dark:border-transparent"
+            >
+              <div
+                class="flex items-center gap-1 text-[11px] font-bold text-text-muted mb-0.5"
+              >
+                <Package
+                  size={13}
+                  class="text-blue-600 dark:text-blue-400 shrink-0"
+                />
                 <span>Artículos</span>
               </div>
               <span class="text-base font-black text-text-base tracking-tight">
@@ -362,9 +400,16 @@
             </div>
 
             <!-- Clientes -->
-            <div class="flex flex-col items-center justify-center text-center p-2 rounded-xl bg-white/40 dark:bg-white/[0.02] border border-border-subtle/50 dark:border-transparent">
-              <div class="flex items-center gap-1 text-[11px] font-bold text-text-muted mb-0.5">
-                <Users size={13} class="text-emerald-600 dark:text-emerald-400 shrink-0" />
+            <div
+              class="flex flex-col items-center justify-center text-center p-2 rounded-xl bg-white/40 dark:bg-white/[0.02] border border-border-subtle/50 dark:border-transparent"
+            >
+              <div
+                class="flex items-center gap-1 text-[11px] font-bold text-text-muted mb-0.5"
+              >
+                <Users
+                  size={13}
+                  class="text-emerald-600 dark:text-emerald-400 shrink-0"
+                />
                 <span>Clientes</span>
               </div>
               <span class="text-base font-black text-text-base tracking-tight">
@@ -373,9 +418,16 @@
             </div>
 
             <!-- Proveedores -->
-            <div class="flex flex-col items-center justify-center text-center p-2 rounded-xl bg-white/40 dark:bg-white/[0.02] border border-border-subtle/50 dark:border-transparent">
-              <div class="flex items-center gap-1 text-[11px] font-bold text-text-muted mb-0.5">
-                <Building2 size={13} class="text-amber-600 dark:text-amber-400 shrink-0" />
+            <div
+              class="flex flex-col items-center justify-center text-center p-2 rounded-xl bg-white/40 dark:bg-white/[0.02] border border-border-subtle/50 dark:border-transparent"
+            >
+              <div
+                class="flex items-center gap-1 text-[11px] font-bold text-text-muted mb-0.5"
+              >
+                <Building2
+                  size={13}
+                  class="text-amber-600 dark:text-amber-400 shrink-0"
+                />
                 <span>Proveed.</span>
               </div>
               <span class="text-base font-black text-text-base tracking-tight">
@@ -424,10 +476,10 @@
             </div>
           </div>
 
-          <div
-            class="mt-6 pt-6 border-t border-white/5 flex flex-col gap-4"
-          >
-            <div class="flex items-center justify-between text-[10px] uppercase font-black tracking-widest text-text-muted/50">
+          <div class="mt-6 pt-6 border-t border-white/5 flex flex-col gap-4">
+            <div
+              class="flex items-center justify-between text-[10px] uppercase font-black tracking-widest text-text-muted/50"
+            >
               <span>ESTADO AGENTE LOCAL</span>
               <div
                 class="flex items-center gap-1 {branch.active
@@ -532,26 +584,51 @@
             JSON.stringify(editingBranch.profit_branch_codes),
           );
           formData.set("sql_config", JSON.stringify(editingBranch.sql_config));
-          formData.set("allow_decimals_units", (editingBranch.allow_decimals_units || "MTS, MTS2, KG").replace(/[\[\]"']/g, '').trim());
+          formData.set(
+            "allow_decimals_units",
+            (editingBranch.allow_decimals_units || "MTS, MTS2, KG")
+              .replace(/[\[\]"']/g, "")
+              .trim(),
+          );
           formData.set("default_zone", editingBranch.default_zone || "01");
-          formData.set("default_client_type", editingBranch.default_client_type || "01");
-          formData.set("default_cta_ingr_egr", editingBranch.default_cta_ingr_egr || "01");
-          formData.set("default_segment", editingBranch.default_segment || "01");
+          formData.set(
+            "default_client_type",
+            editingBranch.default_client_type || "01",
+          );
+          formData.set(
+            "default_cta_ingr_egr",
+            editingBranch.default_cta_ingr_egr || "01",
+          );
+          formData.set(
+            "default_segment",
+            editingBranch.default_segment || "01",
+          );
           formData.set("default_seller", editingBranch.default_seller || "01");
-          formData.set("default_warehouse", editingBranch.default_warehouse || "");
+          formData.set(
+            "default_warehouse",
+            editingBranch.default_warehouse || "",
+          );
 
           isSaving = true;
           return async ({ result, update }) => {
-            await update();
             isSaving = false;
             if (result.type === "success") {
+              await update();
               showModal = false;
               toast.success(
                 editingBranch?.id ? "Sucursal actualizada" : "Sucursal creada",
               );
               editingBranch = null;
-            } else if (result.type === "failure" && result.data?.message) {
-              toast.error(result.data.message as string);
+            } else if (result.type === "failure") {
+              toast.error(
+                (result.data?.message as string) ||
+                  "No se pudo guardar la sucursal.",
+              );
+            } else if (result.type === "error") {
+              toast.error(
+                result.error?.message ||
+                  "Error interno al guardar la sucursal.",
+              );
             }
           };
         }}
@@ -560,7 +637,9 @@
         <input type="hidden" name="branchId" value={editingBranch.id} />
 
         <div class="space-y-6">
-          <div class="flex items-center gap-3 text-brand-600 dark:text-brand-400">
+          <div
+            class="flex items-center gap-3 text-brand-600 dark:text-brand-400"
+          >
             <Store size={18} />
             <h3 class="text-xs uppercase font-black tracking-widest">
               Identidad
@@ -582,8 +661,9 @@
             </div>
 
             <div class="space-y-2 lg:col-span-2">
-              <label class="text-xs font-bold text-text-muted ml-1" for="business_name"
-                >Razón Social (Nombre Fiscal)</label
+              <label
+                class="text-xs font-bold text-text-muted ml-1"
+                for="business_name">Razón Social (Nombre Fiscal)</label
               >
               <input
                 type="text"
@@ -658,13 +738,19 @@
             </div>
 
             <div class="space-y-2 lg:col-span-2">
-              <label class="text-xs font-bold text-text-muted ml-1" for="default_warehouse">
+              <label
+                class="text-xs font-bold text-text-muted ml-1"
+                for="default_warehouse"
+              >
                 Almacén por Defecto (Profit)
               </label>
               <div class="relative">
-                <Database class="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted opacity-50" size={18} />
-                <input 
-                  type="text" 
+                <Database
+                  class="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted opacity-50"
+                  size={18}
+                />
+                <input
+                  type="text"
                   name="default_warehouse"
                   bind:value={editingBranch.default_warehouse}
                   placeholder="Ej: 01"
@@ -672,18 +758,25 @@
                 />
               </div>
               <p class="text-[10px] text-text-muted/70 ml-2 mt-1 italic">
-                Este almacén se asignará automáticamente a los artículos de servicio (Línea 09).
+                Este almacén se asignará automáticamente a los artículos de
+                servicio (Línea 09).
               </p>
             </div>
 
             <div class="space-y-2 lg:col-span-2">
-              <label class="text-xs font-bold text-text-muted ml-1" for="allow_decimals_units">
+              <label
+                class="text-xs font-bold text-text-muted ml-1"
+                for="allow_decimals_units"
+              >
                 Unidades que permiten decimales
               </label>
               <div class="relative">
-                <Database class="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted opacity-50" size={18} />
-                <input 
-                  type="text" 
+                <Database
+                  class="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted opacity-50"
+                  size={18}
+                />
+                <input
+                  type="text"
                   name="allow_decimals_units"
                   bind:value={editingBranch.allow_decimals_units}
                   placeholder="MTS, MTS2, KG"
@@ -691,18 +784,25 @@
                 />
               </div>
               <p class="text-[10px] text-text-muted/70 ml-2 mt-1 italic">
-                Separadas por coma. Ej: MTS, MTS2, KG. Estas unidades permitirán cantidades con fracción (ej: 1.5).
+                Separadas por coma. Ej: MTS, MTS2, KG. Estas unidades permitirán
+                cantidades con fracción (ej: 1.5).
               </p>
             </div>
 
             <div class="space-y-2 lg:col-span-2">
-              <label class="text-xs font-bold text-text-muted ml-1" for="default_seller">
+              <label
+                class="text-xs font-bold text-text-muted ml-1"
+                for="default_seller"
+              >
                 Vendedor por Defecto para Clientes (saCliente)
               </label>
               <div class="relative">
-                <Users class="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted opacity-50" size={18} />
-                <input 
-                  type="text" 
+                <Users
+                  class="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted opacity-50"
+                  size={18}
+                />
+                <input
+                  type="text"
                   name="default_seller"
                   bind:value={editingBranch.default_seller}
                   placeholder="Ej: 01 o VEN01"
@@ -710,18 +810,26 @@
                 />
               </div>
               <p class="text-[10px] text-text-muted/70 ml-2 mt-1 italic">
-                Código de vendedor general asignado automáticamente a los clientes nuevos o actualizados en esta sede (evita errores por vendedores inactivos).
+                Código de vendedor general asignado automáticamente a los
+                clientes nuevos o actualizados en esta sede (evita errores por
+                vendedores inactivos).
               </p>
             </div>
 
             <div class="space-y-2 lg:col-span-1">
-              <label class="text-xs font-bold text-text-muted ml-1" for="default_zone">
+              <label
+                class="text-xs font-bold text-text-muted ml-1"
+                for="default_zone"
+              >
                 Zona por Defecto (saCliente)
               </label>
               <div class="relative">
-                <MapPin class="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted opacity-50" size={18} />
-                <input 
-                  type="text" 
+                <MapPin
+                  class="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted opacity-50"
+                  size={18}
+                />
+                <input
+                  type="text"
                   name="default_zone"
                   bind:value={editingBranch.default_zone}
                   placeholder="Ej: 004 o 01"
@@ -734,13 +842,19 @@
             </div>
 
             <div class="space-y-2 lg:col-span-1">
-              <label class="text-xs font-bold text-text-muted ml-1" for="default_client_type">
+              <label
+                class="text-xs font-bold text-text-muted ml-1"
+                for="default_client_type"
+              >
                 Tipo de Cliente por Defecto (saCliente)
               </label>
               <div class="relative">
-                <Users class="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted opacity-50" size={18} />
-                <input 
-                  type="text" 
+                <Users
+                  class="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted opacity-50"
+                  size={18}
+                />
+                <input
+                  type="text"
                   name="default_client_type"
                   bind:value={editingBranch.default_client_type}
                   placeholder="Ej: DET o 01"
@@ -748,18 +862,25 @@
                 />
               </div>
               <p class="text-[10px] text-text-muted/70 ml-2 mt-1 italic">
-                Tipo de cliente en Profit Plus (ej. DET para Aldanet, 01 para Galpe).
+                Tipo de cliente en Profit Plus (ej. DET para Aldanet, 01 para
+                Galpe).
               </p>
             </div>
 
             <div class="space-y-2 lg:col-span-1">
-              <label class="text-xs font-bold text-text-muted ml-1" for="default_cta_ingr_egr">
+              <label
+                class="text-xs font-bold text-text-muted ml-1"
+                for="default_cta_ingr_egr"
+              >
                 Cuenta Ingreso/Egreso por Defecto (saCliente)
               </label>
               <div class="relative">
-                <CreditCard class="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted opacity-50" size={18} />
-                <input 
-                  type="text" 
+                <CreditCard
+                  class="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted opacity-50"
+                  size={18}
+                />
+                <input
+                  type="text"
                   name="default_cta_ingr_egr"
                   bind:value={editingBranch.default_cta_ingr_egr}
                   placeholder="Ej: I-001 o 01"
@@ -767,18 +888,25 @@
                 />
               </div>
               <p class="text-[10px] text-text-muted/70 ml-2 mt-1 italic">
-                Requerido por FK_saCliente_saCuentaIngEgr (ej. I-001 en Aldanet).
+                Requerido por FK_saCliente_saCuentaIngEgr (ej. I-001 en
+                Aldanet).
               </p>
             </div>
 
             <div class="space-y-2 lg:col-span-1">
-              <label class="text-xs font-bold text-text-muted ml-1" for="default_segment">
+              <label
+                class="text-xs font-bold text-text-muted ml-1"
+                for="default_segment"
+              >
                 Segmento por Defecto (saCliente)
               </label>
               <div class="relative">
-                <Database class="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted opacity-50" size={18} />
-                <input 
-                  type="text" 
+                <Database
+                  class="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted opacity-50"
+                  size={18}
+                />
+                <input
+                  type="text"
                   name="default_segment"
                   bind:value={editingBranch.default_segment}
                   placeholder="Ej: 01"
@@ -814,7 +942,9 @@
 
         <!-- NEW SECTION: LEGAL & LOCATION -->
         <div class="space-y-6">
-          <div class="flex items-center gap-3 text-brand-600 dark:text-brand-400">
+          <div
+            class="flex items-center gap-3 text-brand-600 dark:text-brand-400"
+          >
             <Globe size={18} />
             <h3 class="text-xs uppercase font-black tracking-widest">
               Información Legal y Ubicación
@@ -910,7 +1040,7 @@
             <input
               type="hidden"
               name="logo_url"
-              value={editingBranch.logo_url}
+              value={editingBranch.logo_url || ""}
             />
 
             <div
@@ -978,7 +1108,9 @@
         </div>
 
         <div class="space-y-6">
-          <div class="flex items-center gap-3 text-brand-600 dark:text-brand-400">
+          <div
+            class="flex items-center gap-3 text-brand-600 dark:text-brand-400"
+          >
             <Database size={18} />
             <h3 class="text-xs uppercase font-black tracking-widest">
               Configuración SQL Server (Agente)
@@ -1052,7 +1184,9 @@
         </div>
 
         <div class="space-y-6">
-          <div class="flex items-center gap-3 text-brand-600 dark:text-brand-400">
+          <div
+            class="flex items-center gap-3 text-brand-600 dark:text-brand-400"
+          >
             <Database size={18} />
             <h3 class="text-xs uppercase font-black tracking-widest">
               Conexión Remota (Tailscale / HTTP)
@@ -1235,8 +1369,14 @@
   <div class="fixed inset-0 z-50 flex items-center justify-center p-4 md:p-8">
     <div
       class="absolute inset-0 bg-black/80 backdrop-blur-xl"
-      onclick={() => { if (!isSyncing) { showSyncModal = false; syncResult = null; } }}
-      onkeydown={(e) => e.key === "Escape" && !isSyncing && (showSyncModal = false)}
+      onclick={() => {
+        if (!isSyncing) {
+          showSyncModal = false;
+          syncResult = null;
+        }
+      }}
+      onkeydown={(e) =>
+        e.key === "Escape" && !isSyncing && (showSyncModal = false)}
       role="button"
       tabindex="-1"
     ></div>
@@ -1245,19 +1385,33 @@
       class="sync-modal-box w-full max-w-2xl rounded-[32px] shadow-2xl relative z-10 overflow-hidden max-h-[90vh] flex flex-col"
     >
       <!-- Header -->
-      <div class="sync-modal-header p-6 md:p-8 flex items-center justify-between">
+      <div
+        class="sync-modal-header p-6 md:p-8 flex items-center justify-between"
+      >
         <div class="flex items-center gap-4">
-          <div class="h-12 w-12 rounded-2xl bg-brand-500/10 text-brand-500 flex items-center justify-center shadow-lg shadow-brand-500/5">
+          <div
+            class="h-12 w-12 rounded-2xl bg-brand-500/10 text-brand-500 flex items-center justify-center shadow-lg shadow-brand-500/5"
+          >
             <RefreshCw size={24} class={syncingEntity ? "animate-spin" : ""} />
           </div>
           <div>
-            <h2 class="text-2xl font-black sync-title">Sincronización Multisede</h2>
-            <p class="text-xs sync-subtitle mt-0.5">Replica maestros e iguala registros entre sucursales de Profit Plus</p>
+            <h2 class="text-2xl font-black sync-title">
+              Sincronización Multisede
+            </h2>
+            <p class="text-xs sync-subtitle mt-0.5">
+              Replica maestros e iguala registros entre sucursales de Profit
+              Plus
+            </p>
           </div>
         </div>
         <button
           type="button"
-          onclick={() => { if (!syncingEntity) { showSyncModal = false; syncResult = null; } }}
+          onclick={() => {
+            if (!syncingEntity) {
+              showSyncModal = false;
+              syncResult = null;
+            }
+          }}
           disabled={syncingEntity !== null}
           class="sync-close-btn p-2.5 rounded-xl transition disabled:opacity-30"
         >
@@ -1266,37 +1420,77 @@
       </div>
 
       <!-- Content -->
-      <div class="sync-modal-body p-6 md:p-8 overflow-y-auto space-y-6 custom-scrollbar">
+      <div
+        class="sync-modal-body p-6 md:p-8 overflow-y-auto space-y-6 custom-scrollbar"
+      >
         <!-- Comparativa de Sucursales -->
         <div>
-          <h4 class="text-xs font-black uppercase tracking-widest sync-subtitle mb-3">Estado de Datos por Sucursal</h4>
+          <h4
+            class="text-xs font-black uppercase tracking-widest sync-subtitle mb-3"
+          >
+            Estado de Datos por Sucursal
+          </h4>
           <div class="space-y-2.5">
-            {#each (data?.branches || []) as branch}
+            {#each data?.branches || [] as branch}
               {@const stats = getStatsForBranch(branch)}
-              <div class="sync-branch-row flex items-center justify-between p-3.5 rounded-2xl">
+              <div
+                class="sync-branch-row flex items-center justify-between p-3.5 rounded-2xl"
+              >
                 <div class="flex items-center gap-3">
-                  <div class="h-2.5 w-2.5 rounded-full {stats.online && branch.active ? 'bg-emerald-500 animate-pulse' : 'bg-zinc-400 dark:bg-zinc-500'}"></div>
+                  <div
+                    class="h-2.5 w-2.5 rounded-full {stats.online &&
+                    branch.active
+                      ? 'bg-emerald-500 animate-pulse'
+                      : 'bg-zinc-400 dark:bg-zinc-500'}"
+                  ></div>
                   <div>
                     <p class="text-sm font-bold sync-title">{branch.name}</p>
-                    <p class="text-[10px] sync-subtitle uppercase font-mono">{branch.id}</p>
+                    <p class="text-[10px] sync-subtitle uppercase font-mono">
+                      {branch.id}
+                    </p>
                   </div>
                 </div>
-                <div class="flex items-center gap-3.5 text-xs font-mono flex-wrap">
+                <div
+                  class="flex items-center gap-3.5 text-xs font-mono flex-wrap"
+                >
                   <div class="flex items-center gap-1.5" title="Artículos">
-                    <Package size={14} class="text-blue-500 dark:text-blue-400" />
-                    <span class="font-bold sync-num">{(stats.articulos || 0).toLocaleString("es-VE")}</span>
+                    <Package
+                      size={14}
+                      class="text-blue-500 dark:text-blue-400"
+                    />
+                    <span class="font-bold sync-num"
+                      >{(stats.articulos || 0).toLocaleString("es-VE")}</span
+                    >
                   </div>
                   <div class="flex items-center gap-1.5" title="Clientes">
-                    <Users size={14} class="text-emerald-500 dark:text-emerald-400" />
-                    <span class="font-bold sync-num">{(stats.clientes || 0).toLocaleString("es-VE")}</span>
+                    <Users
+                      size={14}
+                      class="text-emerald-500 dark:text-emerald-400"
+                    />
+                    <span class="font-bold sync-num"
+                      >{(stats.clientes || 0).toLocaleString("es-VE")}</span
+                    >
                   </div>
                   <div class="flex items-center gap-1.5" title="Proveedores">
-                    <Building2 size={14} class="text-amber-500 dark:text-amber-400" />
-                    <span class="font-bold sync-num">{(stats.proveedores || 0).toLocaleString("es-VE")}</span>
+                    <Building2
+                      size={14}
+                      class="text-amber-500 dark:text-amber-400"
+                    />
+                    <span class="font-bold sync-num"
+                      >{(stats.proveedores || 0).toLocaleString("es-VE")}</span
+                    >
                   </div>
-                  <div class="flex items-center gap-1.5" title="Usuarios de Profit">
-                    <ShieldCheck size={14} class="text-cyan-500 dark:text-cyan-400" />
-                    <span class="font-bold sync-num-cyan">{(stats.usuarios || 0).toLocaleString("es-VE")}</span>
+                  <div
+                    class="flex items-center gap-1.5"
+                    title="Usuarios de Profit"
+                  >
+                    <ShieldCheck
+                      size={14}
+                      class="text-cyan-500 dark:text-cyan-400"
+                    />
+                    <span class="font-bold sync-num-cyan"
+                      >{(stats.usuarios || 0).toLocaleString("es-VE")}</span
+                    >
                   </div>
                 </div>
               </div>
@@ -1306,7 +1500,11 @@
 
         <!-- Selección de Entidad a Sincronizar -->
         <div>
-          <h4 class="text-xs font-black uppercase tracking-widest sync-subtitle mb-3">Sincronización Selectiva</h4>
+          <h4
+            class="text-xs font-black uppercase tracking-widest sync-subtitle mb-3"
+          >
+            Sincronización Selectiva
+          </h4>
           <form
             method="POST"
             action="?/syncEntity"
@@ -1319,24 +1517,29 @@
                 syncingEntity = null;
                 if (result.type === "success" && result.data) {
                   syncResult = result.data;
-                  toast.success(result.data?.message || "Sincronización completada.");
+                  toast.success(
+                    result.data?.message || "Sincronización completada.",
+                  );
                 } else if (result.type === "failure") {
                   syncResult = {
                     success: false,
                     entity,
                     message: result.data?.message || "Error al sincronizar.",
                     total_synced: 0,
-                    summary: []
+                    summary: [],
                   };
                   toast.error(result.data?.message || "Error al sincronizar");
                 } else if (result.type === "error") {
-                  const errorMsg = (result as any)?.error?.message || (result as any)?.message || "Tiempo de espera agotado (Timeout) o error en la sincronización.";
+                  const errorMsg =
+                    (result as any)?.error?.message ||
+                    (result as any)?.message ||
+                    "Tiempo de espera agotado (Timeout) o error en la sincronización.";
                   syncResult = {
                     success: false,
                     entity,
                     message: errorMsg,
                     total_synced: 0,
-                    summary: []
+                    summary: [],
                   };
                   toast.error(errorMsg);
                 } else {
@@ -1347,15 +1550,22 @@
             class="grid grid-cols-1 md:grid-cols-2 gap-4"
           >
             <!-- 1. Proveedores y Condiciones de Pago -->
-            <div class="sync-entity-card p-4.5 rounded-2xl flex flex-col justify-between gap-3.5 transition-all">
+            <div
+              class="sync-entity-card p-4.5 rounded-2xl flex flex-col justify-between gap-3.5 transition-all"
+            >
               <div class="flex items-start gap-3">
-                <div class="p-2.5 rounded-xl bg-amber-500/10 text-amber-500 shrink-0">
+                <div
+                  class="p-2.5 rounded-xl bg-amber-500/10 text-amber-500 shrink-0"
+                >
                   <Building2 size={20} />
                 </div>
                 <div>
-                  <h5 class="text-sm font-black sync-title">Proveedores y Cond. Pago</h5>
+                  <h5 class="text-sm font-black sync-title">
+                    Proveedores y Cond. Pago
+                  </h5>
                   <p class="text-[11px] sync-subtitle mt-0.5 leading-snug">
-                    Proveedores, cuentas de egreso, segmentos, ISLR y condiciones comerciales.
+                    Proveedores, cuentas de egreso, segmentos, ISLR y
+                    condiciones comerciales.
                   </p>
                 </div>
               </div>
@@ -1377,9 +1587,13 @@
             </div>
 
             <!-- 2. Clientes -->
-            <div class="sync-entity-card p-4.5 rounded-2xl flex flex-col justify-between gap-3.5 transition-all">
+            <div
+              class="sync-entity-card p-4.5 rounded-2xl flex flex-col justify-between gap-3.5 transition-all"
+            >
               <div class="flex items-start gap-3">
-                <div class="p-2.5 rounded-xl bg-emerald-500/10 text-emerald-500 shrink-0">
+                <div
+                  class="p-2.5 rounded-xl bg-emerald-500/10 text-emerald-500 shrink-0"
+                >
                   <Users size={20} />
                 </div>
                 <div>
@@ -1407,9 +1621,13 @@
             </div>
 
             <!-- 3. Artículos -->
-            <div class="sync-entity-card p-4.5 rounded-2xl flex flex-col justify-between gap-3.5 transition-all">
+            <div
+              class="sync-entity-card p-4.5 rounded-2xl flex flex-col justify-between gap-3.5 transition-all"
+            >
               <div class="flex items-start gap-3">
-                <div class="p-2.5 rounded-xl bg-blue-500/10 text-blue-500 shrink-0">
+                <div
+                  class="p-2.5 rounded-xl bg-blue-500/10 text-blue-500 shrink-0"
+                >
                   <Package size={20} />
                 </div>
                 <div>
@@ -1437,15 +1655,22 @@
             </div>
 
             <!-- 4. Precios y Márgenes de Venta -->
-            <div class="sync-entity-card p-4.5 rounded-2xl flex flex-col justify-between gap-3.5 transition-all">
+            <div
+              class="sync-entity-card p-4.5 rounded-2xl flex flex-col justify-between gap-3.5 transition-all"
+            >
               <div class="flex items-start gap-3">
-                <div class="p-2.5 rounded-xl bg-purple-500/10 text-purple-500 shrink-0">
+                <div
+                  class="p-2.5 rounded-xl bg-purple-500/10 text-purple-500 shrink-0"
+                >
                   <BadgeDollarSign size={20} />
                 </div>
                 <div>
-                  <h5 class="text-sm font-black sync-title">Precios y Márgenes</h5>
+                  <h5 class="text-sm font-black sync-title">
+                    Precios y Márgenes
+                  </h5>
                   <p class="text-[11px] sync-subtitle mt-0.5 leading-snug">
-                    Precios 1 y 2 (y hasta 10 en código 09) con sus márgenes en todas las sedes.
+                    Precios 1 y 2 (y hasta 10 en código 09) con sus márgenes en
+                    todas las sedes.
                   </p>
                 </div>
               </div>
@@ -1467,15 +1692,22 @@
             </div>
 
             <!-- 5. Usuarios y Mapas Profit -->
-            <div class="sync-entity-card p-4.5 rounded-2xl flex flex-col md:flex-row md:items-center justify-between gap-3.5 transition-all md:col-span-2">
+            <div
+              class="sync-entity-card p-4.5 rounded-2xl flex flex-col md:flex-row md:items-center justify-between gap-3.5 transition-all md:col-span-2"
+            >
               <div class="flex items-start gap-3">
-                <div class="p-2.5 rounded-xl bg-cyan-500/10 text-cyan-500 shrink-0">
+                <div
+                  class="p-2.5 rounded-xl bg-cyan-500/10 text-cyan-500 shrink-0"
+                >
                   <ShieldCheck size={20} />
                 </div>
                 <div>
-                  <h5 class="text-sm font-black sync-title">Usuarios y Mapas</h5>
+                  <h5 class="text-sm font-black sync-title">
+                    Usuarios y Mapas
+                  </h5>
                   <p class="text-[11px] sync-subtitle mt-0.5 leading-snug">
-                    Usuarios (MpUsuario), contraseñas, mapas (MpMapa) y perfiles en MasterProfitPro.
+                    Usuarios (MpUsuario), contraseñas, mapas (MpMapa) y perfiles
+                    en MasterProfitPro.
                   </p>
                 </div>
               </div>
@@ -1502,33 +1734,53 @@
         <div class="sync-info-box p-4 rounded-2xl flex gap-3 text-xs">
           <CheckCircle2 size={18} class="text-brand-500 shrink-0 mt-0.5" />
           <div>
-            <span class="font-bold sync-title">Garantía de Consistencia Referencial y Auditoría</span>
+            <span class="font-bold sync-title"
+              >Garantía de Consistencia Referencial y Auditoría</span
+            >
             <p class="mt-1 leading-relaxed sync-subtitle">
-              Cada sincronización analiza las bases de datos de todas las sedes activas. Si un registro no existe en alguna sede, se replica adaptando automáticamente todas sus claves foráneas a los catálogos de destino y se registra la acción en el log de auditoría.
+              Cada sincronización analiza las bases de datos de todas las sedes
+              activas. Si un registro no existe en alguna sede, se replica
+              adaptando automáticamente todas sus claves foráneas a los
+              catálogos de destino y se registra la acción en el log de
+              auditoría.
             </p>
           </div>
         </div>
 
         <!-- Resultado de la Sincronización -->
         {#if syncResult}
-          <div class="p-5 rounded-2xl border {syncResult.total_synced > 0 ? 'bg-emerald-500/10 border-emerald-500/20' : 'sync-result-box border-border-subtle'} space-y-3 animate-in fade-in duration-300">
+          <div
+            class="p-5 rounded-2xl border {syncResult.total_synced > 0
+              ? 'bg-emerald-500/10 border-emerald-500/20'
+              : 'sync-result-box border-border-subtle'} space-y-3 animate-in fade-in duration-300"
+          >
             <div class="flex items-center justify-between">
               <div class="flex items-center gap-2">
                 {#if syncResult.total_synced > 0}
                   <CheckCircle2 size={20} class="text-emerald-500" />
-                  <span class="text-sm font-black text-emerald-600 dark:text-emerald-400">
+                  <span
+                    class="text-sm font-black text-emerald-600 dark:text-emerald-400"
+                  >
                     Sincronización Exitosa
-                    {#if syncResult.entity === "suppliers"}(Proveedores y Cond. Pago){:else if syncResult.entity === "customers"}(Clientes){:else if syncResult.entity === "articles"}(Artículos){:else if syncResult.entity === "prices"}(Precios y Márgenes){:else if syncResult.entity === "profit_users" || syncResult.entity === "users"}(Usuarios y Mapas Profit){/if}
+                    {#if syncResult.entity === "suppliers"}(Proveedores y Cond.
+                      Pago){:else if syncResult.entity === "customers"}(Clientes){:else if syncResult.entity === "articles"}(Artículos){:else if syncResult.entity === "prices"}(Precios
+                      y Márgenes){:else if syncResult.entity === "profit_users" || syncResult.entity === "users"}(Usuarios
+                      y Mapas Profit){/if}
                   </span>
                 {:else}
                   <CheckCircle2 size={20} class="text-brand-500" />
                   <span class="text-sm font-black sync-title">
                     Todo al día
-                    {#if syncResult.entity === "suppliers"}(Proveedores y Cond. Pago){:else if syncResult.entity === "customers"}(Clientes){:else if syncResult.entity === "articles"}(Artículos){:else if syncResult.entity === "prices"}(Precios y Márgenes){:else if syncResult.entity === "profit_users" || syncResult.entity === "users"}(Usuarios y Mapas Profit){/if}
+                    {#if syncResult.entity === "suppliers"}(Proveedores y Cond.
+                      Pago){:else if syncResult.entity === "customers"}(Clientes){:else if syncResult.entity === "articles"}(Artículos){:else if syncResult.entity === "prices"}(Precios
+                      y Márgenes){:else if syncResult.entity === "profit_users" || syncResult.entity === "users"}(Usuarios
+                      y Mapas Profit){/if}
                   </span>
                 {/if}
               </div>
-              <span class="text-xs font-mono font-bold px-2 py-0.5 rounded-md sync-pill">
+              <span
+                class="text-xs font-mono font-bold px-2 py-0.5 rounded-md sync-pill"
+              >
                 Total: {syncResult.total_synced || 0}
               </span>
             </div>
@@ -1537,20 +1789,30 @@
             {#if syncResult.summary && syncResult.summary.length > 0}
               <div class="pt-2 border-t border-border-subtle space-y-2">
                 {#each syncResult.summary as item}
-                  <div class="flex items-center justify-between text-xs p-2.5 rounded-xl sync-item-row">
-                    <span class="font-bold sync-title">{item.sede_nombre || item.sede_id}</span>
+                  <div
+                    class="flex items-center justify-between text-xs p-2.5 rounded-xl sync-item-row"
+                  >
+                    <span class="font-bold sync-title"
+                      >{item.sede_nombre || item.sede_id}</span
+                    >
                     {#if item.migrated > 0 || item.migrated_mapas > 0}
-                      <span class="px-2 py-0.5 rounded-lg bg-emerald-500/20 text-emerald-700 dark:text-emerald-400 font-mono font-bold">
-                        {#if syncResult.entity === 'prices'}
+                      <span
+                        class="px-2 py-0.5 rounded-lg bg-emerald-500/20 text-emerald-700 dark:text-emerald-400 font-mono font-bold"
+                      >
+                        {#if syncResult.entity === "prices"}
                           +{item.migrated} precios act.
-                        {:else if syncResult.entity === 'profit_users' || syncResult.entity === 'users'}
-                          +{item.migrated} usuarios {item.migrated_mapas ? `(+${item.migrated_mapas} mapas)` : ''}
+                        {:else if syncResult.entity === "profit_users" || syncResult.entity === "users"}
+                          +{item.migrated} usuarios {item.migrated_mapas
+                            ? `(+${item.migrated_mapas} mapas)`
+                            : ""}
                         {:else}
                           +{item.migrated} registros
                         {/if}
                       </span>
                     {:else if item.errors && item.errors.length > 0}
-                      <span class="px-2 py-0.5 rounded-lg bg-red-500/20 text-red-700 dark:text-red-400 font-mono font-bold">
+                      <span
+                        class="px-2 py-0.5 rounded-lg bg-red-500/20 text-red-700 dark:text-red-400 font-mono font-bold"
+                      >
                         {item.errors.length} error(es)
                       </span>
                     {:else}
@@ -1571,7 +1833,10 @@
         <button
           type="button"
           disabled={syncingEntity !== null}
-          onclick={() => { showSyncModal = false; syncResult = null; }}
+          onclick={() => {
+            showSyncModal = false;
+            syncResult = null;
+          }}
           class="sync-close-footer-btn px-6 py-2.5 rounded-xl font-bold transition-all text-sm disabled:opacity-50"
         >
           Cerrar

@@ -6,6 +6,7 @@ import { supabaseAdmin } from '$lib/server/supabase';
 import { normalizeAllowDecimalsUnits } from '$lib/server/branches';
 import { AgentClient } from '$lib/server/agent';
 import { clearBranchesCache } from '$lib/server/branches';
+import { logAction } from '$lib/server/audit';
 import { hasPermission } from '$lib/server/auth';
 import { fail } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
@@ -37,7 +38,7 @@ export const load: PageServerLoad = protectLoad('sec_branches', async ({ locals,
         .select('id, name, business_name, agent_url, agent_token, profit_branch_codes, sql_config, profit_server_id, local_dns_alias, active, sort_order, updated_at, rif, address, latitude, longitude, logo_url, phone, allow_decimals_units, default_warehouse')
         .order('sort_order')
         .order('name');
-      
+
       branches = fallback.data;
       error = fallback.error;
     }
@@ -49,7 +50,7 @@ export const load: PageServerLoad = protectLoad('sec_branches', async ({ locals,
         .select('id, name, business_name, agent_url, agent_token, profit_branch_codes, sql_config, profit_server_id, local_dns_alias, active, sort_order, updated_at, rif, address, latitude, longitude, logo_url, phone, allow_decimals_units')
         .order('sort_order')
         .order('name');
-      
+
       branches = fallback.data;
       error = fallback.error;
     }
@@ -84,8 +85,8 @@ export const load: PageServerLoad = protectLoad('sec_branches', async ({ locals,
           try {
             const client = new AgentClient(
               {
-                slug:          branch.id,
-                agent_url:     branch.agent_url!,
+                slug: branch.id,
+                agent_url: branch.agent_url!,
                 agent_api_key: branch.agent_token
               },
               locals.profile || undefined,
@@ -139,7 +140,7 @@ export const load: PageServerLoad = protectLoad('sec_branches', async ({ locals,
     }
 
     return {
-      branches:     branches ?? [],
+      branches: branches ?? [],
       agentServers,
       branchStats,
       loadError,
@@ -165,217 +166,267 @@ export const load: PageServerLoad = protectLoad('sec_branches', async ({ locals,
 export const actions: Actions = {
 
   saveBranch: protectAction('sec_branches', async ({ request, locals }) => {
-    const formData        = await request.formData();
-    const branchId        = (formData.get('branchId') as string)?.trim() || null;
-    const name            = (formData.get('name') as string)?.trim();
-    const business_name   = (formData.get('business_name') as string)?.trim() || null;
-    const agentUrl        = (formData.get('agent_url') as string)?.trim() || null;
-    const agentToken      = (formData.get('agent_token') as string)?.trim() || null;
-    const logoFile        = formData.get('logo_file') as File;
-    const existingLogoUrl = formData.get('logo_url') as string;
-    
-    // Parsear el array de códigos JSON
-    const profitBranchCodesStr = formData.get('profit_branch_codes') as string;
-    let profitBranchCodes = [];
     try {
-      if (profitBranchCodesStr) profitBranchCodes = JSON.parse(profitBranchCodesStr);
-    } catch(e) { }
+      const formData = await request.formData();
+      const branchId = (formData.get('branchId') as string)?.trim() || null;
+      const name = (formData.get('name') as string)?.trim();
+      const business_name = (formData.get('business_name') as string)?.trim() || null;
+      const agentUrl = (formData.get('agent_url') as string)?.trim() || null;
+      const agentToken = (formData.get('agent_token') as string)?.trim() || null;
+      const logoFile = formData.get('logo_file') as File | null;
 
-    // Parsear configuración SQL local JSON
-    const sqlConfigStr = formData.get('sql_config') as string;
-    let sqlConfig = {};
-    try {
-      if (sqlConfigStr) sqlConfig = JSON.parse(sqlConfigStr);
-    } catch(e) { }
+      if (!name) return fail(400, { message: 'El nombre de la sucursal es requerido.' });
 
-    const profitServer    = (formData.get('profit_server_id') as string)?.trim() || null;
-    const localDns        = (formData.get('local_dns_alias') as string)?.trim() || null;
-    const sortOrder       = parseInt(formData.get('sort_order') as string || '0');
-    const active          = formData.get('active') !== 'false';
+      // Parsear el array de códigos JSON
+      const profitBranchCodesStr = formData.get('profit_branch_codes') as string;
+      let profitBranchCodes: any[] = [];
+      try {
+        if (profitBranchCodesStr) profitBranchCodes = JSON.parse(profitBranchCodesStr);
+      } catch { }
 
-    // Nuevos campos Legales y Ubicación
-    const rif             = (formData.get('rif') as string)?.trim() || null;
-    const address         = (formData.get('address') as string)?.trim() || null;
-    const phone           = (formData.get('phone') as string)?.trim() || null;
-    let logoUrl           = (formData.get('logo_url') as string)?.trim() || null;
-    const latitude        = formData.get('latitude') ? parseFloat(formData.get('latitude') as string) : null;
-    const longitude       = formData.get('longitude') ? parseFloat(formData.get('longitude') as string) : null;
-    const defaultWarehouse = (formData.get('default_warehouse') as string)?.trim() || null;
-    const rawAllowDecimals = formData.get('allow_decimals_units');
-    const allowDecimalsUnits = normalizeAllowDecimalsUnits(rawAllowDecimals);
-    const defaultSeller = (formData.get('default_seller') as string)?.trim() || '01';
-    const defaultZone = (formData.get('default_zone') as string)?.trim() || '01';
-    const defaultClientType = (formData.get('default_client_type') as string)?.trim() || '01';
-    const defaultCtaIngrEgr = (formData.get('default_cta_ingr_egr') as string)?.trim() || '01';
-    const defaultSegment = (formData.get('default_segment') as string)?.trim() || '01';
+      // Parsear configuración SQL local JSON
+      const sqlConfigStr = formData.get('sql_config') as string;
+      let sqlConfig: Record<string, any> = {};
+      try {
+        if (sqlConfigStr) sqlConfig = JSON.parse(sqlConfigStr);
+      } catch { }
 
-    if (sqlConfig && typeof sqlConfig === 'object') {
-      sqlConfig.profit_defaults = {
-        default_zone: defaultZone,
-        default_client_type: defaultClientType,
-        default_cta_ingr_egr: defaultCtaIngrEgr,
-        default_seller: defaultSeller,
-        default_segment: defaultSegment,
-        default_warehouse: defaultWarehouse
-      };
-    }
+      const profitServer = (formData.get('profit_server_id') as string)?.trim() || null;
+      const localDns = (formData.get('local_dns_alias') as string)?.trim() || null;
+      const parsedSort = parseInt((formData.get('sort_order') as string) || '0', 10);
+      const sortOrder = Number.isFinite(parsedSort) ? parsedSort : 0;
+      const active = formData.get('active') !== 'false';
 
-    // ─── Proceso de Subida de Logo ─────────────────────────────
-    if (logoFile && logoFile.size > 0 && logoFile.name) {
-      const fileName = `${branchId || 'new'}_${Date.now()}_${logoFile.name.replace(/\s+/g, '_')}`;
-      const filePath = `logos/${fileName}`;
+      // Campos Legales y Ubicación
+      const rif = (formData.get('rif') as string)?.trim() || null;
+      const address = (formData.get('address') as string)?.trim() || null;
+      const phone = (formData.get('phone') as string)?.trim() || null;
+      const rawLogoUrl = (formData.get('logo_url') as string)?.trim();
+      let logoUrl = rawLogoUrl && rawLogoUrl !== 'null' && rawLogoUrl !== 'undefined' ? rawLogoUrl : null;
+      const rawLat = (formData.get('latitude') as string)?.trim();
+      const rawLng = (formData.get('longitude') as string)?.trim();
+      const parsedLat = rawLat ? parseFloat(rawLat) : NaN;
+      const parsedLng = rawLng ? parseFloat(rawLng) : NaN;
+      const latitude = Number.isFinite(parsedLat) ? parsedLat : null;
+      const longitude = Number.isFinite(parsedLng) ? parsedLng : null;
+      const defaultWarehouse = (formData.get('default_warehouse') as string)?.trim() || null;
 
-      const { data: uploadData, error: uploadErr } = await supabaseAdmin.storage
-        .from('brand-assets')
-        .upload(filePath, logoFile, { upsert: true });
+      // En Supabase branches.allow_decimals_units es TEXT[] (arreglo); mantenemos también versión texto para fallback
+      const rawAllowDecimals = formData.get('allow_decimals_units');
+      const allowDecimalsUnitsText = normalizeAllowDecimalsUnits(rawAllowDecimals);
+      const allowDecimalsUnitsArray = allowDecimalsUnitsText
+        .split(',')
+        .map((u) => u.trim())
+        .filter(Boolean);
 
-      if (uploadErr) {
-        console.error('[STORAGE] Error subiendo logo:', uploadErr.message);
-      } else {
+      const defaultSeller = (formData.get('default_seller') as string)?.trim() || '01';
+      const defaultZone = (formData.get('default_zone') as string)?.trim() || '01';
+      const defaultClientType = (formData.get('default_client_type') as string)?.trim() || '01';
+      const defaultCtaIngrEgr = (formData.get('default_cta_ingr_egr') as string)?.trim() || '01';
+      const defaultSegment = (formData.get('default_segment') as string)?.trim() || '01';
+
+      if (sqlConfig && typeof sqlConfig === 'object') {
+        sqlConfig.profit_defaults = {
+          default_zone: defaultZone,
+          default_client_type: defaultClientType,
+          default_cta_ingr_egr: defaultCtaIngrEgr,
+          default_seller: defaultSeller,
+          default_segment: defaultSegment,
+          default_warehouse: defaultWarehouse
+        };
+      }
+
+      // ─── Proceso de Subida de Logo (PNG / JPG / WebP / SVG) al bucket 'branding' ───
+      if (logoFile && typeof logoFile === 'object' && logoFile.size > 0 && logoFile.name) {
+        const rawExt = (logoFile.name.split('.').pop() || 'webp').toLowerCase().replace(/[^a-z0-9]/g, '') || 'webp';
+        const safeBase =
+          logoFile.name
+            .replace(/\.[^/.]+$/, '')
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .replace(/[^a-zA-Z0-9_-]/g, '_')
+            .slice(0, 40) || 'logo';
+        const fileName = `${branchId || 'new'}_${Date.now()}_${safeBase}.${rawExt}`;
+        const filePath = `branches/${fileName}`;
+
+        const mimeMap: Record<string, string> = {
+          webp: 'image/webp',
+          png: 'image/png',
+          jpg: 'image/jpeg',
+          jpeg: 'image/jpeg',
+          gif: 'image/gif',
+          svg: 'image/svg+xml'
+        };
+        const contentType = logoFile.type || mimeMap[rawExt] || 'application/octet-stream';
+        const fileBuffer = Buffer.from(await logoFile.arrayBuffer());
+
+        let { data: uploadData, error: uploadErr } = await supabaseAdmin.storage
+          .from('branding')
+          .upload(filePath, fileBuffer, {
+            upsert: true,
+            contentType
+          });
+
+        if (uploadErr && uploadErr.message?.toLowerCase().includes('not found')) {
+          await supabaseAdmin.storage.createBucket('branding', { public: true });
+          const retryUpload = await supabaseAdmin.storage
+            .from('branding')
+            .upload(filePath, fileBuffer, {
+              upsert: true,
+              contentType
+            });
+          uploadData = retryUpload.data;
+          uploadErr = retryUpload.error;
+        }
+
+        if (uploadErr) {
+          console.error('[STORAGE] Error subiendo logo de sucursal:', uploadErr.message);
+          return fail(400, { message: `No se pudo subir el logo (${uploadErr.message}).` });
+        }
+
         const { data: publicData } = supabaseAdmin.storage
-          .from('brand-assets')
-          .getPublicUrl(filePath);
-        
+          .from('branding')
+          .getPublicUrl(uploadData?.path || filePath);
+
         logoUrl = publicData.publicUrl;
       }
-    }
 
-    if (!name) return fail(400, { message: 'El nombre de la sucursal es requerido.' });
+      const payload: any = {
+        name,
+        business_name,
+        agent_url: agentUrl,
+        profit_branch_codes: profitBranchCodes,
+        sql_config: sqlConfig,
+        profit_server_id: profitServer,
+        local_dns_alias: localDns,
+        sort_order: sortOrder,
+        active,
+        rif,
+        address,
+        phone,
+        logo_url: logoUrl,
+        latitude,
+        longitude,
+        default_warehouse: defaultWarehouse,
+        allow_decimals_units: allowDecimalsUnitsArray,
+        default_seller: defaultSeller,
+        updated_at: new Date().toISOString()
+      };
 
-    const payload: any = {
-      name,
-      business_name,
-      agent_url:           agentUrl,
-      profit_branch_codes: profitBranchCodes,
-      sql_config:          sqlConfig,
-      profit_server_id:    profitServer,
-      local_dns_alias:     localDns,
-      sort_order:          sortOrder,
-      active,
-      rif,
-      address,
-      phone,
-      logo_url:            logoUrl,
-      latitude,
-      longitude,
-      default_warehouse:   defaultWarehouse,
-      allow_decimals_units: allowDecimalsUnits,
-      default_seller:      defaultSeller,
-      updated_at:          new Date().toISOString()
-    };
+      // Solo actualizar agent_token si se envió uno nuevo
+      if (agentToken) payload.agent_token = agentToken;
 
-    // Solo actualizar agent_token si se envió uno nuevo
-    if (agentToken) payload.agent_token = agentToken;
+      let savedId: string;
+      let oldData: any = null;
 
-    let savedId: string;
-    let oldData: any = null;
+      if (branchId) {
+        const { data: current } = await supabaseAdmin.from('branches').select('*').eq('id', branchId).single();
+        oldData = current;
 
-    if (branchId) {
-      // Obtener datos actuales para la auditoría (Estado Anterior)
-      const { data: current } = await supabaseAdmin.from('branches').select('*').eq('id', branchId).single();
-      oldData = current;
-
-      let { error } = await supabaseAdmin
-        .from('branches')
-        .update(payload)
-        .eq('id', branchId);
-
-      // Reintento granular si falla por columna inexistente (default_seller o default_warehouse)
-      if (error && error.message.includes('default_seller')) {
-        console.warn('[BRANCHES] Reintentando actualización sin default_seller...');
-        const { default_seller, ...safePayload } = payload;
-        let retry = await supabaseAdmin
+        let { error } = await supabaseAdmin
           .from('branches')
-          .update(safePayload)
+          .update(payload)
           .eq('id', branchId);
-        if (retry.error && retry.error.message.includes('default_warehouse')) {
-          const { default_warehouse, ...saferPayload } = safePayload;
-          retry = await supabaseAdmin.from('branches').update(saferPayload).eq('id', branchId);
+
+        // Reintento granular si falla por columna inexistente (default_seller o default_warehouse)
+        if (error && error.message.includes('default_seller')) {
+          console.warn('[BRANCHES] Reintentando actualización sin default_seller...');
+          const { default_seller, ...safePayload } = payload;
+          let retry = await supabaseAdmin
+            .from('branches')
+            .update(safePayload)
+            .eq('id', branchId);
+          if (retry.error && retry.error.message.includes('default_warehouse')) {
+            const { default_warehouse, ...saferPayload } = safePayload;
+            retry = await supabaseAdmin.from('branches').update(saferPayload).eq('id', branchId);
+          }
+          error = retry.error;
+        } else if (error && error.message.includes('default_warehouse')) {
+          console.warn('[BRANCHES] Reintentando actualización sin default_warehouse...');
+          const { default_warehouse, ...safePayload } = payload;
+          const retry = await supabaseAdmin
+            .from('branches')
+            .update(safePayload)
+            .eq('id', branchId);
+          error = retry.error;
         }
-        error = retry.error;
-      } else if (error && error.message.includes('default_warehouse')) {
-        console.warn('[BRANCHES] Reintentando actualización sin default_warehouse...');
-        const { default_warehouse, ...safePayload } = payload;
-        const retry = await supabaseAdmin
-          .from('branches')
-          .update(safePayload)
-          .eq('id', branchId);
-        error = retry.error;
-      }
 
-      if (error && (error.message.includes('allow_decimals_units') || error.message.includes('malformed array literal'))) {
-        console.warn('[BRANCHES] Reintentando actualización con formato texto para allow_decimals_units...');
-        const textUnits = allowDecimalsUnits.join(', ');
-        const retry = await supabaseAdmin
-          .from('branches')
-          .update({ ...payload, allow_decimals_units: textUnits })
-          .eq('id', branchId);
-        error = retry.error;
-      }
-      if (error) return fail(500, { message: error.message });
-      savedId = branchId;
-    } else {
-      let { data, error } = await supabaseAdmin
-        .from('branches')
-        .insert(payload)
-        .select('id')
-        .single();
-
-      // Reintento granular si falla por columna inexistente
-      if (error && error.message.includes('default_seller')) {
-        console.warn('[BRANCHES] Reintentando inserción sin default_seller...');
-        const { default_seller, ...safePayload } = payload;
-        let retry = await supabaseAdmin
-          .from('branches')
-          .insert(safePayload)
-          .select('id')
-          .single();
-        if (retry.error && retry.error.message.includes('default_warehouse')) {
-          const { default_warehouse, ...saferPayload } = safePayload;
-          retry = await supabaseAdmin.from('branches').insert(saferPayload).select('id').single();
+        // Fallback si en alguna instancia la columna allow_decimals_units es TEXT en vez de TEXT[]
+        if (error && (error.message.includes('allow_decimals_units') || error.message.includes('malformed array literal'))) {
+          console.warn('[BRANCHES] Reintentando actualización con formato texto para allow_decimals_units...');
+          const retry = await supabaseAdmin
+            .from('branches')
+            .update({ ...payload, allow_decimals_units: allowDecimalsUnitsText })
+            .eq('id', branchId);
+          error = retry.error;
         }
-        data = retry.data;
-        error = retry.error;
-      } else if (error && error.message.includes('default_warehouse')) {
-        console.warn('[BRANCHES] Reintentando inserción sin default_warehouse...');
-        const { default_warehouse, ...safePayload } = payload;
-        const retry = await supabaseAdmin
+        if (error) return fail(500, { message: error.message });
+        savedId = branchId;
+      } else {
+        let { data, error } = await supabaseAdmin
           .from('branches')
-          .insert(safePayload)
+          .insert(payload)
           .select('id')
           .single();
-        data = retry.data;
-        error = retry.error;
+
+        // Reintento granular si falla por columna inexistente
+        if (error && error.message.includes('default_seller')) {
+          console.warn('[BRANCHES] Reintentando inserción sin default_seller...');
+          const { default_seller, ...safePayload } = payload;
+          let retry = await supabaseAdmin
+            .from('branches')
+            .insert(safePayload)
+            .select('id')
+            .single();
+          if (retry.error && retry.error.message.includes('default_warehouse')) {
+            const { default_warehouse, ...saferPayload } = safePayload;
+            retry = await supabaseAdmin.from('branches').insert(saferPayload).select('id').single();
+          }
+          data = retry.data;
+          error = retry.error;
+        } else if (error && error.message.includes('default_warehouse')) {
+          console.warn('[BRANCHES] Reintentando inserción sin default_warehouse...');
+          const { default_warehouse, ...safePayload } = payload;
+          const retry = await supabaseAdmin
+            .from('branches')
+            .insert(safePayload)
+            .select('id')
+            .single();
+          data = retry.data;
+          error = retry.error;
+        }
+
+        if (error && (error.message.includes('allow_decimals_units') || error.message.includes('malformed array literal'))) {
+          console.warn('[BRANCHES] Reintentando inserción con formato texto para allow_decimals_units...');
+          const retry = await supabaseAdmin
+            .from('branches')
+            .insert({ ...payload, allow_decimals_units: allowDecimalsUnitsText })
+            .select('id')
+            .single();
+          data = retry.data;
+          error = retry.error;
+        }
+        if (error || !data) return fail(500, { message: error?.message || 'Error al crear la sucursal.' });
+        savedId = data.id;
       }
 
-      if (error && (error.message.includes('allow_decimals_units') || error.message.includes('malformed array literal'))) {
-        console.warn('[BRANCHES] Reintentando actualización con formato texto para allow_decimals_units...');
-        const textUnits = allowDecimalsUnits.join(', ');
-        const retry = await supabaseAdmin
-          .from('branches')
-          .insert({ ...payload, allow_decimals_units: textUnits })
-          .select('id')
-          .single();
-        data = retry.data;
-        error = retry.error;
-      }
-      if (error) return fail(500, { message: error.message });
-      savedId = data.id;
+      await logAction({
+        uid: locals.profile?.id ?? null,
+        user_email: locals.profile?.email ?? 'system',
+        action: branchId ? 'UPDATE' : 'CREATE',
+        module: 'sec_branches',
+        record_id: savedId,
+        branch_id: savedId,
+        old_data: oldData,
+        new_data: payload
+      });
+
+      clearBranchesCache();
+      return { success: true, savedId, logoUrl };
+    } catch (err: any) {
+      console.error('[BRANCHES] Excepción en saveBranch:', err);
+      return fail(500, { message: `Error al guardar la sucursal: ${err?.message || 'Error interno'}` });
     }
-
-    await supabaseAdmin.rpc('log_action', {
-      p_user_id:    locals.profile?.id ?? null,
-      p_user_email: locals.profile?.email ?? 'system',
-      p_action:     branchId ? 'UPDATE' : 'CREATE',
-      p_module:     'sec_branches',
-      p_record_id:  savedId,
-      p_branch_id:  savedId,
-      p_old_data:   oldData ? JSON.stringify(oldData) : null,
-      p_new_data:   JSON.stringify(payload)
-    });
-
-    clearBranchesCache();
-    return { success: true, savedId };
   }),
 
   testConnection: protectAction('sec_branches', async ({ request, locals, fetch }) => {
@@ -402,8 +453,8 @@ export const actions: Actions = {
     try {
       const client = new AgentClient(
         {
-          slug:          branch.id,
-          agent_url:     branch.agent_url,
+          slug: branch.id,
+          agent_url: branch.agent_url,
           agent_api_key: branch.agent_token
         },
         locals.profile || undefined,
@@ -411,7 +462,7 @@ export const actions: Actions = {
       );
 
       const res = await client.testConnection(branch.id);
-      
+
       if (!res.success) {
         return fail(500, { message: res.message || 'Error al conectar con la base de datos SQL del agente.' });
       }
@@ -423,9 +474,9 @@ export const actions: Actions = {
   }),
 
   deleteBranch: protectAction('sec_branches', async ({ request, locals }) => {
-    const formData  = await request.formData();
-    const branchId  = (formData.get('branchId') as string)?.trim();
-    const password  = (formData.get('password') as string)?.trim();
+    const formData = await request.formData();
+    const branchId = (formData.get('branchId') as string)?.trim();
+    const password = (formData.get('password') as string)?.trim();
 
     if (!branchId) return fail(400, { message: 'ID de sucursal requerido.' });
     if (!password) return fail(400, { message: 'La contraseña es requerida para confirmar.' });
@@ -445,12 +496,12 @@ export const actions: Actions = {
     if (error) return fail(500, { message: error.message });
 
     await supabaseAdmin.rpc('log_action', {
-      p_user_id:    locals.profile?.id ?? null,
+      p_user_id: locals.profile?.id ?? null,
       p_user_email: locals.profile?.email ?? 'system',
-      p_action:     'DELETE',
-      p_module:     'sec_branches',
-      p_record_id:  branchId,
-      p_branch_id:  branchId
+      p_action: 'DELETE',
+      p_module: 'sec_branches',
+      p_record_id: branchId,
+      p_branch_id: branchId
     });
 
     clearBranchesCache();
@@ -479,8 +530,8 @@ export const actions: Actions = {
           activeBranches.map(async (branch) => {
             const client = new AgentClient(
               {
-                slug:          branch.id,
-                agent_url:     branch.agent_url!,
+                slug: branch.id,
+                agent_url: branch.agent_url!,
                 agent_api_key: branch.agent_token
               },
               locals.profile || undefined,
@@ -662,8 +713,8 @@ export const actions: Actions = {
           activeBranches.map(async (branch) => {
             const client = new AgentClient(
               {
-                slug:          branch.id,
-                agent_url:     branch.agent_url!,
+                slug: branch.id,
+                agent_url: branch.agent_url!,
                 agent_api_key: branch.agent_token
               },
               locals.profile || undefined,
@@ -932,8 +983,8 @@ export const actions: Actions = {
         activeBranches.map(async (branch) => {
           const client = new AgentClient(
             {
-              slug:          branch.id,
-              agent_url:     branch.agent_url!,
+              slug: branch.id,
+              agent_url: branch.agent_url!,
               agent_api_key: branch.agent_token
             },
             locals.profile || undefined,
@@ -1034,13 +1085,13 @@ export const actions: Actions = {
 
       // 4. Registrar en Auditoría Supabase
       await supabaseAdmin.rpc('log_action', {
-        p_user_id:    locals.profile?.id ?? null,
+        p_user_id: locals.profile?.id ?? null,
         p_user_email: locals.profile?.email ?? 'system',
-        p_action:     'SYNC',
-        p_module:     moduleName,
-        p_record_id:  'MULTI-SEDE',
-        p_branch_id:  validBranches[0]?.branch.id || null,
-        p_new_data:   JSON.stringify({ entity, total_synced: totalSynced, summary, timestamp: new Date().toISOString() })
+        p_action: 'SYNC',
+        p_module: moduleName,
+        p_record_id: 'MULTI-SEDE',
+        p_branch_id: validBranches[0]?.branch.id || null,
+        p_new_data: JSON.stringify({ entity, total_synced: totalSynced, summary, timestamp: new Date().toISOString() })
       });
 
       return {

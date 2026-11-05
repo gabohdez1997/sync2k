@@ -37,7 +37,10 @@
     ArrowRight,
     ChevronDown,
     ChevronUp,
-    Settings2
+    Settings2,
+    FileSpreadsheet,
+    FileCode2,
+    Download
   } from "lucide-svelte";
   import type { PageData, ActionData } from "./$types";
 
@@ -82,6 +85,31 @@
   let campo3Source = $state<string>("ip");
   let saveDefaults = $state(true);
   let showFailuresList = $state(false);
+
+  // Modal de Extracción / Exportación (Excel & SQL) / Replicación HKA -> Profit Plus
+  let isHkaModalOpen = $state(false);
+  let hkaTargetBranch = $state(data.branches?.[0]?.id || "");
+  let hkaSerie = $state("");
+  let hkaTipoDoc = $state("ALL");
+  let hkaDocInicio = $state("");
+  let hkaDocFin = $state("");
+  let hkaFechaInicio = $state("");
+  let hkaFechaFin = $state("");
+  let hkaPadDocNum = $state(true);
+  let hkaMonedaProfit = $state<"BS" | "USD">("BS");
+  let hkaMonedaPrecioArt = $state<"USD" | "BS">("USD");
+  let hkaSaldoMode = $state<"pendiente" | "cero">("pendiente");
+  let hkaSkipZero = $state(true);
+  let hkaIncludeAnnulled = $state(true);
+  let isExtractingHka = $state(false);
+  let isExportingHka = $state<"excel" | "sql" | null>(null);
+  let isReplicatingHka = $state(false);
+  let hkaPlanResult = $state<any>(null);
+  let hkaSelectedDocs = $state<Record<string, boolean>>({});
+  let hkaConfirmReplicate = $state(false);
+  let isCheckingMissingPrices = $state(false);
+  let isApplyingMissingPrices = $state(false);
+  let hkaMissingPricesResult = $state<any>(null);
 
   // Estados de prueba y guardado
   let testingId = $state<string | null>(null);
@@ -342,6 +370,247 @@
       toast.error(`Error de sincronización: ${err.message}`);
     } finally {
       isSyncing = false;
+    }
+  }
+
+  function openHkaModal() {
+    isHkaModalOpen = true;
+    hkaPlanResult = null;
+    hkaMissingPricesResult = null;
+    hkaConfirmReplicate = false;
+    if (data.branches && data.branches.length > 0 && !hkaTargetBranch) {
+      hkaTargetBranch = data.branches[0].id;
+    }
+  }
+
+  function closeHkaModal() {
+    if (isExtractingHka || isReplicatingHka || isCheckingMissingPrices || isApplyingMissingPrices) return;
+    isHkaModalOpen = false;
+    hkaConfirmReplicate = false;
+  }
+
+  function getSelectedHkaDocsArray(): string[] | undefined {
+    if (!hkaPlanResult?.plan?.invoices) return undefined;
+    const keys = Object.keys(hkaSelectedDocs).filter((k) => hkaSelectedDocs[k]);
+    return keys.length > 0 ? keys : undefined;
+  }
+
+  function buildHkaPayload(extra: Record<string, any> = {}) {
+    return {
+      branch_id: hkaTargetBranch,
+      serie: hkaSerie.trim(),
+      tipo_documento: hkaTipoDoc,
+      doc_inicio: hkaDocInicio.trim() || undefined,
+      doc_fin: hkaDocFin.trim() || undefined,
+      fecha_inicio: hkaFechaInicio || undefined,
+      fecha_fin: hkaFechaFin || undefined,
+      pad_doc_num: hkaPadDocNum,
+      moneda_profit: hkaMonedaProfit,
+      moneda_precio_articulo: hkaMonedaPrecioArt,
+      saldo_mode: hkaSaldoMode,
+      skip_zero_amount: hkaSkipZero,
+      include_annulled: hkaIncludeAnnulled,
+      ...extra
+    };
+  }
+
+  async function previewMissingPricesInProfit() {
+    isCheckingMissingPrices = true;
+    try {
+      const res = await fetch("/api/integrations/hka/replicate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          mode: "backfill_prices",
+          branch_id: hkaTargetBranch,
+          moneda_precio_articulo: hkaMonedaPrecioArt,
+          dry_run: true
+        })
+      });
+      const jsonRes = await res.json();
+      if (!res.ok || !jsonRes.success) {
+        throw new Error(jsonRes.message || "Error al consultar artículos sin precio en Profit Plus");
+      }
+      hkaMissingPricesResult = jsonRes;
+      if (jsonRes.count > 0) {
+        toast.info(jsonRes.message);
+      } else {
+        toast.success(jsonRes.message);
+      }
+    } catch (err: any) {
+      toast.error(`Error al verificar precios en Profit: ${err.message}`);
+    } finally {
+      isCheckingMissingPrices = false;
+    }
+  }
+
+  async function downloadMissingPricesSql() {
+    try {
+      const res = await fetch("/api/integrations/hka/replicate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          mode: "backfill_prices",
+          format: "sql",
+          branch_id: hkaTargetBranch,
+          moneda_precio_articulo: hkaMonedaPrecioArt,
+          dry_run: true
+        })
+      });
+      if (!res.ok) {
+        throw new Error("No se pudo generar el script SQL de precios.");
+      }
+      const blob = await res.blob();
+      const disposition = res.headers.get("Content-Disposition") || "";
+      const fnMatch = disposition.match(/filename="([^"]+)"/);
+      const fileName = fnMatch?.[1] || "Precios_Faltantes_saArtPrecio.sql";
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      toast.success(`Script ${fileName} descargado.`);
+    } catch (err: any) {
+      toast.error(err.message);
+    }
+  }
+
+  async function applyMissingPricesInProfit() {
+    isApplyingMissingPrices = true;
+    try {
+      const res = await fetch("/api/integrations/hka/replicate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          mode: "backfill_prices",
+          branch_id: hkaTargetBranch,
+          moneda_precio_articulo: hkaMonedaPrecioArt,
+          dry_run: false,
+          confirm: true
+        })
+      });
+      const jsonRes = await res.json();
+      if (!res.ok || !jsonRes.success) {
+        throw new Error(jsonRes.message || "Error al insertar precios en saArtPrecio");
+      }
+      toast.success(jsonRes.message || "Precios registrados exitosamente en saArtPrecio.");
+      await previewMissingPricesInProfit();
+    } catch (err: any) {
+      toast.error(`Error al registrar precios: ${err.message}`);
+    } finally {
+      isApplyingMissingPrices = false;
+    }
+  }
+
+  async function previewHkaExtraction() {
+    isExtractingHka = true;
+    hkaConfirmReplicate = false;
+    try {
+      toast.info("Consultando facturas emitidas en The Factory HKA y auditando contra Profit Plus...");
+      const res = await fetch("/api/integrations/hka/extract", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(buildHkaPayload({ format: "json" }))
+      });
+      const jsonRes = await res.json();
+      if (!res.ok || !jsonRes.success) {
+        throw new Error(jsonRes.message || "No se pudo extraer la información de HKA");
+      }
+      hkaPlanResult = jsonRes;
+      const sel: Record<string, boolean> = {};
+      for (const inv of jsonRes.plan?.invoices || []) {
+        sel[inv.hka_numero_documento] = inv.action === "CREATE";
+      }
+      hkaSelectedDocs = sel;
+      toast.success(
+        `Extracción lista: ${jsonRes.plan.summary.totalHkaDocuments} documento(s) encontrados (${jsonRes.plan.summary.invoicesToCreate} nuevos para Profit).`
+      );
+    } catch (err: any) {
+      toast.error(`Error al extraer desde HKA: ${err.message}`);
+    } finally {
+      isExtractingHka = false;
+    }
+  }
+
+  async function exportHkaFile(format: "excel" | "sql") {
+    isExportingHka = format;
+    try {
+      const selected = getSelectedHkaDocsArray();
+      const res = await fetch("/api/integrations/hka/extract", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(
+          buildHkaPayload({
+            format,
+            ...(selected ? { selected_hka_docs: selected } : {})
+          })
+        )
+      });
+
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}));
+        throw new Error(errJson.message || `Error al generar archivo ${format.toUpperCase()}`);
+      }
+
+      const blob = await res.blob();
+      const disposition = res.headers.get("Content-Disposition") || "";
+      const fnMatch = disposition.match(/filename="([^"]+)"/);
+      const defaultName =
+        format === "excel" ? "Auditoria_HKA_Profit.xlsx" : "Replicacion_HKA_Profit.sql";
+      const fileName = fnMatch?.[1] || defaultName;
+
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+
+      toast.success(`Archivo ${fileName} descargado exitosamente.`);
+    } catch (err: any) {
+      toast.error(`Error al exportar ${format.toUpperCase()}: ${err.message}`);
+    } finally {
+      isExportingHka = null;
+    }
+  }
+
+  async function executeHkaReplication() {
+    const selected = getSelectedHkaDocsArray();
+    if (!selected || selected.length === 0) {
+      toast.error("Seleccione al menos una factura pendiente para replicar en Profit Plus.");
+      return;
+    }
+
+    isReplicatingHka = true;
+    try {
+      toast.info(`Replicando ${selected.length} factura(s) en Profit Plus...`);
+      const res = await fetch("/api/integrations/hka/replicate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(
+          buildHkaPayload({
+            selected_hka_docs: selected,
+            dry_run: false,
+            confirm: true
+          })
+        )
+      });
+      const jsonRes = await res.json();
+      if (!res.ok || !jsonRes.success) {
+        throw new Error(jsonRes.message || "Error al replicar en Profit Plus");
+      }
+      toast.success(jsonRes.message || "Facturas replicadas exitosamente en Profit Plus.");
+      hkaConfirmReplicate = false;
+      await previewHkaExtraction();
+    } catch (err: any) {
+      toast.error(`Error al replicar en Profit Plus: ${err.message}`);
+    } finally {
+      isReplicatingHka = false;
     }
   }
 
@@ -657,6 +926,19 @@
               >
                 <RefreshCw size={13} class={isSyncing ? "animate-spin" : ""} />
                 <span>Sincronizar</span>
+              </button>
+            {/if}
+
+            <!-- Botón Extraer / Exportar / Replicar (Específico para The Factory HKA cuando está activo) -->
+            {#if item.id === "the_factory_hka" && item.is_active}
+              <button
+                type="button"
+                onclick={() => openHkaModal()}
+                class="px-3.5 py-2 rounded-xl bg-cyan-500/15 hover:bg-cyan-500/25 text-cyan-800 dark:text-cyan-300 border border-cyan-500/30 text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer active:scale-95"
+                title="Extraer facturas de HKA, exportar en Excel o SQL y replicar en Profit Plus"
+              >
+                <Database size={13} />
+                <span>Extraer / Profit</span>
               </button>
             {/if}
           </div>
@@ -1876,6 +2158,522 @@
             <span>Iniciar Sincronización Ahora</span>
           {/if}
         </button>
+      </div>
+    </div>
+  </div>
+{/if}
+
+<!-- ============================================================== -->
+<!-- MODAL DE AUDITORÍA, EXPORTACIÓN (EXCEL/SQL) Y REPLICACIÓN HKA  -->
+<!-- ============================================================== -->
+{#if isHkaModalOpen}
+  <div
+    class="fixed inset-0 z-[115] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
+    in:fade={{ duration: 180 }}
+  >
+    <div
+      class="fixed inset-0"
+      onclick={closeHkaModal}
+      role="presentation"
+    ></div>
+
+    <div
+      class="relative z-10 w-full max-w-5xl max-h-[92vh] overflow-hidden rounded-3xl bg-surface-base border border-border-subtle shadow-2xl flex flex-col"
+      in:scale={{ duration: 200, start: 0.96 }}
+    >
+      <!-- Cabecera -->
+      <div class="p-5 md:p-6 border-b border-border-subtle flex items-center justify-between bg-surface-raised">
+        <div class="flex items-center gap-3.5">
+          <div class="w-11 h-11 rounded-2xl bg-cyan-500/15 border border-cyan-500/30 flex items-center justify-center text-cyan-500">
+            <Receipt size={22} />
+          </div>
+          <div>
+            <h3 class="text-base md:text-lg font-black text-text-base">
+              Extracción y Replicación Fiscal: The Factory HKA → Profit Plus
+            </h3>
+            <p class="text-xs text-text-muted font-medium">
+              Extrae las facturas ya emitidas en HKA, audita clientes/artículos/tasas y exporta en Excel o SQL antes de recrear en Profit Plus.
+            </p>
+          </div>
+        </div>
+        <button
+          type="button"
+          onclick={closeHkaModal}
+          class="p-2 rounded-xl text-text-muted hover:text-text-base hover:bg-surface-soft transition-colors cursor-pointer"
+        >
+          <X size={18} />
+        </button>
+      </div>
+
+      <!-- Contenido Scrollable -->
+      <div class="p-5 md:p-6 overflow-y-auto space-y-5 flex-1">
+        <!-- Filtros y Parámetros -->
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-3 bg-surface-raised p-4 rounded-2xl border border-border-subtle">
+          <div>
+            <label class="block text-[11px] font-bold text-text-muted uppercase mb-1">
+              Sucursal Profit Destino
+            </label>
+            <select
+              bind:value={hkaTargetBranch}
+              class="w-full bg-surface-base border border-border-subtle rounded-xl px-3 py-2 text-xs font-semibold text-text-base outline-none focus:border-brand-500"
+            >
+              {#each data.branches || [] as b}
+                <option value={b.id}>{b.name}</option>
+              {/each}
+            </select>
+          </div>
+
+          <div>
+            <label class="block text-[11px] font-bold text-text-muted uppercase mb-1">
+              Tipo Documento / Serie
+            </label>
+            <div class="flex gap-1.5">
+              <select
+                bind:value={hkaTipoDoc}
+                class="flex-1 bg-surface-base border border-border-subtle rounded-xl px-2.5 py-2 text-xs font-semibold text-text-base outline-none focus:border-brand-500"
+              >
+                <option value="ALL">Todos (01/02/03)</option>
+                <option value="01">01 - Factura</option>
+                <option value="03">03 - Nota Crédito</option>
+                <option value="02">02 - Nota Débito</option>
+              </select>
+              <input
+                type="text"
+                bind:value={hkaSerie}
+                placeholder="Serie (*)"
+                title="Dejar vacío para traer todas las series"
+                class="w-20 bg-surface-base border border-border-subtle rounded-xl px-2.5 py-2 text-xs font-mono text-text-base outline-none focus:border-brand-500"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label class="block text-[11px] font-bold text-text-muted uppercase mb-1">
+              Rango N° Documento (Opc.)
+            </label>
+            <div class="flex items-center gap-1.5">
+              <input
+                type="number"
+                bind:value={hkaDocInicio}
+                placeholder="Desde"
+                class="w-1/2 bg-surface-base border border-border-subtle rounded-xl px-2.5 py-2 text-xs font-mono text-text-base outline-none focus:border-brand-500"
+              />
+              <input
+                type="number"
+                bind:value={hkaDocFin}
+                placeholder="Hasta"
+                class="w-1/2 bg-surface-base border border-border-subtle rounded-xl px-2.5 py-2 text-xs font-mono text-text-base outline-none focus:border-brand-500"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label class="block text-[11px] font-bold text-text-muted uppercase mb-1">
+              Rango Fechas Emisión (Opc.)
+            </label>
+            <div class="flex items-center gap-1.5">
+              <input
+                type="date"
+                bind:value={hkaFechaInicio}
+                class="w-1/2 bg-surface-base border border-border-subtle rounded-xl px-2 py-2 text-[11px] text-text-base outline-none focus:border-brand-500"
+              />
+              <input
+                type="date"
+                bind:value={hkaFechaFin}
+                class="w-1/2 bg-surface-base border border-border-subtle rounded-xl px-2 py-2 text-[11px] text-text-base outline-none focus:border-brand-500"
+              />
+            </div>
+          </div>
+
+          <!-- Fila 2: Opciones Profit Plus -->
+          <div>
+            <label class="block text-[11px] font-bold text-text-muted uppercase mb-1">
+              Moneda Cabecera Profit
+            </label>
+            <select
+              bind:value={hkaMonedaProfit}
+              class="w-full bg-surface-base border border-border-subtle rounded-xl px-3 py-2 text-xs font-semibold text-text-base outline-none focus:border-brand-500"
+            >
+              <option value="BS">BS (Tasa 1.00 - Nativo HKA VES)</option>
+              <option value="USD">USD (Tasa BCV histórica saTasa)</option>
+            </select>
+          </div>
+
+          <div>
+            <label class="block text-[11px] font-bold text-text-muted uppercase mb-1">
+              Moneda Precio 01 (saArtPrecio)
+            </label>
+            <select
+              bind:value={hkaMonedaPrecioArt}
+              class="w-full bg-surface-base border border-border-subtle rounded-xl px-3 py-2 text-xs font-semibold text-text-base outline-none focus:border-brand-500"
+            >
+              <option value="USD">USD (Otra Moneda prec_om=1 / BCV)</option>
+              <option value="BS">BS (Moneda Base prec_om=0)</option>
+            </select>
+          </div>
+
+          <div>
+            <label class="block text-[11px] font-bold text-text-muted uppercase mb-1">
+              Saldo CxC Inicial
+            </label>
+            <select
+              bind:value={hkaSaldoMode}
+              class="w-full bg-surface-base border border-border-subtle rounded-xl px-3 py-2 text-xs font-semibold text-text-base outline-none focus:border-brand-500"
+            >
+              <option value="pendiente">Pendiente (= Total Neto, cruzar cobro)</option>
+              <option value="cero">Saldo 0.00 (Sin saldo pendiente)</option>
+            </select>
+          </div>
+
+          <div class="flex flex-col justify-center gap-1.5 pt-2">
+            <label class="flex items-center gap-2 text-[11px] font-semibold text-text-base cursor-pointer">
+              <input type="checkbox" bind:checked={hkaPadDocNum} class="rounded accent-cyan-500" />
+              <span>Correlativo 10 dígitos (<code class="font-mono">0000000512</code>)</span>
+            </label>
+            <div class="flex items-center gap-3">
+              <label class="flex items-center gap-1.5 text-[11px] font-semibold text-text-base cursor-pointer">
+                <input type="checkbox" bind:checked={hkaSkipZero} class="rounded accent-cyan-500" />
+                <span>Omitir 0.00</span>
+              </label>
+              <label class="flex items-center gap-1.5 text-[11px] font-semibold text-text-base cursor-pointer">
+                <input type="checkbox" bind:checked={hkaIncludeAnnulled} class="rounded accent-cyan-500" />
+                <span>Incluir anuladas</span>
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <!-- Barra de Acciones de Consulta y Exportación -->
+        <div class="flex flex-wrap items-center justify-between gap-3">
+          <div class="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              disabled={isExtractingHka || isCheckingMissingPrices}
+              onclick={previewHkaExtraction}
+              class="px-4 py-2.5 rounded-2xl bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold flex items-center gap-2 shadow-md shadow-cyan-500/20 cursor-pointer disabled:opacity-50"
+            >
+              {#if isExtractingHka}
+                <Loader2 size={15} class="animate-spin" />
+                <span>Extrayendo de HKA y Auditando BD...</span>
+              {:else}
+                <Search size={15} />
+                <span>1. Consultar y Previsualizar Facturas HKA</span>
+              {/if}
+            </button>
+
+            <button
+              type="button"
+              disabled={isCheckingMissingPrices || isExtractingHka}
+              onclick={previewMissingPricesInProfit}
+              title="Detecta al instante artículos ya creados en Profit Plus que no tengan Precio 01 en saArtPrecio, tomando su última factura activa sin redescargar desde HKA"
+              class="px-4 py-2.5 rounded-2xl bg-purple-500/15 hover:bg-purple-500/25 text-purple-800 dark:text-purple-300 border border-purple-500/30 text-xs font-bold flex items-center gap-2 cursor-pointer disabled:opacity-50"
+            >
+              {#if isCheckingMissingPrices}
+                <Loader2 size={14} class="animate-spin" />
+                <span>Verificando saArtPrecio...</span>
+              {:else}
+                <Sparkles size={15} />
+                <span>Completar Precios Faltantes en Profit (saArtPrecio)</span>
+              {/if}
+            </button>
+          </div>
+
+          <div class="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              disabled={isExportingHka !== null || isExtractingHka}
+              onclick={() => exportHkaFile("excel")}
+              class="px-4 py-2.5 rounded-2xl bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-800 dark:text-emerald-300 border border-emerald-500/30 text-xs font-bold flex items-center gap-2 cursor-pointer disabled:opacity-50"
+            >
+              {#if isExportingHka === "excel"}
+                <Loader2 size={14} class="animate-spin" />
+                <span>Generando Excel...</span>
+              {:else}
+                <FileSpreadsheet size={15} />
+                <span>Exportar Excel (.xlsx)</span>
+              {/if}
+            </button>
+
+            <button
+              type="button"
+              disabled={isExportingHka !== null || isExtractingHka}
+              onclick={() => exportHkaFile("sql")}
+              class="px-4 py-2.5 rounded-2xl bg-amber-500/15 hover:bg-amber-500/25 text-amber-900 dark:text-amber-300 border border-amber-500/35 text-xs font-bold flex items-center gap-2 cursor-pointer disabled:opacity-50"
+            >
+              {#if isExportingHka === "sql"}
+                <Loader2 size={14} class="animate-spin" />
+                <span>Generando SQL...</span>
+              {:else}
+                <FileCode2 size={15} />
+                <span>Exportar Script SQL (.sql)</span>
+              {/if}
+            </button>
+          </div>
+        </div>
+
+        <!-- Panel Rápido: Artículos en Profit Plus sin Precio en saArtPrecio -->
+        {#if hkaMissingPricesResult}
+          <div class="rounded-2xl border border-purple-500/30 bg-purple-500/5 overflow-hidden space-y-3 p-4" in:slide={{ duration: 160 }}>
+            <div class="flex flex-wrap items-center justify-between gap-2">
+              <div class="flex items-center gap-2">
+                <Sparkles size={16} class="text-purple-500" />
+                <span class="text-xs font-black text-text-base">
+                  Auditoría Directa de Precios en {hkaMissingPricesResult.databaseName} (dbo.saArtPrecio — Precio 01 en {hkaMissingPricesResult.monedaPrecio})
+                </span>
+              </div>
+              <button
+                type="button"
+                onclick={() => (hkaMissingPricesResult = null)}
+                class="text-[11px] font-bold text-text-muted hover:text-text-base cursor-pointer"
+              >
+                Ocultar
+              </button>
+            </div>
+
+            <p class="text-xs text-text-muted">
+              {hkaMissingPricesResult.message}
+            </p>
+
+            {#if hkaMissingPricesResult.count > 0}
+              <div class="max-h-56 overflow-auto rounded-xl border border-border-subtle bg-surface-base">
+                <table class="w-full text-left text-xs">
+                  <thead class="bg-surface-soft/80 text-[10px] uppercase text-text-muted sticky top-0">
+                    <tr>
+                      <th class="p-2">Co_Art</th>
+                      <th class="p-2">Descripción</th>
+                      <th class="p-2">Últ. Factura</th>
+                      <th class="p-2 text-right">Tasa BCV</th>
+                      <th class="p-2 text-right">Base Bs</th>
+                      <th class="p-2 text-right">Base USD</th>
+                      <th class="p-2 text-right">Ref c/IVA USD</th>
+                      <th class="p-2 text-right">Precio 01 ({hkaMissingPricesResult.monedaPrecio})</th>
+                    </tr>
+                  </thead>
+                  <tbody class="divide-y divide-border-subtle font-mono text-[11px]">
+                    {#each hkaMissingPricesResult.articles as art}
+                      <tr class="hover:bg-surface-soft/50">
+                        <td class="p-2 font-bold text-text-base">{art.co_art}</td>
+                        <td class="p-2 font-sans text-text-base truncate max-w-[220px]" title={art.art_des}>{art.art_des}</td>
+                        <td class="p-2 text-text-muted">{art.latest_doc_num} ({art.latest_fec_emis})</td>
+                        <td class="p-2 text-right text-text-muted">{Number(art.tasa_bcv_fecha).toFixed(2)}</td>
+                        <td class="p-2 text-right text-text-muted">
+                          {Number(art.latest_price_bs).toLocaleString("es-VE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </td>
+                        <td class="p-2 text-right text-cyan-700 dark:text-cyan-300 font-semibold">
+                          ${Number(art.latest_price_usd).toFixed(4)}
+                        </td>
+                        <td class="p-2 text-right text-emerald-700 dark:text-emerald-300 font-bold">
+                          ${Number(art.ref_con_iva_usd).toFixed(2)}
+                        </td>
+                        <td class="p-2 text-right font-black text-purple-700 dark:text-purple-300">
+                          {Number(art.monto_asignar).toFixed(4)} {art.co_mone_precio}
+                        </td>
+                      </tr>
+                    {/each}
+                  </tbody>
+                </table>
+              </div>
+
+              <div class="flex flex-wrap items-center justify-end gap-2 pt-1">
+                <button
+                  type="button"
+                  onclick={downloadMissingPricesSql}
+                  class="px-3.5 py-2 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 text-amber-900 dark:text-amber-300 border border-amber-500/35 text-xs font-bold flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Download size={14} />
+                  <span>Descargar SQL Precios (.sql)</span>
+                </button>
+                <button
+                  type="button"
+                  disabled={isApplyingMissingPrices}
+                  onclick={applyMissingPricesInProfit}
+                  class="px-4 py-2 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white text-xs font-bold shadow-md flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                >
+                  {#if isApplyingMissingPrices}
+                    <Loader2 size={14} class="animate-spin" />
+                    <span>Registrando en saArtPrecio...</span>
+                  {:else}
+                    <CheckCircle2 size={14} />
+                    <span>Registrar Precio 01 en saArtPrecio ({hkaMissingPricesResult.count} artículos)</span>
+                  {/if}
+                </button>
+              </div>
+            {/if}
+          </div>
+        {/if}
+
+        <!-- Resultados de Previsualización -->
+        {#if hkaPlanResult?.plan}
+          {@const p = hkaPlanResult.plan}
+          <div class="space-y-4" in:fade={{ duration: 150 }}>
+            <!-- Métricas Resumen -->
+            <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2.5 font-mono">
+              <div class="p-3 rounded-2xl bg-surface-raised border border-border-subtle">
+                <span class="text-[10px] text-text-muted uppercase block">Extraídas HKA</span>
+                <span class="text-base font-black text-text-base">{p.summary.totalHkaDocuments}</span>
+              </div>
+              <div class="p-3 rounded-2xl bg-cyan-500/10 border border-cyan-500/25">
+                <span class="text-[10px] text-cyan-700 dark:text-cyan-300 uppercase block">Por Crear Profit</span>
+                <span class="text-base font-black text-cyan-700 dark:text-cyan-300">{p.summary.invoicesToCreate}</span>
+              </div>
+              <div class="p-3 rounded-2xl bg-emerald-500/10 border border-emerald-500/25">
+                <span class="text-[10px] text-emerald-700 dark:text-emerald-300 uppercase block">Ya en Profit</span>
+                <span class="text-base font-black text-emerald-700 dark:text-emerald-300">{p.summary.invoicesAlreadyInProfit}</span>
+              </div>
+              <div class="p-3 rounded-2xl bg-indigo-500/10 border border-indigo-500/25">
+                <span class="text-[10px] text-indigo-700 dark:text-indigo-300 uppercase block">Clientes Nuevos</span>
+                <span class="text-base font-black text-indigo-700 dark:text-indigo-300">{p.summary.clientsToCreate} / {p.summary.totalClientsReferenced}</span>
+              </div>
+              <div class="p-3 rounded-2xl bg-purple-500/10 border border-purple-500/25">
+                <span class="text-[10px] text-purple-700 dark:text-purple-300 uppercase block">Artículos / Precios</span>
+                <span class="text-base font-black text-purple-700 dark:text-purple-300">{p.summary.articlesToCreate} / {p.summary.totalArticlesReferenced}</span>
+                {#if p.summary.articlesMissingPrice > 0}
+                  <span class="text-[9px] text-purple-600 dark:text-purple-400 block">+{p.summary.articlesMissingPrice} Precio 01</span>
+                {/if}
+              </div>
+              <div class="p-3 rounded-2xl bg-surface-raised border border-border-subtle">
+                <span class="text-[10px] text-text-muted uppercase block">Total Neto (Bs)</span>
+                <span class="text-sm font-black text-text-base">
+                  {Number(p.summary.totalNetoBsToReplicate || 0).toLocaleString("es-VE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </span>
+              </div>
+            </div>
+
+            <!-- Tabla de Facturas Auditadas -->
+            <div class="rounded-2xl border border-border-subtle overflow-hidden bg-surface-raised">
+              <div class="px-4 py-2.5 bg-surface-soft border-b border-border-subtle flex items-center justify-between text-xs">
+                <span class="font-bold text-text-base">
+                  Detalle de Documentos Extraídos ({p.databaseName} • Entorno HKA: {p.hkaEnvironment.toUpperCase()})
+                </span>
+                <span class="text-[11px] text-text-muted font-mono">
+                  Control: {p.summary.minControlNumber || "-"} → {p.summary.maxControlNumber || "-"}
+                </span>
+              </div>
+              <div class="max-h-72 overflow-auto">
+                <table class="w-full text-left text-xs">
+                  <thead class="bg-surface-soft/70 text-[10px] uppercase text-text-muted sticky top-0">
+                    <tr>
+                      <th class="p-2.5 w-8 text-center">Sel</th>
+                      <th class="p-2.5">Doc Profit</th>
+                      <th class="p-2.5">N° Control</th>
+                      <th class="p-2.5">Emisión</th>
+                      <th class="p-2.5">Cliente (co_cli)</th>
+                      <th class="p-2.5">Ítems / Comentario Factura</th>
+                      <th class="p-2.5 text-right">Total Bs</th>
+                      <th class="p-2.5 text-right">Tasa BCV</th>
+                      <th class="p-2.5">Estado</th>
+                    </tr>
+                  </thead>
+                  <tbody class="divide-y divide-border-subtle font-mono text-[11px]">
+                    {#each p.invoices as inv}
+                      <tr class="hover:bg-surface-soft/50">
+                        <td class="p-2.5 text-center">
+                          <input
+                            type="checkbox"
+                            disabled={inv.action !== "CREATE"}
+                            bind:checked={hkaSelectedDocs[inv.hka_numero_documento]}
+                            class="rounded accent-cyan-500"
+                          />
+                        </td>
+                        <td class="p-2.5 font-bold text-text-base">
+                          {inv.doc_num_profit}
+                          {#if inv.anulado}
+                            <span class="ml-1 px-1.5 py-0.5 rounded bg-red-500/15 text-red-600 dark:text-red-400 text-[9px]">ANULADA</span>
+                          {/if}
+                        </td>
+                        <td class="p-2.5 text-text-muted">{inv.n_control}</td>
+                        <td class="p-2.5 text-text-muted">{inv.fec_emis_iso}</td>
+                        <td class="p-2.5 font-sans">
+                          <div class="font-bold text-text-base truncate max-w-[200px]" title={inv.cli_des}>{inv.cli_des}</div>
+                          <div class="text-[10px] text-text-muted font-mono">{inv.co_cli} ({inv.rif})</div>
+                        </td>
+                        <td class="p-2.5 font-sans">
+                          <div class="font-mono font-bold text-text-base" title={inv.renglones.map((r: any) => `${r.co_art}: ${r.des_art}`).join(" | ")}>
+                            {inv.renglones.map((r: any) => r.co_art).join(", ")}
+                          </div>
+                          {#if inv.comentario_factura}
+                            <div class="text-[10px] text-cyan-700 dark:text-cyan-300 font-semibold truncate max-w-[230px]" title={inv.comentario_factura}>
+                              {inv.comentario_factura}
+                            </div>
+                          {/if}
+                        </td>
+                        <td class="p-2.5 text-right font-bold text-text-base">
+                          {Number(inv.total_neto_bs).toLocaleString("es-VE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </td>
+                        <td class="p-2.5 text-right text-text-muted">
+                          {Number(inv.tasa_bcv_referencia).toFixed(2)}
+                        </td>
+                        <td class="p-2.5 font-sans">
+                          {#if inv.action === "CREATE"}
+                            <span class="px-2 py-0.5 rounded-lg bg-cyan-500/15 text-cyan-800 dark:text-cyan-300 font-bold text-[10px]">
+                              LISTA PARA CREAR
+                            </span>
+                          {:else if inv.action === "SKIP_EXISTING"}
+                            <span class="px-2 py-0.5 rounded-lg bg-emerald-500/15 text-emerald-800 dark:text-emerald-300 font-bold text-[10px]">
+                              YA EN PROFIT
+                            </span>
+                          {:else}
+                            <span class="px-2 py-0.5 rounded-lg bg-amber-500/15 text-amber-900 dark:text-amber-300 font-bold text-[10px]" title={inv.warnings?.join(" • ")}>
+                              OMITIDA ({inv.action.replace("SKIP_", "")})
+                            </span>
+                          {/if}
+                        </td>
+                      </tr>
+                    {/each}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {#if p.warnings && p.warnings.length > 0}
+              <div class="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-xs space-y-1">
+                <div class="font-bold text-amber-900 dark:text-amber-300 flex items-center gap-1.5">
+                  <AlertCircle size={14} />
+                  <span>Observaciones de validación detectadas ({p.warnings.length}):</span>
+                </div>
+                <ul class="list-disc list-inside text-[11px] text-amber-900/90 dark:text-amber-200/90 space-y-0.5 max-h-24 overflow-y-auto">
+                  {#each p.warnings as w}
+                    <li><strong>Doc {w.doc_num} ({w.n_control}):</strong> {w.message}</li>
+                  {/each}
+                </ul>
+              </div>
+            {/if}
+          </div>
+        {/if}
+      </div>
+
+      <!-- Footer -->
+      <div class="p-5 border-t border-border-subtle bg-surface-soft/60 flex flex-wrap items-center justify-between gap-3">
+        <button
+          type="button"
+          onclick={closeHkaModal}
+          class="px-5 py-2.5 rounded-2xl text-xs font-bold text-text-muted hover:text-text-base hover:bg-surface-soft cursor-pointer"
+        >
+          Cerrar
+        </button>
+
+        {#if hkaPlanResult?.plan?.summary?.invoicesToCreate > 0}
+          <div class="flex items-center gap-3">
+            <label class="flex items-center gap-2 text-xs font-bold text-amber-800 dark:text-amber-300 cursor-pointer">
+              <input type="checkbox" bind:checked={hkaConfirmReplicate} class="rounded accent-emerald-500" />
+              <span>Ya revisé el Excel/SQL y confirmo escribir en Profit Plus ({hkaPlanResult.plan.databaseName})</span>
+            </label>
+            <button
+              type="button"
+              disabled={!hkaConfirmReplicate || isReplicatingHka}
+              onclick={executeHkaReplication}
+              class="px-5 py-2.5 rounded-2xl bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-white text-xs font-bold shadow-lg shadow-emerald-500/20 flex items-center gap-2 cursor-pointer disabled:opacity-40"
+            >
+              {#if isReplicatingHka}
+                <Loader2 size={15} class="animate-spin" />
+                <span>Replicando en Profit Plus...</span>
+              {:else}
+                <Database size={15} />
+                <span>Ejecutar Replicación en Profit</span>
+              {/if}
+            </button>
+          </div>
+        {/if}
       </div>
     </div>
   </div>

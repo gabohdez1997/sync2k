@@ -716,14 +716,22 @@ export async function emitInvoiceHka(
 }
 
 /**
- * Descarga el archivo PDF de una factura emitida: POST /api/DescargaArchivo
+ * Descarga cualquier formato oficial de una factura emitida en HKA: POST /api/DescargaArchivo
+ * Soporta tipoArchivo: 'pdf' | 'json' | 'xml'
  */
-export async function downloadInvoicePdf(
+export async function downloadHkaFile(
   tipoDocumento: string,
   serie: string,
   numeroDocumento: string,
+  tipoArchivo: 'pdf' | 'json' | 'xml' = 'json',
   configOverride?: Partial<HkaConfig>
-): Promise<{ success: boolean; archivo?: string; mensaje?: string }> {
+): Promise<{
+  success: boolean;
+  archivo?: string;
+  decodedText?: string;
+  decodedJson?: any;
+  mensaje?: string;
+}> {
   const cfg = configOverride ? { ...(await getHkaConfig()), ...configOverride } : await getHkaConfig();
 
   const auth = await authenticateHka(cfg);
@@ -743,25 +751,61 @@ export async function downloadInvoicePdf(
         'Authorization': `Bearer ${auth.token}`
       },
       body: JSON.stringify({
-        tipoDocumento,
-        serie,
-        numeroDocumento,
-        tipoArchivo: 'pdf'
+        tipoDocumento: String(tipoDocumento || '01'),
+        serie: serie ?? '',
+        numeroDocumento: String(numeroDocumento),
+        tipoArchivo
       })
     });
 
-    const data = await res.json();
+    const data = await res.json().catch(() => null);
     if (res.ok && data?.archivo) {
-      return { success: true, archivo: data.archivo, mensaje: data.mensaje };
+      let decodedText: string | undefined;
+      let decodedJson: any = undefined;
+
+      if (tipoArchivo === 'json' || tipoArchivo === 'xml') {
+        decodedText = Buffer.from(data.archivo, 'base64').toString('utf8');
+        if (tipoArchivo === 'json') {
+          try {
+            decodedJson = JSON.parse(decodedText);
+          } catch {
+            decodedJson = null;
+          }
+        }
+      }
+
+      return {
+        success: true,
+        archivo: data.archivo,
+        decodedText,
+        decodedJson,
+        mensaje: data.mensaje
+      };
     }
-    return { success: false, mensaje: data?.mensaje || 'No se pudo obtener el PDF del documento' };
+    return {
+      success: false,
+      mensaje: data?.mensaje || `No se pudo obtener el archivo (${tipoArchivo}) del documento ${numeroDocumento}`
+    };
   } catch (err: any) {
     return { success: false, mensaje: err.message };
   }
 }
 
 /**
- * Consulta el estado fiscal de un documento ante The Factory HKA: POST /api/EstatusDocumento
+ * Descarga el archivo PDF de una factura emitida: POST /api/DescargaArchivo
+ */
+export async function downloadInvoicePdf(
+  tipoDocumento: string,
+  serie: string,
+  numeroDocumento: string,
+  configOverride?: Partial<HkaConfig>
+): Promise<{ success: boolean; archivo?: string; mensaje?: string }> {
+  const res = await downloadHkaFile(tipoDocumento, serie, numeroDocumento, 'pdf', configOverride);
+  return { success: res.success, archivo: res.archivo, mensaje: res.mensaje };
+}
+
+/**
+ * Consulta el estado fiscal de un documento ante The Factory HKA: POST /api/EstadoDocumento
  */
 export async function getHkaDocumentStatus(
   numeroDocumento: string | number,
@@ -773,6 +817,15 @@ export async function getHkaDocumentStatus(
   codigo?: string | number;
   mensaje?: string;
   estatus?: string;
+  estado?: {
+    estadoDocumento?: string;
+    numeroControl?: string;
+    fechaAsignacion?: string;
+    horaAsignacion?: string;
+    fechaAnulacion?: string;
+    motivo?: string;
+    urlConsulta?: string;
+  };
   resultado?: any;
 }> {
   const cfg = configOverride ? { ...(await getHkaConfig()), ...configOverride } : await getHkaConfig();
@@ -787,7 +840,7 @@ export async function getHkaDocumentStatus(
   }
 
   const baseUrl = (cfg.base_url || 'https://demoemision.thefactoryhka.com.ve').replace(/\/+$/, '');
-  const url = `${baseUrl}/api/EstatusDocumento`;
+  const url = `${baseUrl}/api/EstadoDocumento`;
 
   try {
     const res = await fetch(url, {
@@ -799,7 +852,7 @@ export async function getHkaDocumentStatus(
       },
       body: JSON.stringify({
         tipoDocumento,
-        serie: serie ?? (cfg.serie_default || ''),
+        serie: serie ?? '',
         numeroDocumento: String(numeroDocumento)
       })
     });
@@ -811,18 +864,227 @@ export async function getHkaDocumentStatus(
       data = { raw: await res.text() };
     }
 
+    const estadoObj = data?.estado || data?.resultado || null;
     return {
       success: res.ok && (data?.codigo === '200' || data?.codigo === 200),
       codigo: data?.codigo || res.status,
       mensaje: data?.mensaje || (res.ok ? 'Consulta exitosa' : 'Error en consulta'),
-      estatus: data?.resultado?.estatus || data?.resultado?.status,
-      resultado: data?.resultado || data
+      estatus: estadoObj?.estadoDocumento || estadoObj?.estatus || estadoObj?.status,
+      estado: estadoObj,
+      resultado: estadoObj || data
     };
   } catch (err: any) {
     return {
       success: false,
       codigo: 500,
       mensaje: `Error al consultar estatus en HKA: ${err.message}`
+    };
+  }
+}
+
+export interface HkaAssignmentItem {
+  serie: string;
+  tipoDocumento: string;
+  numeroDocumento: string;
+  numeroControl: string;
+  fechaAsignacion: string;
+}
+
+/**
+ * Parsea fecha en formato YYYY-MM-DD o DD/MM/YYYY a Date local
+ */
+function parseFlexibleDate(str?: string): Date | null {
+  if (!str) return null;
+  const s = str.trim();
+  const isoMatch = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (isoMatch) {
+    return new Date(Number(isoMatch[1]), Number(isoMatch[2]) - 1, Number(isoMatch[3]));
+  }
+  const dmyMatch = s.match(/^(\d{2})\/(\d{2})\/(\d{4})/);
+  if (dmyMatch) {
+    return new Date(Number(dmyMatch[3]), Number(dmyMatch[2]) - 1, Number(dmyMatch[1]));
+  }
+  return null;
+}
+
+function toHkaDateString(d: Date): string {
+  const dd = String(d.getDate()).padStart(2, '0');
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const yyyy = d.getFullYear();
+  return `${dd}/${mm}/${yyyy}`;
+}
+
+/**
+ * Lista todas las asignaciones de documentos emitidos en The Factory HKA: POST /api/ListadoAsignaciones
+ * Soporta paginación automática y división en ventanas <= 28 días si se filtra por rango de fechas
+ * (evitando el límite estricto de 30 días del API HKA V2).
+ */
+export async function listHkaAssignments(
+  filters: {
+    serie?: string;
+    tipoDocumento?: string;
+    numeroDocumentoInicio?: string | number;
+    numeroDocumentoFin?: string | number;
+    fechaInicio?: string; // YYYY-MM-DD o DD/MM/YYYY
+    fechaFin?: string; // YYYY-MM-DD o DD/MM/YYYY
+  } = {},
+  configOverride?: Partial<HkaConfig>
+): Promise<{
+  success: boolean;
+  total: number;
+  asignaciones: HkaAssignmentItem[];
+  mensaje?: string;
+}> {
+  const cfg = configOverride ? { ...(await getHkaConfig()), ...configOverride } : await getHkaConfig();
+
+  const auth = await authenticateHka(cfg);
+  if (!auth.success || !auth.token) {
+    return {
+      success: false,
+      total: 0,
+      asignaciones: [],
+      mensaje: `Fallo de autenticación HKA: ${auth.mensaje}`
+    };
+  }
+
+  const baseUrl = (cfg.base_url || 'https://demoemision.thefactoryhka.com.ve').replace(/\/+$/, '');
+  const url = `${baseUrl}/api/ListadoAsignaciones`;
+
+  const fetchWindow = async (windowBody: Record<string, any>): Promise<{ ok: boolean; items: HkaAssignmentItem[]; msg?: string }> => {
+    const collected: HkaAssignmentItem[] = [];
+    let page = 1;
+    let totalPages = 1;
+
+    while (page <= totalPages && page <= 200) {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'Authorization': `Bearer ${auth.token}`
+        },
+        body: JSON.stringify({
+          ...windowBody,
+          numPagina: page
+        })
+      });
+
+      const data = await res.json().catch(() => null);
+      // Código 204 o "No se encontraron registros" no es un fallo fatal sino lista vacía
+      if (!res.ok) {
+        const msg = String(data?.mensaje || '');
+        if (res.status === 404 || msg.toLowerCase().includes('no se encontr') || msg.toLowerCase().includes('sin registros')) {
+          break;
+        }
+        return { ok: false, items: collected, msg: msg || `HTTP ${res.status} en ListadoAsignaciones` };
+      }
+
+      if (Array.isArray(data?.asignaciones)) {
+        for (const row of data.asignaciones) {
+          collected.push({
+            serie: String(row.serie ?? '').trim(),
+            tipoDocumento: String(row.tipoDocumento ?? '01').trim(),
+            numeroDocumento: String(row.numeroDocumento ?? '').trim(),
+            numeroControl: String(row.numeroControl ?? '').trim(),
+            fechaAsignacion: String(row.fechaAsignacion ?? '').trim()
+          });
+        }
+      }
+
+      totalPages = Math.max(1, Number(data?.totalPaginas || 1));
+      page++;
+    }
+
+    return { ok: true, items: collected };
+  };
+
+  try {
+    const baseFilter: Record<string, any> = {};
+    if (filters.serie !== undefined && filters.serie !== null && filters.serie !== '*') {
+      // Si el usuario envía serie explícita (ej. "A"), filtramos; si la deja vacía o undefined, omitimos para traer todas las series
+      if (filters.serie !== '') baseFilter.serie = filters.serie;
+    }
+    if (filters.tipoDocumento && filters.tipoDocumento !== 'ALL') {
+      baseFilter.tipoDocumento = filters.tipoDocumento;
+    }
+
+    const dStart = parseFlexibleDate(filters.fechaInicio);
+    const dEnd = parseFlexibleDate(filters.fechaFin);
+
+    const allMap = new Map<string, HkaAssignmentItem>();
+
+    if (dStart && dEnd && dStart <= dEnd) {
+      // Dividir en bloques de 28 días para respetar el límite de 30 días de HKA
+      let cursor = new Date(dStart.getTime());
+      while (cursor <= dEnd) {
+        const chunkEnd = new Date(cursor.getTime());
+        chunkEnd.setDate(chunkEnd.getDate() + 27);
+        const actualEnd = chunkEnd > dEnd ? dEnd : chunkEnd;
+
+        const winBody: Record<string, any> = {
+          ...baseFilter,
+          fechaInicio: toHkaDateString(cursor),
+          fechaFin: toHkaDateString(actualEnd)
+        };
+        if (filters.numeroDocumentoInicio) winBody.numeroDocumentoInicio = String(filters.numeroDocumentoInicio);
+        if (filters.numeroDocumentoFin) winBody.numeroDocumentoFin = String(filters.numeroDocumentoFin);
+
+        const winRes = await fetchWindow(winBody);
+        if (!winRes.ok && allMap.size === 0) {
+          return { success: false, total: 0, asignaciones: [], mensaje: winRes.msg };
+        }
+        for (const it of winRes.items) {
+          allMap.set(`${it.tipoDocumento}__${it.serie}__${it.numeroDocumento}`, it);
+        }
+
+        cursor = new Date(actualEnd.getTime());
+        cursor.setDate(cursor.getDate() + 1);
+      }
+    } else {
+      // Consulta completa por rango de número de documento (evita restricción de 30 días de fechas)
+      const winBody: Record<string, any> = {
+        ...baseFilter,
+        numeroDocumentoInicio: String(filters.numeroDocumentoInicio || '1'),
+        numeroDocumentoFin: String(filters.numeroDocumentoFin || '99999999')
+      };
+      const winRes = await fetchWindow(winBody);
+      if (!winRes.ok) {
+        return { success: false, total: 0, asignaciones: [], mensaje: winRes.msg };
+      }
+      for (const it of winRes.items) {
+        allMap.set(`${it.tipoDocumento}__${it.serie}__${it.numeroDocumento}`, it);
+      }
+    }
+
+    // Si el usuario filtró explícitamente por documentos sin serie (serie === ''), filtrar en memoria si se desea
+    let finalList = Array.from(allMap.values());
+    if (filters.numeroDocumentoInicio || filters.numeroDocumentoFin) {
+      const minN = filters.numeroDocumentoInicio ? Number(filters.numeroDocumentoInicio) : null;
+      const maxN = filters.numeroDocumentoFin ? Number(filters.numeroDocumentoFin) : null;
+      finalList = finalList.filter((it) => {
+        const n = Number(it.numeroDocumento);
+        if (isNaN(n)) return true;
+        if (minN !== null && !isNaN(minN) && n < minN) return false;
+        if (maxN !== null && !isNaN(maxN) && n > maxN) return false;
+        return true;
+      });
+    }
+
+    // Ordenar por Número de Control (orden cronológico fiscal SENIAT)
+    finalList.sort((a, b) => a.numeroControl.localeCompare(b.numeroControl, undefined, { numeric: true }));
+
+    return {
+      success: true,
+      total: finalList.length,
+      asignaciones: finalList,
+      mensaje: `${finalList.length} documento(s) encontrado(s) en The Factory HKA.`
+    };
+  } catch (err: any) {
+    return {
+      success: false,
+      total: 0,
+      asignaciones: [],
+      mensaje: `Error al listar asignaciones en HKA: ${err.message}`
     };
   }
 }
