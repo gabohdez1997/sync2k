@@ -1819,6 +1819,9 @@
       ? firstSelectedDoc.co_ven.trim()
       : (selectedClient.co_ven && selectedClient.co_ven.trim() !== '' ? selectedClient.co_ven.trim() : "01");
 
+    const currentBranchObj = data.branches?.find((b: any) => b.id === selectedBranch);
+    const effectiveCtaIE = currentBranchObj?.default_cta_ingr_egr || currentBranchObj?.sql_config?.profit_defaults?.default_cta_ingr_egr || "I-001";
+
     const payload = {
       co_cli: selectedClient.co_cli,
       co_ven: effectiveCoVen,
@@ -1826,6 +1829,7 @@
       tasa: tasaCobro,
       monto: Math.max(0, Math.round(totalFpBs * 100) / 100),
       descrip: `COBRO CLIENTE ${selectedClient.co_cli}`,
+      co_cta_ingr_egr: effectiveCtaIE,
       renglones,
       formas_pago: active_formas_pago,
       retenciones_iva,

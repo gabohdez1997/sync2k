@@ -1059,10 +1059,18 @@
     if (existingIndex >= 0) {
       cart[existingIndex].qty += qty;
     } else {
+      const itemDispo = (article.disponibilidad && article.disponibilidad.length > 0)
+        ? article.disponibilidad
+        : (data.context?.warehouses || []).map((w: any) => ({
+            co_alma: w.co_alma,
+            des_alma: w.des_alma || w.nombre || w.co_alma,
+            stock: 0
+          }));
       cart = [
         ...cart,
         {
           ...article,
+          disponibilidad: itemDispo,
           qty,
           co_alma_selected: almId,
           price_index_selected: priceIndex,
@@ -2821,7 +2829,7 @@
                             updateCartWarehouse(i, e.currentTarget.value)}
                           class="w-full h-11 bg-surface-soft rounded-xl px-4 text-sm font-black outline-none border border-border-subtle appearance-none cursor-pointer focus:border-brand-500/30 transition-all hover:bg-surface-strong"
                         >
-                          {#each item.disponibilidad || [] as alm}
+                          {#each (item.disponibilidad && item.disponibilidad.length > 0 ? item.disponibilidad : (data.context?.warehouses || []).map((w) => ({ co_alma: w.co_alma, des_alma: w.des_alma || w.nombre || w.co_alma, stock: 0 }))) as alm}
                             <option
                               value={alm.co_alma}
                               class="bg-surface-base text-text-base text-sm"

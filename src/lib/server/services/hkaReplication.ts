@@ -731,8 +731,8 @@ export async function loadProfitAuditContext(
       tipoCliente: defaults.default_client_type || 'DET',
       ctaIngrEgr: defaults.default_cta_ingr_egr || 'I-001',
       segmento: defaults.default_segment || '01',
-      linea: defaults.default_lin || '01',
-      sublinea: defaults.default_subl || '0101',
+      linea: defaults.default_lin || '09',
+      sublinea: defaults.default_subl || '0901',
       categoria: defaults.default_cat || '101001',
       color: defaults.default_color || '01',
       ubicacion: defaults.default_ubicacion || '00001',
@@ -786,8 +786,8 @@ export async function loadProfitAuditContext(
           (SELECT TOP 1 RTRIM(tip_cli) FROM saTipoCliente ORDER BY CASE WHEN RTRIM(tip_cli) = '${ctx.catalogs.tipoCliente}' THEN 0 WHEN RTRIM(tip_cli) = 'DET' THEN 1 WHEN RTRIM(tip_cli) = '01' THEN 2 ELSE 3 END) AS tipo_cli,
           (SELECT TOP 1 RTRIM(co_cta_ingr_egr) FROM saCuentaIngEgr ORDER BY CASE WHEN RTRIM(co_cta_ingr_egr) = '${ctx.catalogs.ctaIngrEgr}' THEN 0 WHEN RTRIM(co_cta_ingr_egr) = 'I-001' THEN 1 ELSE 2 END) AS cta_ie,
           (SELECT TOP 1 RTRIM(co_seg) FROM saSegmento ORDER BY CASE WHEN RTRIM(co_seg) = '${ctx.catalogs.segmento}' THEN 0 WHEN RTRIM(co_seg) = '01' THEN 1 ELSE 2 END) AS segmento,
-          (SELECT TOP 1 RTRIM(co_lin) FROM saLineaArticulo ORDER BY CASE WHEN RTRIM(co_lin) = '${ctx.catalogs.linea}' THEN 0 WHEN RTRIM(co_lin) = '01' THEN 1 ELSE 2 END) AS linea,
-          (SELECT TOP 1 RTRIM(co_subl) FROM saSubLinea ORDER BY CASE WHEN RTRIM(co_subl) = '${ctx.catalogs.sublinea}' THEN 0 WHEN RTRIM(co_subl) = '0101' THEN 1 ELSE 2 END) AS sublinea,
+          (SELECT TOP 1 RTRIM(co_lin) FROM saLineaArticulo ORDER BY CASE WHEN RTRIM(co_lin) = '${ctx.catalogs.linea}' THEN 0 WHEN RTRIM(co_lin) = '09' THEN 1 WHEN RTRIM(co_lin) = '01' THEN 2 ELSE 3 END) AS linea,
+          (SELECT TOP 1 RTRIM(co_subl) FROM saSubLinea ORDER BY CASE WHEN RTRIM(co_subl) = '${ctx.catalogs.sublinea}' THEN 0 WHEN RTRIM(co_subl) = '0901' THEN 1 WHEN RTRIM(co_subl) = '0101' THEN 2 ELSE 3 END) AS sublinea,
           (SELECT TOP 1 RTRIM(co_cat) FROM saCatArticulo ORDER BY CASE WHEN RTRIM(co_cat) = '${ctx.catalogs.categoria}' THEN 0 WHEN RTRIM(co_cat) = '101001' THEN 1 ELSE 2 END) AS categoria,
           (SELECT TOP 1 RTRIM(co_color) FROM saColor ORDER BY CASE WHEN RTRIM(co_color) = '01' THEN 0 ELSE 1 END) AS color,
           (SELECT TOP 1 RTRIM(co_ubicacion) FROM saUbicacion ORDER BY CASE WHEN RTRIM(co_ubicacion) = '00001' THEN 0 ELSE 1 END) AS ubicacion,
@@ -1536,6 +1536,22 @@ export function generateHkaReplicationSql(plan: HkaReplicationPlan, ctx?: Profit
     lines.push(`            1, 1, 0, 0, 0, 0,`);
     lines.push(`            'PROFIT', ${sqlStr(ctx?.catalogs.sucursal || '01', 6)}, GETDATE(), 'PROFIT', ${sqlStr(ctx?.catalogs.sucursal || '01', 6)}, GETDATE(), NEWID()`);
     lines.push(`        );`);
+    lines.push(`    END;`);
+    lines.push(``);
+    lines.push(`    -- Asegurar registro en saStockAlmacen para el almacén por defecto`);
+    lines.push(`    IF NOT EXISTS (`);
+    lines.push(`        SELECT 1 FROM dbo.saStockAlmacen`);
+    lines.push(`        WHERE LTRIM(RTRIM(co_art)) = ${sqlStr(art.co_art, 30)}`);
+    lines.push(`          AND LTRIM(RTRIM(co_alma)) = ${sqlStr(ctx?.catalogs.almacen || '01', 6)}`);
+    lines.push(`          AND tipo = 'ACT'`);
+    lines.push(`    )`);
+    lines.push(`    BEGIN`);
+    lines.push(`        INSERT INTO dbo.saStockAlmacen (co_alma, co_art, tipo, stock, revisado, trasnfe)`);
+    lines.push(`        VALUES `);
+    lines.push(`            (${sqlStr(ctx?.catalogs.almacen || '01', 6)}, ${sqlStr(art.co_art, 30)}, 'ACT', 0.00000, NULL, NULL),`);
+    lines.push(`            (${sqlStr(ctx?.catalogs.almacen || '01', 6)}, ${sqlStr(art.co_art, 30)}, 'COM', 0.00000, NULL, NULL),`);
+    lines.push(`            (${sqlStr(ctx?.catalogs.almacen || '01', 6)}, ${sqlStr(art.co_art, 30)}, 'DES', 0.00000, NULL, NULL),`);
+    lines.push(`            (${sqlStr(ctx?.catalogs.almacen || '01', 6)}, ${sqlStr(art.co_art, 30)}, 'LLE', 0.00000, NULL, NULL);`);
     lines.push(`    END;`);
     lines.push(``);
     if (art.monto_precio_asignar > 0) {
