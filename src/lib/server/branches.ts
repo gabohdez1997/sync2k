@@ -210,6 +210,8 @@ export async function getActiveBranches(fetchFn?: typeof fetch): Promise<BranchR
   return inFlightBranchesPromise;
 }
 
+export const getBranches = getActiveBranches;
+
 /**
  * Obtiene la configuración y datos legales/membrete completos de una sucursal.
  * Busca por id, profit_server_id o name con soporte de caché, Supabase, DB local y allowedBranches.

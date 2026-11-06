@@ -1,6 +1,6 @@
 import { protectLoad } from '$lib/server/permissions';
 import { hasPermission } from '$lib/server/auth';
-import { getBranches } from '$lib/server/branches';
+import { getActiveBranches } from '$lib/server/branches';
 import { redirect } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
 
@@ -29,7 +29,7 @@ export const load: PageServerLoad = protectLoad('cash_payments', async ({ url, l
 		};
 	}
 
-	const dbBranches = await getBranches(fetch).catch(() => []);
+	const dbBranches = await getActiveBranches(fetch).catch(() => []);
 	const allowedBranches = profileAllowed.map((pb: any) => {
 		const match = dbBranches.find((db: any) => db.id === pb.id);
 		return match ? { ...pb, ...match } : pb;
