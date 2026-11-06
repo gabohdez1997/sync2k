@@ -52,6 +52,7 @@ export interface BranchRecord {
   default_client_type?: string | null;
   default_cta_ingr_egr?: string | null;
   default_segment?: string | null;
+  allowed_islr_concepts?: string[];
   sql_config?: any;
   active?: boolean;
   sort_order?: number;
@@ -180,6 +181,7 @@ export async function getActiveBranches(fetchFn?: typeof fetch): Promise<BranchR
           default_client_type: b.default_client_type || b.sql_config?.profit_defaults?.default_client_type || '01',
           default_cta_ingr_egr: b.default_cta_ingr_egr || b.sql_config?.profit_defaults?.default_cta_ingr_egr || '01',
           default_segment: b.default_segment || b.sql_config?.profit_defaults?.default_segment || '01',
+          allowed_islr_concepts: b.allowed_islr_concepts || b.sql_config?.profit_defaults?.allowed_islr_concepts || [],
           sql_config: b.sql_config,
           active: b.active,
           sort_order: b.sort_order,

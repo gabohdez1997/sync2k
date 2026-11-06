@@ -167,6 +167,156 @@
     );
   }
 
+  function resolveTabulador(
+    tab: string | undefined | null,
+    rif: string | undefined | null,
+    tipoPer: string | undefined | null,
+  ): string {
+    const cleanTab = String(tab || "").trim();
+    if (cleanTab && cleanTab !== "" && cleanTab !== "0") return cleanTab;
+    if (tipoPer === "1") return "5"; // Persona Natural Residente
+    if (tipoPer === "2") return "6"; // Persona Natural No Residente
+    if (tipoPer === "3") return "7"; // Persona Jurídica Domiciliada
+    if (tipoPer === "4") return "8"; // Persona Jurídica No Domiciliada
+    const cleanRif = String(rif || "").trim().toUpperCase();
+    if (cleanRif.startsWith("V") || cleanRif.startsWith("E")) return "5";
+    return "7";
+  }
+
+  function getTabDescription(tabCode: string): string {
+    const t = (data.tabuladores || []).find(
+      (x: any) => String(x.co_tab).trim() === String(tabCode).trim(),
+    );
+    if (t?.tab_des) return t.tab_des.trim();
+    if (tabCode === "5") return "Persona Natural Residente (PNR)";
+    if (tabCode === "6") return "Persona Natural No Residente (PNNR)";
+    if (tabCode === "7") return "Persona Jurídica Domiciliada (PJD)";
+    if (tabCode === "8") return "Persona Jurídica No Domiciliada (PJND)";
+    return `Tabulador ${tabCode}`;
+  }
+
+  function getEffectiveClientTab(): string {
+    return resolveTabulador(
+      selectedClient?.co_tab,
+      selectedClient?.rif || selectedClient?.co_cli,
+      selectedClient?.tipo_per,
+    );
+  }
+
+  function getConceptosForClient(): any[] {
+    const currentTab = getEffectiveClientTab();
+    const list = data.conceptosIslr || [];
+    const filteredByTab = list.filter(
+      (c: any) => String(c.co_tab || "").trim() === currentTab,
+    );
+    const candidateList = filteredByTab.length > 0 ? filteredByTab : list;
+
+    const currentBranchObj = data.branches?.find(
+      (b: any) => b.id === selectedBranch,
+    );
+    const allowed =
+      currentBranchObj?.allowed_islr_concepts ||
+      currentBranchObj?.sql_config?.profit_defaults?.allowed_islr_concepts;
+
+    if (Array.isArray(allowed) && allowed.length > 0) {
+      const filtered = candidateList.filter((c: any) =>
+        allowed.includes(String(c.co_islr || "").trim()),
+      );
+      if (filtered.length > 0) return filtered;
+    }
+
+    return candidateList;
+  }
+
+  function resolveConceptValues(
+    conceptObj: any,
+    coIslr: string,
+    currentTab: string,
+  ) {
+    let porcRet = Number(conceptObj?.porc_ret ?? 0);
+    let porcImp = Number(conceptObj?.porc_imp ?? 100);
+    let sustraen = Number(conceptObj?.sustraen ?? 0);
+
+    if (porcRet === 0) {
+      if (currentTab === "5") {
+        porcRet = 3;
+        porcImp = 100;
+        sustraen = 107.5;
+      } else {
+        porcRet = coIslr === "072" || coIslr === "083" ? 3 : 2;
+        porcImp = 100;
+        sustraen = 0;
+      }
+    }
+
+    return { porcRet, porcImp, sustraen };
+  }
+
+  function handleConceptChange(
+    docNo: string,
+    doc: any,
+    selectedCode: string,
+  ) {
+    const inp = docInputs[docNo];
+    if (!inp) return;
+    inp.co_islr = selectedCode.trim();
+    inp.manual_override_islr = false;
+
+    const currentTab = getEffectiveClientTab();
+    const allList = data.conceptosIslr || [];
+    const foundInTab = allList.find(
+      (c: any) =>
+        String(c.co_tab || "").trim() === currentTab &&
+        String(c.co_islr || "").trim() === inp.co_islr,
+    );
+    const found =
+      foundInTab ||
+      allList.find((c: any) => String(c.co_islr || "").trim() === inp.co_islr);
+
+    const { porcRet, porcImp, sustraen } = resolveConceptValues(
+      found,
+      inp.co_islr,
+      currentTab,
+    );
+    inp.porc_islr = porcRet;
+    inp.porc_base_islr = porcImp;
+    inp.sustraendo_islr_bs = sustraen;
+    recalculateDocAmounts(docNo, doc);
+  }
+
+  function onClientTabChange() {
+    const currentTab = getEffectiveClientTab();
+    const clientConceptos = getConceptosForClient();
+    const defaultConceptObj =
+      currentTab === "5"
+        ? clientConceptos.find((c: any) => c.co_islr.trim() === "083") ||
+          clientConceptos.find((c: any) => c.co_islr.trim() === "002") ||
+          clientConceptos[0]
+        : clientConceptos.find((c: any) => c.co_islr.trim() === "055") ||
+          clientConceptos.find((c: any) => c.co_islr.trim() === "072") ||
+          clientConceptos[0];
+
+    documentos.forEach((doc) => {
+      const nro = doc.nro_doc.trim();
+      const inp = docInputs[nro];
+      if (inp && defaultConceptObj) {
+        inp.co_islr = defaultConceptObj.co_islr.trim();
+        const { porcRet, porcImp, sustraen } = resolveConceptValues(
+          defaultConceptObj,
+          inp.co_islr,
+          currentTab,
+        );
+        inp.porc_islr = porcRet;
+        inp.porc_base_islr = porcImp;
+        inp.sustraendo_islr_bs = sustraen;
+        if (checkedDocs[nro]) {
+          recalculateDocAmounts(nro, doc, false);
+        }
+      }
+    });
+    syncSinglePaymentInstrument();
+  }
+
   // Prioridad de consumo de créditos para amortizar deudas:
   // 1. Notas de Crédito comerciales / devoluciones (N/CR, NCR) -> DEBEN liquidarse primero ("matar la NCR")
   // 2. Ajustes negativos directos sobre ventas (AJNA)
@@ -263,6 +413,8 @@
         reten_islr_bs: number;
         co_islr: string;
         porc_islr: number;
+        porc_base_islr?: number;
+        sustraendo_islr_bs?: number;
         base_imponible_islr: number;
         base_imponible_islr_bs: number;
         showIvaDetails: boolean;
@@ -863,6 +1015,7 @@
       co_cli: inv.co_cli ? inv.co_cli.trim() : "",
       rif: inv.rif ? inv.rif.trim() : "",
       tipo_per: inv.tipo_per ? String(inv.tipo_per).trim() : "",
+      co_tab: inv.co_tab ? String(inv.co_tab).trim() : "",
       contrib: inv.contrib,
       contribu_e: inv.contribu_e,
       porc_esp: inv.porc_esp,
@@ -872,6 +1025,7 @@
       descripcion: inv.cli_des ? inv.cli_des.trim() : "",
       rif: initialClientRef.rif,
       tipo_per: initialClientRef.tipo_per,
+      co_tab: initialClientRef.co_tab,
       contrib: Boolean(inv.contrib),
       contribu_e: isContribuyenteEspecialClient(initialClientRef),
       porc_esp: getEffectivePorcEsp(initialClientRef),
@@ -898,11 +1052,13 @@
           if (cDetail && selectedClient && selectedClient.co_cli === co_cli) {
             const prevEligible = selectedClient.contribu_e;
             const prevPorc = selectedClient.porc_esp;
+            const prevTab = getEffectiveClientTab();
             selectedClient.direc1 = cDetail.direc1 || "";
             selectedClient.telefonos = cDetail.telefonos || "";
             selectedClient.email = cDetail.email || "";
             if (cDetail.rif) selectedClient.rif = String(cDetail.rif).trim();
             selectedClient.tipo_per = String(cDetail.sTipo_Per ?? cDetail.tipo_per ?? selectedClient.tipo_per ?? "").trim();
+            selectedClient.co_tab = String(cDetail.co_tab || selectedClient.co_tab || "").trim();
             selectedClient.contrib = Boolean(cDetail.contrib ?? cDetail.bContrib ?? cDetail.contribuyente ?? selectedClient.contrib);
             selectedClient.contribu_e = isContribuyenteEspecialClient(cDetail);
             selectedClient.porc_esp = getEffectivePorcEsp(cDetail);
@@ -922,6 +1078,10 @@
               }
               syncSinglePaymentInstrument();
             }
+
+            if (documentos.length > 0 && prevTab !== getEffectiveClientTab()) {
+              onClientTabChange();
+            }
           }
         }
       })
@@ -939,6 +1099,15 @@
       if (res.ok) {
         const resJson = await res.json();
         documentos = resJson.data || [];
+
+        const currentTab = getEffectiveClientTab();
+        const clientConceptos = getConceptosForClient();
+        const defaultConceptObj = currentTab === "5"
+          ? (clientConceptos.find((c: any) => c.co_islr.trim() === "083") || clientConceptos.find((c: any) => c.co_islr.trim() === "002") || clientConceptos[0])
+          : (clientConceptos.find((c: any) => c.co_islr.trim() === "055") || clientConceptos.find((c: any) => c.co_islr.trim() === "072") || clientConceptos[0]);
+
+        const defaultIslrConcept = defaultConceptObj ? defaultConceptObj.co_islr.trim() : (currentTab === "5" ? "083" : "055");
+        const { porcRet: defaultPorcIslr, porcImp: defaultPorcBaseIslr, sustraen: defaultSustraendoIslr } = resolveConceptValues(defaultConceptObj, defaultIslrConcept, currentTab);
 
         documentos.forEach((doc) => {
           const isTargetDoc =
@@ -978,8 +1147,10 @@
             porc_ret_iva: getEffectivePorcEsp(selectedClient) || 75,
             reten_islr: 0,
             reten_islr_bs: 0,
-            co_islr: "072",
-            porc_islr: 3,
+            co_islr: defaultIslrConcept,
+            porc_islr: defaultPorcIslr,
+            porc_base_islr: defaultPorcBaseIslr,
+            sustraendo_islr_bs: defaultSustraendoIslr,
             base_imponible_islr: Math.round(((doc.base_islr_default || 0) / (doc.tasa > 0 ? doc.tasa : 1)) * 100) / 100,
             base_imponible_islr_bs: doc.base_islr_default || 0,
             showIvaDetails: false,
@@ -1091,7 +1262,13 @@
         const baseImpBs = Number(input.base_imponible_islr_bs) > 0 ? Number(input.base_imponible_islr_bs) : (Number(doc.base_islr_default) > 0 ? Number(doc.base_islr_default) : (doc.total_neto - doc.monto_imp));
         input.base_imponible_islr_bs = baseImpBs;
         input.base_imponible_islr = Math.round((baseImpBs / docTasa) * 100) / 100;
-        input.reten_islr_bs = Math.round(baseImpBs * (input.porc_islr / 100) * 100) / 100;
+        const porcBase = Number(input.porc_base_islr ?? 100) / 100;
+        const baseSujeta = Math.round(baseImpBs * porcBase * 100) / 100;
+        const porcRet = (Number(input.porc_islr) || 0) / 100;
+        const sustraendoBs = Number(input.sustraendo_islr_bs) || 0;
+        const retBruta = Math.round(baseSujeta * porcRet * 100) / 100;
+        const retNeta = Math.max(0, Math.round((retBruta - sustraendoBs) * 100) / 100);
+        input.reten_islr_bs = retNeta;
         input.reten_islr = Math.round((input.reten_islr_bs / docTasa) * 100) / 100;
       } else {
         input.reten_islr = 0;
@@ -1754,7 +1931,7 @@
           monto: doc.total_neto - doc.monto_imp,
           monto_reten: inp.reten_islr_bs || 0,
           monto_obj: inp.base_imponible_islr_bs > 0 ? inp.base_imponible_islr_bs : (doc.total_neto - doc.monto_imp),
-          sustraendo: 0,
+          sustraendo: inp.sustraendo_islr_bs || 0,
           porc_retn: inp.porc_islr,
         };
       });
@@ -2057,11 +2234,11 @@
                   {#if isPersonaNaturalClient(selectedClient)}
                     Persona Natural (No aplica retenciones)
                   {:else if isContribuyenteEspecialClient(selectedClient)}
-                    Contribuyente Especial ({getEffectivePorcEsp(selectedClient)}% Ret. IVA)
+                    Contribuyente Especial ({getEffectivePorcEsp(selectedClient)}% Ret. IVA) • Tabulador ISLR: {getTabDescription(getEffectiveClientTab())}
                   {:else if selectedClient.contrib || selectedClient.contribuyente}
-                    Contribuyente Ordinario (Sin retención de IVA)
+                    Contribuyente Ordinario (Sin retención de IVA) • Tabulador ISLR: {getTabDescription(getEffectiveClientTab())}
                   {:else}
-                    No Contribuyente
+                    No Contribuyente • Tabulador ISLR: {getTabDescription(getEffectiveClientTab())}
                   {/if}
                 </p>
               </div>
@@ -2844,19 +3021,23 @@
                                 ><X size={14} /></button
                               >
                             </div>
-                            <div class="grid grid-cols-1 sm:grid-cols-4 gap-3">
-                              <div>
-                                <span class="text-[9px] text-text-muted font-bold block mb-1">CONCEPTO</span>
+                            <div class="grid grid-cols-1 sm:grid-cols-5 gap-2.5">
+                              <div class="sm:col-span-2">
+                                <span class="text-[9px] text-text-muted font-bold block mb-1">CONCEPTO ({getTabDescription(getEffectiveClientTab())})</span>
                                 <select
-                                  bind:value={input.co_islr}
-                                  onchange={() => {
-                                    input.porc_islr = input.co_islr === '072' ? 3 : 2;
-                                    recalculateDocAmounts(doc.nro_doc.trim(), doc);
+                                  value={input.co_islr}
+                                  onchange={(e) => {
+                                    const selectedCode = (e.currentTarget as HTMLSelectElement).value;
+                                    handleConceptChange(doc.nro_doc.trim(), doc, selectedCode);
                                   }}
-                                  class="w-full bg-surface-soft border border-border-subtle px-2 py-1.5 rounded-lg text-xs appearance-none"
+                                  class="w-full bg-surface-soft border border-border-subtle px-2 py-1.5 rounded-lg text-xs"
                                 >
-                                  <option value="072">072 = Servicio de Flete (3%)</option>
-                                  <option value="055">055 = Servicio de Corte (2%)</option>
+                                  {#each getConceptosForClient() as c}
+                                    {@const cVals = resolveConceptValues(c, c.co_islr.trim(), getEffectiveClientTab())}
+                                    <option value={c.co_islr.trim()}>
+                                      {c.co_islr.trim()} - {c.islr_des.trim()} ({cVals.porcRet}%{cVals.sustraen > 0 ? ` - Sustr: Bs. ${cVals.sustraen}` : ''})
+                                    </option>
+                                  {/each}
                                 </select>
                               </div>
                               <div>
@@ -2868,7 +3049,7 @@
                                   oninput={() => {
                                     recalculateDocAmounts(doc.nro_doc.trim(), doc);
                                   }}
-                                  class="w-full bg-surface-soft border border-border-subtle px-2 py-1.5 rounded-lg text-xs text-right"
+                                  class="w-full bg-surface-soft border border-border-subtle px-2 py-1.5 rounded-lg text-xs text-right font-mono"
                                 />
                               </div>
                               <div>
@@ -2878,7 +3059,7 @@
                                   step="0.1"
                                   disabled
                                   bind:value={input.porc_islr}
-                                  class="w-full bg-surface-soft/50 border border-border-subtle px-2 py-1.5 rounded-lg text-xs text-right opacity-70 cursor-not-allowed"
+                                  class="w-full bg-surface-soft/50 border border-border-subtle px-2 py-1.5 rounded-lg text-xs text-right opacity-70 cursor-not-allowed font-mono"
                                 />
                               </div>
                               <div>
@@ -2888,10 +3069,15 @@
                                   step="0.01"
                                   readonly
                                   value={input.reten_islr_bs}
-                                  class="w-full bg-surface-soft/60 border border-border-subtle px-2 py-1.5 rounded-lg text-xs text-right text-amber-700 dark:text-amber-400 font-bold cursor-not-allowed opacity-90"
+                                  class="w-full bg-surface-soft/60 border border-border-subtle px-2 py-1.5 rounded-lg text-xs text-right text-amber-700 dark:text-amber-400 font-bold cursor-not-allowed opacity-90 font-mono"
                                 />
                               </div>
                             </div>
+                            {#if (input.sustraendo_islr_bs || 0) > 0}
+                              <div class="mt-2 text-[10px] text-amber-400/90 flex items-center gap-1 font-medium bg-amber-500/10 px-2.5 py-1 rounded-lg border border-amber-500/20 w-max">
+                                <span>Sustraendo legal aplicado: <strong>Bs. {Number(input.sustraendo_islr_bs).toLocaleString('de-DE', { minimumFractionDigits: 2 })}</strong></span>
+                              </div>
+                            {/if}
                           </div>
                         {/if}
 

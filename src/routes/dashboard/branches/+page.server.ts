@@ -7,7 +7,7 @@ import { normalizeAllowDecimalsUnits } from '$lib/server/branches';
 import { AgentClient } from '$lib/server/agent';
 import { clearBranchesCache } from '$lib/server/branches';
 import { logAction } from '$lib/server/audit';
-import { hasPermission } from '$lib/server/auth';
+import { hasPermission, clearProfileCache } from '$lib/server/auth';
 import { fail } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
 
@@ -69,13 +69,16 @@ export const load: PageServerLoad = protectLoad('sec_branches', async ({ locals,
         default_zone: b.default_zone || pDef.default_zone || '01',
         default_client_type: b.default_client_type || pDef.default_client_type || '01',
         default_cta_ingr_egr: b.default_cta_ingr_egr || pDef.default_cta_ingr_egr || '01',
-        default_segment: b.default_segment || pDef.default_segment || '01'
+        default_segment: b.default_segment || pDef.default_segment || '01',
+        allowed_islr_concepts: b.allowed_islr_concepts || pDef.allowed_islr_concepts || []
       };
     });
 
-    // Consultar servidores SQL y estadísticas de todas las sucursales activas en paralelo
+    // Consultar servidores SQL, estadísticas y conceptos de ISLR de todas las sucursales activas en paralelo
     let agentServers: any[] = [];
     let branchStats: Record<string, { articulos: number; clientes: number; proveedores: number; condiciones_pago?: number; usuarios?: number; online: boolean }> = {};
+    let conceptosIslr: any[] = [];
+    let tabuladores: any[] = [];
     let loadError: string | null = null;
     const activeBranches = (branches ?? []).filter(b => b.active && b.agent_url);
 
@@ -93,10 +96,16 @@ export const load: PageServerLoad = protectLoad('sec_branches', async ({ locals,
               fetch
             );
 
-            const [dbConfigRes, statsRes] = await Promise.all([
+            const [dbConfigRes, statsRes, islrRes] = await Promise.all([
               client.getDatabaseConfig().catch(() => null),
-              client.getBranchStats(branch.id).catch(() => null)
+              client.getBranchStats(branch.id).catch(() => null),
+              client.request<any>('/pagos/conceptos-islr').catch(() => null)
             ]);
+
+            if (islrRes && islrRes.data && islrRes.data.length > 0 && conceptosIslr.length === 0) {
+              conceptosIslr = islrRes.data;
+              tabuladores = islrRes.tabuladores || [];
+            }
 
             if (dbConfigRes) {
               const resAny = dbConfigRes as any;
@@ -143,6 +152,8 @@ export const load: PageServerLoad = protectLoad('sec_branches', async ({ locals,
       branches: branches ?? [],
       agentServers,
       branchStats,
+      conceptosIslr,
+      tabuladores,
       loadError,
       canCreate,
       canUpdate,
@@ -225,6 +236,19 @@ export const actions: Actions = {
       const defaultCtaIngrEgr = (formData.get('default_cta_ingr_egr') as string)?.trim() || '01';
       const defaultSegment = (formData.get('default_segment') as string)?.trim() || '01';
 
+      const allowedIslrRaw = formData.get('allowed_islr_concepts') as string;
+      let allowedIslrConcepts: string[] = [];
+      if (allowedIslrRaw) {
+        try {
+          const parsed = JSON.parse(allowedIslrRaw);
+          if (Array.isArray(parsed)) {
+            allowedIslrConcepts = parsed.map((c: any) => String(c).trim()).filter(Boolean);
+          }
+        } catch {
+          allowedIslrConcepts = allowedIslrRaw.split(',').map((s) => s.trim()).filter(Boolean);
+        }
+      }
+
       if (sqlConfig && typeof sqlConfig === 'object') {
         sqlConfig.profit_defaults = {
           default_zone: defaultZone,
@@ -232,7 +256,8 @@ export const actions: Actions = {
           default_cta_ingr_egr: defaultCtaIngrEgr,
           default_seller: defaultSeller,
           default_segment: defaultSegment,
-          default_warehouse: defaultWarehouse
+          default_warehouse: defaultWarehouse,
+          allowed_islr_concepts: allowedIslrConcepts
         };
       }
 
@@ -422,6 +447,7 @@ export const actions: Actions = {
       });
 
       clearBranchesCache();
+      clearProfileCache();
       return { success: true, savedId, logoUrl };
     } catch (err: any) {
       console.error('[BRANCHES] Excepción en saveBranch:', err);

@@ -1,5 +1,6 @@
 import { protectLoad } from '$lib/server/permissions';
 import { hasPermission } from '$lib/server/auth';
+import { getBranches } from '$lib/server/branches';
 import { redirect } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
 
@@ -12,8 +13,8 @@ export const load: PageServerLoad = protectLoad('cash_payments', async ({ url, l
 		throw redirect(303, '/dashboard/cash/payments/history');
 	}
 
-	const allowedBranches = profile.allowed_branches || [];
-	if (allowedBranches.length === 0) {
+	const profileAllowed = profile.allowed_branches || [];
+	if (profileAllowed.length === 0) {
 		return {
 			branches: [],
 			selectedBranchId: '',
@@ -21,9 +22,18 @@ export const load: PageServerLoad = protectLoad('cash_payments', async ({ url, l
 			cuentasBancarias: [],
 			bancos: [],
 			tarjetasCredito: [],
+			conceptosIslr: [],
+			tabuladores: [],
+			unidadTributaria: 43,
 			error: 'No tienes sucursales asignadas.'
 		};
 	}
+
+	const dbBranches = await getBranches(fetch).catch(() => []);
+	const allowedBranches = profileAllowed.map((pb: any) => {
+		const match = dbBranches.find((db: any) => db.id === pb.id);
+		return match ? { ...pb, ...match } : pb;
+	});
 
 	const urlBranchId = url.searchParams.get('branch_id');
 	const selectedBranch = urlBranchId ? allowedBranches.find((b: any) => b.id === urlBranchId) : allowedBranches[0];
@@ -33,6 +43,9 @@ export const load: PageServerLoad = protectLoad('cash_payments', async ({ url, l
 	let cuentasBancarias: any[] = [];
 	let bancos: any[] = [];
 	let tarjetasCredito: any[] = [];
+	let conceptosIslr: any[] = [];
+	let tabuladores: any[] = [];
+	let unidadTributaria = 43;
 	let errorMsg = '';
 
 	if (selectedBranchId) {
@@ -46,17 +59,23 @@ export const load: PageServerLoad = protectLoad('cash_payments', async ({ url, l
 				return [];
 			};
 
-			const [cRes, cbRes, bRes, tRes] = await Promise.all([
+			const [cRes, cbRes, bRes, tRes, islrRes] = await Promise.all([
 				fetchCatalog('cajas'),
 				fetchCatalog('cuentas_bancarias'),
 				fetchCatalog('bancos'),
-				fetchCatalog('tarjetas_credito')
+				fetchCatalog('tarjetas_credito'),
+				fetch(`/api/agent/payables/conceptos-islr?branch_id=${selectedBranchId}`)
+					.then((r) => (r.ok ? r.json() : { data: [], tabuladores: [], unidad_tributaria: 43 }))
+					.catch(() => ({ data: [], tabuladores: [], unidad_tributaria: 43 }))
 			]);
 
 			cajas = cRes;
 			cuentasBancarias = cbRes;
 			bancos = bRes;
 			tarjetasCredito = tRes;
+			conceptosIslr = islrRes.data || [];
+			tabuladores = islrRes.tabuladores || [];
+			unidadTributaria = islrRes.unidad_tributaria || 43;
 		} catch (err: any) {
 			errorMsg = `Error al cargar catálogos desde el agente: ${err.message}`;
 		}
@@ -70,6 +89,9 @@ export const load: PageServerLoad = protectLoad('cash_payments', async ({ url, l
 		cuentasBancarias,
 		bancos,
 		tarjetasCredito,
+		conceptosIslr,
+		tabuladores,
+		unidadTributaria,
 		error: errorMsg || null
 	};
 });
