@@ -151,6 +151,139 @@
     inp.porc_islr = porcRet;
     inp.porc_base_islr = porcImp;
     inp.sustraendo_islr_bs = sustraen;
+    if (inp.islr_lines && inp.islr_lines[0]) {
+      inp.islr_lines[0].co_islr = inp.co_islr;
+      inp.islr_lines[0].porc_islr = porcRet;
+      inp.islr_lines[0].porc_base_islr = porcImp;
+      inp.islr_lines[0].sustraendo_islr_bs = sustraen;
+    }
+    recalculateDocAmounts(docNo, doc);
+  }
+
+  function ensureIslrLines(inp, doc) {
+    if (!inp) return;
+    const docTotalBaseBs = getDocBaseBs(doc);
+    if (!Array.isArray(inp.islr_lines) || inp.islr_lines.length === 0) {
+      const baseBs = Number(inp.base_imponible_islr_bs) > 0 ? Number(inp.base_imponible_islr_bs) : docTotalBaseBs;
+      inp.islr_lines = [
+        {
+          id: `islr_${Date.now()}_0`,
+          co_islr: inp.co_islr || "055",
+          porc_islr: inp.porc_islr || 2,
+          porc_base_islr: inp.porc_base_islr ?? 100,
+          sustraendo_islr_bs: inp.sustraendo_islr_bs || 0,
+          base_imponible_islr: toUsd(baseBs),
+          base_imponible_islr_bs: baseBs,
+          reten_islr: inp.reten_islr || 0,
+          reten_islr_bs: inp.reten_islr_bs || 0,
+        }
+      ];
+    } else if (
+      inp.islr_lines.length === 1 &&
+      (Number(inp.islr_lines[0].base_imponible_islr_bs) || 0) === 0 &&
+      docTotalBaseBs > 0
+    ) {
+      inp.islr_lines[0].base_imponible_islr_bs = docTotalBaseBs;
+      inp.islr_lines[0].base_imponible_islr = toUsd(docTotalBaseBs);
+    }
+  }
+
+  function assignRemainingBaseToLine(docNo, doc, lineIndex) {
+    const inp = docInputs[docNo];
+    if (!inp || !inp.islr_lines || !inp.islr_lines[lineIndex]) return;
+    const docTotalBaseBs = getDocBaseBs(doc);
+    const otherLinesAssigned = inp.islr_lines.reduce(
+      (sum, l, idx) => idx === lineIndex ? sum : sum + (Number(l.base_imponible_islr_bs) || 0),
+      0
+    );
+    const remaining = Math.max(0, r2(docTotalBaseBs - otherLinesAssigned));
+    inp.islr_lines[lineIndex].base_imponible_islr_bs = remaining;
+    recalculateDocAmounts(docNo, doc);
+  }
+
+  function addIslrConceptLine(docNo, doc) {
+    const inp = docInputs[docNo];
+    if (!inp) return;
+    ensureIslrLines(inp, doc);
+    const docTotalBaseBs = getDocBaseBs(doc);
+    const currentlyAssignedBs = inp.islr_lines.reduce(
+      (sum, l) => sum + (Number(l.base_imponible_islr_bs) || 0),
+      0
+    );
+    const remainingBaseBs = Math.max(0, r2(docTotalBaseBs - currentlyAssignedBs));
+    const initialLineBaseBs = remainingBaseBs > 0 ? remainingBaseBs : docTotalBaseBs;
+
+    const supplierConceptos = getConceptosForSupplier();
+    const currentTab = getEffectiveSupplierTab();
+    const usedCodes = new Set(inp.islr_lines.map((l) => String(l.co_islr).trim()));
+    const nextConcept = supplierConceptos.find((c) => !usedCodes.has(String(c.co_islr).trim())) || supplierConceptos[0];
+    const nextCode = nextConcept ? String(nextConcept.co_islr).trim() : (currentTab === '5' ? '083' : '055');
+    const { porcRet, porcImp, sustraen } = resolveConceptValues(nextConcept, nextCode, currentTab);
+
+    inp.islr_lines.push({
+      id: `islr_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
+      co_islr: nextCode,
+      porc_islr: porcRet,
+      porc_base_islr: porcImp,
+      sustraendo_islr_bs: sustraen,
+      base_imponible_islr_bs: initialLineBaseBs,
+      base_imponible_islr: toUsd(initialLineBaseBs),
+      reten_islr: 0,
+      reten_islr_bs: 0
+    });
+
+    recalculateDocAmounts(docNo, doc);
+  }
+
+  function setLineToFullBase(docNo, doc, lineIndex) {
+    const inp = docInputs[docNo];
+    if (!inp || !inp.islr_lines || !inp.islr_lines[lineIndex]) return;
+    const docTotalBaseBs = getDocBaseBs(doc);
+    inp.islr_lines[lineIndex].base_imponible_islr_bs = docTotalBaseBs;
+    recalculateDocAmounts(docNo, doc);
+  }
+
+  function removeIslrConceptLine(docNo, doc, index) {
+    const inp = docInputs[docNo];
+    if (!inp || !inp.islr_lines || inp.islr_lines.length <= 1) return;
+    inp.islr_lines.splice(index, 1);
+    recalculateDocAmounts(docNo, doc);
+  }
+
+  function handleLineConceptChange(
+    docNo,
+    doc,
+    lineIndex,
+    selectedCode,
+  ) {
+    const inp = docInputs[docNo];
+    if (!inp) return;
+    ensureIslrLines(inp, doc);
+    const line = inp.islr_lines[lineIndex];
+    if (!line) return;
+
+    line.co_islr = selectedCode.trim();
+    inp.manual_override_islr = false;
+
+    const currentTab = getEffectiveSupplierTab();
+    const allList = data.conceptosIslr || [];
+    const foundInTab = allList.find(
+      (c) =>
+        String(c.co_tab || "").trim() === currentTab &&
+        String(c.co_islr || "").trim() === line.co_islr,
+    );
+    const found =
+      foundInTab ||
+      allList.find((c) => String(c.co_islr || "").trim() === line.co_islr);
+
+    const { porcRet, porcImp, sustraen } = resolveConceptValues(
+      found,
+      line.co_islr,
+      currentTab,
+    );
+    line.porc_islr = porcRet;
+    line.porc_base_islr = porcImp;
+    line.sustraendo_islr_bs = sustraen;
     recalculateDocAmounts(docNo, doc);
   }
 
@@ -214,6 +347,17 @@
         base_imponible_islr: number;
         base_imponible_islr_bs: number;
         porc_base_islr?: number;
+        islr_lines?: Array<{
+          id: string;
+          co_islr: string;
+          porc_islr: number;
+          porc_base_islr?: number;
+          sustraendo_islr_bs?: number;
+          base_imponible_islr: number;
+          base_imponible_islr_bs: number;
+          reten_islr: number;
+          reten_islr_bs: number;
+        }>;
         sustraendo_islr_bs?: number;
         showIvaDetails: boolean;
         showIslrDetails: boolean;
@@ -754,6 +898,19 @@
             sustraendo_islr_bs: defaultSustraendoIslr,
             base_imponible_islr: toUsd(baseImpBs),
             base_imponible_islr_bs: baseImpBs,
+            islr_lines: [
+              {
+                id: `islr_${Date.now()}_0`,
+                co_islr: defaultIslrConcept,
+                porc_islr: defaultPorcIslr,
+                porc_base_islr: defaultPorcBaseIslr,
+                sustraendo_islr_bs: defaultSustraendoIslr,
+                base_imponible_islr: toUsd(baseImpBs),
+                base_imponible_islr_bs: baseImpBs,
+                reten_islr: 0,
+                reten_islr_bs: 0
+              }
+            ],
             showIvaDetails: !yaTieneRetIva && retIvaBs > 0,
             showIslrDetails: false,
             yaTieneRetIva,
@@ -832,22 +989,41 @@
     // (si es manual se respeta el monto en Bs ingresado por el usuario)
     inp.reten_iva = toUsd(inp.reten_iva_bs);
 
-    // Manejo de Retención de ISLR (se calcula sobre la base en Bs con % base, % retención y sustraendo)
+    // Manejo de Retención de ISLR (soporta múltiples conceptos por documento)
     if (inp.yaTieneRetIslr) {
       inp.showIslrDetails = false;
       inp.reten_islr_bs = 0;
     } else if (!inp.manual_override_islr) {
       if (inp.showIslrDetails) {
-        const baseImpRaw = Number(inp.base_imponible_islr_bs) > 0 ? r2(inp.base_imponible_islr_bs) : baseImpBs;
-        const porcBase = Number(inp.porc_base_islr ?? 100) / 100;
-        const baseSujeta = r2(baseImpRaw * porcBase);
-        const porcRet = (Number(inp.porc_islr) || 0) / 100;
-        const sustraendoBs = Number(inp.sustraendo_islr_bs) || 0;
+        ensureIslrLines(inp, doc);
+        let totalRetBs = 0;
+        let totalBaseBs = 0;
 
-        // Fórmula SENIAT / Profit Plus: (Base * %Base * %Ret) - Sustraendo
-        const retBruta = r2(baseSujeta * porcRet);
-        const retNeta = r2(retBruta - sustraendoBs);
-        inp.reten_islr_bs = Math.max(0, retNeta);
+        for (const line of inp.islr_lines) {
+          const lineBaseRaw = Number(line.base_imponible_islr_bs) || 0;
+          const porcBase = Number(line.porc_base_islr ?? 100) / 100;
+          const baseSujeta = r2(lineBaseRaw * porcBase);
+          const porcRet = (Number(line.porc_islr) || 0) / 100;
+          const sustraendoBs = Number(line.sustraendo_islr_bs) || 0;
+
+          // Fórmula SENIAT / Profit Plus: (Base * %Base * %Ret) - Sustraendo
+          const retBruta = r2(baseSujeta * porcRet);
+          const retNeta = r2(retBruta - sustraendoBs);
+          line.reten_islr_bs = Math.max(0, retNeta);
+          line.reten_islr = toUsd(line.reten_islr_bs);
+          line.base_imponible_islr = toUsd(lineBaseRaw);
+
+          totalRetBs += line.reten_islr_bs;
+          totalBaseBs += lineBaseRaw;
+        }
+
+        inp.reten_islr_bs = r2(totalRetBs);
+        inp.base_imponible_islr_bs = r2(totalBaseBs);
+        if (inp.islr_lines[0]) {
+          inp.co_islr = inp.islr_lines[0].co_islr;
+          inp.porc_islr = inp.islr_lines[0].porc_islr;
+          inp.sustraendo_islr_bs = inp.islr_lines[0].sustraendo_islr_bs;
+        }
       } else {
         inp.reten_islr_bs = 0;
       }
@@ -1110,22 +1286,37 @@
           };
         });
 
-      // Retenciones de ISLR (solo nuevas)
-      const retenciones_islr = selectedDocsList
+      // Retenciones de ISLR (soporta múltiples conceptos por documento)
+      const retenciones_islr = [];
+      selectedDocsList
         .filter((doc) => {
           const inp = docInputs[doc.nro_doc.trim()];
-          return inp && !inp.yaTieneRetIslr && inp.showIslrDetails && inp.reten_islr_bs > 0;
+          return inp && !inp.yaTieneRetIslr && inp.showIslrDetails && ((inp.reten_islr_bs || 0) > 0 || (inp.islr_lines?.length || 0) > 0);
         })
-        .map((doc) => {
+        .forEach((doc) => {
           const inp = docInputs[doc.nro_doc.trim()];
-          return {
-            nro_doc_asoc: doc.nro_doc.trim(),
-            co_islr: inp.co_islr || "055",
-            monto_obj: inp.base_imponible_islr_bs || (doc.total_neto - doc.monto_imp),
-            monto_reten: inp.reten_islr_bs,
-            porc_retn: inp.porc_islr || 2,
-            sustraendo: Number(inp.sustraendo_islr_bs || 0),
-          };
+          const lines = (inp.islr_lines && inp.islr_lines.length > 0)
+            ? inp.islr_lines
+            : [{
+                co_islr: inp.co_islr || "055",
+                base_imponible_islr_bs: inp.base_imponible_islr_bs,
+                reten_islr_bs: inp.reten_islr_bs,
+                porc_islr: inp.porc_islr || 2,
+                sustraendo_islr_bs: inp.sustraendo_islr_bs || 0
+              }];
+
+          lines.forEach((l) => {
+            if ((l.reten_islr_bs || 0) > 0 || (l.base_imponible_islr_bs || 0) > 0) {
+              retenciones_islr.push({
+                nro_doc_asoc: doc.nro_doc.trim(),
+                co_islr: l.co_islr || "055",
+                monto_obj: l.base_imponible_islr_bs || (doc.total_neto - doc.monto_imp),
+                monto_reten: l.reten_islr_bs || 0,
+                porc_retn: l.porc_islr || 2,
+                sustraendo: Number(l.sustraendo_islr_bs || 0),
+              });
+            }
+          });
         });
 
       // Formas de pago limpiadas (si hay excedente cubierto por N/CR y no hay formas de pago, se envían vacías)
@@ -1762,16 +1953,40 @@
                           </div>
                         {/if}
 
-                        <!-- Detalles Retención ISLR -->
+                        <!-- Detalles Retención ISLR (Soporte Multi-concepto) -->
                         {#if input.showIslrDetails && !input.yaTieneRetIslr}
+                          {@const docTotalBaseBs = getDocBaseBs(doc)}
+                          {@const totalLineasBaseBs = (input.islr_lines || []).reduce((sum, l) => sum + (Number(l.base_imponible_islr_bs) || 0), 0)}
+                          {@const difBaseBs = r2(docTotalBaseBs - totalLineasBaseBs)}
                           <div
                             class="bg-amber-500/5 border border-amber-500/20 p-4 rounded-2xl space-y-3 text-xs animate-in slide-in-from-top-2 duration-150"
                           >
-                            <div class="flex justify-between items-center">
-                              <span class="font-bold text-amber-300"
-                                >Datos Retención ISLR Proveedores</span
-                              >
+                            <div class="flex justify-between items-center flex-wrap gap-2">
+                              <div class="flex items-center gap-2 flex-wrap">
+                                <span class="font-bold text-amber-300"
+                                  >Conceptos Retención ISLR ({getTabDescription(getEffectiveSupplierTab())})</span
+                                >
+                                <span class="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400 font-bold border border-amber-500/20">
+                                  Base Total: Bs. {docTotalBaseBs.toLocaleString('de-DE', { minimumFractionDigits: 2 })}
+                                </span>
+                                {#if Math.abs(difBaseBs) > 0.05}
+                                  <button
+                                    type="button"
+                                    onclick={() => {
+                                      if (difBaseBs > 0) {
+                                        const targetIdx = (input.islr_lines || []).findIndex((l) => (Number(l.base_imponible_islr_bs) || 0) === 0);
+                                        assignRemainingBaseToLine(doc.nro_doc.trim(), doc, targetIdx !== -1 ? targetIdx : (input.islr_lines?.length || 1) - 1);
+                                      }
+                                    }}
+                                    class="text-[10px] px-2 py-0.5 rounded-full {difBaseBs > 0 ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30 hover:bg-amber-500/30 cursor-pointer' : 'bg-rose-500/20 text-rose-300 border border-rose-500/30'} font-semibold transition-colors"
+                                    title={difBaseBs > 0 ? "Haz clic para asignar el restante" : ""}
+                                  >
+                                    {difBaseBs > 0 ? `Por asignar: Bs. ${difBaseBs.toLocaleString('de-DE', { minimumFractionDigits: 2 })} (clic para asignar)` : `Exceso base: Bs. ${Math.abs(difBaseBs).toLocaleString('de-DE', { minimumFractionDigits: 2 })}`}
+                                  </button>
+                                {/if}
+                              </div>
                               <button
+                                type="button"
                                 onclick={() => {
                                   input.showIslrDetails = false;
                                   input.reten_islr_bs = 0;
@@ -1783,75 +1998,132 @@
                                 ><X size={14} /></button
                               >
                             </div>
-                            <div class="grid grid-cols-1 sm:grid-cols-5 gap-3">
-                              <div class="sm:col-span-1">
-                                <span class="text-[9px] text-text-muted font-bold block mb-1">CONCEPTO SENIAT</span>
-                                <select
-                                  value={input.co_islr}
-                                  onchange={(e) => {
-                                    const selectedCode = (e.currentTarget as HTMLSelectElement).value;
-                                    handleConceptChange(doc.nro_doc.trim(), doc, selectedCode);
-                                  }}
-                                  class="w-full bg-surface-soft border border-border-subtle px-2 py-1.5 rounded-lg text-xs"
-                                >
-                                  {#each getConceptosForSupplier() as c}
-                                    {@const cVals = resolveConceptValues(c, c.co_islr.trim(), getEffectiveSupplierTab())}
-                                    <option value={c.co_islr.trim()}>
-                                      {c.co_islr.trim()} - {c.islr_des.trim()} ({cVals.porcRet}%{cVals.sustraen > 0 ? ` - Sustr: Bs. ${cVals.sustraen}` : ''})
-                                    </option>
-                                  {/each}
-                                </select>
-                              </div>
-                              <div>
-                                <span class="text-[9px] text-text-muted font-bold block mb-1">BASE IMPONIBLE (Bs.)</span>
-                                <input
-                                  type="number"
-                                  step="0.01"
-                                  bind:value={input.base_imponible_islr_bs}
-                                  oninput={() => {
-                                    input.manual_override_islr = false;
-                                    recalculateDocAmounts(doc.nro_doc.trim(), doc);
-                                  }}
-                                  class="w-full bg-surface-soft border border-border-subtle px-2 py-1.5 rounded-lg text-xs text-right"
-                                />
-                              </div>
-                              <div>
-                                <span class="text-[9px] text-text-muted font-bold block mb-1">PORCENTAJE (%)</span>
-                                <input
-                                  type="number"
-                                  step="0.1"
-                                  bind:value={input.porc_islr}
-                                  oninput={() => {
-                                    input.manual_override_islr = false;
-                                    recalculateDocAmounts(doc.nro_doc.trim(), doc);
-                                  }}
-                                  class="w-full bg-surface-soft border border-border-subtle px-2 py-1.5 rounded-lg text-xs text-right"
-                                />
-                              </div>
-                              <div>
-                                <span class="text-[9px] text-text-muted font-bold block mb-1 text-amber-300">SUSTRAENDO (Bs.)</span>
-                                <input
-                                  type="number"
-                                  step="0.01"
-                                  bind:value={input.sustraendo_islr_bs}
-                                  oninput={() => {
-                                    input.manual_override_islr = false;
-                                    recalculateDocAmounts(doc.nro_doc.trim(), doc);
-                                  }}
-                                  class="w-full bg-surface-soft border border-border-subtle px-2 py-1.5 rounded-lg text-xs text-right text-amber-300 font-mono"
-                                />
-                              </div>
-                              <div>
-                                <span class="text-[9px] text-text-muted font-bold block mb-1 font-semibold text-amber-400">MTO RETENIDO (Bs.)</span>
-                                <input
-                                  type="number"
-                                  step="0.01"
-                                  readonly
-                                  value={input.reten_islr_bs}
-                                  class="w-full bg-surface-soft/60 border border-border-subtle px-2 py-1.5 rounded-lg text-xs text-right text-amber-400 font-bold cursor-not-allowed opacity-90"
-                                />
+
+                            <!-- Lista dinámica de conceptos ISLR aplicados -->
+                            {#if !input.islr_lines || input.islr_lines.length === 0}
+                              {@const _ = ensureIslrLines(input, doc)}
+                            {/if}
+
+                            <div class="space-y-2">
+                              {#each (input.islr_lines || []) as line, lineIdx (line.id || lineIdx)}
+                                <div class="p-2.5 rounded-xl bg-surface-soft border border-border-subtle grid grid-cols-1 sm:grid-cols-12 gap-2.5 items-center">
+                                  <div class="sm:col-span-5">
+                                    <span class="text-[9px] text-text-muted font-bold block mb-1">CONCEPTO #{lineIdx + 1}</span>
+                                    <select
+                                      value={line.co_islr}
+                                      onchange={(e) => {
+                                        const selectedCode = (e.currentTarget as HTMLSelectElement).value;
+                                        handleLineConceptChange(doc.nro_doc.trim(), doc, lineIdx, selectedCode);
+                                      }}
+                                      class="w-full bg-surface-base border border-border-subtle px-2 py-1.5 rounded-lg text-xs"
+                                    >
+                                      {#each getConceptosForSupplier() as c}
+                                        {@const cVals = resolveConceptValues(c, c.co_islr.trim(), getEffectiveSupplierTab())}
+                                        <option value={c.co_islr.trim()}>
+                                          {c.co_islr.trim()} - {c.islr_des.trim()} ({cVals.porcRet}%{cVals.sustraen > 0 ? ` - Sustr: Bs. ${cVals.sustraen}` : ''})
+                                        </option>
+                                      {/each}
+                                    </select>
+                                  </div>
+                                  <div class="sm:col-span-3">
+                                    <div class="flex justify-between items-center mb-1 flex-wrap gap-1">
+                                      <span class="text-[9px] text-text-muted font-bold block">BASE IMPONIBLE (Bs.)</span>
+                                      <div class="flex items-center gap-1.5">
+                                        {#if (Number(line.base_imponible_islr_bs) || 0) === 0 && difBaseBs > 0}
+                                          <button
+                                            type="button"
+                                            title="Asignar el remanente no cubierto a este concepto"
+                                            onclick={() => assignRemainingBaseToLine(doc.nro_doc.trim(), doc, lineIdx)}
+                                            class="text-[9px] font-bold text-amber-500 hover:text-amber-400 underline cursor-pointer"
+                                          >
+                                            + Remanente
+                                          </button>
+                                        {/if}
+                                        {#if Math.abs((Number(line.base_imponible_islr_bs) || 0) - docTotalBaseBs) > 0.01}
+                                          <button
+                                            type="button"
+                                            title="Colocar la base total de la factura a este concepto"
+                                            onclick={() => setLineToFullBase(doc.nro_doc.trim(), doc, lineIdx)}
+                                            class="text-[9px] font-semibold text-text-muted hover:text-amber-400 cursor-pointer"
+                                          >
+                                            Base total
+                                          </button>
+                                        {/if}
+                                      </div>
+                                    </div>
+                                    <input
+                                      type="number"
+                                      step="0.01"
+                                      bind:value={line.base_imponible_islr_bs}
+                                      oninput={() => {
+                                        input.manual_override_islr = false;
+                                        recalculateDocAmounts(doc.nro_doc.trim(), doc);
+                                      }}
+                                      class="w-full bg-surface-base border border-border-subtle px-2 py-1.5 rounded-lg text-xs text-right font-mono"
+                                    />
+                                  </div>
+                                  <div class="sm:col-span-1">
+                                    <span class="text-[9px] text-text-muted font-bold block mb-1">% RET.</span>
+                                    <input
+                                      type="number"
+                                      step="0.1"
+                                      bind:value={line.porc_islr}
+                                      oninput={() => {
+                                        input.manual_override_islr = false;
+                                        recalculateDocAmounts(doc.nro_doc.trim(), doc);
+                                      }}
+                                      class="w-full bg-surface-base border border-border-subtle px-1.5 py-1.5 rounded-lg text-xs text-right font-mono"
+                                    />
+                                  </div>
+                                  <div class="sm:col-span-2">
+                                    <span class="text-[9px] text-text-muted font-bold block mb-1 font-semibold text-amber-400">RETENIDO (Bs.)</span>
+                                    <input
+                                      type="number"
+                                      step="0.01"
+                                      readonly
+                                      value={line.reten_islr_bs}
+                                      class="w-full bg-surface-soft/60 border border-border-subtle px-2 py-1.5 rounded-lg text-xs text-right text-amber-400 font-bold cursor-not-allowed opacity-90 font-mono"
+                                    />
+                                  </div>
+                                  <div class="sm:col-span-1 flex justify-center pt-2 sm:pt-0">
+                                    {#if (input.islr_lines?.length || 0) > 1}
+                                      <button
+                                        type="button"
+                                        title="Eliminar este concepto"
+                                        onclick={() => removeIslrConceptLine(doc.nro_doc.trim(), doc, lineIdx)}
+                                        class="p-1.5 text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 rounded-lg transition-colors cursor-pointer"
+                                      >
+                                        <Trash2 size={14} />
+                                      </button>
+                                    {/if}
+                                  </div>
+                                </div>
+                              {/each}
+                            </div>
+
+                            <div class="flex items-center justify-between pt-1 flex-wrap gap-2">
+                              <button
+                                type="button"
+                                onclick={() => addIslrConceptLine(doc.nro_doc.trim(), doc)}
+                                class="inline-flex items-center gap-1.5 text-xs font-bold text-amber-400 hover:text-amber-300 transition-colors px-3 py-1.5 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/20 cursor-pointer"
+                              >
+                                <Plus size={13} />
+                                Agregar otro concepto ISLR
+                              </button>
+
+                              <div class="text-right">
+                                <span class="text-[11px] text-text-muted">Total Retención ISLR:</span>
+                                <strong class="text-xs font-mono font-bold text-amber-400 ml-1.5">
+                                  Bs. {Number(input.reten_islr_bs || 0).toLocaleString('de-DE', { minimumFractionDigits: 2 })}
+                                </strong>
                               </div>
                             </div>
+
+                            {#if (input.sustraendo_islr_bs || 0) > 0}
+                              <div class="text-[10px] text-amber-400/90 flex items-center gap-1 font-medium bg-amber-500/10 px-2.5 py-1 rounded-lg border border-amber-500/20 w-max">
+                                <span>Sustraendo legal aplicado: <strong>Bs. {Number(input.sustraendo_islr_bs).toLocaleString('de-DE', { minimumFractionDigits: 2 })}</strong></span>
+                              </div>
+                            {/if}
                           </div>
                         {/if}
 

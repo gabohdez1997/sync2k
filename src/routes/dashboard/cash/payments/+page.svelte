@@ -62,7 +62,8 @@
 
     const targetBranch = sede_id || selectedBranch;
     const bConfig = data.branches?.find(
-      (b: any) => String(b.id).toLowerCase() === String(targetBranch).toLowerCase(),
+      (b: any) =>
+        String(b.id).toLowerCase() === String(targetBranch).toLowerCase(),
     );
     if (!bConfig) return false;
 
@@ -83,8 +84,12 @@
     if (!found) return false;
 
     return (
-      String(co_sucu_in || "").trim().toUpperCase() ===
-      String(found.code || "").trim().toUpperCase()
+      String(co_sucu_in || "")
+        .trim()
+        .toUpperCase() ===
+      String(found.code || "")
+        .trim()
+        .toUpperCase()
     );
   }
 
@@ -92,7 +97,9 @@
     if (!doc) return "";
     const fromOrigJoin = String(doc.num_doc_orig || "").trim();
     if (fromOrigJoin) return fromOrigJoin;
-    const rawDocOrig = String(doc.doc_orig || "").trim().toUpperCase();
+    const rawDocOrig = String(doc.doc_orig || "")
+      .trim()
+      .toUpperCase();
     const rawNroOrig = String(doc.nro_orig || "").trim();
     if (["FACT", "N/DB", "NDEB"].includes(rawDocOrig) && rawNroOrig) {
       return rawNroOrig;
@@ -167,6 +174,18 @@
     );
   }
 
+  function getDocBaseIslrBs(doc: any): number {
+    if (!doc) return 0;
+    if (Number(doc.base_islr_default) > 0) {
+      return Math.round(Number(doc.base_islr_default) * 100) / 100;
+    }
+    const baseFromDoc =
+      (Number(doc.total_neto) || 0) -
+      (Number(doc.monto_imp) || 0) -
+      (Number(doc.otros1) || 0);
+    return Math.max(0, Math.round(baseFromDoc * 100) / 100);
+  }
+
   function resolveTabulador(
     tab: string | undefined | null,
     rif: string | undefined | null,
@@ -178,7 +197,9 @@
     if (tipoPer === "2") return "6"; // Persona Natural No Residente
     if (tipoPer === "3") return "7"; // Persona Jurídica Domiciliada
     if (tipoPer === "4") return "8"; // Persona Jurídica No Domiciliada
-    const cleanRif = String(rif || "").trim().toUpperCase();
+    const cleanRif = String(rif || "")
+      .trim()
+      .toUpperCase();
     if (cleanRif.startsWith("V") || cleanRif.startsWith("E")) return "5";
     return "7";
   }
@@ -252,11 +273,7 @@
     return { porcRet, porcImp, sustraen };
   }
 
-  function handleConceptChange(
-    docNo: string,
-    doc: any,
-    selectedCode: string,
-  ) {
+  function handleConceptChange(docNo: string, doc: any, selectedCode: string) {
     const inp = docInputs[docNo];
     if (!inp) return;
     inp.co_islr = selectedCode.trim();
@@ -281,6 +298,175 @@
     inp.porc_islr = porcRet;
     inp.porc_base_islr = porcImp;
     inp.sustraendo_islr_bs = sustraen;
+    if (inp.islr_lines && inp.islr_lines[0]) {
+      inp.islr_lines[0].co_islr = inp.co_islr;
+      inp.islr_lines[0].porc_islr = porcRet;
+      inp.islr_lines[0].porc_base_islr = porcImp;
+      inp.islr_lines[0].sustraendo_islr_bs = sustraen;
+    }
+    recalculateDocAmounts(docNo, doc);
+  }
+
+  function ensureIslrLines(inp: any, doc: any) {
+    if (!inp) return;
+    const docTasa = doc.tasa > 0 ? doc.tasa : 1;
+    const docTotalBaseBs = getDocBaseIslrBs(doc);
+
+    if (!Array.isArray(inp.islr_lines) || inp.islr_lines.length === 0) {
+      const baseBs =
+        Number(inp.base_imponible_islr_bs) > 0
+          ? Number(inp.base_imponible_islr_bs)
+          : docTotalBaseBs;
+      inp.islr_lines = [
+        {
+          id: `islr_${Date.now()}_0`,
+          co_islr: inp.co_islr || "055",
+          porc_islr: inp.porc_islr || 2,
+          porc_base_islr: inp.porc_base_islr ?? 100,
+          sustraendo_islr_bs: inp.sustraendo_islr_bs || 0,
+          base_imponible_islr: Math.round((baseBs / docTasa) * 100) / 100,
+          base_imponible_islr_bs: baseBs,
+          reten_islr: inp.reten_islr || 0,
+          reten_islr_bs: inp.reten_islr_bs || 0,
+        },
+      ];
+    } else if (
+      inp.islr_lines.length === 1 &&
+      (Number(inp.islr_lines[0].base_imponible_islr_bs) || 0) === 0 &&
+      docTotalBaseBs > 0
+    ) {
+      inp.islr_lines[0].base_imponible_islr_bs = docTotalBaseBs;
+      inp.islr_lines[0].base_imponible_islr =
+        Math.round((docTotalBaseBs / docTasa) * 100) / 100;
+    }
+  }
+
+  function addIslrConceptLine(docNo: string, doc: any) {
+    const inp = docInputs[docNo];
+    if (!inp) return;
+    ensureIslrLines(inp, doc);
+    const docTasa = doc.tasa > 0 ? doc.tasa : 1;
+    const docTotalBaseBs = getDocBaseIslrBs(doc);
+    const currentlyAssignedBs = inp.islr_lines.reduce(
+      (sum: number, l: any) => sum + (Number(l.base_imponible_islr_bs) || 0),
+      0,
+    );
+    const remainingBaseBs = Math.max(
+      0,
+      Math.round((docTotalBaseBs - currentlyAssignedBs) * 100) / 100,
+    );
+    const initialLineBaseBs =
+      remainingBaseBs > 0 ? remainingBaseBs : docTotalBaseBs;
+
+    const clientConceptos = getConceptosForClient();
+    const currentTab = getEffectiveClientTab();
+    const usedCodes = new Set(
+      inp.islr_lines.map((l: any) => String(l.co_islr).trim()),
+    );
+    const nextConcept =
+      clientConceptos.find(
+        (c: any) => !usedCodes.has(String(c.co_islr).trim()),
+      ) || clientConceptos[0];
+    const nextCode = nextConcept
+      ? String(nextConcept.co_islr).trim()
+      : currentTab === "5"
+        ? "083"
+        : "055";
+    const { porcRet, porcImp, sustraen } = resolveConceptValues(
+      nextConcept,
+      nextCode,
+      currentTab,
+    );
+
+    inp.islr_lines.push({
+      id: `islr_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
+      co_islr: nextCode,
+      porc_islr: porcRet,
+      porc_base_islr: porcImp,
+      sustraendo_islr_bs: sustraen,
+      base_imponible_islr_bs: initialLineBaseBs,
+      base_imponible_islr: Math.round((initialLineBaseBs / docTasa) * 100) / 100,
+      reten_islr: 0,
+      reten_islr_bs: 0,
+    });
+
+    recalculateDocAmounts(docNo, doc);
+  }
+
+  function removeIslrConceptLine(docNo: string, doc: any, index: number) {
+    const inp = docInputs[docNo];
+    if (!inp || !inp.islr_lines || inp.islr_lines.length <= 1) return;
+    inp.islr_lines.splice(index, 1);
+    recalculateDocAmounts(docNo, doc);
+  }
+
+  function assignRemainingBaseToLine(
+    docNo: string,
+    doc: any,
+    lineIndex: number,
+  ) {
+    const inp = docInputs[docNo];
+    if (!inp || !inp.islr_lines || !inp.islr_lines[lineIndex]) return;
+    const docTotalBaseBs = getDocBaseIslrBs(doc);
+    const otherLinesAssigned = inp.islr_lines.reduce(
+      (sum: number, l: any, idx: number) =>
+        idx === lineIndex ? sum : sum + (Number(l.base_imponible_islr_bs) || 0),
+      0,
+    );
+    const remaining = Math.max(
+      0,
+      Math.round((docTotalBaseBs - otherLinesAssigned) * 100) / 100,
+    );
+    inp.islr_lines[lineIndex].base_imponible_islr_bs = remaining;
+    recalculateDocAmounts(docNo, doc);
+  }
+
+  function setLineToFullBase(
+    docNo: string,
+    doc: any,
+    lineIndex: number,
+  ) {
+    const inp = docInputs[docNo];
+    if (!inp || !inp.islr_lines || !inp.islr_lines[lineIndex]) return;
+    const docTotalBaseBs = getDocBaseIslrBs(doc);
+    inp.islr_lines[lineIndex].base_imponible_islr_bs = docTotalBaseBs;
+    recalculateDocAmounts(docNo, doc);
+  }
+
+  function handleLineConceptChange(
+    docNo: string,
+    doc: any,
+    lineIndex: number,
+    selectedCode: string,
+  ) {
+    const inp = docInputs[docNo];
+    if (!inp) return;
+    ensureIslrLines(inp, doc);
+    const line = inp.islr_lines[lineIndex];
+    if (!line) return;
+
+    line.co_islr = selectedCode.trim();
+    inp.manual_override_islr = false;
+
+    const currentTab = getEffectiveClientTab();
+    const allList = data.conceptosIslr || [];
+    const foundInTab = allList.find(
+      (c: any) =>
+        String(c.co_tab || "").trim() === currentTab &&
+        String(c.co_islr || "").trim() === line.co_islr,
+    );
+    const found =
+      foundInTab ||
+      allList.find((c: any) => String(c.co_islr || "").trim() === line.co_islr);
+
+    const { porcRet, porcImp, sustraen } = resolveConceptValues(
+      found,
+      line.co_islr,
+      currentTab,
+    );
+    line.porc_islr = porcRet;
+    line.porc_base_islr = porcImp;
+    line.sustraendo_islr_bs = sustraen;
     recalculateDocAmounts(docNo, doc);
   }
 
@@ -335,48 +521,55 @@
     if (t === "FACT") {
       return {
         label: "Factura",
-        class: "bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20"
+        class:
+          "bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20",
       };
     }
     if (t === "AJPM" || t === "AJPA") {
       return {
         label: "Reintegro",
-        class: "bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20"
+        class:
+          "bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20",
       };
     }
     if (t === "AJNM" || t === "AJNA") {
       return {
         label: "Anticipo",
-        class: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20"
+        class:
+          "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20",
       };
     }
     if (t === "N/CR" || t === "NCR") {
       return {
         label: "Nota de Crédito",
-        class: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20"
+        class:
+          "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20",
       };
     }
     if (t === "N/DB" || t === "NDEB") {
       return {
         label: "Nota de Débito",
-        class: "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20"
+        class:
+          "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20",
       };
     }
     if (t === "GIRO") {
       return {
         label: "Giro",
-        class: "bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border border-cyan-500/20"
+        class:
+          "bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border border-cyan-500/20",
       };
     }
     if (t === "ADEL") {
       return {
         label: "Adelanto",
-        class: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20"
+        class:
+          "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20",
       };
     }
     return {
       label: t,
-      class: "bg-surface-soft border border-border-subtle text-text-muted"
+      class: "bg-surface-soft border border-border-subtle text-text-muted",
     };
   }
 
@@ -417,6 +610,17 @@
         sustraendo_islr_bs?: number;
         base_imponible_islr: number;
         base_imponible_islr_bs: number;
+        islr_lines?: Array<{
+          id: string;
+          co_islr: string;
+          porc_islr: number;
+          porc_base_islr?: number;
+          sustraendo_islr_bs?: number;
+          base_imponible_islr: number;
+          base_imponible_islr_bs: number;
+          reten_islr: number;
+          reten_islr_bs: number;
+        }>;
         showIvaDetails: boolean;
         showIslrDetails: boolean;
         manual_override_iva?: boolean;
@@ -452,24 +656,53 @@
 
       const inp = docInputs[nro];
       const docTasa = doc.tasa > 0 ? doc.tasa : 1;
-      const retIvaBs = (!inp?.yaTieneRetIva && inp?.showIvaDetails) ? (Number(inp.reten_iva_bs) || 0) : 0;
-      const retIslrBs = (!inp?.yaTieneRetIslr && inp?.showIslrDetails) ? (Number(inp.reten_islr_bs) || 0) : 0;
-      const retIvaUsd = (!inp?.yaTieneRetIva && inp?.showIvaDetails) ? (Number(inp.reten_iva) || 0) : 0;
-      const retIslrUsd = (!inp?.yaTieneRetIslr && inp?.showIslrDetails) ? (Number(inp.reten_islr) || 0) : 0;
+      const retIvaBs =
+        !inp?.yaTieneRetIva && inp?.showIvaDetails
+          ? Number(inp.reten_iva_bs) || 0
+          : 0;
+      const retIslrBs =
+        !inp?.yaTieneRetIslr && inp?.showIslrDetails
+          ? Number(inp.reten_islr_bs) || 0
+          : 0;
+      const retIvaUsd =
+        !inp?.yaTieneRetIva && inp?.showIvaDetails
+          ? Number(inp.reten_iva) || 0
+          : 0;
+      const retIslrUsd =
+        !inp?.yaTieneRetIslr && inp?.showIslrDetails
+          ? Number(inp.reten_islr) || 0
+          : 0;
 
       const isFactura = doc.co_tipo_doc?.trim()?.toUpperCase() === "FACT";
-      const docFecEmisStr = doc.fec_emis ? new Date(doc.fec_emis).toISOString().split('T')[0] : '';
-      const todayStr = new Date().toISOString().split('T')[0];
+      const docFecEmisStr = doc.fec_emis
+        ? new Date(doc.fec_emis).toISOString().split("T")[0]
+        : "";
+      const todayStr = new Date().toISOString().split("T")[0];
       const isPreviousDateDoc = docFecEmisStr && docFecEmisStr < todayStr;
       let diffBs = 0;
-      if (isFactura && isPreviousDateDoc && doc.saldo > 0 && currentExchangeRate > docTasa) {
+      if (
+        isFactura &&
+        isPreviousDateDoc &&
+        doc.saldo > 0 &&
+        currentExchangeRate > docTasa
+      ) {
         const saldoUsd = doc.saldo / docTasa;
-        const montoBsActual = Math.round((saldoUsd * currentExchangeRate) * 100) / 100;
-        diffBs = Math.max(0, Math.round((montoBsActual - doc.saldo) * 100) / 100);
+        const montoBsActual =
+          Math.round(saldoUsd * currentExchangeRate * 100) / 100;
+        diffBs = Math.max(
+          0,
+          Math.round((montoBsActual - doc.saldo) * 100) / 100,
+        );
       }
 
-      const maxAbonoBs = Math.max(0, Math.round((doc.saldo - retIvaBs - retIslrBs + diffBs) * 100) / 100);
-      const maxAbonoUsd = Math.max(0, Math.round(((doc.saldo / docTasa) - retIvaUsd - retIslrUsd) * 100) / 100);
+      const maxAbonoBs = Math.max(
+        0,
+        Math.round((doc.saldo - retIvaBs - retIslrBs + diffBs) * 100) / 100,
+      );
+      const maxAbonoUsd = Math.max(
+        0,
+        Math.round((doc.saldo / docTasa - retIvaUsd - retIslrUsd) * 100) / 100,
+      );
 
       totalDebtNeededBs += maxAbonoBs;
       totalDebtNeededUsd += maxAbonoUsd;
@@ -522,25 +755,45 @@
         continue;
       }
 
-      const retIvaBs = (!inp.yaTieneRetIva && inp.showIvaDetails) ? (Number(inp.reten_iva_bs) || 0) : 0;
-      const retIvaUsd = (!inp.yaTieneRetIva && inp.showIvaDetails) ? (Number(inp.reten_iva) || 0) : 0;
+      const retIvaBs =
+        !inp.yaTieneRetIva && inp.showIvaDetails
+          ? Number(inp.reten_iva_bs) || 0
+          : 0;
+      const retIvaUsd =
+        !inp.yaTieneRetIva && inp.showIvaDetails
+          ? Number(inp.reten_iva) || 0
+          : 0;
 
-      const netCreditBs = Math.max(0, Math.round((doc.saldo - retIvaBs) * 100) / 100);
-      const netCreditUsd = Math.max(0, Math.round((docSaldoUsd - retIvaUsd) * 100) / 100);
+      const netCreditBs = Math.max(
+        0,
+        Math.round((doc.saldo - retIvaBs) * 100) / 100,
+      );
+      const netCreditUsd = Math.max(
+        0,
+        Math.round((docSaldoUsd - retIvaUsd) * 100) / 100,
+      );
 
       // Monto a aplicar: hasta agotar la deuda pendiente o el saldo neto disponible de este crédito (descontando su retención de IVA si aplica)
       let appliedUsd = Math.min(netCreditUsd, remainingDebtToCoverUsd);
       let appliedBs = Math.min(netCreditBs, remainingDebtToCoverBs);
 
-      let remanenteUsd = Math.max(0, Math.round((netCreditUsd - appliedUsd) * 100) / 100);
-      let remanenteBs = Math.max(0, Math.round((netCreditBs - appliedBs) * 100) / 100);
+      let remanenteUsd = Math.max(
+        0,
+        Math.round((netCreditUsd - appliedUsd) * 100) / 100,
+      );
+      let remanenteBs = Math.max(
+        0,
+        Math.round((netCreditBs - appliedBs) * 100) / 100,
+      );
 
       // Si hay deuda a cubrir y el remanente en Bs es insignificante (<= 0.05 Bs por redondeo o centavos),
       // significa que el crédito neto se consume al 100% contra las facturas seleccionadas.
       if (
         netCreditBs > 0 &&
         remainingDebtToCoverBs > 0 &&
-        (remanenteBs <= 0.05 || (remanenteUsd <= 0.02 && remainingDebtToCoverBs >= (netCreditBs - 0.05)))
+        (remanenteBs <= 0.05 ||
+          (remanenteUsd <= 0.02 &&
+            remainingDebtToCoverBs >= netCreditBs - 0.05))
       ) {
         appliedBs = netCreditBs;
         appliedUsd = netCreditUsd;
@@ -552,18 +805,27 @@
       inp.mont_cob = -Math.round(appliedUsd * 100) / 100;
       inp.saldo_remanente_bs = remanenteBs;
       inp.saldo_remanente_usd = remanenteUsd;
-      inp.es_abono_parcial = appliedUsd > 0.005 && remanenteUsd >= 0.01 && remanenteBs > 0.05;
+      inp.es_abono_parcial =
+        appliedUsd > 0.005 && remanenteUsd >= 0.01 && remanenteBs > 0.05;
 
       totalCreditAppliedBs += appliedBs;
       totalCreditAppliedUsd += appliedUsd;
 
-      remainingDebtToCoverBs = Math.max(0, Math.round((remainingDebtToCoverBs - appliedBs) * 100) / 100);
-      remainingDebtToCoverUsd = Math.max(0, Math.round((remainingDebtToCoverUsd - appliedUsd) * 100) / 100);
+      remainingDebtToCoverBs = Math.max(
+        0,
+        Math.round((remainingDebtToCoverBs - appliedBs) * 100) / 100,
+      );
+      remainingDebtToCoverUsd = Math.max(
+        0,
+        Math.round((remainingDebtToCoverUsd - appliedUsd) * 100) / 100,
+      );
     }
 
     // 3. Fondo total disponible para amortizar las deudas (Crédito efectivamente aplicado + Instrumentos de pago)
-    let remainingPaymentBs = Math.round((totalInstrumentosPagoBs + totalCreditAppliedBs) * 100) / 100;
-    let remainingPaymentUsd = Math.round((totalInstrumentosPago + totalCreditAppliedUsd) * 100) / 100;
+    let remainingPaymentBs =
+      Math.round((totalInstrumentosPagoBs + totalCreditAppliedBs) * 100) / 100;
+    let remainingPaymentUsd =
+      Math.round((totalInstrumentosPago + totalCreditAppliedUsd) * 100) / 100;
 
     // 4. Distribuir a los documentos de débito (Facturas, Ajustes Positivos, etc.) según orden de selección
     const sortedDebitDocs = documentos
@@ -597,31 +859,61 @@
       }
 
       const docTasa = doc.tasa > 0 ? doc.tasa : 1;
-      const retIvaBs = (!inp.yaTieneRetIva && inp.showIvaDetails) ? (Number(inp.reten_iva_bs) || 0) : 0;
-      const retIslrBs = (!inp.yaTieneRetIslr && inp.showIslrDetails) ? (Number(inp.reten_islr_bs) || 0) : 0;
-      const retIvaUsd = (!inp.yaTieneRetIva && inp.showIvaDetails) ? (Number(inp.reten_iva) || 0) : 0;
-      const retIslrUsd = (!inp.yaTieneRetIslr && inp.showIslrDetails) ? (Number(inp.reten_islr) || 0) : 0;
+      const retIvaBs =
+        !inp.yaTieneRetIva && inp.showIvaDetails
+          ? Number(inp.reten_iva_bs) || 0
+          : 0;
+      const retIslrBs =
+        !inp.yaTieneRetIslr && inp.showIslrDetails
+          ? Number(inp.reten_islr_bs) || 0
+          : 0;
+      const retIvaUsd =
+        !inp.yaTieneRetIva && inp.showIvaDetails
+          ? Number(inp.reten_iva) || 0
+          : 0;
+      const retIslrUsd =
+        !inp.yaTieneRetIslr && inp.showIslrDetails
+          ? Number(inp.reten_islr) || 0
+          : 0;
 
-      const maxAbonoBs = Math.max(0, Math.round((doc.saldo - retIvaBs - retIslrBs) * 100) / 100);
-      const maxAbonoUsd = Math.max(0, Math.round(((doc.saldo / docTasa) - retIvaUsd - retIslrUsd) * 100) / 100);
+      const maxAbonoBs = Math.max(
+        0,
+        Math.round((doc.saldo - retIvaBs - retIslrBs) * 100) / 100,
+      );
+      const maxAbonoUsd = Math.max(
+        0,
+        Math.round((doc.saldo / docTasa - retIvaUsd - retIslrUsd) * 100) / 100,
+      );
 
       let appliedBs = Math.min(remainingPaymentBs, maxAbonoBs);
       let appliedUsd = Math.min(remainingPaymentUsd, maxAbonoUsd);
 
       // Si los fondos restantes cubren casi la totalidad de la deuda (diferencia residual <= 0.05 Bs o <= 0.02 USD),
       // absorber esa pequeña diferencia de centavos para saldar el documento al 100%
-      if (remainingPaymentBs > 0 && Math.abs(maxAbonoBs - remainingPaymentBs) <= 0.05) {
+      if (
+        remainingPaymentBs > 0 &&
+        Math.abs(maxAbonoBs - remainingPaymentBs) <= 0.05
+      ) {
         appliedBs = maxAbonoBs;
       }
-      if (remainingPaymentUsd > 0 && Math.abs(maxAbonoUsd - remainingPaymentUsd) <= 0.02) {
+      if (
+        remainingPaymentUsd > 0 &&
+        Math.abs(maxAbonoUsd - remainingPaymentUsd) <= 0.02
+      ) {
         appliedUsd = maxAbonoUsd;
       }
 
       inp.mont_cob_bs = Math.round(appliedBs * 100) / 100;
       inp.mont_cob = Math.round(appliedUsd * 100) / 100;
 
-      remainingPaymentBs = Math.max(0, Math.round((remainingPaymentBs - appliedBs) * 100) / 100);
-      remainingPaymentUsd = Math.max(0, Math.round((remainingPaymentUsd - appliedUsd) * 100) / 100);
+      remainingPaymentBs = Math.max(
+        0,
+        Math.round((remainingPaymentBs - appliedBs) * 100) / 100,
+      );
+      remainingPaymentUsd = Math.max(
+        0,
+        Math.round((remainingPaymentUsd - appliedUsd) * 100) / 100,
+      );
     }
   });
 
@@ -635,24 +927,41 @@
         if (!checkedDocs[doc.nro_doc.trim()]) return acc;
         if (isCreditDoc(doc.co_tipo_doc)) return acc;
         const inp = docInputs[doc.nro_doc.trim()];
-        const retIvaBs = (!inp?.yaTieneRetIva && inp?.showIvaDetails) ? (Number(inp.reten_iva_bs) || 0) : 0;
-        const retIslrBs = (!inp?.yaTieneRetIslr && inp?.showIslrDetails) ? (Number(inp.reten_islr_bs) || 0) : 0;
+        const retIvaBs =
+          !inp?.yaTieneRetIva && inp?.showIvaDetails
+            ? Number(inp.reten_iva_bs) || 0
+            : 0;
+        const retIslrBs =
+          !inp?.yaTieneRetIslr && inp?.showIslrDetails
+            ? Number(inp.reten_islr_bs) || 0
+            : 0;
 
         const isFactura = doc.co_tipo_doc?.trim()?.toUpperCase() === "FACT";
-        const docFecEmisStr = doc.fec_emis ? new Date(doc.fec_emis).toISOString().split('T')[0] : '';
-        const todayStr = new Date().toISOString().split('T')[0];
+        const docFecEmisStr = doc.fec_emis
+          ? new Date(doc.fec_emis).toISOString().split("T")[0]
+          : "";
+        const todayStr = new Date().toISOString().split("T")[0];
         const isPreviousDateDoc = docFecEmisStr && docFecEmisStr < todayStr;
         const docTasa = doc.tasa > 0 ? doc.tasa : 1;
         let diffBs = 0;
-        if (isFactura && isPreviousDateDoc && doc.saldo > 0 && currentExchangeRate > docTasa) {
+        if (
+          isFactura &&
+          isPreviousDateDoc &&
+          doc.saldo > 0 &&
+          currentExchangeRate > docTasa
+        ) {
           const saldoUsd = doc.saldo / docTasa;
-          const montoBsActual = Math.round((saldoUsd * currentExchangeRate) * 100) / 100;
-          diffBs = Math.max(0, Math.round((montoBsActual - doc.saldo) * 100) / 100);
+          const montoBsActual =
+            Math.round(saldoUsd * currentExchangeRate * 100) / 100;
+          diffBs = Math.max(
+            0,
+            Math.round((montoBsActual - doc.saldo) * 100) / 100,
+          );
         }
 
         return acc + Math.max(0, doc.saldo - retIvaBs - retIslrBs + diffBs);
-      }, 0) * 100
-    ) / 100
+      }, 0) * 100,
+    ) / 100,
   );
 
   let totalDebitNeededUsd = $derived(
@@ -661,12 +970,18 @@
         if (!checkedDocs[doc.nro_doc.trim()]) return acc;
         if (isCreditDoc(doc.co_tipo_doc)) return acc;
         const inp = docInputs[doc.nro_doc.trim()];
-        const retIvaUsd = (!inp?.yaTieneRetIva && inp?.showIvaDetails) ? (Number(inp.reten_iva) || 0) : 0;
-        const retIslrUsd = (!inp?.yaTieneRetIslr && inp?.showIslrDetails) ? (Number(inp.reten_islr) || 0) : 0;
+        const retIvaUsd =
+          !inp?.yaTieneRetIva && inp?.showIvaDetails
+            ? Number(inp.reten_iva) || 0
+            : 0;
+        const retIslrUsd =
+          !inp?.yaTieneRetIslr && inp?.showIslrDetails
+            ? Number(inp.reten_islr) || 0
+            : 0;
         const docTasa = doc.tasa > 0 ? doc.tasa : 1;
-        return acc + Math.max(0, (doc.saldo / docTasa) - retIvaUsd - retIslrUsd);
-      }, 0) * 100
-    ) / 100
+        return acc + Math.max(0, doc.saldo / docTasa - retIvaUsd - retIslrUsd);
+      }, 0) * 100,
+    ) / 100,
   );
 
   // Crédito total neto disponible en documentos de crédito seleccionados (N/CR, AJNA, ADEL), descontando retención de IVA sobre N/CR
@@ -677,10 +992,13 @@
         if (!checkedDocs[nro]) return acc;
         if (!isCreditDoc(doc.co_tipo_doc)) return acc;
         const inp = docInputs[nro];
-        const retIvaBs = (!inp?.yaTieneRetIva && inp?.showIvaDetails) ? (Number(inp.reten_iva_bs) || 0) : 0;
+        const retIvaBs =
+          !inp?.yaTieneRetIva && inp?.showIvaDetails
+            ? Number(inp.reten_iva_bs) || 0
+            : 0;
         return acc + Math.max(0, (Number(doc.saldo) || 0) - retIvaBs);
-      }, 0) * 100
-    ) / 100
+      }, 0) * 100,
+    ) / 100,
   );
 
   let totalCreditAvailableUsd = $derived(
@@ -691,107 +1009,144 @@
         if (!isCreditDoc(doc.co_tipo_doc)) return acc;
         const docTasa = doc.tasa > 0 ? doc.tasa : 1;
         const inp = docInputs[nro];
-        const retIvaUsd = (!inp?.yaTieneRetIva && inp?.showIvaDetails) ? (Number(inp.reten_iva) || 0) : 0;
-        return acc + Math.max(0, ((Number(doc.saldo) || 0) / docTasa) - retIvaUsd);
-      }, 0) * 100
-    ) / 100
+        const retIvaUsd =
+          !inp?.yaTieneRetIva && inp?.showIvaDetails
+            ? Number(inp.reten_iva) || 0
+            : 0;
+        return (
+          acc + Math.max(0, (Number(doc.saldo) || 0) / docTasa - retIvaUsd)
+        );
+      }, 0) * 100,
+    ) / 100,
   );
 
   // Crédito efectivamente aplicado: hasta agotar la deuda requerida
   let totalCreditoAplicadoBs = $derived(
     (() => {
       let val = Math.min(totalCreditAvailableBs, totalDebitNeededBs);
-      if (totalCreditAvailableBs > 0 && Math.abs(totalDebitNeededBs - totalCreditAvailableBs) <= 0.05) {
+      if (
+        totalCreditAvailableBs > 0 &&
+        Math.abs(totalDebitNeededBs - totalCreditAvailableBs) <= 0.05
+      ) {
         val = totalCreditAvailableBs;
       }
       return Math.round(val * 100) / 100;
-    })()
+    })(),
   );
 
   let totalCreditoAplicadoUsd = $derived(
     (() => {
       let val = Math.min(totalCreditAvailableUsd, totalDebitNeededUsd);
-      if (totalCreditAvailableUsd > 0 && Math.abs(totalDebitNeededUsd - totalCreditAvailableUsd) <= 0.02) {
+      if (
+        totalCreditAvailableUsd > 0 &&
+        Math.abs(totalDebitNeededUsd - totalCreditAvailableUsd) <= 0.02
+      ) {
         val = totalCreditAvailableUsd;
       }
       return Math.round(val * 100) / 100;
-    })()
+    })(),
   );
 
   // Crédito remanente no consumido (saldo a favor remanente)
   let totalCreditoRemanenteBs = $derived(
     (() => {
-      const val = Math.max(0, Math.round((totalCreditAvailableBs - totalCreditoAplicadoBs) * 100) / 100);
+      const val = Math.max(
+        0,
+        Math.round((totalCreditAvailableBs - totalCreditoAplicadoBs) * 100) /
+          100,
+      );
       return val <= 0.05 ? 0 : val;
-    })()
+    })(),
   );
 
   let totalCreditoRemanenteUsd = $derived(
     (() => {
       if (totalCreditoRemanenteBs <= 0.05) return 0;
-      const val = Math.max(0, Math.round((totalCreditAvailableUsd - totalCreditoAplicadoUsd) * 100) / 100);
+      const val = Math.max(
+        0,
+        Math.round((totalCreditAvailableUsd - totalCreditoAplicadoUsd) * 100) /
+          100,
+      );
       return val <= 0.02 ? 0 : val;
-    })()
+    })(),
   );
 
   // Monto neto esperado a cobrar en efectivo/instrumentos (deuda neta requerida - créditos efectivamente aplicados)
   let expectedNetPayBs = $derived(
     (() => {
-      const val = Math.max(0, Math.round((totalDebitNeededBs - totalCreditoAplicadoBs) * 100) / 100);
+      const val = Math.max(
+        0,
+        Math.round((totalDebitNeededBs - totalCreditoAplicadoBs) * 100) / 100,
+      );
       return val <= 0.05 ? 0 : val;
-    })()
+    })(),
   );
 
   let expectedNetPayUsd = $derived(
     (() => {
-      const val = Math.max(0, Math.round((totalDebitNeededUsd - totalCreditoAplicadoUsd) * 100) / 100);
+      const val = Math.max(
+        0,
+        Math.round((totalDebitNeededUsd - totalCreditoAplicadoUsd) * 100) / 100,
+      );
       return val <= 0.02 ? 0 : val;
-    })()
+    })(),
   );
 
   // Totales derivativos
-  let totalCobradoNetoBs = $derived(
-    expectedNetPayBs
-  );
+  let totalCobradoNetoBs = $derived(expectedNetPayBs);
 
-  let totalCobradoNeto = $derived(
-    expectedNetPayUsd
-  );
+  let totalCobradoNeto = $derived(expectedNetPayUsd);
 
   let totalRetenidoIvaBs = $derived(
     Math.round(
       Object.values(docInputs).reduce(
-        (acc, curr) => acc + (!curr.yaTieneRetIva && curr.showIvaDetails ? (Number(curr.reten_iva_bs) || 0) : 0),
+        (acc, curr) =>
+          acc +
+          (!curr.yaTieneRetIva && curr.showIvaDetails
+            ? Number(curr.reten_iva_bs) || 0
+            : 0),
         0,
-      ) * 100
-    ) / 100
+      ) * 100,
+    ) / 100,
   );
 
   let totalRetenidoIva = $derived(
     Math.round(
       Object.values(docInputs).reduce(
-        (acc, curr) => acc + (!curr.yaTieneRetIva && curr.showIvaDetails ? (Number(curr.reten_iva) || 0) : 0),
+        (acc, curr) =>
+          acc +
+          (!curr.yaTieneRetIva && curr.showIvaDetails
+            ? Number(curr.reten_iva) || 0
+            : 0),
         0,
-      ) * 100
-    ) / 100
+      ) * 100,
+    ) / 100,
   );
 
   let totalRetenidoIslrBs = $derived(
     Math.round(
       Object.values(docInputs).reduce(
-        (acc, curr) => acc + (!curr.yaTieneRetIslr && curr.showIslrDetails ? (Number(curr.reten_islr_bs) || 0) : 0),
+        (acc, curr) =>
+          acc +
+          (!curr.yaTieneRetIslr && curr.showIslrDetails
+            ? Number(curr.reten_islr_bs) || 0
+            : 0),
         0,
-      ) * 100
-    ) / 100
+      ) * 100,
+    ) / 100,
   );
 
   let totalRetenidoIslr = $derived(
     Math.round(
       Object.values(docInputs).reduce(
-        (acc, curr) => acc + (!curr.yaTieneRetIslr && curr.showIslrDetails ? (Number(curr.reten_islr) || 0) : 0),
+        (acc, curr) =>
+          acc +
+          (!curr.yaTieneRetIslr && curr.showIslrDetails
+            ? Number(curr.reten_islr) || 0
+            : 0),
         0,
-      ) * 100
-    ) / 100
+      ) * 100,
+    ) / 100,
   );
 
   let totalRetenidoIvaVista = $derived(
@@ -807,8 +1162,8 @@
           }
         }
         return acc;
-      }, 0) * 100
-    ) / 100
+      }, 0) * 100,
+    ) / 100,
   );
 
   let totalRetenidoIslrVista = $derived(
@@ -823,8 +1178,8 @@
           }
         }
         return acc;
-      }, 0) * 100
-    ) / 100
+      }, 0) * 100,
+    ) / 100,
   );
 
   let totalIgtfBs = $derived(
@@ -848,22 +1203,35 @@
 
   let totalInstrumentosPagoBs = $derived(
     formasPago.reduce((acc, fp) => {
-      const isBs = getRowCurrency(fp) === 'BS';
-      const valBs = isBs ? (Number(fp.mont_doc_bs) || 0) : Math.round((Number(fp.mont_doc) || 0) * currentExchangeRate * 100) / 100;
+      const isBs = getRowCurrency(fp) === "BS";
+      const valBs = isBs
+        ? Number(fp.mont_doc_bs) || 0
+        : Math.round((Number(fp.mont_doc) || 0) * currentExchangeRate * 100) /
+          100;
       return acc + valBs;
-    }, 0)
+    }, 0),
   );
 
   let totalInstrumentosPago = $derived.by(() => {
-    const rawUsd = formasPago.reduce((acc, curr) => acc + (Number(curr.mont_doc) || 0), 0);
-    if (totalCobradoNeto > 0 && Math.abs(totalInstrumentosPagoBs - totalCobradoNetoBs) <= 0.05 && Math.abs(rawUsd - totalCobradoNeto) <= 0.02) {
+    const rawUsd = formasPago.reduce(
+      (acc, curr) => acc + (Number(curr.mont_doc) || 0),
+      0,
+    );
+    if (
+      totalCobradoNeto > 0 &&
+      Math.abs(totalInstrumentosPagoBs - totalCobradoNetoBs) <= 0.05 &&
+      Math.abs(rawUsd - totalCobradoNeto) <= 0.02
+    ) {
       return totalCobradoNeto;
     }
     return Math.round(rawUsd * 100) / 100;
   });
 
   let saldoPendientePorCobrar = $derived(
-    Math.max(0, Math.round((expectedNetPayUsd - totalInstrumentosPago) * 100) / 100)
+    Math.max(
+      0,
+      Math.round((expectedNetPayUsd - totalInstrumentosPago) * 100) / 100,
+    ),
   );
 
   let diferenciaCuadreBs = $derived(
@@ -871,7 +1239,11 @@
   );
 
   let diferenciaCuadre = $derived(
-    Math.round((diferenciaCuadreBs / (currentExchangeRate > 0 ? currentExchangeRate : 1)) * 100) / 100,
+    Math.round(
+      (diferenciaCuadreBs /
+        (currentExchangeRate > 0 ? currentExchangeRate : 1)) *
+        100,
+    ) / 100,
   );
 
   // Sucursal seleccionada
@@ -1057,20 +1429,34 @@
             selectedClient.telefonos = cDetail.telefonos || "";
             selectedClient.email = cDetail.email || "";
             if (cDetail.rif) selectedClient.rif = String(cDetail.rif).trim();
-            selectedClient.tipo_per = String(cDetail.sTipo_Per ?? cDetail.tipo_per ?? selectedClient.tipo_per ?? "").trim();
-            selectedClient.co_tab = String(cDetail.co_tab || selectedClient.co_tab || "").trim();
-            selectedClient.contrib = Boolean(cDetail.contrib ?? cDetail.bContrib ?? cDetail.contribuyente ?? selectedClient.contrib);
+            selectedClient.tipo_per = String(
+              cDetail.sTipo_Per ??
+                cDetail.tipo_per ??
+                selectedClient.tipo_per ??
+                "",
+            ).trim();
+            selectedClient.co_tab = String(
+              cDetail.co_tab || selectedClient.co_tab || "",
+            ).trim();
+            selectedClient.contrib = Boolean(
+              cDetail.contrib ??
+                cDetail.bContrib ??
+                cDetail.contribuyente ??
+                selectedClient.contrib,
+            );
             selectedClient.contribu_e = isContribuyenteEspecialClient(cDetail);
             selectedClient.porc_esp = getEffectivePorcEsp(cDetail);
 
             if (
               documentos.length > 0 &&
-              (prevEligible !== selectedClient.contribu_e || prevPorc !== selectedClient.porc_esp)
+              (prevEligible !== selectedClient.contribu_e ||
+                prevPorc !== selectedClient.porc_esp)
             ) {
               for (const d of documentos) {
                 const nro = d.nro_doc.trim();
                 if (docInputs[nro]) {
-                  docInputs[nro].porc_ret_iva = getEffectivePorcEsp(selectedClient) || 75;
+                  docInputs[nro].porc_ret_iva =
+                    getEffectivePorcEsp(selectedClient) || 75;
                   if (checkedDocs[nro]) {
                     recalculateDocAmounts(nro, d, false);
                   }
@@ -1102,12 +1488,29 @@
 
         const currentTab = getEffectiveClientTab();
         const clientConceptos = getConceptosForClient();
-        const defaultConceptObj = currentTab === "5"
-          ? (clientConceptos.find((c: any) => c.co_islr.trim() === "083") || clientConceptos.find((c: any) => c.co_islr.trim() === "002") || clientConceptos[0])
-          : (clientConceptos.find((c: any) => c.co_islr.trim() === "055") || clientConceptos.find((c: any) => c.co_islr.trim() === "072") || clientConceptos[0]);
+        const defaultConceptObj =
+          currentTab === "5"
+            ? clientConceptos.find((c: any) => c.co_islr.trim() === "083") ||
+              clientConceptos.find((c: any) => c.co_islr.trim() === "002") ||
+              clientConceptos[0]
+            : clientConceptos.find((c: any) => c.co_islr.trim() === "055") ||
+              clientConceptos.find((c: any) => c.co_islr.trim() === "072") ||
+              clientConceptos[0];
 
-        const defaultIslrConcept = defaultConceptObj ? defaultConceptObj.co_islr.trim() : (currentTab === "5" ? "083" : "055");
-        const { porcRet: defaultPorcIslr, porcImp: defaultPorcBaseIslr, sustraen: defaultSustraendoIslr } = resolveConceptValues(defaultConceptObj, defaultIslrConcept, currentTab);
+        const defaultIslrConcept = defaultConceptObj
+          ? defaultConceptObj.co_islr.trim()
+          : currentTab === "5"
+            ? "083"
+            : "055";
+        const {
+          porcRet: defaultPorcIslr,
+          porcImp: defaultPorcBaseIslr,
+          sustraen: defaultSustraendoIslr,
+        } = resolveConceptValues(
+          defaultConceptObj,
+          defaultIslrConcept,
+          currentTab,
+        );
 
         documentos.forEach((doc) => {
           const isTargetDoc =
@@ -1121,12 +1524,16 @@
             Math.round((totalNetoUsd - montoImpUsd - otros1Usd) * 100) / 100;
 
           // Verificar si ya tiene retención de IVA o ISLR aplicada
-          const yaTieneRetIva = (Number(doc.ya_reten_iva_bs) > 0) || Boolean(doc.nro_comp_iva);
-          const yaTieneRetIslr = (Number(doc.ya_reten_islr_bs) > 0) || Boolean(doc.nro_comp_islr);
+          const yaTieneRetIva =
+            Number(doc.ya_reten_iva_bs) > 0 || Boolean(doc.nro_comp_iva);
+          const yaTieneRetIslr =
+            Number(doc.ya_reten_islr_bs) > 0 || Boolean(doc.nro_comp_islr);
           const montoRetIvaPrevioBs = Number(doc.ya_reten_iva_bs) || 0;
-          const montoRetIvaPrevioUsd = Math.round((montoRetIvaPrevioBs / docTasa) * 100) / 100;
+          const montoRetIvaPrevioUsd =
+            Math.round((montoRetIvaPrevioBs / docTasa) * 100) / 100;
           const montoRetIslrPrevioBs = Number(doc.ya_reten_islr_bs) || 0;
-          const montoRetIslrPrevioUsd = Math.round((montoRetIslrPrevioBs / docTasa) * 100) / 100;
+          const montoRetIslrPrevioUsd =
+            Math.round((montoRetIslrPrevioBs / docTasa) * 100) / 100;
 
           checkedDocs[doc.nro_doc.trim()] = isTargetDoc;
           if (isTargetDoc) {
@@ -1134,13 +1541,21 @@
           }
 
           const baseImpBs = doc.total_neto - doc.monto_imp - (doc.otros1 || 0);
+          const defaultBaseIslrBs = getDocBaseIslrBs(doc);
+          const defaultBaseIslrUsd =
+            Math.round(
+              (defaultBaseIslrBs / (doc.tasa > 0 ? doc.tasa : 1)) * 100,
+            ) / 100;
+
           docInputs[doc.nro_doc.trim()] = {
             mont_cob: 0,
             mont_cob_bs: 0,
             reten_iva: 0,
             reten_iva_bs: 0,
             num_comprobante_iva: "",
-            numero_documento_afectado_iva: isCreditNote(doc.co_tipo_doc) ? getNcrOriginDocNum(doc) : "0",
+            numero_documento_afectado_iva: isCreditNote(doc.co_tipo_doc)
+              ? getNcrOriginDocNum(doc)
+              : "0",
             base_imponible_iva: baseImpUsd,
             base_imponible_iva_bs: baseImpBs,
             alicuota_iva: Number(doc.porc_imp) > 0 ? Number(doc.porc_imp) : 16,
@@ -1151,19 +1566,36 @@
             porc_islr: defaultPorcIslr,
             porc_base_islr: defaultPorcBaseIslr,
             sustraendo_islr_bs: defaultSustraendoIslr,
-            base_imponible_islr: Math.round(((doc.base_islr_default || 0) / (doc.tasa > 0 ? doc.tasa : 1)) * 100) / 100,
-            base_imponible_islr_bs: doc.base_islr_default || 0,
+            base_imponible_islr: defaultBaseIslrUsd,
+            base_imponible_islr_bs: defaultBaseIslrBs,
+            islr_lines: [
+              {
+                id: `islr_${Date.now()}_0`,
+                co_islr: defaultIslrConcept,
+                porc_islr: defaultPorcIslr,
+                porc_base_islr: defaultPorcBaseIslr,
+                sustraendo_islr_bs: defaultSustraendoIslr,
+                base_imponible_islr: defaultBaseIslrUsd,
+                base_imponible_islr_bs: defaultBaseIslrBs,
+                reten_islr: 0,
+                reten_islr_bs: 0,
+              },
+            ],
             showIvaDetails: false,
             showIslrDetails: false,
             manual_override_iva: false,
             manual_override_islr: false,
             manual_override_abono: false,
             yaTieneRetIva,
-            nro_comp_iva_previo: doc.nro_comp_iva ? doc.nro_comp_iva.trim() : "",
+            nro_comp_iva_previo: doc.nro_comp_iva
+              ? doc.nro_comp_iva.trim()
+              : "",
             monto_ret_iva_previo_bs: montoRetIvaPrevioBs,
             monto_ret_iva_previo_usd: montoRetIvaPrevioUsd,
             yaTieneRetIslr,
-            nro_comp_islr_previo: doc.nro_comp_islr ? doc.nro_comp_islr.trim() : "",
+            nro_comp_islr_previo: doc.nro_comp_islr
+              ? doc.nro_comp_islr.trim()
+              : "",
             monto_ret_islr_previo_bs: montoRetIslrPrevioBs,
             monto_ret_islr_previo_usd: montoRetIslrPrevioUsd,
             saldo_remanente_bs: doc.saldo,
@@ -1202,7 +1634,11 @@
     recalculateDocAmounts(nroDoc, doc, true);
   }
 
-  function recalculateDocAmounts(nroDoc: string, doc: any, syncInstrument = true) {
+  function recalculateDocAmounts(
+    nroDoc: string,
+    doc: any,
+    syncInstrument = true,
+  ) {
     const input = docInputs[nroDoc];
     if (!input) return;
 
@@ -1235,16 +1671,28 @@
         input.reten_iva_bs = 0;
         input.reten_iva = 0;
       } else if (input.showIvaDetails && canRetainIva) {
-        const porc = Number(input.porc_ret_iva) || getEffectivePorcEsp(selectedClient) || 75;
+        const porc =
+          Number(input.porc_ret_iva) ||
+          getEffectivePorcEsp(selectedClient) ||
+          75;
         input.porc_ret_iva = porc;
-        input.reten_iva_bs = Math.round(doc.monto_imp * (porc / 100) * 100) / 100;
-        input.reten_iva = Math.round((input.reten_iva_bs / docTasa) * 100) / 100;
+        input.reten_iva_bs =
+          Math.round(doc.monto_imp * (porc / 100) * 100) / 100;
+        input.reten_iva =
+          Math.round((input.reten_iva_bs / docTasa) * 100) / 100;
 
-        input.base_imponible_iva_bs = Math.round((doc.total_neto - doc.monto_imp - (doc.otros1 || 0)) * 100) / 100;
+        input.base_imponible_iva_bs =
+          Math.round(
+            (doc.total_neto - doc.monto_imp - (doc.otros1 || 0)) * 100,
+          ) / 100;
         input.base_imponible_iva =
           Math.round((input.base_imponible_iva_bs / docTasa) * 100) / 100;
-        input.alicuota_iva = Number(doc.porc_imp) > 0 ? Number(doc.porc_imp) : 16;
-        if (isCreditNote(doc.co_tipo_doc) && !input.numero_documento_afectado_iva) {
+        input.alicuota_iva =
+          Number(doc.porc_imp) > 0 ? Number(doc.porc_imp) : 16;
+        if (
+          isCreditNote(doc.co_tipo_doc) &&
+          !input.numero_documento_afectado_iva
+        ) {
           input.numero_documento_afectado_iva = getNcrOriginDocNum(doc);
         }
       } else {
@@ -1259,17 +1707,44 @@
         input.reten_islr_bs = 0;
         input.reten_islr = 0;
       } else if (input.showIslrDetails && canRetainIslr) {
-        const baseImpBs = Number(input.base_imponible_islr_bs) > 0 ? Number(input.base_imponible_islr_bs) : (Number(doc.base_islr_default) > 0 ? Number(doc.base_islr_default) : (doc.total_neto - doc.monto_imp));
-        input.base_imponible_islr_bs = baseImpBs;
-        input.base_imponible_islr = Math.round((baseImpBs / docTasa) * 100) / 100;
-        const porcBase = Number(input.porc_base_islr ?? 100) / 100;
-        const baseSujeta = Math.round(baseImpBs * porcBase * 100) / 100;
-        const porcRet = (Number(input.porc_islr) || 0) / 100;
-        const sustraendoBs = Number(input.sustraendo_islr_bs) || 0;
-        const retBruta = Math.round(baseSujeta * porcRet * 100) / 100;
-        const retNeta = Math.max(0, Math.round((retBruta - sustraendoBs) * 100) / 100);
-        input.reten_islr_bs = retNeta;
-        input.reten_islr = Math.round((input.reten_islr_bs / docTasa) * 100) / 100;
+        ensureIslrLines(input, doc);
+        let totalRetBs = 0;
+        let totalRetUsd = 0;
+        let totalBaseBs = 0;
+
+        for (const line of input.islr_lines) {
+          const lineBaseBs = Number(line.base_imponible_islr_bs) || 0;
+          line.base_imponible_islr_bs = lineBaseBs;
+          line.base_imponible_islr =
+            Math.round((lineBaseBs / docTasa) * 100) / 100;
+          const porcBase = Number(line.porc_base_islr ?? 100) / 100;
+          const baseSujeta = Math.round(lineBaseBs * porcBase * 100) / 100;
+          const porcRet = (Number(line.porc_islr) || 0) / 100;
+          const sustraendoBs = Number(line.sustraendo_islr_bs) || 0;
+          const retBruta = Math.round(baseSujeta * porcRet * 100) / 100;
+          line.reten_islr_bs = Math.max(
+            0,
+            Math.round((retBruta - sustraendoBs) * 100) / 100,
+          );
+          line.reten_islr =
+            Math.round((line.reten_islr_bs / docTasa) * 100) / 100;
+
+          totalRetBs += line.reten_islr_bs;
+          totalRetUsd += line.reten_islr;
+          totalBaseBs += lineBaseBs;
+        }
+
+        input.reten_islr_bs = Math.round(totalRetBs * 100) / 100;
+        input.reten_islr = Math.round(totalRetUsd * 100) / 100;
+        input.base_imponible_islr_bs = Math.round(totalBaseBs * 100) / 100;
+        input.base_imponible_islr =
+          Math.round((input.base_imponible_islr_bs / docTasa) * 100) / 100;
+
+        if (input.islr_lines[0]) {
+          input.co_islr = input.islr_lines[0].co_islr;
+          input.porc_islr = input.islr_lines[0].porc_islr;
+          input.sustraendo_islr_bs = input.islr_lines[0].sustraendo_islr_bs;
+        }
       } else {
         input.reten_islr = 0;
         input.reten_islr_bs = 0;
@@ -1311,26 +1786,54 @@
       if (isCreditDoc(doc.co_tipo_doc)) continue;
 
       const inp = docInputs[nro];
-      const docTasa = doc.tasa > 0 ? doc.tasa : (currentExchangeRate > 0 ? currentExchangeRate : 1);
-      const retIvaBs = (!inp?.yaTieneRetIva && inp?.showIvaDetails) ? (Number(inp.reten_iva_bs) || 0) : 0;
-      const retIslrBs = (!inp?.yaTieneRetIslr && inp?.showIslrDetails) ? (Number(inp.reten_islr_bs) || 0) : 0;
-      const retIvaUsd = (!inp?.yaTieneRetIva && inp?.showIvaDetails) ? (Number(inp.reten_iva) || 0) : 0;
-      const retIslrUsd = (!inp?.yaTieneRetIslr && inp?.showIslrDetails) ? (Number(inp.reten_islr) || 0) : 0;
+      const docTasa =
+        doc.tasa > 0
+          ? doc.tasa
+          : currentExchangeRate > 0
+            ? currentExchangeRate
+            : 1;
+      const retIvaBs =
+        !inp?.yaTieneRetIva && inp?.showIvaDetails
+          ? Number(inp.reten_iva_bs) || 0
+          : 0;
+      const retIslrBs =
+        !inp?.yaTieneRetIslr && inp?.showIslrDetails
+          ? Number(inp.reten_islr_bs) || 0
+          : 0;
+      const retIvaUsd =
+        !inp?.yaTieneRetIva && inp?.showIvaDetails
+          ? Number(inp.reten_iva) || 0
+          : 0;
+      const retIslrUsd =
+        !inp?.yaTieneRetIslr && inp?.showIslrDetails
+          ? Number(inp.reten_islr) || 0
+          : 0;
 
       // Cálculo del diferencial cambiario N/DB EXCLUSIVAMENTE para Facturas de venta (FACT) de una fecha anterior
       const isFactura = doc.co_tipo_doc?.trim()?.toUpperCase() === "FACT";
-      const docFecEmisStr = doc.fec_emis ? new Date(doc.fec_emis).toISOString().split('T')[0] : '';
-      const todayStr = new Date().toISOString().split('T')[0];
+      const docFecEmisStr = doc.fec_emis
+        ? new Date(doc.fec_emis).toISOString().split("T")[0]
+        : "";
+      const todayStr = new Date().toISOString().split("T")[0];
       const isPreviousDateDoc = docFecEmisStr && docFecEmisStr < todayStr;
       let diffBs = 0;
-      if (isFactura && isPreviousDateDoc && doc.saldo > 0 && currentExchangeRate > docTasa) {
+      if (
+        isFactura &&
+        isPreviousDateDoc &&
+        doc.saldo > 0 &&
+        currentExchangeRate > docTasa
+      ) {
         const saldoUsd = doc.saldo / docTasa;
-        const montoBsActual = Math.round((saldoUsd * currentExchangeRate) * 100) / 100;
-        diffBs = Math.max(0, Math.round((montoBsActual - doc.saldo) * 100) / 100);
+        const montoBsActual =
+          Math.round(saldoUsd * currentExchangeRate * 100) / 100;
+        diffBs = Math.max(
+          0,
+          Math.round((montoBsActual - doc.saldo) * 100) / 100,
+        );
       }
 
       const maxBs = Math.max(0, doc.saldo - retIvaBs - retIslrBs + diffBs);
-      const maxUsd = Math.max(0, (doc.saldo / docTasa) - retIvaUsd - retIslrUsd);
+      const maxUsd = Math.max(0, doc.saldo / docTasa - retIvaUsd - retIslrUsd);
 
       totalNeededBs += maxBs;
       totalNeededUsd += maxUsd;
@@ -1346,10 +1849,19 @@
       if (isCreditDoc(doc.co_tipo_doc)) {
         const docTasa = doc.tasa > 0 ? doc.tasa : 1;
         const inp = docInputs[nro];
-        const retIvaBs = (!inp?.yaTieneRetIva && inp?.showIvaDetails) ? (Number(inp.reten_iva_bs) || 0) : 0;
-        const retIvaUsd = (!inp?.yaTieneRetIva && inp?.showIvaDetails) ? (Number(inp.reten_iva) || 0) : 0;
+        const retIvaBs =
+          !inp?.yaTieneRetIva && inp?.showIvaDetails
+            ? Number(inp.reten_iva_bs) || 0
+            : 0;
+        const retIvaUsd =
+          !inp?.yaTieneRetIva && inp?.showIvaDetails
+            ? Number(inp.reten_iva) || 0
+            : 0;
         const netBs = Math.max(0, doc.saldo - retIvaBs);
-        const netUsd = Math.max(0, Math.round(((doc.saldo / docTasa) - retIvaUsd) * 100) / 100);
+        const netUsd = Math.max(
+          0,
+          Math.round((doc.saldo / docTasa - retIvaUsd) * 100) / 100,
+        );
         totalCreditAvailableBs += netBs;
         totalCreditAvailableUsd += netUsd;
       }
@@ -1359,10 +1871,16 @@
     let creditFromNCsBs = Math.min(totalCreditAvailableBs, totalNeededBs);
     let creditFromNCsUsd = Math.min(totalCreditAvailableUsd, totalNeededUsd);
 
-    if (totalCreditAvailableBs > 0 && Math.abs(totalNeededBs - totalCreditAvailableBs) <= 0.05) {
+    if (
+      totalCreditAvailableBs > 0 &&
+      Math.abs(totalNeededBs - totalCreditAvailableBs) <= 0.05
+    ) {
       creditFromNCsBs = totalNeededBs;
     }
-    if (totalCreditAvailableUsd > 0 && Math.abs(totalNeededUsd - totalCreditAvailableUsd) <= 0.02) {
+    if (
+      totalCreditAvailableUsd > 0 &&
+      Math.abs(totalNeededUsd - totalCreditAvailableUsd) <= 0.02
+    ) {
       creditFromNCsUsd = totalNeededUsd;
     }
 
@@ -1376,8 +1894,17 @@
       }
     });
 
-    const pendingBs = Math.max(0, Math.round((totalNeededBs - creditFromNCsBs - otherInstrumentsBs) * 100) / 100);
-    const pendingUsd = Math.max(0, Math.round((totalNeededUsd - creditFromNCsUsd - otherInstrumentsUsd) * 100) / 100);
+    const pendingBs = Math.max(
+      0,
+      Math.round((totalNeededBs - creditFromNCsBs - otherInstrumentsBs) * 100) /
+        100,
+    );
+    const pendingUsd = Math.max(
+      0,
+      Math.round(
+        (totalNeededUsd - creditFromNCsUsd - otherInstrumentsUsd) * 100,
+      ) / 100,
+    );
 
     return { pendingBs, pendingUsd };
   }
@@ -1487,7 +2014,10 @@
     if (curr === "BS") {
       fp.mont_doc_bs = Number(val) || 0;
       const calculatedUsd = Math.round((fp.mont_doc_bs / rate) * 100) / 100;
-      if (Math.abs(fp.mont_doc_bs - totalCobradoNetoBs) <= 0.05 && Math.abs(calculatedUsd - expectedNetPayUsd) <= 0.02) {
+      if (
+        Math.abs(fp.mont_doc_bs - totalCobradoNetoBs) <= 0.05 &&
+        Math.abs(calculatedUsd - expectedNetPayUsd) <= 0.02
+      ) {
         fp.mont_doc = expectedNetPayUsd;
       } else {
         fp.mont_doc = calculatedUsd;
@@ -1499,22 +2029,33 @@
   }
 
   function getRowCurrency(fp: any) {
-    if (fp.forma_pag === "EF" || fp.forma_pag === "TJ" || fp.forma_pag === "CT") {
+    if (
+      fp.forma_pag === "EF" ||
+      fp.forma_pag === "TJ" ||
+      fp.forma_pag === "CT"
+    ) {
       if (fp.cod_caja) {
-        const caja = data.cajas?.find((c: any) => c.cod_caja?.trim() === fp.cod_caja?.trim());
-        const mone = caja?.co_mone?.trim()?.toUpperCase() || 'BS';
-        return (mone === 'VES' || mone === 'BS') ? 'BS' : 'USD';
+        const caja = data.cajas?.find(
+          (c: any) => c.cod_caja?.trim() === fp.cod_caja?.trim(),
+        );
+        const mone = caja?.co_mone?.trim()?.toUpperCase() || "BS";
+        return mone === "VES" || mone === "BS" ? "BS" : "USD";
       }
-    } else if (fp.forma_pag === "TE" || fp.forma_pag === "DP" || fp.forma_pag === "CH") {
+    } else if (
+      fp.forma_pag === "TE" ||
+      fp.forma_pag === "DP" ||
+      fp.forma_pag === "CH"
+    ) {
       if (fp.cod_cta) {
-        const cta = data.cuentasBancarias?.find((c: any) => c.cod_cta?.trim() === fp.cod_cta?.trim());
-        const mone = cta?.co_mone?.trim()?.toUpperCase() || 'BS';
-        return (mone === 'VES' || mone === 'BS') ? 'BS' : 'USD';
+        const cta = data.cuentasBancarias?.find(
+          (c: any) => c.cod_cta?.trim() === fp.cod_cta?.trim(),
+        );
+        const mone = cta?.co_mone?.trim()?.toUpperCase() || "BS";
+        return mone === "VES" || mone === "BS" ? "BS" : "USD";
       }
     }
-    return 'BS';
+    return "BS";
   }
-
 
   let saving = $state(false);
   let saveError = $state<string | null>(null);
@@ -1522,15 +2063,19 @@
   let generatedDocNum = $state("");
 
   let showDifferenceModal = $state(false);
-  let selectedDifferenceAction = $state<'AJNM' | 'AJPM' | 'KEEP_REMAINING'>('KEEP_REMAINING');
+  let selectedDifferenceAction = $state<"AJNM" | "AJPM" | "KEEP_REMAINING">(
+    "KEEP_REMAINING",
+  );
   let differenceSurplusUsd = $state(0);
   let differenceSurplusBs = $state(0);
   let differenceHasCreditRemanente = $state(false);
-  let differenceOriginType = $state<'CREDIT_DOC' | 'INSTRUMENTS' | 'MIXED'>('CREDIT_DOC');
-  let differenceCreditDocNum = $state('');
-  let differenceCreditDocType = $state('');
+  let differenceOriginType = $state<"CREDIT_DOC" | "INSTRUMENTS" | "MIXED">(
+    "CREDIT_DOC",
+  );
+  let differenceCreditDocNum = $state("");
+  let differenceCreditDocType = $state("");
   let hasSelectedPositiveAdjustment = $state(false);
-  let positiveAdjustmentDocNum = $state('');
+  let positiveAdjustmentDocNum = $state("");
   let pendingDifferenceConfirmation = $state(false);
 
   async function confirmAndSaveWithDifference() {
@@ -1566,10 +2111,18 @@
           }
 
           if (isCreditNote(doc.co_tipo_doc)) {
-            const affectedOrig = (inp.numero_documento_afectado_iva || getNcrOriginDocNum(doc) || "").trim();
-            if (!affectedOrig || affectedOrig === "0" || affectedOrig === nroTrim) {
+            const affectedOrig = (
+              inp.numero_documento_afectado_iva ||
+              getNcrOriginDocNum(doc) ||
+              ""
+            ).trim();
+            if (
+              !affectedOrig ||
+              affectedOrig === "0" ||
+              affectedOrig === nroTrim
+            ) {
               toast.error(
-                `Debe indicar el número de factura fiscal de origen afectada para la Nota de Crédito ${nroTrim}.`
+                `Debe indicar el número de factura fiscal de origen afectada para la Nota de Crédito ${nroTrim}.`,
               );
               saving = false;
               return;
@@ -1577,9 +2130,13 @@
           }
 
           const compNum = (inp.num_comprobante_iva || "").trim();
-          if (!compNum || compNum.toUpperCase() === "S/N" || compNum.toUpperCase() === "SN") {
+          if (
+            !compNum ||
+            compNum.toUpperCase() === "S/N" ||
+            compNum.toUpperCase() === "SN"
+          ) {
             toast.error(
-              `Debe ingresar el número de comprobante para la retención de IVA del documento ${nroTrim}.`
+              `Debe ingresar el número de comprobante para la retención de IVA del documento ${nroTrim}.`,
             );
             saving = false;
             return;
@@ -1598,7 +2155,7 @@
             toast.error(
               isPersonaNaturalClient(selectedClient)
                 ? "Las Personas Naturales no aplican retención de ISLR."
-                : `El documento ${nroTrim} no es fiscal elegible para retención de ISLR.`
+                : `El documento ${nroTrim} no es fiscal elegible para retención de ISLR.`,
             );
             saving = false;
             return;
@@ -1618,10 +2175,10 @@
     let anticipoRemanenteBs = 0;
     let ncrRemanenteUsd = 0;
     let ncrRemanenteBs = 0;
-    let lastCreditDocNum = '';
-    let lastCreditDocType = '';
+    let lastCreditDocNum = "";
+    let lastCreditDocType = "";
     let foundPosAdjustment = false;
-    let foundPosAdjustmentDocNum = '';
+    let foundPosAdjustmentDocNum = "";
     let hasCheckedDebitDocs = false;
     let hasActiveCreditRetention = false;
 
@@ -1631,24 +2188,35 @@
         if (isDebitDoc(doc.co_tipo_doc)) {
           hasCheckedDebitDocs = true;
         }
-        if (t === 'AJPM' || t === 'AJPA') {
+        if (t === "AJPM" || t === "AJPA") {
           foundPosAdjustment = true;
           foundPosAdjustmentDocNum = doc.nro_doc.trim();
         }
 
         if (isCreditDoc(doc.co_tipo_doc)) {
           const inp = docInputs[doc.nro_doc.trim()];
-          if (!inp?.yaTieneRetIva && inp?.showIvaDetails && (Number(inp.reten_iva_bs) || 0) > 0) {
+          if (
+            !inp?.yaTieneRetIva &&
+            inp?.showIvaDetails &&
+            (Number(inp.reten_iva_bs) || 0) > 0
+          ) {
             hasActiveCreditRetention = true;
           }
           const docTasa = doc.tasa > 0 ? doc.tasa : 1;
-          const remUsd = (inp?.saldo_remanente_usd !== undefined) ? inp.saldo_remanente_usd : (doc.saldo / docTasa);
-          const remBs = (inp?.saldo_remanente_bs !== undefined) ? inp.saldo_remanente_bs : doc.saldo;
+          const remUsd =
+            inp?.saldo_remanente_usd !== undefined
+              ? inp.saldo_remanente_usd
+              : doc.saldo / docTasa;
+          const remBs =
+            inp?.saldo_remanente_bs !== undefined
+              ? inp.saldo_remanente_bs
+              : doc.saldo;
           // Solo se considera remanente real si en Bs supera 0.05 Bs Y en USD supera 0.02 USD
           if (remUsd > 0.02 && remBs > 0.05) {
             lastCreditDocNum = doc.nro_doc.trim();
-            lastCreditDocType = (t === 'N/CR' || t === 'NCR') ? 'Nota de Crédito' : 'Anticipo';
-            if (t === 'N/CR' || t === 'NCR') {
+            lastCreditDocType =
+              t === "N/CR" || t === "NCR" ? "Nota de Crédito" : "Anticipo";
+            if (t === "N/CR" || t === "NCR") {
               ncrRemanenteUsd += remUsd;
               ncrRemanenteBs += remBs;
             } else {
@@ -1664,56 +2232,86 @@
     hasSelectedPositiveAdjustment = foundPosAdjustment;
     positiveAdjustmentDocNum = foundPosAdjustmentDocNum;
 
-    const surplusInstrumentosUsd = Math.max(0, Math.round((totalInstrumentosPago - Math.max(0, expectedNetPayUsd)) * 100) / 100);
-    const surplusInstrumentosBs = Math.max(0, Math.round((totalInstrumentosPagoBs - Math.max(0, totalCobradoNetoBs)) * 100) / 100);
+    const surplusInstrumentosUsd = Math.max(
+      0,
+      Math.round(
+        (totalInstrumentosPago - Math.max(0, expectedNetPayUsd)) * 100,
+      ) / 100,
+    );
+    const surplusInstrumentosBs = Math.max(
+      0,
+      Math.round(
+        (totalInstrumentosPagoBs - Math.max(0, totalCobradoNetoBs)) * 100,
+      ) / 100,
+    );
 
-    const creditRemanenteUsd = Math.round((anticipoRemanenteUsd + ncrRemanenteUsd) * 100) / 100;
-    const creditRemanenteBs = Math.round((anticipoRemanenteBs + ncrRemanenteBs) * 100) / 100;
+    const creditRemanenteUsd =
+      Math.round((anticipoRemanenteUsd + ncrRemanenteUsd) * 100) / 100;
+    const creditRemanenteBs =
+      Math.round((anticipoRemanenteBs + ncrRemanenteBs) * 100) / 100;
 
     // Si el usuario únicamente seleccionó N/CR para registrar su comprobante de retención de IVA (sin facturas de débito ni dinero recibido),
     // conservar automáticamente el saldo neto remanente en la N/CR sin pedir ajuste por diferencia
-    const isStandaloneCreditRetention = !hasCheckedDebitDocs && hasActiveCreditRetention && totalInstrumentosPagoBs <= 0.05;
+    const isStandaloneCreditRetention =
+      !hasCheckedDebitDocs &&
+      hasActiveCreditRetention &&
+      totalInstrumentosPagoBs <= 0.05;
 
     // Si los instrumentos en Bs cuadran (diferencia <= 0.05 Bs) y en USD solo hay 1-2 centavos por redondeo de tasa,
     // se trata de un residuo de conversión y no de un exceso de dinero real entregado por el cliente
-    const realSurplusInstrumentosUsd = (surplusInstrumentosBs <= 0.05 && surplusInstrumentosUsd <= 0.02)
-      ? 0
-      : surplusInstrumentosUsd;
+    const realSurplusInstrumentosUsd =
+      surplusInstrumentosBs <= 0.05 && surplusInstrumentosUsd <= 0.02
+        ? 0
+        : surplusInstrumentosUsd;
 
     // Si el crédito en Bs no tiene remanente real (<= 0.05 Bs) o en USD solo hay 1-2 centavos por redondeo de tasa (<= 0.02 USD),
     // se trata de un residuo de conversión y no de un saldo a favor real disponible
-    const realCreditRemanenteUsd = (creditRemanenteBs <= 0.05 || (creditRemanenteUsd <= 0.02 && creditRemanenteBs <= 0.05))
-      ? 0
-      : creditRemanenteUsd;
+    const realCreditRemanenteUsd =
+      creditRemanenteBs <= 0.05 ||
+      (creditRemanenteUsd <= 0.02 && creditRemanenteBs <= 0.05)
+        ? 0
+        : creditRemanenteUsd;
 
-    const totalSurplusUsd = Math.round((realCreditRemanenteUsd + realSurplusInstrumentosUsd) * 100) / 100;
-    const totalSurplusBs = Math.round((creditRemanenteBs + surplusInstrumentosBs) * 100) / 100;
+    const totalSurplusUsd =
+      Math.round((realCreditRemanenteUsd + realSurplusInstrumentosUsd) * 100) /
+      100;
+    const totalSurplusBs =
+      Math.round((creditRemanenteBs + surplusInstrumentosBs) * 100) / 100;
 
-    const isRealSurplus = (totalSurplusBs > 0.05) || (realCreditRemanenteUsd > 0.02);
+    const isRealSurplus =
+      totalSurplusBs > 0.05 || realCreditRemanenteUsd > 0.02;
 
-    if (!isStandaloneCreditRetention && isRealSurplus && totalSurplusUsd > 0.02 && !pendingDifferenceConfirmation) {
+    if (
+      !isStandaloneCreditRetention &&
+      isRealSurplus &&
+      totalSurplusUsd > 0.02 &&
+      !pendingDifferenceConfirmation
+    ) {
       differenceSurplusUsd = totalSurplusUsd;
       differenceSurplusBs = totalSurplusBs;
       differenceCreditDocNum = lastCreditDocNum;
-      differenceCreditDocType = lastCreditDocType || 'Crédito';
+      differenceCreditDocType = lastCreditDocType || "Crédito";
 
       if (creditRemanenteUsd > 0.009 && surplusInstrumentosUsd <= 0.009) {
         // La diferencia proviene de un documento de crédito existente (N/CR, AJNM, etc.)
         // NUNCA generar AJNM (otro documento negativo) porque sumaría negativos en vez de cancelar a $0
-        differenceOriginType = 'CREDIT_DOC';
+        differenceOriginType = "CREDIT_DOC";
         differenceHasCreditRemanente = true;
-        selectedDifferenceAction = 'KEEP_REMAINING';
-      } else if (surplusInstrumentosUsd > 0.009 && creditRemanenteUsd <= 0.009) {
+        selectedDifferenceAction = "KEEP_REMAINING";
+      } else if (
+        surplusInstrumentosUsd > 0.009 &&
+        creditRemanenteUsd <= 0.009
+      ) {
         // La diferencia proviene de instrumentos de pago recibidos en exceso (Efectivo/Banco)
         // El dinero ingresado es positivo (+), por lo que un crédito AJNM (-) sí cuadra a $0
-        differenceOriginType = 'INSTRUMENTS';
+        differenceOriginType = "INSTRUMENTS";
         differenceHasCreditRemanente = false;
-        selectedDifferenceAction = 'AJNM';
+        selectedDifferenceAction = "AJNM";
       } else {
         // Mixto (Crédito + Sobrante en efectivo)
-        differenceOriginType = 'MIXED';
+        differenceOriginType = "MIXED";
         differenceHasCreditRemanente = creditRemanenteUsd > 0.009;
-        selectedDifferenceAction = 'KEEP_REMAINING';
+        selectedDifferenceAction = "KEEP_REMAINING";
       }
 
       showDifferenceModal = true;
@@ -1740,7 +2338,9 @@
         return nroA.localeCompare(nroB);
       });
     const checkedCreditDocs = documentos
-      .filter((d) => checkedDocs[d.nro_doc.trim()] && isCreditDoc(d.co_tipo_doc))
+      .filter(
+        (d) => checkedDocs[d.nro_doc.trim()] && isCreditDoc(d.co_tipo_doc),
+      )
       .sort((a, b) => {
         const nroA = a.nro_doc.trim();
         const nroB = b.nro_doc.trim();
@@ -1769,21 +2369,36 @@
       const nro = doc.nro_doc.trim();
       const inp = docInputs[nro] || {};
       const docTasa = doc.tasa > 0 ? doc.tasa : 1;
-      const retIvaBs = (!inp.yaTieneRetIva && inp.showIvaDetails) ? (inp.reten_iva_bs || 0) : 0;
-      const retIslrBs = (!inp.yaTieneRetIslr && inp.showIslrDetails) ? (inp.reten_islr_bs || 0) : 0;
+      const retIvaBs =
+        !inp.yaTieneRetIva && inp.showIvaDetails ? inp.reten_iva_bs || 0 : 0;
+      const retIslrBs =
+        !inp.yaTieneRetIslr && inp.showIslrDetails ? inp.reten_islr_bs || 0 : 0;
 
       const isFactura = doc.co_tipo_doc?.trim()?.toUpperCase() === "FACT";
-      const docFecEmisStr = doc.fec_emis ? new Date(doc.fec_emis).toISOString().split('T')[0] : '';
-      const todayStr = new Date().toISOString().split('T')[0];
+      const docFecEmisStr = doc.fec_emis
+        ? new Date(doc.fec_emis).toISOString().split("T")[0]
+        : "";
+      const todayStr = new Date().toISOString().split("T")[0];
       const isPreviousDateDoc = docFecEmisStr && docFecEmisStr < todayStr;
       let diffBs = 0;
-      if (isFactura && isPreviousDateDoc && doc.saldo > 0 && tasaCobro > docTasa) {
+      if (
+        isFactura &&
+        isPreviousDateDoc &&
+        doc.saldo > 0 &&
+        tasaCobro > docTasa
+      ) {
         const saldoUsd = doc.saldo / docTasa;
-        const montoBsActual = Math.round((saldoUsd * tasaCobro) * 100) / 100;
-        diffBs = Math.max(0, Math.round((montoBsActual - doc.saldo) * 100) / 100);
+        const montoBsActual = Math.round(saldoUsd * tasaCobro * 100) / 100;
+        diffBs = Math.max(
+          0,
+          Math.round((montoBsActual - doc.saldo) * 100) / 100,
+        );
       }
 
-      const netDebtBs = Math.max(0, Math.round((doc.saldo - retIvaBs - retIslrBs + diffBs) * 100) / 100);
+      const netDebtBs = Math.max(
+        0,
+        Math.round((doc.saldo - retIvaBs - retIslrBs + diffBs) * 100) / 100,
+      );
       totalDebtToCoverBs += netDebtBs;
       debitDocInfoMap.set(nro, { retIvaBs, retIslrBs, diffBs, netDebtBs });
     }
@@ -1796,22 +2411,39 @@
     for (const doc of checkedCreditDocs) {
       const nro = doc.nro_doc.trim();
       const inp = docInputs[nro];
-      const retIvaBs = (!inp?.yaTieneRetIva && inp?.showIvaDetails) ? (Number(inp.reten_iva_bs) || 0) : 0;
+      const retIvaBs =
+        !inp?.yaTieneRetIva && inp?.showIvaDetails
+          ? Number(inp.reten_iva_bs) || 0
+          : 0;
       const docSaldoBs = Number(doc.saldo) || 0;
-      const netDocSaldoBs = Math.max(0, Math.round((docSaldoBs - retIvaBs) * 100) / 100);
+      const netDocSaldoBs = Math.max(
+        0,
+        Math.round((docSaldoBs - retIvaBs) * 100) / 100,
+      );
       let appliedBs = 0;
 
-      if (pendingDifferenceConfirmation && (selectedDifferenceAction === 'AJNM' || selectedDifferenceAction === 'AJPM')) {
+      if (
+        pendingDifferenceConfirmation &&
+        (selectedDifferenceAction === "AJNM" ||
+          selectedDifferenceAction === "AJPM")
+      ) {
         appliedBs = netDocSaldoBs;
       } else {
         appliedBs = Math.min(netDocSaldoBs, remainingDebtForCreditsBs);
         // Si hay deuda a cubrir y cubre el saldo neto casi por completo (diferencia <= 0.05 Bs), absorber el 100%
-        if (netDocSaldoBs > 0 && remainingDebtForCreditsBs > 0 && remainingDebtForCreditsBs >= (netDocSaldoBs - 0.05)) {
+        if (
+          netDocSaldoBs > 0 &&
+          remainingDebtForCreditsBs > 0 &&
+          remainingDebtForCreditsBs >= netDocSaldoBs - 0.05
+        ) {
           appliedBs = netDocSaldoBs;
         }
       }
 
-      remainingDebtForCreditsBs = Math.max(0, Math.round((remainingDebtForCreditsBs - appliedBs) * 100) / 100);
+      remainingDebtForCreditsBs = Math.max(
+        0,
+        Math.round((remainingDebtForCreditsBs - appliedBs) * 100) / 100,
+      );
       totalCreditAmortizedBs += appliedBs;
 
       if (appliedBs > 0.005 || retIvaBs > 0.005) {
@@ -1827,7 +2459,9 @@
     }
 
     // Fondos totales disponibles para liquidar débitos = Créditos aplicados + Instrumentos de pago
-    let availableFundsForDebitsBs = Math.round((totalCreditAmortizedBs + totalInstrumentosPagoBs) * 100) / 100;
+    let availableFundsForDebitsBs =
+      Math.round((totalCreditAmortizedBs + totalInstrumentosPagoBs) * 100) /
+      100;
     const debitRenglones = [];
     let totalDocBs = 0;
 
@@ -1838,11 +2472,17 @@
 
       // Si los fondos cubren casi toda la deuda (tolerancia 15 Bs o 0.02 * tasa), liquidar el 100%
       const maxTolerance = Math.max(15.0, tasaCobro * 0.02);
-      if (availableFundsForDebitsBs > 0 && Math.abs(info.netDebtBs - availableFundsForDebitsBs) <= maxTolerance) {
+      if (
+        availableFundsForDebitsBs > 0 &&
+        Math.abs(info.netDebtBs - availableFundsForDebitsBs) <= maxTolerance
+      ) {
         payBs = info.netDebtBs;
       }
 
-      availableFundsForDebitsBs = Math.max(0, Math.round((availableFundsForDebitsBs - payBs) * 100) / 100);
+      availableFundsForDebitsBs = Math.max(
+        0,
+        Math.round((availableFundsForDebitsBs - payBs) * 100) / 100,
+      );
       totalDocBs += payBs;
 
       debitRenglones.push({
@@ -1865,12 +2505,20 @@
       return;
     }
 
-    const hasActiveAjuste = pendingDifferenceConfirmation && selectedDifferenceAction !== 'KEEP_REMAINING' && differenceSurplusUsd > 0.009;
-    const hasAnyEffectiveApplication = renglones.some(r => Math.abs(r.mont_cob) > 0.009 || (r.monto_retencion_iva || 0) > 0.009 || (r.monto_retencion || 0) > 0.009);
+    const hasActiveAjuste =
+      pendingDifferenceConfirmation &&
+      selectedDifferenceAction !== "KEEP_REMAINING" &&
+      differenceSurplusUsd > 0.009;
+    const hasAnyEffectiveApplication = renglones.some(
+      (r) =>
+        Math.abs(r.mont_cob) > 0.009 ||
+        (r.monto_retencion_iva || 0) > 0.009 ||
+        (r.monto_retencion || 0) > 0.009,
+    );
 
     if (!hasActiveAjuste && !hasAnyEffectiveApplication) {
       toast.info(
-        "No hay facturas amortizadas ni pagos que registrar. El saldo permanece disponible en el documento actual."
+        "No hay facturas amortizadas ni pagos que registrar. El saldo permanece disponible en el documento actual.",
       );
       saving = false;
       return;
@@ -1887,7 +2535,13 @@
     const retenciones_iva = documentos
       .filter((doc) => {
         const inp = docInputs[doc.nro_doc.trim()];
-        return checkedDocs[doc.nro_doc.trim()] && inp && !inp.yaTieneRetIva && inp.showIvaDetails && (inp.reten_iva_bs || 0) > 0;
+        return (
+          checkedDocs[doc.nro_doc.trim()] &&
+          inp &&
+          !inp.yaTieneRetIva &&
+          inp.showIvaDetails &&
+          (inp.reten_iva_bs || 0) > 0
+        );
       })
       .map((doc) => {
         const inp = docInputs[doc.nro_doc.trim()];
@@ -1896,12 +2550,18 @@
           today.getFullYear() + String(today.getMonth() + 1).padStart(2, "0");
         const isNc = isCreditNote(doc.co_tipo_doc);
         const affectedDocNum = isNc
-          ? (inp.numero_documento_afectado_iva || getNcrOriginDocNum(doc) || "").trim()
+          ? (
+              inp.numero_documento_afectado_iva ||
+              getNcrOriginDocNum(doc) ||
+              ""
+            ).trim()
           : "0";
 
         return {
           nro_doc_asoc: doc.nro_doc.trim(),
-          tipo_documento: isNc ? "N/CR" : doc.co_tipo_doc.trim().substring(0, 4),
+          tipo_documento: isNc
+            ? "N/CR"
+            : doc.co_tipo_doc.trim().substring(0, 4),
           rif_contribuyente: selectedClient.rif,
           periodo_impositivo: Number(periodStr),
           fecha_documento: doc.fec_emis,
@@ -1912,46 +2572,82 @@
           base_imponible: inp.base_imponible_iva_bs || 0,
           monto_ret_imp: inp.reten_iva_bs || 0,
           numero_documento_afectado: affectedDocNum,
-          num_comprobante: inp.num_comprobante_iva ? inp.num_comprobante_iva.trim() : "",
+          num_comprobante: inp.num_comprobante_iva
+            ? inp.num_comprobante_iva.trim()
+            : "",
           monto_excento: 0,
           alicuota: inp.alicuota_iva,
         };
       });
 
-    const retenciones_islr = documentos
+    const retenciones_islr: any[] = [];
+    documentos
       .filter((doc) => {
         const inp = docInputs[doc.nro_doc.trim()];
-        return checkedDocs[doc.nro_doc.trim()] && inp && !inp.yaTieneRetIslr && inp.showIslrDetails && inp.reten_islr_bs > 0;
+        return (
+          checkedDocs[doc.nro_doc.trim()] &&
+          inp &&
+          !inp.yaTieneRetIslr &&
+          inp.showIslrDetails &&
+          ((inp.reten_islr_bs || 0) > 0 || (inp.islr_lines?.length || 0) > 0)
+        );
       })
-      .map((doc) => {
+      .forEach((doc) => {
         const inp = docInputs[doc.nro_doc.trim()];
-        return {
-          nro_doc_asoc: doc.nro_doc.trim(),
-          co_islr: inp.co_islr,
-          monto: doc.total_neto - doc.monto_imp,
-          monto_reten: inp.reten_islr_bs || 0,
-          monto_obj: inp.base_imponible_islr_bs > 0 ? inp.base_imponible_islr_bs : (doc.total_neto - doc.monto_imp),
-          sustraendo: inp.sustraendo_islr_bs || 0,
-          porc_retn: inp.porc_islr,
-        };
+        const lines =
+          inp.islr_lines && inp.islr_lines.length > 0
+            ? inp.islr_lines
+            : [
+                {
+                  co_islr: inp.co_islr,
+                  base_imponible_islr_bs: inp.base_imponible_islr_bs,
+                  reten_islr_bs: inp.reten_islr_bs,
+                  porc_islr: inp.porc_islr,
+                  sustraendo_islr_bs: inp.sustraendo_islr_bs,
+                },
+              ];
+
+        lines.forEach((l: any) => {
+          if (
+            (l.reten_islr_bs || 0) > 0 ||
+            (l.base_imponible_islr_bs || 0) > 0
+          ) {
+            retenciones_islr.push({
+              nro_doc_asoc: doc.nro_doc.trim(),
+              co_islr: l.co_islr,
+              monto: l.base_imponible_islr_bs || doc.total_neto - doc.monto_imp,
+              monto_reten: l.reten_islr_bs || 0,
+              monto_obj:
+                l.base_imponible_islr_bs || doc.total_neto - doc.monto_imp,
+              sustraendo: l.sustraendo_islr_bs || 0,
+              porc_retn: l.porc_islr || 0,
+            });
+          }
+        });
       });
 
     const getFpCurrency = (fp: any) => {
       if (fp.cod_caja) {
-        const caja = data.cajas?.find((c: any) => c.cod_caja?.trim() === fp.cod_caja?.trim());
-        return caja?.co_mone?.trim()?.toUpperCase() || 'BS';
+        const caja = data.cajas?.find(
+          (c: any) => c.cod_caja?.trim() === fp.cod_caja?.trim(),
+        );
+        return caja?.co_mone?.trim()?.toUpperCase() || "BS";
       }
       if (fp.cod_cta) {
-        const cta = data.cuentasBancarias?.find((c: any) => c.cod_cta?.trim() === fp.cod_cta?.trim());
-        return cta?.co_mone?.trim()?.toUpperCase() || 'BS';
+        const cta = data.cuentasBancarias?.find(
+          (c: any) => c.cod_cta?.trim() === fp.cod_cta?.trim(),
+        );
+        return cta?.co_mone?.trim()?.toUpperCase() || "BS";
       }
-      return 'BS';
+      return "BS";
     };
 
     let totalFpBs = 0;
     const formas_pago_cleaned = formasPago.map((fp) => {
-      const isBs = getRowCurrency(fp) === 'BS';
-      const montDocBs = isBs ? (fp.mont_doc_bs || 0) : (fp.mont_doc_bs || Math.round(fp.mont_doc * tasaCobro * 100) / 100);
+      const isBs = getRowCurrency(fp) === "BS";
+      const montDocBs = isBs
+        ? fp.mont_doc_bs || 0
+        : fp.mont_doc_bs || Math.round(fp.mont_doc * tasaCobro * 100) / 100;
       totalFpBs += montDocBs;
       return {
         forma_pag: fp.forma_pag,
@@ -1969,35 +2665,59 @@
     // Ajustar por diferencias de redondeo pequeñas si se paga en total
     const diffBs = Math.round((totalDocBs - totalFpBs) * 100) / 100;
     const maxDiffBsTolerance = Math.max(15.0, tasaCobro * 0.02);
-    if (Math.abs(diffBs) > 0 && Math.abs(diffBs) <= maxDiffBsTolerance && formas_pago_cleaned.length > 0) {
+    if (
+      Math.abs(diffBs) > 0 &&
+      Math.abs(diffBs) <= maxDiffBsTolerance &&
+      formas_pago_cleaned.length > 0
+    ) {
       // Intentar compensar primero en el primer instrumento de Bs/VES
-      let targetFp = formas_pago_cleaned.find((fp) => fp._moneda === "BS" || fp._moneda === "VES");
+      let targetFp = formas_pago_cleaned.find(
+        (fp) => fp._moneda === "BS" || fp._moneda === "VES",
+      );
       if (!targetFp) {
         // De lo contrario, usar el primero disponible (que será USD)
         targetFp = formas_pago_cleaned[0];
       }
       targetFp.mont_doc = Math.round((targetFp.mont_doc + diffBs) * 100) / 100;
-      console.log(`[PAYMENTS] Rounding difference of ${diffBs} Bs compensated on instrument (${targetFp._moneda})`);
+      console.log(
+        `[PAYMENTS] Rounding difference of ${diffBs} Bs compensated on instrument (${targetFp._moneda})`,
+      );
     }
 
     // Remover la propiedad temporal _moneda y omitir renglones con monto 0 cuando el cobro es exclusivo de créditos/retenciones
     formas_pago_cleaned.forEach((fp) => delete fp._moneda);
-    const active_formas_pago = totalFpBs > 0.005
-      ? formas_pago_cleaned.filter((fp) => Number(fp.mont_doc) > 0)
-      : [];
+    const active_formas_pago =
+      totalFpBs > 0.005
+        ? formas_pago_cleaned.filter((fp) => Number(fp.mont_doc) > 0)
+        : [];
 
-    const selectedDocList = documentos.filter((doc) => checkedDocs[doc.nro_doc.trim()]);
+    const selectedDocList = documentos.filter(
+      (doc) => checkedDocs[doc.nro_doc.trim()],
+    );
     const firstSelectedDoc = selectedDocList[0];
-    const collectionCurrency = firstSelectedDoc ? firstSelectedDoc.co_mone?.trim()?.toUpperCase() : (selectedClient.co_mone?.trim()?.toUpperCase() || "USD");
-    const safeCollectionCurrency = collectionCurrency === "US$" ? "USD" : collectionCurrency;
+    const collectionCurrency = firstSelectedDoc
+      ? firstSelectedDoc.co_mone?.trim()?.toUpperCase()
+      : selectedClient.co_mone?.trim()?.toUpperCase() || "USD";
+    const safeCollectionCurrency =
+      collectionCurrency === "US$" ? "USD" : collectionCurrency;
 
     // Obtener el vendedor del primer documento seleccionado (factura), o el del cliente como fallback
-    const effectiveCoVen = (firstSelectedDoc?.co_ven && firstSelectedDoc.co_ven.trim() !== '' && firstSelectedDoc.co_ven.trim() !== '01')
-      ? firstSelectedDoc.co_ven.trim()
-      : (selectedClient.co_ven && selectedClient.co_ven.trim() !== '' ? selectedClient.co_ven.trim() : "01");
+    const effectiveCoVen =
+      firstSelectedDoc?.co_ven &&
+      firstSelectedDoc.co_ven.trim() !== "" &&
+      firstSelectedDoc.co_ven.trim() !== "01"
+        ? firstSelectedDoc.co_ven.trim()
+        : selectedClient.co_ven && selectedClient.co_ven.trim() !== ""
+          ? selectedClient.co_ven.trim()
+          : "01";
 
-    const currentBranchObj = data.branches?.find((b: any) => b.id === selectedBranch);
-    const effectiveCtaIE = currentBranchObj?.default_cta_ingr_egr || currentBranchObj?.sql_config?.profit_defaults?.default_cta_ingr_egr || "I-001";
+    const currentBranchObj = data.branches?.find(
+      (b: any) => b.id === selectedBranch,
+    );
+    const effectiveCtaIE =
+      currentBranchObj?.default_cta_ingr_egr ||
+      currentBranchObj?.sql_config?.profit_defaults?.default_cta_ingr_egr ||
+      "I-001";
 
     const payload = {
       co_cli: selectedClient.co_cli,
@@ -2011,13 +2731,17 @@
       formas_pago: active_formas_pago,
       retenciones_iva,
       retenciones_islr,
-      ajuste_diferencia: (pendingDifferenceConfirmation && selectedDifferenceAction !== 'KEEP_REMAINING' && differenceSurplusUsd > 0.009) ? {
-        tipo: selectedDifferenceAction,
-        monto_usd: differenceSurplusUsd,
-        monto_bs: differenceSurplusBs
-      } : null
+      ajuste_diferencia:
+        pendingDifferenceConfirmation &&
+        selectedDifferenceAction !== "KEEP_REMAINING" &&
+        differenceSurplusUsd > 0.009
+          ? {
+              tipo: selectedDifferenceAction,
+              monto_usd: differenceSurplusUsd,
+              monto_bs: differenceSurplusBs,
+            }
+          : null,
     };
-
 
     try {
       const res = await fetch(
@@ -2234,11 +2958,18 @@
                   {#if isPersonaNaturalClient(selectedClient)}
                     Persona Natural (No aplica retenciones)
                   {:else if isContribuyenteEspecialClient(selectedClient)}
-                    Contribuyente Especial ({getEffectivePorcEsp(selectedClient)}% Ret. IVA) • Tabulador ISLR: {getTabDescription(getEffectiveClientTab())}
+                    Contribuyente Especial ({getEffectivePorcEsp(
+                      selectedClient,
+                    )}% Ret. IVA) • Tabulador ISLR: {getTabDescription(
+                      getEffectiveClientTab(),
+                    )}
                   {:else if selectedClient.contrib || selectedClient.contribuyente}
-                    Contribuyente Ordinario (Sin retención de IVA) • Tabulador ISLR: {getTabDescription(getEffectiveClientTab())}
+                    Contribuyente Ordinario (Sin retención de IVA) • Tabulador
+                    ISLR: {getTabDescription(getEffectiveClientTab())}
                   {:else}
-                    No Contribuyente • Tabulador ISLR: {getTabDescription(getEffectiveClientTab())}
+                    No Contribuyente • Tabulador ISLR: {getTabDescription(
+                      getEffectiveClientTab(),
+                    )}
                   {/if}
                 </p>
               </div>
@@ -2317,7 +3048,9 @@
                         <div>
                           <div class="flex items-center gap-2">
                             {#if checkedDocs[doc.nro_doc.trim()]}
-                              {@const orderIdx = selectedDocOrder.indexOf(doc.nro_doc.trim()) + 1}
+                              {@const orderIdx =
+                                selectedDocOrder.indexOf(doc.nro_doc.trim()) +
+                                1}
                               {#if orderIdx > 0}
                                 <span
                                   class="text-[10px] font-black px-1.5 py-0.5 rounded-full bg-brand-500/20 text-brand-600 dark:text-brand-300 border border-brand-500/40"
@@ -2348,7 +3081,8 @@
                               ).toLocaleDateString("es-VE")}</span
                             >
                             <span>•</span>
-                            <span class="text-brand-500 dark:text-brand-400 font-bold"
+                            <span
+                              class="text-brand-500 dark:text-brand-400 font-bold"
                               >Tasa Doc: {Number(doc.tasa).toFixed(2)}</span
                             >
                             {#if isCreditNote(doc.co_tipo_doc) && getNcrOriginDocNum(doc)}
@@ -2358,7 +3092,12 @@
                                   ? 'text-emerald-600 dark:text-emerald-400'
                                   : 'text-amber-600 dark:text-amber-400'}"
                               >
-                                Origen: {(doc.tipo_doc_orig || "FACT").trim()} {getNcrOriginDocNum(doc)} ({isNcrOriginFiscal(doc) ? "Fiscal" : "No Fiscal"})
+                                Origen: {(doc.tipo_doc_orig || "FACT").trim()}
+                                {getNcrOriginDocNum(doc)} ({isNcrOriginFiscal(
+                                  doc,
+                                )
+                                  ? "Fiscal"
+                                  : "No Fiscal"})
                               </span>
                             {/if}
                           </div>
@@ -2368,9 +3107,17 @@
                       <div class="text-left sm:text-right shrink-0">
                         <span
                           class="text-xs text-text-muted font-black block uppercase tracking-wider"
-                          >{isCreditDoc(doc.co_tipo_doc) ? "Saldo a Favor" : "Saldo Pendiente"}</span
+                          >{isCreditDoc(doc.co_tipo_doc)
+                            ? "Saldo a Favor"
+                            : "Saldo Pendiente"}</span
                         >
-                        <span class="text-lg font-black {isCreditDoc(doc.co_tipo_doc) ? 'text-emerald-600 dark:text-emerald-400' : 'text-brand-500'}">
+                        <span
+                          class="text-lg font-black {isCreditDoc(
+                            doc.co_tipo_doc,
+                          )
+                            ? 'text-emerald-600 dark:text-emerald-400'
+                            : 'text-brand-500'}"
+                        >
                           {#if isCreditDoc(doc.co_tipo_doc)}-{/if}$ {(
                             doc.saldo / (doc.tasa > 0 ? doc.tasa : 1)
                           ).toLocaleString("de-DE", {
@@ -2379,7 +3126,9 @@
                           })}
                         </span>
                         <span
-                          class="block text-xs {isCreditDoc(doc.co_tipo_doc) ? 'text-emerald-700 dark:text-emerald-400/90' : 'text-text-muted'} font-bold mt-1"
+                          class="block text-xs {isCreditDoc(doc.co_tipo_doc)
+                            ? 'text-emerald-700 dark:text-emerald-400/90'
+                            : 'text-text-muted'} font-bold mt-1"
                         >
                           Bs. {#if isCreditDoc(doc.co_tipo_doc)}-{/if}{Number(
                             doc.saldo,
@@ -2389,19 +3138,34 @@
                         </span>
                         {#if isCreditDoc(doc.co_tipo_doc) && checkedDocs[doc.nro_doc.trim()]}
                           {#if input.es_abono_parcial}
-                            <span class="inline-block text-[10px] bg-amber-500/15 dark:bg-amber-500/25 text-amber-800 dark:text-amber-200 border border-amber-500/40 px-2.5 py-0.5 rounded-full font-bold mt-1.5">
-                              Aplica: -${Math.abs(input.mont_cob || 0).toFixed(2)} | Queda: +${(input.saldo_remanente_usd || 0).toFixed(2)}
+                            <span
+                              class="inline-block text-[10px] bg-amber-500/15 dark:bg-amber-500/25 text-amber-800 dark:text-amber-200 border border-amber-500/40 px-2.5 py-0.5 rounded-full font-bold mt-1.5"
+                            >
+                              Aplica: -${Math.abs(input.mont_cob || 0).toFixed(
+                                2,
+                              )} | Queda: +${(
+                                input.saldo_remanente_usd || 0
+                              ).toFixed(2)}
                             </span>
                           {:else if Math.abs(input.mont_cob || 0) > 0.005}
-                            <span class="inline-block text-[10px] bg-emerald-500/15 dark:bg-emerald-500/25 text-emerald-800 dark:text-emerald-200 border border-emerald-500/40 px-2.5 py-0.5 rounded-full font-bold mt-1.5">
-                              Aplica: -${Math.abs(input.mont_cob || 0).toFixed(2)} (Total)
+                            <span
+                              class="inline-block text-[10px] bg-emerald-500/15 dark:bg-emerald-500/25 text-emerald-800 dark:text-emerald-200 border border-emerald-500/40 px-2.5 py-0.5 rounded-full font-bold mt-1.5"
+                            >
+                              Aplica: -${Math.abs(input.mont_cob || 0).toFixed(
+                                2,
+                              )} (Total)
                             </span>
                           {:else if !input.yaTieneRetIva && input.showIvaDetails && (input.reten_iva || 0) > 0}
-                            <span class="inline-block text-[10px] bg-emerald-500/15 dark:bg-emerald-500/25 text-emerald-800 dark:text-emerald-200 border border-emerald-500/40 px-2.5 py-0.5 rounded-full font-bold mt-1.5">
-                              Ret. IVA: -${(input.reten_iva || 0).toFixed(2)} | Queda: +${(input.saldo_remanente_usd || 0).toFixed(2)}
+                            <span
+                              class="inline-block text-[10px] bg-emerald-500/15 dark:bg-emerald-500/25 text-emerald-800 dark:text-emerald-200 border border-emerald-500/40 px-2.5 py-0.5 rounded-full font-bold mt-1.5"
+                            >
+                              Ret. IVA: -${(input.reten_iva || 0).toFixed(2)} | Queda:
+                              +${(input.saldo_remanente_usd || 0).toFixed(2)}
                             </span>
                           {:else}
-                            <span class="inline-block text-[10px] bg-blue-500/15 dark:bg-blue-500/25 text-blue-800 dark:text-blue-200 border border-blue-500/40 px-2.5 py-0.5 rounded-full font-bold mt-1.5">
+                            <span
+                              class="inline-block text-[10px] bg-blue-500/15 dark:bg-blue-500/25 text-blue-800 dark:text-blue-200 border border-blue-500/40 px-2.5 py-0.5 rounded-full font-bold mt-1.5"
+                            >
                               No requerido
                             </span>
                           {/if}
@@ -2418,27 +3182,65 @@
                         {@const remanenteBs = input.saldo_remanente_bs || 0}
                         {@const isParcial = input.es_abono_parcial}
                         {@const isNotApplied = appliedUsd <= 0.005}
-                        {@const activeNcrRetIvaUsd = (!input.yaTieneRetIva && input.showIvaDetails) ? (Number(input.reten_iva) || 0) : 0}
-                        {@const activeNcrRetIvaBs = (!input.yaTieneRetIva && input.showIvaDetails) ? (Number(input.reten_iva_bs) || 0) : 0}
-                        {@const showNcrIvaSection = isCreditNote(doc.co_tipo_doc) && (canApplyIvaRetentionOnDoc(doc) || Boolean(input.yaTieneRetIva))}
+                        {@const activeNcrRetIvaUsd =
+                          !input.yaTieneRetIva && input.showIvaDetails
+                            ? Number(input.reten_iva) || 0
+                            : 0}
+                        {@const activeNcrRetIvaBs =
+                          !input.yaTieneRetIva && input.showIvaDetails
+                            ? Number(input.reten_iva_bs) || 0
+                            : 0}
+                        {@const showNcrIvaSection =
+                          isCreditNote(doc.co_tipo_doc) &&
+                          (canApplyIvaRetentionOnDoc(doc) ||
+                            Boolean(input.yaTieneRetIva))}
 
-                        <div class="border-t border-border-subtle/50 pt-3 space-y-4">
+                        <div
+                          class="border-t border-border-subtle/50 pt-3 space-y-4"
+                        >
                           {#if isNotApplied}
                             {#if activeNcrRetIvaBs > 0}
                               <div
                                 class="bg-emerald-500/10 dark:bg-emerald-500/10 border border-emerald-500/30 p-4 rounded-2xl text-xs space-y-2 animate-in fade-in duration-150"
                               >
                                 <div class="flex items-center justify-between">
-                                  <span class="font-bold text-emerald-800 dark:text-emerald-300 flex items-center gap-1.5">
-                                    <Receipt size={16} class="text-emerald-600 dark:text-emerald-400 shrink-0" />
-                                    Registro de Comprobante de Retención IVA sobre N/CR
+                                  <span
+                                    class="font-bold text-emerald-800 dark:text-emerald-300 flex items-center gap-1.5"
+                                  >
+                                    <Receipt
+                                      size={16}
+                                      class="text-emerald-600 dark:text-emerald-400 shrink-0"
+                                    />
+                                    Registro de Comprobante de Retención IVA sobre
+                                    N/CR
                                   </span>
-                                  <span class="text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-900 dark:text-emerald-200 border border-emerald-500/40">
+                                  <span
+                                    class="text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-900 dark:text-emerald-200 border border-emerald-500/40"
+                                  >
                                     Solo Retención
                                   </span>
                                 </div>
                                 <p class="text-text-muted leading-relaxed">
-                                  Se rebajará el monto retenido de IVA (-$ {activeNcrRetIvaUsd.toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} / Bs. {activeNcrRetIvaBs.toLocaleString("de-DE", { minimumFractionDigits: 2 })}) sobre esta Nota de Crédito y el saldo neto restante (+$ {remanenteUsd.toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} / Bs. {remanenteBs.toLocaleString("de-DE", { minimumFractionDigits: 2 })}) quedará disponible para futuros cobros.
+                                  Se rebajará el monto retenido de IVA (-$ {activeNcrRetIvaUsd.toLocaleString(
+                                    "de-DE",
+                                    {
+                                      minimumFractionDigits: 2,
+                                      maximumFractionDigits: 2,
+                                    },
+                                  )} / Bs. {activeNcrRetIvaBs.toLocaleString(
+                                    "de-DE",
+                                    { minimumFractionDigits: 2 },
+                                  )}) sobre esta Nota de Crédito y el saldo neto
+                                  restante (+$ {remanenteUsd.toLocaleString(
+                                    "de-DE",
+                                    {
+                                      minimumFractionDigits: 2,
+                                      maximumFractionDigits: 2,
+                                    },
+                                  )} / Bs. {remanenteBs.toLocaleString(
+                                    "de-DE",
+                                    { minimumFractionDigits: 2 },
+                                  )}) quedará disponible para futuros cobros.
                                 </p>
                               </div>
                             {:else}
@@ -2446,16 +3248,27 @@
                                 class="bg-blue-500/10 dark:bg-blue-500/15 border border-blue-500/30 p-4 rounded-2xl text-xs space-y-2 animate-in fade-in duration-150"
                               >
                                 <div class="flex items-center justify-between">
-                                  <span class="font-bold text-blue-800 dark:text-blue-300 flex items-center gap-1.5">
-                                    <Info size={16} class="text-blue-600 dark:text-blue-400 shrink-0" />
+                                  <span
+                                    class="font-bold text-blue-800 dark:text-blue-300 flex items-center gap-1.5"
+                                  >
+                                    <Info
+                                      size={16}
+                                      class="text-blue-600 dark:text-blue-400 shrink-0"
+                                    />
                                     Crédito no requerido en este cobro
                                   </span>
-                                  <span class="text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full bg-blue-500/20 text-blue-900 dark:text-blue-200 border border-blue-500/40">
+                                  <span
+                                    class="text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full bg-blue-500/20 text-blue-900 dark:text-blue-200 border border-blue-500/40"
+                                  >
                                     Sin Aplicar
                                   </span>
                                 </div>
                                 <p class="text-text-muted leading-relaxed">
-                                  La deuda de las facturas seleccionadas ya fue saldada por completo o no se han seleccionado facturas a cobrar. El saldo total de este crédito permanecerá intacto para futuras compras.
+                                  La deuda de las facturas seleccionadas ya fue
+                                  saldada por completo o no se han seleccionado
+                                  facturas a cobrar. El saldo total de este
+                                  crédito permanecerá intacto para futuras
+                                  compras.
                                 </p>
                               </div>
                             {/if}
@@ -2464,34 +3277,76 @@
                               class="bg-amber-500/10 dark:bg-amber-500/15 border border-amber-500/30 p-4 rounded-2xl text-xs space-y-3 animate-in fade-in duration-150"
                             >
                               <div class="flex items-center justify-between">
-                                <span class="font-bold text-amber-800 dark:text-amber-300 flex items-center gap-1.5">
-                                  <AlertCircle size={16} class="text-amber-600 dark:text-amber-400 shrink-0" />
-                                  Crédito superior a la deuda (Abono Prorrateado Automático)
+                                <span
+                                  class="font-bold text-amber-800 dark:text-amber-300 flex items-center gap-1.5"
+                                >
+                                  <AlertCircle
+                                    size={16}
+                                    class="text-amber-600 dark:text-amber-400 shrink-0"
+                                  />
+                                  Crédito superior a la deuda (Abono Prorrateado
+                                  Automático)
                                 </span>
-                                <span class="text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-900 dark:text-amber-200 border border-amber-500/40">
+                                <span
+                                  class="text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-900 dark:text-amber-200 border border-amber-500/40"
+                                >
                                   Abono Parcial
                                 </span>
                               </div>
                               <p class="text-text-muted leading-relaxed">
-                                El monto neto disponible de este crédito supera la deuda restante. Se aplicará únicamente lo necesario para saldar la factura y el remanente quedará como saldo a favor en Profit Plus para futuras compras.
+                                El monto neto disponible de este crédito supera
+                                la deuda restante. Se aplicará únicamente lo
+                                necesario para saldar la factura y el remanente
+                                quedará como saldo a favor en Profit Plus para
+                                futuras compras.
                               </p>
-                              <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-amber-500/20">
-                                <div class="bg-surface-base dark:bg-black/40 p-3.5 rounded-xl border border-border-subtle dark:border-white/10 shadow-xs">
-                                  <span class="block text-[10px] text-text-muted uppercase font-black tracking-wider">Monto a Aplicar en este Cobro:</span>
-                                  <span class="text-base font-black text-emerald-600 dark:text-emerald-400 font-mono block mt-0.5">
-                                    -$ {appliedUsd.toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              <div
+                                class="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-amber-500/20"
+                              >
+                                <div
+                                  class="bg-surface-base dark:bg-black/40 p-3.5 rounded-xl border border-border-subtle dark:border-white/10 shadow-xs"
+                                >
+                                  <span
+                                    class="block text-[10px] text-text-muted uppercase font-black tracking-wider"
+                                    >Monto a Aplicar en este Cobro:</span
+                                  >
+                                  <span
+                                    class="text-base font-black text-emerald-600 dark:text-emerald-400 font-mono block mt-0.5"
+                                  >
+                                    -$ {appliedUsd.toLocaleString("de-DE", {
+                                      minimumFractionDigits: 2,
+                                      maximumFractionDigits: 2,
+                                    })}
                                   </span>
-                                  <span class="block text-xs text-text-muted font-bold mt-0.5">
-                                    -Bs. {appliedBs.toLocaleString("de-DE", { minimumFractionDigits: 2 })}
+                                  <span
+                                    class="block text-xs text-text-muted font-bold mt-0.5"
+                                  >
+                                    -Bs. {appliedBs.toLocaleString("de-DE", {
+                                      minimumFractionDigits: 2,
+                                    })}
                                   </span>
                                 </div>
-                                <div class="bg-surface-base dark:bg-black/40 p-3.5 rounded-xl border border-amber-500/30 dark:border-white/10 shadow-xs">
-                                  <span class="block text-[10px] text-amber-800 dark:text-amber-300 uppercase font-black tracking-wider">Saldo a Favor Remanente (Queda disponible):</span>
-                                  <span class="text-base font-black text-amber-700 dark:text-amber-300 font-mono block mt-0.5">
-                                    +$ {remanenteUsd.toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                <div
+                                  class="bg-surface-base dark:bg-black/40 p-3.5 rounded-xl border border-amber-500/30 dark:border-white/10 shadow-xs"
+                                >
+                                  <span
+                                    class="block text-[10px] text-amber-800 dark:text-amber-300 uppercase font-black tracking-wider"
+                                    >Saldo a Favor Remanente (Queda disponible):</span
+                                  >
+                                  <span
+                                    class="text-base font-black text-amber-700 dark:text-amber-300 font-mono block mt-0.5"
+                                  >
+                                    +$ {remanenteUsd.toLocaleString("de-DE", {
+                                      minimumFractionDigits: 2,
+                                      maximumFractionDigits: 2,
+                                    })}
                                   </span>
-                                  <span class="block text-xs text-text-muted font-bold mt-0.5">
-                                    +Bs. {remanenteBs.toLocaleString("de-DE", { minimumFractionDigits: 2 })}
+                                  <span
+                                    class="block text-xs text-text-muted font-bold mt-0.5"
+                                  >
+                                    +Bs. {remanenteBs.toLocaleString("de-DE", {
+                                      minimumFractionDigits: 2,
+                                    })}
                                   </span>
                                 </div>
                               </div>
@@ -2501,9 +3356,15 @@
                               class="bg-emerald-500/10 dark:bg-emerald-500/5 border border-emerald-500/30 p-4 rounded-2xl text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-in fade-in duration-150"
                             >
                               <div class="flex items-center gap-2.5">
-                                <CheckCircle size={18} class="text-emerald-600 dark:text-emerald-400 shrink-0" />
+                                <CheckCircle
+                                  size={18}
+                                  class="text-emerald-600 dark:text-emerald-400 shrink-0"
+                                />
                                 <div>
-                                  <span class="font-bold text-emerald-800 dark:text-emerald-300 block">Crédito aplicado en su totalidad</span>
+                                  <span
+                                    class="font-bold text-emerald-800 dark:text-emerald-300 block"
+                                    >Crédito aplicado en su totalidad</span
+                                  >
                                   <span class="text-text-muted text-[11px]">
                                     {activeNcrRetIvaBs > 0
                                       ? "Se descuenta el crédito neto disponible de la deuda y se registra su comprobante de retención de IVA."
@@ -2512,18 +3373,29 @@
                                 </div>
                               </div>
                               <div class="text-left sm:text-right shrink-0">
-                                <span class="font-mono font-black text-emerald-600 dark:text-emerald-400 text-sm">
-                                  -$ {appliedUsd.toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                <span
+                                  class="font-mono font-black text-emerald-600 dark:text-emerald-400 text-sm"
+                                >
+                                  -$ {appliedUsd.toLocaleString("de-DE", {
+                                    minimumFractionDigits: 2,
+                                    maximumFractionDigits: 2,
+                                  })}
                                 </span>
-                                <span class="block text-[10px] text-text-muted font-bold">
-                                  -Bs. {appliedBs.toLocaleString("de-DE", { minimumFractionDigits: 2 })}
+                                <span
+                                  class="block text-[10px] text-text-muted font-bold"
+                                >
+                                  -Bs. {appliedBs.toLocaleString("de-DE", {
+                                    minimumFractionDigits: 2,
+                                  })}
                                 </span>
                               </div>
                             </div>
                           {/if}
 
                           {#if showNcrIvaSection}
-                            <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-1">
+                            <div
+                              class="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-1"
+                            >
                               <div>
                                 <label
                                   class="block text-xs font-black text-text-muted uppercase mb-1.5"
@@ -2584,7 +3456,9 @@
                                   {#if input.yaTieneRetIva}
                                     <span
                                       class="text-[10px] text-emerald-400 bg-emerald-500/10 border border-emerald-500/30 px-1.5 py-0.5 rounded font-black tracking-wide"
-                                      title={input.nro_comp_iva_previo ? `Comprobante: ${input.nro_comp_iva_previo}` : "Ya aplicada en cobro previo"}
+                                      title={input.nro_comp_iva_previo
+                                        ? `Comprobante: ${input.nro_comp_iva_previo}`
+                                        : "Ya aplicada en cobro previo"}
                                     >
                                       Ya Aplicada
                                     </span>
@@ -2592,7 +3466,8 @@
                                     <button
                                       type="button"
                                       onclick={() => {
-                                        input.showIvaDetails = !input.showIvaDetails;
+                                        input.showIvaDetails =
+                                          !input.showIvaDetails;
                                         if (!input.showIvaDetails) {
                                           input.reten_iva_bs = 0;
                                           input.reten_iva = 0;
@@ -2600,31 +3475,50 @@
                                         } else {
                                           input.manual_override_iva = false;
                                         }
-                                        recalculateDocAmounts(doc.nro_doc.trim(), doc);
+                                        recalculateDocAmounts(
+                                          doc.nro_doc.trim(),
+                                          doc,
+                                        );
                                       }}
                                       class="text-xs text-brand-500 font-bold hover:underline cursor-pointer"
                                     >
-                                      {input.showIvaDetails ? "Cerrar" : "Aplicar"}
+                                      {input.showIvaDetails
+                                        ? "Cerrar"
+                                        : "Aplicar"}
                                     </button>
                                   {/if}
                                 </div>
                                 <input
                                   type="number"
                                   step="0.01"
-                                  value={input.yaTieneRetIva ? input.monto_ret_iva_previo_usd : (input.showIvaDetails ? input.reten_iva : 0)}
+                                  value={input.yaTieneRetIva
+                                    ? input.monto_ret_iva_previo_usd
+                                    : input.showIvaDetails
+                                      ? input.reten_iva
+                                      : 0}
                                   readonly
-                                  class="w-full bg-surface-soft border border-border-subtle px-3 py-2 rounded-xl text-sm font-bold {input.yaTieneRetIva ? 'text-emerald-400' : 'text-green-400'} text-right cursor-not-allowed opacity-90"
+                                  class="w-full bg-surface-soft border border-border-subtle px-3 py-2 rounded-xl text-sm font-bold {input.yaTieneRetIva
+                                    ? 'text-emerald-400'
+                                    : 'text-green-400'} text-right cursor-not-allowed opacity-90"
                                 />
                                 <span
-                                  class="block text-xs {input.yaTieneRetIva ? 'text-emerald-500/80' : 'text-green-500'} font-black text-right mt-1.5"
+                                  class="block text-xs {input.yaTieneRetIva
+                                    ? 'text-emerald-500/80'
+                                    : 'text-green-500'} font-black text-right mt-1.5"
                                 >
-                                  Bs. {(
-                                    input.yaTieneRetIva ? (input.monto_ret_iva_previo_bs || 0) : (input.showIvaDetails ? (input.reten_iva_bs || 0) : 0)
+                                  Bs. {(input.yaTieneRetIva
+                                    ? input.monto_ret_iva_previo_bs || 0
+                                    : input.showIvaDetails
+                                      ? input.reten_iva_bs || 0
+                                      : 0
                                   ).toLocaleString("de-DE", {
                                     minimumFractionDigits: 2,
                                   })}
                                   {#if input.yaTieneRetIva && input.nro_comp_iva_previo}
-                                    <span class="block text-[10px] font-normal text-text-muted mt-0.5">Comp: {input.nro_comp_iva_previo}</span>
+                                    <span
+                                      class="block text-[10px] font-normal text-text-muted mt-0.5"
+                                      >Comp: {input.nro_comp_iva_previo}</span
+                                    >
                                   {/if}
                                 </span>
                               </div>
@@ -2635,7 +3529,8 @@
                                 class="bg-green-500/5 border border-green-500/20 p-4 rounded-2xl space-y-3 text-xs animate-in slide-in-from-top-2 duration-150"
                               >
                                 <div class="flex justify-between items-center">
-                                  <span class="font-bold text-emerald-700 dark:text-green-400"
+                                  <span
+                                    class="font-bold text-emerald-700 dark:text-green-400"
                                     >Datos Comprobante Retención IVA (N/CR)</span
                                   >
                                   <button
@@ -2645,13 +3540,18 @@
                                       input.reten_iva_bs = 0;
                                       input.reten_iva = 0;
                                       input.manual_override_iva = true;
-                                      recalculateDocAmounts(doc.nro_doc.trim(), doc);
+                                      recalculateDocAmounts(
+                                        doc.nro_doc.trim(),
+                                        doc,
+                                      );
                                     }}
                                     class="text-text-muted hover:text-text-base cursor-pointer"
                                     ><X size={14} /></button
                                   >
                                 </div>
-                                <div class="grid grid-cols-1 sm:grid-cols-6 gap-3">
+                                <div
+                                  class="grid grid-cols-1 sm:grid-cols-6 gap-3"
+                                >
                                   <div>
                                     <span
                                       class="text-[9px] text-text-muted font-bold block mb-1"
@@ -2672,9 +3572,15 @@
                                     <input
                                       type="text"
                                       placeholder="Factura Origen"
-                                      bind:value={input.numero_documento_afectado_iva}
-                                      readonly={Boolean(getNcrOriginDocNum(doc))}
-                                      class="w-full {getNcrOriginDocNum(doc) ? 'bg-surface-soft/50 opacity-80 cursor-not-allowed' : 'bg-surface-soft'} border border-border-subtle px-2 py-1.5 rounded-lg text-xs font-mono font-bold"
+                                      bind:value={
+                                        input.numero_documento_afectado_iva
+                                      }
+                                      readonly={Boolean(
+                                        getNcrOriginDocNum(doc),
+                                      )}
+                                      class="w-full {getNcrOriginDocNum(doc)
+                                        ? 'bg-surface-soft/50 opacity-80 cursor-not-allowed'
+                                        : 'bg-surface-soft'} border border-border-subtle px-2 py-1.5 rounded-lg text-xs font-mono font-bold"
                                     />
                                   </div>
                                   <div>
@@ -2710,7 +3616,10 @@
                                     <select
                                       bind:value={input.porc_ret_iva}
                                       onchange={() => {
-                                        recalculateDocAmounts(doc.nro_doc.trim(), doc);
+                                        recalculateDocAmounts(
+                                          doc.nro_doc.trim(),
+                                          doc,
+                                        );
                                       }}
                                       class="w-full bg-surface-soft border border-border-subtle px-2 py-1.5 rounded-lg text-xs"
                                     >
@@ -2737,443 +3646,718 @@
                           {/if}
                         </div>
                       {:else}
-                        {@const showDebitIvaCol = canApplyIvaRetentionOnDoc(doc) || Boolean(input.yaTieneRetIva)}
-                        {@const showDebitIslrCol = canApplyIslrRetentionOnDoc(doc) || Boolean(input.yaTieneRetIslr)}
+                        {@const showDebitIvaCol =
+                          canApplyIvaRetentionOnDoc(doc) ||
+                          Boolean(input.yaTieneRetIva)}
+                        {@const showDebitIslrCol =
+                          canApplyIslrRetentionOnDoc(doc) ||
+                          Boolean(input.yaTieneRetIslr)}
                         <div
                           class="border-t border-border-subtle/50 pt-4 space-y-4 transition-all duration-200"
                         >
-                        <div class="grid grid-cols-2 {showDebitIvaCol && showDebitIslrCol ? 'md:grid-cols-4' : (showDebitIvaCol || showDebitIslrCol ? 'md:grid-cols-3' : 'md:grid-cols-2')} gap-4">
-                          <div>
-                            <label
-                              class="block text-xs font-black text-text-muted uppercase mb-1.5"
-                              >Base Imponible ($)</label
-                            >
-                            <input
-                              type="number"
-                              step="0.01"
-                              bind:value={input.base_imponible_iva}
-                              readonly
-                              class="w-full bg-surface-soft border border-border-subtle px-3 py-2 rounded-xl text-sm text-text-base text-right font-bold cursor-not-allowed opacity-90"
-                            />
-                            <span
-                              class="block text-xs text-text-muted font-bold text-right mt-1.5"
-                            >
-                              Bs. {(
-                                input.base_imponible_iva_bs || 0
-                              ).toLocaleString("de-DE", {
-                                minimumFractionDigits: 2,
-                              })}
-                            </span>
-                          </div>
-
-                          <div>
-                            <label
-                              class="block text-xs font-black text-text-muted uppercase mb-1.5"
-                              >Monto IVA ($)</label
-                            >
-                            <input
-                              type="number"
-                              step="0.01"
-                              value={Math.round(
-                                (doc.monto_imp /
-                                  (doc.tasa > 0 ? doc.tasa : 1)) *
-                                  100,
-                              ) / 100}
-                              readonly
-                              class="w-full bg-surface-soft border border-border-subtle px-3 py-2 rounded-xl text-sm text-text-base text-right font-bold cursor-not-allowed opacity-90"
-                            />
-                            <span
-                              class="block text-xs text-text-muted font-bold text-right mt-1.5"
-                            >
-                              Bs. {Number(doc.monto_imp).toLocaleString(
-                                "de-DE",
-                                { minimumFractionDigits: 2 },
-                              )}
-                            </span>
-                          </div>
-
-                          {#if showDebitIvaCol}
-                          <div>
-                            <div
-                              class="flex justify-between items-center mb-1.5"
-                            >
+                          <div
+                            class="grid grid-cols-2 {showDebitIvaCol &&
+                            showDebitIslrCol
+                              ? 'md:grid-cols-4'
+                              : showDebitIvaCol || showDebitIslrCol
+                                ? 'md:grid-cols-3'
+                                : 'md:grid-cols-2'} gap-4"
+                          >
+                            <div>
                               <label
-                                class="block text-xs font-black text-text-muted uppercase"
-                                >Reten. IVA ($)</label
+                                class="block text-xs font-black text-text-muted uppercase mb-1.5"
+                                >Base Imponible ($)</label
                               >
-                              {#if input.yaTieneRetIva}
-                                <span
-                                  class="text-[10px] text-emerald-400 bg-emerald-500/10 border border-emerald-500/30 px-1.5 py-0.5 rounded font-black tracking-wide"
-                                  title={input.nro_comp_iva_previo ? `Comprobante: ${input.nro_comp_iva_previo}` : 'Ya aplicada en cobro previo'}
-                                >
-                                  Ya Aplicada
-                                </span>
-                              {:else if canApplyIvaRetentionOnDoc(doc)}
-                                <button
-                                  type="button"
-                                  onclick={() => {
-                                    input.showIvaDetails = !input.showIvaDetails;
-                                    if (!input.showIvaDetails) {
-                                      input.reten_iva_bs = 0;
-                                      input.reten_iva = 0;
-                                      input.manual_override_iva = true;
-                                    } else {
-                                      input.manual_override_iva = false;
-                                    }
-                                    recalculateDocAmounts(doc.nro_doc.trim(), doc);
-                                  }}
-                                  class="text-xs text-brand-500 font-bold hover:underline cursor-pointer"
-                                >
-                                  {input.showIvaDetails ? "Cerrar" : "Aplicar"}
-                                </button>
-                              {/if}
-                            </div>
-                            <input
-                              type="number"
-                              step="0.01"
-                              value={input.yaTieneRetIva ? input.monto_ret_iva_previo_usd : (input.showIvaDetails ? input.reten_iva : 0)}
-                              readonly
-                              class="w-full bg-surface-soft border border-border-subtle px-3 py-2 rounded-xl text-sm font-bold {input.yaTieneRetIva ? 'text-emerald-400' : 'text-green-400'} text-right cursor-not-allowed opacity-90"
-                            />
-                            <span
-                              class="block text-xs {input.yaTieneRetIva ? 'text-emerald-500/80' : 'text-green-500'} font-black text-right mt-1.5"
-                            >
-                              Bs. {(
-                                input.yaTieneRetIva ? (input.monto_ret_iva_previo_bs || 0) : (input.showIvaDetails ? (input.reten_iva_bs || 0) : 0)
-                              ).toLocaleString("de-DE", {
-                                minimumFractionDigits: 2,
-                              })}
-                              {#if input.yaTieneRetIva && input.nro_comp_iva_previo}
-                                <span class="block text-[10px] font-normal text-text-muted mt-0.5">Comp: {input.nro_comp_iva_previo}</span>
-                              {/if}
-                            </span>
-                          </div>
-                          {/if}
-                          {#if showDebitIslrCol}
-                          <div>
-                            <div
-                              class="flex justify-between items-center mb-1.5"
-                            >
-                              <label
-                                class="block text-xs font-black text-text-muted uppercase"
-                                >Reten. ISLR ($)</label
+                              <input
+                                type="number"
+                                step="0.01"
+                                bind:value={input.base_imponible_iva}
+                                readonly
+                                class="w-full bg-surface-soft border border-border-subtle px-3 py-2 rounded-xl text-sm text-text-base text-right font-bold cursor-not-allowed opacity-90"
+                              />
+                              <span
+                                class="block text-xs text-text-muted font-bold text-right mt-1.5"
                               >
-                              {#if input.yaTieneRetIslr}
-                                <span
-                                  class="text-[10px] text-amber-400 bg-amber-500/10 border border-amber-500/30 px-1.5 py-0.5 rounded font-black tracking-wide"
-                                  title={input.nro_comp_islr_previo ? `Comprobante: ${input.nro_comp_islr_previo}` : 'Ya aplicada en cobro previo'}
-                                >
-                                  Ya Aplicada
-                                </span>
-                              {:else if canApplyIslrRetentionOnDoc(doc)}
-                                <button
-                                  type="button"
-                                  onclick={() => {
-                                    input.showIslrDetails = !input.showIslrDetails;
-                                    if (!input.showIslrDetails) {
-                                      input.reten_islr_bs = 0;
-                                      input.reten_islr = 0;
-                                      input.manual_override_islr = true;
-                                    } else {
-                                      input.manual_override_islr = false;
-                                    }
-                                    recalculateDocAmounts(doc.nro_doc.trim(), doc);
-                                  }}
-                                  class="text-xs text-brand-500 font-bold hover:underline cursor-pointer"
-                                >
-                                  {input.showIslrDetails ? "Cerrar" : "Aplicar"}
-                                </button>
-                              {/if}
-                            </div>
-                            <input
-                              type="number"
-                              step="0.01"
-                              value={input.yaTieneRetIslr ? input.monto_ret_islr_previo_usd : (input.showIslrDetails ? input.reten_islr : 0)}
-                              readonly
-                              class="w-full bg-surface-soft border border-border-subtle px-3 py-2 rounded-xl text-sm font-bold text-amber-400 text-right cursor-not-allowed opacity-90"
-                            />
-                            <span
-                              class="block text-xs {input.yaTieneRetIslr ? 'text-amber-500/80' : 'text-amber-400'} font-black text-right mt-1.5"
-                            >
-                              Bs. {(
-                                input.yaTieneRetIslr ? (input.monto_ret_islr_previo_bs || 0) : (input.showIslrDetails ? (input.reten_islr_bs || 0) : 0)
-                              ).toLocaleString("de-DE", {
-                                minimumFractionDigits: 2,
-                              })}
-                              {#if input.yaTieneRetIslr && input.nro_comp_islr_previo}
-                                <span class="block text-[10px] font-normal text-text-muted mt-0.5">Comp: {input.nro_comp_islr_previo}</span>
-                              {/if}
-                            </span>
-                          </div>
-                          {/if}
-                        </div>
-
-                        <!-- Detalles Retención IVA -->
-                        {#if input.showIvaDetails && !input.yaTieneRetIva && canApplyIvaRetentionOnDoc(doc)}
-                          <div
-                            class="bg-green-500/5 border border-green-500/20 p-4 rounded-2xl space-y-3 text-xs animate-in slide-in-from-top-2 duration-150"
-                          >
-                            <div class="flex justify-between items-center">
-                              <span class="font-bold text-emerald-700 dark:text-green-400"
-                                >Datos Comprobante Retención IVA</span
-                              >
-                              <button
-                                onclick={() => {
-                                  input.showIvaDetails = false;
-                                  input.reten_iva_bs = 0;
-                                  input.reten_iva = 0;
-                                  input.manual_override_iva = true;
-                                  recalculateDocAmounts(doc.nro_doc.trim(), doc);
-                                }}
-                                class="text-text-muted hover:text-text-base cursor-pointer"
-                                ><X size={14} /></button
-                              >
-                            </div>
-                            <div class="grid grid-cols-1 sm:grid-cols-5 gap-3">
-                              <div>
-                                <span
-                                  class="text-[9px] text-text-muted font-bold block mb-1"
-                                  >NRO. COMPROBANTE</span
-                                >
-                                <input
-                                  type="text"
-                                  placeholder="Ej: 2026060001"
-                                  bind:value={input.num_comprobante_iva}
-                                  class="w-full bg-surface-soft border border-border-subtle px-2 py-1.5 rounded-lg text-xs"
-                                />
-                              </div>
-                              <div>
-                                <span
-                                  class="text-[9px] text-text-muted font-bold block mb-1"
-                                  >BASE IMPONIBLE (Bs.)</span
-                                >
-                                <input
-                                  type="number"
-                                  step="0.01"
-                                  readonly
-                                  bind:value={input.base_imponible_iva_bs}
-                                  class="w-full bg-surface-soft/50 border border-border-subtle px-2 py-1.5 rounded-lg text-xs text-right opacity-70 cursor-not-allowed"
-                                />
-                              </div>
-                              <div>
-                                <span
-                                  class="text-[9px] text-text-muted font-bold block mb-1"
-                                  >ALÍCUOTA (%)</span
-                                >
-                                <input
-                                  type="number"
-                                  readonly
-                                  bind:value={input.alicuota_iva}
-                                  class="w-full bg-surface-soft/50 border border-border-subtle px-2 py-1.5 rounded-lg text-xs text-right opacity-70 cursor-not-allowed"
-                                />
-                              </div>
-                              <div>
-                                <span
-                                  class="text-[9px] text-text-muted font-bold block mb-1"
-                                  >PORC. RETENCIÓN (%)</span
-                                >
-                                <select
-                                  bind:value={input.porc_ret_iva}
-                                  onchange={() => {
-                                    recalculateDocAmounts(doc.nro_doc.trim(), doc);
-                                  }}
-                                  class="w-full bg-surface-soft border border-border-subtle px-2 py-1.5 rounded-lg text-xs"
-                                >
-                                  <option value={75}>75% (General)</option>
-                                  <option value={100}>100% (Total)</option>
-                                </select>
-                              </div>
-                              <div>
-                                <span
-                                  class="text-[9px] text-text-muted font-bold block mb-1 font-semibold text-emerald-700 dark:text-green-400"
-                                  >MTO RETENIDO (Bs.)</span
-                                >
-                                <input
-                                  type="number"
-                                  step="0.01"
-                                  readonly
-                                  value={input.reten_iva_bs}
-                                  class="w-full bg-surface-soft/60 border border-border-subtle text-emerald-700 dark:text-green-400 font-bold px-2 py-1.5 rounded-lg text-xs text-right cursor-not-allowed opacity-90"
-                                />
-                              </div>
-                            </div>
-                          </div>
-                        {/if}
-
-                        <!-- Detalles Retención ISLR -->
-                        {#if input.showIslrDetails && !input.yaTieneRetIslr && canApplyIslrRetentionOnDoc(doc)}
-                          <div
-                            class="bg-amber-500/5 border border-amber-500/20 p-4 rounded-2xl space-y-3 text-xs animate-in slide-in-from-top-2 duration-150"
-                          >
-                            <div class="flex justify-between items-center">
-                              <span class="font-bold text-amber-700 dark:text-amber-300"
-                                >Datos Retención ISLR / Municipal</span
-                              >
-                              <button
-                                onclick={() => {
-                                  input.showIslrDetails = false;
-                                  input.reten_islr_bs = 0;
-                                  input.reten_islr = 0;
-                                  input.manual_override_islr = true;
-                                  recalculateDocAmounts(doc.nro_doc.trim(), doc);
-                                }}
-                                class="text-text-muted hover:text-text-base cursor-pointer"
-                                ><X size={14} /></button
-                              >
-                            </div>
-                            <div class="grid grid-cols-1 sm:grid-cols-5 gap-2.5">
-                              <div class="sm:col-span-2">
-                                <span class="text-[9px] text-text-muted font-bold block mb-1">CONCEPTO ({getTabDescription(getEffectiveClientTab())})</span>
-                                <select
-                                  value={input.co_islr}
-                                  onchange={(e) => {
-                                    const selectedCode = (e.currentTarget as HTMLSelectElement).value;
-                                    handleConceptChange(doc.nro_doc.trim(), doc, selectedCode);
-                                  }}
-                                  class="w-full bg-surface-soft border border-border-subtle px-2 py-1.5 rounded-lg text-xs"
-                                >
-                                  {#each getConceptosForClient() as c}
-                                    {@const cVals = resolveConceptValues(c, c.co_islr.trim(), getEffectiveClientTab())}
-                                    <option value={c.co_islr.trim()}>
-                                      {c.co_islr.trim()} - {c.islr_des.trim()} ({cVals.porcRet}%{cVals.sustraen > 0 ? ` - Sustr: Bs. ${cVals.sustraen}` : ''})
-                                    </option>
-                                  {/each}
-                                </select>
-                              </div>
-                              <div>
-                                <span class="text-[9px] text-text-muted font-bold block mb-1">BASE IMPONIBLE (Bs.)</span>
-                                <input
-                                  type="number"
-                                  step="0.01"
-                                  bind:value={input.base_imponible_islr_bs}
-                                  oninput={() => {
-                                    recalculateDocAmounts(doc.nro_doc.trim(), doc);
-                                  }}
-                                  class="w-full bg-surface-soft border border-border-subtle px-2 py-1.5 rounded-lg text-xs text-right font-mono"
-                                />
-                              </div>
-                              <div>
-                                <span class="text-[9px] text-text-muted font-bold block mb-1">PORCENTAJE (%)</span>
-                                <input
-                                  type="number"
-                                  step="0.1"
-                                  disabled
-                                  bind:value={input.porc_islr}
-                                  class="w-full bg-surface-soft/50 border border-border-subtle px-2 py-1.5 rounded-lg text-xs text-right opacity-70 cursor-not-allowed font-mono"
-                                />
-                              </div>
-                              <div>
-                                <span class="text-[9px] text-text-muted font-bold block mb-1 font-semibold text-amber-700 dark:text-amber-400">MTO RETENIDO (Bs.)</span>
-                                <input
-                                  type="number"
-                                  step="0.01"
-                                  readonly
-                                  value={input.reten_islr_bs}
-                                  class="w-full bg-surface-soft/60 border border-border-subtle px-2 py-1.5 rounded-lg text-xs text-right text-amber-700 dark:text-amber-400 font-bold cursor-not-allowed opacity-90 font-mono"
-                                />
-                              </div>
-                            </div>
-                            {#if (input.sustraendo_islr_bs || 0) > 0}
-                              <div class="mt-2 text-[10px] text-amber-400/90 flex items-center gap-1 font-medium bg-amber-500/10 px-2.5 py-1 rounded-lg border border-amber-500/20 w-max">
-                                <span>Sustraendo legal aplicado: <strong>Bs. {Number(input.sustraendo_islr_bs).toLocaleString('de-DE', { minimumFractionDigits: 2 })}</strong></span>
-                              </div>
-                            {/if}
-                          </div>
-                        {/if}
-
-                        <!-- Alerta IGTF -->
-                        {#if doc.otros1 > 0}
-                          <div
-                            class="flex items-center justify-between bg-brand-500/5 border border-brand-500/10 p-3.5 rounded-2xl text-xs animate-in slide-in-from-top-2 duration-150 mb-3"
-                          >
-                            <span
-                              class="font-bold text-brand-400 flex items-center gap-1.5"
-                            >
-                              <Landmark size={14} />
-                              Impuesto IGTF (3%) Incluido:
-                            </span>
-                            <div class="text-right">
-                              <span class="font-mono font-black text-brand-400">
-                                $ {Number(
-                                  doc.otros1 / (doc.tasa > 0 ? doc.tasa : 1),
+                                Bs. {(
+                                  input.base_imponible_iva_bs || 0
                                 ).toLocaleString("de-DE", {
                                   minimumFractionDigits: 2,
                                 })}
                               </span>
-                              <span
-                                class="block text-xs text-text-muted font-bold mt-1"
+                            </div>
+
+                            <div>
+                              <label
+                                class="block text-xs font-black text-text-muted uppercase mb-1.5"
+                                >Monto IVA ($)</label
                               >
-                                Bs. {Number(doc.otros1).toLocaleString(
+                              <input
+                                type="number"
+                                step="0.01"
+                                value={Math.round(
+                                  (doc.monto_imp /
+                                    (doc.tasa > 0 ? doc.tasa : 1)) *
+                                    100,
+                                ) / 100}
+                                readonly
+                                class="w-full bg-surface-soft border border-border-subtle px-3 py-2 rounded-xl text-sm text-text-base text-right font-bold cursor-not-allowed opacity-90"
+                              />
+                              <span
+                                class="block text-xs text-text-muted font-bold text-right mt-1.5"
+                              >
+                                Bs. {Number(doc.monto_imp).toLocaleString(
                                   "de-DE",
                                   { minimumFractionDigits: 2 },
                                 )}
                               </span>
                             </div>
-                          </div>
-                        {/if}
 
-                        <!-- Alerta Diferencial Cambiario (N/DB) exclusivamente para facturas de venta (FACT) de días anteriores -->
-                        {#if doc.co_tipo_doc.trim().toUpperCase() === "FACT"}
-                          {@const docFecEmisStr = doc.fec_emis ? new Date(doc.fec_emis).toISOString().split('T')[0] : ''}
-                          {@const todayStr = new Date().toISOString().split('T')[0]}
-                          {@const isPreviousDateDoc = docFecEmisStr && docFecEmisStr < todayStr}
-                          {@const docTasa = doc.tasa > 0 ? doc.tasa : 1}
-                          {@const diffBs = (isPreviousDateDoc && doc.saldo > 0 && currentExchangeRate > docTasa) 
-                            ? Math.max(0, Math.round(((doc.saldo / docTasa * currentExchangeRate) - doc.saldo) * 100) / 100)
-                            : 0}
-                          {#if isPreviousDateDoc && diffBs > 0}
-                            <div
-                              class="flex items-center justify-between bg-blue-500/10 border border-blue-500/20 p-3.5 rounded-2xl text-xs animate-in slide-in-from-top-2 duration-150 mb-3"
-                            >
-                              <span
-                                class="font-bold text-blue-400 flex items-center gap-1.5"
-                              >
-                                <RefreshCw size={14} />
-                                Diferencial Cambiario (N/DB a generar):
-                              </span>
-                              <div class="text-right">
-                                <span class="font-mono font-black text-blue-400">
-                                  {diffBs >= 0 ? '+' : '-'}Bs. {Math.abs(diffBs).toLocaleString("de-DE", { minimumFractionDigits: 2 })}
-                                </span>
-                                <span
-                                  class="block text-xs text-text-muted font-bold mt-0.5"
+                            {#if showDebitIvaCol}
+                              <div>
+                                <div
+                                  class="flex justify-between items-center mb-1.5"
                                 >
-                                  {diffBs >= 0 ? '+' : '-'} $ {Math.abs(Number(diffBs / currentExchangeRate)).toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                  <label
+                                    class="block text-xs font-black text-text-muted uppercase"
+                                    >Reten. IVA ($)</label
+                                  >
+                                  {#if input.yaTieneRetIva}
+                                    <span
+                                      class="text-[10px] text-emerald-400 bg-emerald-500/10 border border-emerald-500/30 px-1.5 py-0.5 rounded font-black tracking-wide"
+                                      title={input.nro_comp_iva_previo
+                                        ? `Comprobante: ${input.nro_comp_iva_previo}`
+                                        : "Ya aplicada en cobro previo"}
+                                    >
+                                      Ya Aplicada
+                                    </span>
+                                  {:else if canApplyIvaRetentionOnDoc(doc)}
+                                    <button
+                                      type="button"
+                                      onclick={() => {
+                                        input.showIvaDetails =
+                                          !input.showIvaDetails;
+                                        if (!input.showIvaDetails) {
+                                          input.reten_iva_bs = 0;
+                                          input.reten_iva = 0;
+                                          input.manual_override_iva = true;
+                                        } else {
+                                          input.manual_override_iva = false;
+                                        }
+                                        recalculateDocAmounts(
+                                          doc.nro_doc.trim(),
+                                          doc,
+                                        );
+                                      }}
+                                      class="text-xs text-brand-500 font-bold hover:underline cursor-pointer"
+                                    >
+                                      {input.showIvaDetails
+                                        ? "Cerrar"
+                                        : "Aplicar"}
+                                    </button>
+                                  {/if}
+                                </div>
+                                <input
+                                  type="number"
+                                  step="0.01"
+                                  value={input.yaTieneRetIva
+                                    ? input.monto_ret_iva_previo_usd
+                                    : input.showIvaDetails
+                                      ? input.reten_iva
+                                      : 0}
+                                  readonly
+                                  class="w-full bg-surface-soft border border-border-subtle px-3 py-2 rounded-xl text-sm font-bold {input.yaTieneRetIva
+                                    ? 'text-emerald-400'
+                                    : 'text-green-400'} text-right cursor-not-allowed opacity-90"
+                                />
+                                <span
+                                  class="block text-xs {input.yaTieneRetIva
+                                    ? 'text-emerald-500/80'
+                                    : 'text-green-500'} font-black text-right mt-1.5"
+                                >
+                                  Bs. {(input.yaTieneRetIva
+                                    ? input.monto_ret_iva_previo_bs || 0
+                                    : input.showIvaDetails
+                                      ? input.reten_iva_bs || 0
+                                      : 0
+                                  ).toLocaleString("de-DE", {
+                                    minimumFractionDigits: 2,
+                                  })}
+                                  {#if input.yaTieneRetIva && input.nro_comp_iva_previo}
+                                    <span
+                                      class="block text-[10px] font-normal text-text-muted mt-0.5"
+                                      >Comp: {input.nro_comp_iva_previo}</span
+                                    >
+                                  {/if}
                                 </span>
+                              </div>
+                            {/if}
+                            {#if showDebitIslrCol}
+                              <div>
+                                <div
+                                  class="flex justify-between items-center mb-1.5"
+                                >
+                                  <label
+                                    class="block text-xs font-black text-text-muted uppercase"
+                                    >Reten. ISLR ($)</label
+                                  >
+                                  {#if input.yaTieneRetIslr}
+                                    <span
+                                      class="text-[10px] text-amber-400 bg-amber-500/10 border border-amber-500/30 px-1.5 py-0.5 rounded font-black tracking-wide"
+                                      title={input.nro_comp_islr_previo
+                                        ? `Comprobante: ${input.nro_comp_islr_previo}`
+                                        : "Ya aplicada en cobro previo"}
+                                    >
+                                      Ya Aplicada
+                                    </span>
+                                  {:else if canApplyIslrRetentionOnDoc(doc)}
+                                    <button
+                                      type="button"
+                                      onclick={() => {
+                                        input.showIslrDetails =
+                                          !input.showIslrDetails;
+                                        if (!input.showIslrDetails) {
+                                          input.reten_islr_bs = 0;
+                                          input.reten_islr = 0;
+                                          input.manual_override_islr = true;
+                                        } else {
+                                          input.manual_override_islr = false;
+                                        }
+                                        recalculateDocAmounts(
+                                          doc.nro_doc.trim(),
+                                          doc,
+                                        );
+                                      }}
+                                      class="text-xs text-brand-500 font-bold hover:underline cursor-pointer"
+                                    >
+                                      {input.showIslrDetails
+                                        ? "Cerrar"
+                                        : "Aplicar"}
+                                    </button>
+                                  {/if}
+                                </div>
+                                <input
+                                  type="number"
+                                  step="0.01"
+                                  value={input.yaTieneRetIslr
+                                    ? input.monto_ret_islr_previo_usd
+                                    : input.showIslrDetails
+                                      ? input.reten_islr
+                                      : 0}
+                                  readonly
+                                  class="w-full bg-surface-soft border border-border-subtle px-3 py-2 rounded-xl text-sm font-bold text-amber-400 text-right cursor-not-allowed opacity-90"
+                                />
+                                <span
+                                  class="block text-xs {input.yaTieneRetIslr
+                                    ? 'text-amber-500/80'
+                                    : 'text-amber-400'} font-black text-right mt-1.5"
+                                >
+                                  Bs. {(input.yaTieneRetIslr
+                                    ? input.monto_ret_islr_previo_bs || 0
+                                    : input.showIslrDetails
+                                      ? input.reten_islr_bs || 0
+                                      : 0
+                                  ).toLocaleString("de-DE", {
+                                    minimumFractionDigits: 2,
+                                  })}
+                                  {#if input.yaTieneRetIslr && input.nro_comp_islr_previo}
+                                    <span
+                                      class="block text-[10px] font-normal text-text-muted mt-0.5"
+                                      >Comp: {input.nro_comp_islr_previo}</span
+                                    >
+                                  {/if}
+                                </span>
+                              </div>
+                            {/if}
+                          </div>
+
+                          <!-- Detalles Retención IVA -->
+                          {#if input.showIvaDetails && !input.yaTieneRetIva && canApplyIvaRetentionOnDoc(doc)}
+                            <div
+                              class="bg-green-500/5 border border-green-500/20 p-4 rounded-2xl space-y-3 text-xs animate-in slide-in-from-top-2 duration-150"
+                            >
+                              <div class="flex justify-between items-center">
+                                <span
+                                  class="font-bold text-emerald-700 dark:text-green-400"
+                                  >Datos Comprobante Retención IVA</span
+                                >
+                                <button
+                                  onclick={() => {
+                                    input.showIvaDetails = false;
+                                    input.reten_iva_bs = 0;
+                                    input.reten_iva = 0;
+                                    input.manual_override_iva = true;
+                                    recalculateDocAmounts(
+                                      doc.nro_doc.trim(),
+                                      doc,
+                                    );
+                                  }}
+                                  class="text-text-muted hover:text-text-base cursor-pointer"
+                                  ><X size={14} /></button
+                                >
+                              </div>
+                              <div
+                                class="grid grid-cols-1 sm:grid-cols-5 gap-3"
+                              >
+                                <div>
+                                  <span
+                                    class="text-[9px] text-text-muted font-bold block mb-1"
+                                    >NRO. COMPROBANTE</span
+                                  >
+                                  <input
+                                    type="text"
+                                    placeholder="Ej: 2026060001"
+                                    bind:value={input.num_comprobante_iva}
+                                    class="w-full bg-surface-soft border border-border-subtle px-2 py-1.5 rounded-lg text-xs"
+                                  />
+                                </div>
+                                <div>
+                                  <span
+                                    class="text-[9px] text-text-muted font-bold block mb-1"
+                                    >BASE IMPONIBLE (Bs.)</span
+                                  >
+                                  <input
+                                    type="number"
+                                    step="0.01"
+                                    readonly
+                                    bind:value={input.base_imponible_iva_bs}
+                                    class="w-full bg-surface-soft/50 border border-border-subtle px-2 py-1.5 rounded-lg text-xs text-right opacity-70 cursor-not-allowed"
+                                  />
+                                </div>
+                                <div>
+                                  <span
+                                    class="text-[9px] text-text-muted font-bold block mb-1"
+                                    >ALÍCUOTA (%)</span
+                                  >
+                                  <input
+                                    type="number"
+                                    readonly
+                                    bind:value={input.alicuota_iva}
+                                    class="w-full bg-surface-soft/50 border border-border-subtle px-2 py-1.5 rounded-lg text-xs text-right opacity-70 cursor-not-allowed"
+                                  />
+                                </div>
+                                <div>
+                                  <span
+                                    class="text-[9px] text-text-muted font-bold block mb-1"
+                                    >PORC. RETENCIÓN (%)</span
+                                  >
+                                  <select
+                                    bind:value={input.porc_ret_iva}
+                                    onchange={() => {
+                                      recalculateDocAmounts(
+                                        doc.nro_doc.trim(),
+                                        doc,
+                                      );
+                                    }}
+                                    class="w-full bg-surface-soft border border-border-subtle px-2 py-1.5 rounded-lg text-xs"
+                                  >
+                                    <option value={75}>75% (General)</option>
+                                    <option value={100}>100% (Total)</option>
+                                  </select>
+                                </div>
+                                <div>
+                                  <span
+                                    class="text-[9px] text-text-muted font-bold block mb-1 font-semibold text-emerald-700 dark:text-green-400"
+                                    >MTO RETENIDO (Bs.)</span
+                                  >
+                                  <input
+                                    type="number"
+                                    step="0.01"
+                                    readonly
+                                    value={input.reten_iva_bs}
+                                    class="w-full bg-surface-soft/60 border border-border-subtle text-emerald-700 dark:text-green-400 font-bold px-2 py-1.5 rounded-lg text-xs text-right cursor-not-allowed opacity-90"
+                                  />
+                                </div>
                               </div>
                             </div>
                           {/if}
-                        {/if}
 
-                        <!-- Neto Cobrado Calculado (Solo Lectura) -->
-                        {#if !isCreditDoc(doc.co_tipo_doc) && input.mont_cob > 0}
-                          <div
-                            class="flex flex-col sm:flex-row sm:items-center justify-between border-t border-border-subtle/40 pt-3 gap-3"
-                          >
-                            <span class="text-xs text-text-muted font-bold"
-                              >Monto Abonado por este documento:</span
+                          <!-- Detalles Retención ISLR (Soporte Multi-concepto) -->
+                          {#if input.showIslrDetails && !input.yaTieneRetIslr && canApplyIslrRetentionOnDoc(doc)}
+                            {@const docTotalBaseBs = getDocBaseIslrBs(doc)}
+                            {@const totalLineasBaseBs = (
+                              input.islr_lines || []
+                            ).reduce(
+                              (sum, l) =>
+                                sum + (Number(l.base_imponible_islr_bs) || 0),
+                              0,
+                            )}
+                            {@const difBaseBs =
+                              Math.round(
+                                (docTotalBaseBs - totalLineasBaseBs) * 100,
+                              ) / 100}
+                            <div
+                              class="bg-amber-500/5 border border-amber-500/20 p-4 rounded-2xl space-y-3 text-xs animate-in slide-in-from-top-2 duration-150"
                             >
-                            <div class="flex items-center gap-3">
-                              <span class="text-sm font-bold text-brand-400 font-mono">
-                                $ {input.mont_cob.toLocaleString("de-DE", { minimumFractionDigits: 2 })}
-                              </span>
-                              <div class="text-right shrink-0 min-w-[120px]">
-                                <span
-                                  class="block text-xs text-text-muted font-bold"
+                              <div
+                                class="flex justify-between items-center flex-wrap gap-2"
+                              >
+                                <div class="flex items-center gap-2 flex-wrap">
+                                  <span
+                                    class="font-bold text-amber-700 dark:text-amber-300"
+                                    >Conceptos Retención ISLR ({getTabDescription(
+                                      getEffectiveClientTab(),
+                                    )})</span
+                                  >
+                                  <span
+                                    class="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400 font-bold border border-amber-500/20"
+                                  >
+                                    Base Total: Bs. {docTotalBaseBs.toLocaleString(
+                                      "de-DE",
+                                      { minimumFractionDigits: 2 },
+                                    )}
+                                  </span>
+                                  {#if Math.abs(difBaseBs) > 0.05}
+                                    <button
+                                      type="button"
+                                      onclick={() => {
+                                        if (difBaseBs > 0) {
+                                          const targetIdx = (input.islr_lines || []).findIndex(
+                                            (l) => (Number(l.base_imponible_islr_bs) || 0) === 0,
+                                          );
+                                          assignRemainingBaseToLine(
+                                            doc.nro_doc.trim(),
+                                            doc,
+                                            targetIdx !== -1 ? targetIdx : (input.islr_lines?.length || 1) - 1,
+                                          );
+                                        }
+                                      }}
+                                      class="text-[10px] px-2 py-0.5 rounded-full {difBaseBs >
+                                      0
+                                        ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30 hover:bg-amber-500/30 cursor-pointer'
+                                        : 'bg-rose-500/20 text-rose-300 border border-rose-500/30'} font-semibold transition-colors"
+                                      title={difBaseBs > 0 ? "Haz clic para asignar el remanente" : ""}
+                                    >
+                                      {difBaseBs > 0
+                                        ? `Por asignar: Bs. ${difBaseBs.toLocaleString("de-DE", { minimumFractionDigits: 2 })} (clic para asignar)`
+                                        : `Exceso base: Bs. ${Math.abs(difBaseBs).toLocaleString("de-DE", { minimumFractionDigits: 2 })}`}
+                                    </button>
+                                  {/if}
+                                </div>
+                                <button
+                                  type="button"
+                                  onclick={() => {
+                                    input.showIslrDetails = false;
+                                    input.reten_islr_bs = 0;
+                                    input.reten_islr = 0;
+                                    input.manual_override_islr = true;
+                                    recalculateDocAmounts(
+                                      doc.nro_doc.trim(),
+                                      doc,
+                                    );
+                                  }}
+                                  class="text-text-muted hover:text-text-base cursor-pointer"
+                                  ><X size={14} /></button
                                 >
-                                  Bs. {(
-                                    input.mont_cob_bs || 0
+                              </div>
+
+                              <!-- Lista dinámica de conceptos ISLR aplicados -->
+                              {#if !input.islr_lines || input.islr_lines.length === 0}
+                                {@const _ = ensureIslrLines(input, doc)}
+                              {/if}
+
+                              <div class="space-y-2">
+                                {#each input.islr_lines || [] as line, lineIdx (line.id || lineIdx)}
+                                  <div
+                                    class="p-2.5 rounded-xl bg-surface-soft border border-border-subtle grid grid-cols-1 sm:grid-cols-12 gap-2.5 items-center"
+                                  >
+                                    <div class="sm:col-span-5">
+                                      <span
+                                        class="text-[9px] text-text-muted font-bold block mb-1"
+                                        >CONCEPTO #{lineIdx + 1}</span
+                                      >
+                                      <select
+                                        value={line.co_islr}
+                                        onchange={(e) => {
+                                          const selectedCode = (
+                                            e.currentTarget as HTMLSelectElement
+                                          ).value;
+                                          handleLineConceptChange(
+                                            doc.nro_doc.trim(),
+                                            doc,
+                                            lineIdx,
+                                            selectedCode,
+                                          );
+                                        }}
+                                        class="w-full bg-surface-base border border-border-subtle px-2 py-1.5 rounded-lg text-xs"
+                                      >
+                                        {#each getConceptosForClient() as c}
+                                          {@const cVals = resolveConceptValues(
+                                            c,
+                                            c.co_islr.trim(),
+                                            getEffectiveClientTab(),
+                                          )}
+                                          <option value={c.co_islr.trim()}>
+                                            {c.co_islr.trim()} - {c.islr_des.trim()}
+                                            ({cVals.porcRet}%{cVals.sustraen > 0
+                                              ? ` - Sustr: Bs. ${cVals.sustraen}`
+                                              : ""})
+                                          </option>
+                                        {/each}
+                                      </select>
+                                    </div>
+                                    <div class="sm:col-span-3">
+                                      <div class="flex justify-between items-center mb-1 flex-wrap gap-1">
+                                        <span class="text-[9px] text-text-muted font-bold block">BASE IMPONIBLE (Bs.)</span>
+                                        <div class="flex items-center gap-1.5">
+                                          {#if (Number(line.base_imponible_islr_bs) || 0) === 0 && difBaseBs > 0}
+                                            <button
+                                              type="button"
+                                              title="Asignar el remanente no cubierto a este concepto"
+                                              onclick={() => assignRemainingBaseToLine(doc.nro_doc.trim(), doc, lineIdx)}
+                                              class="text-[9px] font-bold text-amber-500 hover:text-amber-400 underline cursor-pointer"
+                                            >
+                                              + Remanente
+                                            </button>
+                                          {/if}
+                                          {#if Math.abs((Number(line.base_imponible_islr_bs) || 0) - docTotalBaseBs) > 0.01}
+                                            <button
+                                              type="button"
+                                              title="Colocar la base total de la factura a este concepto"
+                                              onclick={() => setLineToFullBase(doc.nro_doc.trim(), doc, lineIdx)}
+                                              class="text-[9px] font-semibold text-text-muted hover:text-amber-400 cursor-pointer"
+                                            >
+                                              Base total
+                                            </button>
+                                          {/if}
+                                        </div>
+                                      </div>
+                                      <input
+                                        type="number"
+                                        step="0.01"
+                                        bind:value={line.base_imponible_islr_bs}
+                                        oninput={() => {
+                                          recalculateDocAmounts(
+                                            doc.nro_doc.trim(),
+                                            doc,
+                                          );
+                                        }}
+                                        class="w-full bg-surface-base border border-border-subtle px-2 py-1.5 rounded-lg text-xs text-right font-mono"
+                                      />
+                                    </div>
+                                    <div class="sm:col-span-1">
+                                      <span
+                                        class="text-[9px] text-text-muted font-bold block mb-1"
+                                        >% RET.</span
+                                      >
+                                      <input
+                                        type="number"
+                                        step="0.1"
+                                        disabled
+                                        value={line.porc_islr}
+                                        class="w-full bg-surface-soft/50 border border-border-subtle px-1.5 py-1.5 rounded-lg text-xs text-right opacity-70 cursor-not-allowed font-mono"
+                                      />
+                                    </div>
+                                    <div class="sm:col-span-2">
+                                      <span
+                                        class="text-[9px] text-text-muted font-bold block mb-1 font-semibold text-amber-700 dark:text-amber-400"
+                                        >RETENIDO (Bs.)</span
+                                      >
+                                      <input
+                                        type="number"
+                                        step="0.01"
+                                        readonly
+                                        value={line.reten_islr_bs}
+                                        class="w-full bg-surface-soft/60 border border-border-subtle px-2 py-1.5 rounded-lg text-xs text-right text-amber-700 dark:text-amber-400 font-bold cursor-not-allowed opacity-90 font-mono"
+                                      />
+                                    </div>
+                                    <div
+                                      class="sm:col-span-1 flex justify-center pt-2 sm:pt-0"
+                                    >
+                                      {#if (input.islr_lines?.length || 0) > 1}
+                                        <button
+                                          type="button"
+                                          title="Eliminar este concepto"
+                                          onclick={() =>
+                                            removeIslrConceptLine(
+                                              doc.nro_doc.trim(),
+                                              doc,
+                                              lineIdx,
+                                            )}
+                                          class="p-1.5 text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 rounded-lg transition-colors cursor-pointer"
+                                        >
+                                          <Trash2 size={14} />
+                                        </button>
+                                      {/if}
+                                    </div>
+                                  </div>
+                                {/each}
+                              </div>
+
+                              <div
+                                class="flex items-center justify-between pt-1 flex-wrap gap-2"
+                              >
+                                <button
+                                  type="button"
+                                  onclick={() =>
+                                    addIslrConceptLine(doc.nro_doc.trim(), doc)}
+                                  class="inline-flex items-center gap-1.5 text-xs font-bold text-amber-400 hover:text-amber-300 transition-colors px-3 py-1.5 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/20 cursor-pointer"
+                                >
+                                  <Plus size={13} />
+                                  Agregar otro concepto ISLR
+                                </button>
+
+                                <div class="text-right">
+                                  <span class="text-[11px] text-text-muted"
+                                    >Total Retención ISLR:</span
+                                  >
+                                  <strong
+                                    class="text-xs font-mono font-bold text-amber-400 ml-1.5"
+                                  >
+                                    Bs. {Number(
+                                      input.reten_islr_bs || 0,
+                                    ).toLocaleString("de-DE", {
+                                      minimumFractionDigits: 2,
+                                    })}
+                                  </strong>
+                                </div>
+                              </div>
+
+                              {#if (input.sustraendo_islr_bs || 0) > 0}
+                                <div
+                                  class="text-[10px] text-amber-400/90 flex items-center gap-1 font-medium bg-amber-500/10 px-2.5 py-1 rounded-lg border border-amber-500/20 w-max"
+                                >
+                                  <span
+                                    >Sustraendo legal aplicado: <strong
+                                      >Bs. {Number(
+                                        input.sustraendo_islr_bs,
+                                      ).toLocaleString("de-DE", {
+                                        minimumFractionDigits: 2,
+                                      })}</strong
+                                    ></span
+                                  >
+                                </div>
+                              {/if}
+                            </div>
+                          {/if}
+
+                          <!-- Alerta IGTF -->
+                          {#if doc.otros1 > 0}
+                            <div
+                              class="flex items-center justify-between bg-brand-500/5 border border-brand-500/10 p-3.5 rounded-2xl text-xs animate-in slide-in-from-top-2 duration-150 mb-3"
+                            >
+                              <span
+                                class="font-bold text-brand-400 flex items-center gap-1.5"
+                              >
+                                <Landmark size={14} />
+                                Impuesto IGTF (3%) Incluido:
+                              </span>
+                              <div class="text-right">
+                                <span
+                                  class="font-mono font-black text-brand-400"
+                                >
+                                  $ {Number(
+                                    doc.otros1 / (doc.tasa > 0 ? doc.tasa : 1),
                                   ).toLocaleString("de-DE", {
                                     minimumFractionDigits: 2,
                                   })}
                                 </span>
+                                <span
+                                  class="block text-xs text-text-muted font-bold mt-1"
+                                >
+                                  Bs. {Number(doc.otros1).toLocaleString(
+                                    "de-DE",
+                                    { minimumFractionDigits: 2 },
+                                  )}
+                                </span>
                               </div>
                             </div>
-                          </div>
-                        {/if}
-                      </div>
+                          {/if}
+
+                          <!-- Alerta Diferencial Cambiario (N/DB) exclusivamente para facturas de venta (FACT) de días anteriores -->
+                          {#if doc.co_tipo_doc.trim().toUpperCase() === "FACT"}
+                            {@const docFecEmisStr = doc.fec_emis
+                              ? new Date(doc.fec_emis)
+                                  .toISOString()
+                                  .split("T")[0]
+                              : ""}
+                            {@const todayStr = new Date()
+                              .toISOString()
+                              .split("T")[0]}
+                            {@const isPreviousDateDoc =
+                              docFecEmisStr && docFecEmisStr < todayStr}
+                            {@const docTasa = doc.tasa > 0 ? doc.tasa : 1}
+                            {@const diffBs =
+                              isPreviousDateDoc &&
+                              doc.saldo > 0 &&
+                              currentExchangeRate > docTasa
+                                ? Math.max(
+                                    0,
+                                    Math.round(
+                                      ((doc.saldo / docTasa) *
+                                        currentExchangeRate -
+                                        doc.saldo) *
+                                        100,
+                                    ) / 100,
+                                  )
+                                : 0}
+                            {#if isPreviousDateDoc && diffBs > 0}
+                              <div
+                                class="flex items-center justify-between bg-blue-500/10 border border-blue-500/20 p-3.5 rounded-2xl text-xs animate-in slide-in-from-top-2 duration-150 mb-3"
+                              >
+                                <span
+                                  class="font-bold text-blue-400 flex items-center gap-1.5"
+                                >
+                                  <RefreshCw size={14} />
+                                  Diferencial Cambiario (N/DB a generar):
+                                </span>
+                                <div class="text-right">
+                                  <span
+                                    class="font-mono font-black text-blue-400"
+                                  >
+                                    {diffBs >= 0 ? "+" : "-"}Bs. {Math.abs(
+                                      diffBs,
+                                    ).toLocaleString("de-DE", {
+                                      minimumFractionDigits: 2,
+                                    })}
+                                  </span>
+                                  <span
+                                    class="block text-xs text-text-muted font-bold mt-0.5"
+                                  >
+                                    {diffBs >= 0 ? "+" : "-"} $ {Math.abs(
+                                      Number(diffBs / currentExchangeRate),
+                                    ).toLocaleString("de-DE", {
+                                      minimumFractionDigits: 2,
+                                      maximumFractionDigits: 2,
+                                    })}
+                                  </span>
+                                </div>
+                              </div>
+                            {/if}
+                          {/if}
+
+                          <!-- Neto Cobrado Calculado (Solo Lectura) -->
+                          {#if !isCreditDoc(doc.co_tipo_doc) && input.mont_cob > 0}
+                            <div
+                              class="flex flex-col sm:flex-row sm:items-center justify-between border-t border-border-subtle/40 pt-3 gap-3"
+                            >
+                              <span class="text-xs text-text-muted font-bold"
+                                >Monto Abonado por este documento:</span
+                              >
+                              <div class="flex items-center gap-3">
+                                <span
+                                  class="text-sm font-bold text-brand-400 font-mono"
+                                >
+                                  $ {input.mont_cob.toLocaleString("de-DE", {
+                                    minimumFractionDigits: 2,
+                                  })}
+                                </span>
+                                <div class="text-right shrink-0 min-w-[120px]">
+                                  <span
+                                    class="block text-xs text-text-muted font-bold"
+                                  >
+                                    Bs. {(
+                                      input.mont_cob_bs || 0
+                                    ).toLocaleString("de-DE", {
+                                      minimumFractionDigits: 2,
+                                    })}
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+                          {/if}
+                        </div>
+                      {/if}
                     {/if}
-                  {/if}
                   </div>
                 {/if}
               {/each}
@@ -3230,8 +4414,11 @@
               <div
                 class="flex justify-between items-center text-xs font-bold bg-amber-500/15 dark:bg-amber-500/10 border border-amber-500/30 px-3.5 py-2.5 rounded-xl"
               >
-                <span class="text-amber-900 dark:text-amber-200">Crédito Remanente (Queda disponible):</span>
-                <span class="font-mono font-black text-amber-700 dark:text-amber-300 text-sm"
+                <span class="text-amber-900 dark:text-amber-200"
+                  >Crédito Remanente (Queda disponible):</span
+                >
+                <span
+                  class="font-mono font-black text-amber-700 dark:text-amber-300 text-sm"
                   >+${totalCreditoRemanenteUsd.toLocaleString("de-DE", {
                     minimumFractionDigits: 2,
                   })}</span
@@ -3239,28 +4426,28 @@
               </div>
             {/if}
             {#if totalRetenidoIvaVista > 0}
-            <div
-              class="flex justify-between items-center text-base font-bold text-text-muted"
-            >
-              <span>Retenciones IVA</span>
-              <span class="font-mono text-emerald-600 dark:text-green-400"
-                >$ {totalRetenidoIvaVista.toLocaleString("de-DE", {
-                  minimumFractionDigits: 2,
-                })}</span
+              <div
+                class="flex justify-between items-center text-base font-bold text-text-muted"
               >
-            </div>
+                <span>Retenciones IVA</span>
+                <span class="font-mono text-emerald-600 dark:text-green-400"
+                  >$ {totalRetenidoIvaVista.toLocaleString("de-DE", {
+                    minimumFractionDigits: 2,
+                  })}</span
+                >
+              </div>
             {/if}
             {#if totalRetenidoIslrVista > 0}
-            <div
-              class="flex justify-between items-center text-base font-bold text-text-muted"
-            >
-              <span>Retenciones ISLR</span>
-              <span class="font-mono text-amber-700 dark:text-amber-300"
-                >$ {totalRetenidoIslrVista.toLocaleString("de-DE", {
-                  minimumFractionDigits: 2,
-                })}</span
+              <div
+                class="flex justify-between items-center text-base font-bold text-text-muted"
               >
-            </div>
+                <span>Retenciones ISLR</span>
+                <span class="font-mono text-amber-700 dark:text-amber-300"
+                  >$ {totalRetenidoIslrVista.toLocaleString("de-DE", {
+                    minimumFractionDigits: 2,
+                  })}</span
+                >
+              </div>
             {/if}
             {#if totalIgtf > 0}
               <div
@@ -3525,7 +4712,9 @@
                       <div class="flex justify-between items-center mb-1">
                         <span
                           class="text-[9px] text-text-muted font-bold block uppercase"
-                          >Monto {getRowCurrency(fp) === 'BS' ? 'en Bolívares (Bs.)' : 'en Dólares ($)'}</span
+                          >Monto {getRowCurrency(fp) === "BS"
+                            ? "en Bolívares (Bs.)"
+                            : "en Dólares ($)"}</span
                         >
                         <div class="flex items-center gap-2">
                           <button
@@ -3540,7 +4729,9 @@
                             Saldar pendiente
                           </button>
                           <span class="text-[10px] text-brand-400 font-bold">
-                            {getRowCurrency(fp) === 'BS' ? `Equiv: $ ${fp.mont_doc || 0}` : `Equiv: Bs. ${fp.mont_doc_bs || 0}`}
+                            {getRowCurrency(fp) === "BS"
+                              ? `Equiv: $ ${fp.mont_doc || 0}`
+                              : `Equiv: Bs. ${fp.mont_doc_bs || 0}`}
                           </span>
                         </div>
                       </div>
@@ -3548,15 +4739,19 @@
                         type="number"
                         step="0.01"
                         placeholder="0.00"
-                        value={getRowCurrency(fp) === 'BS' ? (Math.round((fp.mont_doc_bs || 0) * 100) / 100) : (Math.round((fp.mont_doc || 0) * 100) / 100)}
+                        value={getRowCurrency(fp) === "BS"
+                          ? Math.round((fp.mont_doc_bs || 0) * 100) / 100
+                          : Math.round((fp.mont_doc || 0) * 100) / 100}
                         oninput={(e) => {
                           fp.manual_override = true;
-                          handleAmountChange(index, Number(e.currentTarget.value));
+                          handleAmountChange(
+                            index,
+                            Number(e.currentTarget.value),
+                          );
                         }}
                         class="w-full h-12 px-4 bg-surface-soft border border-border-subtle rounded-xl focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none transition-all font-black text-sm text-text-base text-right font-mono"
                       />
                     </div>
-
                   </div>
                 </div>
               {/each}
@@ -3568,7 +4763,8 @@
         {#if selectedClient}
           <div class="pt-6 space-y-4 relative z-10">
             <button
-              disabled={(expectedNetPayUsd > 0 && (formasPago.length === 0 || totalInstrumentosPago <= 0)) ||
+              disabled={(expectedNetPayUsd > 0 &&
+                (formasPago.length === 0 || totalInstrumentosPago <= 0)) ||
                 saving ||
                 !documentos.some((doc) => checkedDocs[doc.nro_doc.trim()])}
               onclick={saveCobro}
@@ -3690,7 +4886,9 @@
                   amountBs={formattedBs}
                   branchName={inv.sede_nombre}
                   cashierName={inv.cashier_name}
-                  statusLabel={isContribuyenteEspecialClient(inv) ? "Esp." : null}
+                  statusLabel={isContribuyenteEspecialClient(inv)
+                    ? "Esp."
+                    : null}
                   statusClass={isContribuyenteEspecialClient(inv)
                     ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
                     : null}
@@ -3729,9 +4927,13 @@
       class="bg-surface-raised border border-border-subtle rounded-[28px] w-full max-w-xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh] animate-in zoom-in-95 duration-200"
     >
       <!-- Cabecera del Modal -->
-      <div class="p-6 border-b border-border-subtle flex items-center justify-between bg-surface-soft/40">
+      <div
+        class="p-6 border-b border-border-subtle flex items-center justify-between bg-surface-soft/40"
+      >
         <div class="flex items-center gap-3">
-          <div class="p-3 bg-brand-500/10 text-brand-500 dark:text-brand-400 rounded-2xl border border-brand-500/20">
+          <div
+            class="p-3 bg-brand-500/10 text-brand-500 dark:text-brand-400 rounded-2xl border border-brand-500/20"
+          >
             <Wallet size={24} />
           </div>
           <div>
@@ -3739,9 +4941,9 @@
               Saldo a Favor Detectado
             </h3>
             <p class="text-xs text-text-muted mt-0.5">
-              {#if differenceOriginType === 'CREDIT_DOC'}
+              {#if differenceOriginType === "CREDIT_DOC"}
                 El cobro incluye un saldo a favor en {differenceCreditDocType} ({differenceCreditDocNum}):
-              {:else if differenceOriginType === 'INSTRUMENTS'}
+              {:else if differenceOriginType === "INSTRUMENTS"}
                 El cliente entregó dinero en exceso en los instrumentos de pago:
               {:else}
                 El cobro presenta una diferencia a favor del cliente:
@@ -3760,52 +4962,91 @@
       <!-- Cuerpo del Modal -->
       <div class="p-6 space-y-6 overflow-y-auto">
         <!-- Banner del Monto a Favor -->
-        <div class="bg-emerald-500/10 dark:bg-emerald-500/15 border border-emerald-500/30 p-5 rounded-2xl flex items-center justify-between">
+        <div
+          class="bg-emerald-500/10 dark:bg-emerald-500/15 border border-emerald-500/30 p-5 rounded-2xl flex items-center justify-between"
+        >
           <div>
-            <span class="text-[11px] font-black uppercase tracking-wider text-emerald-700 dark:text-emerald-400 block">
+            <span
+              class="text-[11px] font-black uppercase tracking-wider text-emerald-700 dark:text-emerald-400 block"
+            >
               Diferencia a Favor del Cliente
             </span>
             <span class="text-xs text-text-muted/80 mt-0.5 block">
-              Tasa aplicada: Bs. {currentExchangeRate.toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              Tasa aplicada: Bs. {currentExchangeRate.toLocaleString("de-DE", {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2,
+              })}
             </span>
           </div>
           <div class="text-right">
-            <span class="text-2xl font-black text-emerald-600 dark:text-emerald-400 font-mono block">
-              +${differenceSurplusUsd.toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            <span
+              class="text-2xl font-black text-emerald-600 dark:text-emerald-400 font-mono block"
+            >
+              +${differenceSurplusUsd.toLocaleString("de-DE", {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2,
+              })}
             </span>
-            <span class="text-xs font-bold text-emerald-700 dark:text-emerald-400/90 font-mono mt-0.5 block">
-              +Bs. {differenceSurplusBs.toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            <span
+              class="text-xs font-bold text-emerald-700 dark:text-emerald-400/90 font-mono mt-0.5 block"
+            >
+              +Bs. {differenceSurplusBs.toLocaleString("de-DE", {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2,
+              })}
             </span>
           </div>
         </div>
 
         <!-- Opciones de Resolución -->
         <div class="space-y-3">
-          <label class="text-xs font-black uppercase tracking-wider text-text-muted block ml-1">
+          <label
+            class="text-xs font-black uppercase tracking-wider text-text-muted block ml-1"
+          >
             ¿Qué deseas hacer con esta diferencia?
           </label>
 
-          {#if differenceOriginType === 'CREDIT_DOC'}
+          {#if differenceOriginType === "CREDIT_DOC"}
             <!-- ORIGEN: DOCUMENTO DE CRÉDITO EXISTENTE (N/CR, AJNM, ADEL) -->
             <!-- Al ser ya un crédito (-), NUNCA se debe generar un AJNM (-) porque sumaría negativos (-86 + -86 = -172) -->
             <!-- Opción 1: Conservar saldo en documento original (Recomendado) -->
             <button
               type="button"
-              onclick={() => (selectedDifferenceAction = 'KEEP_REMAINING')}
-              class="w-full text-left p-4 rounded-2xl border transition-all cursor-pointer flex items-start gap-3.5 {selectedDifferenceAction === 'KEEP_REMAINING' ? 'bg-emerald-500/10 border-emerald-500 ring-2 ring-emerald-500/20' : 'bg-surface-soft/40 border-border-subtle hover:bg-surface-soft hover:border-white/20'}"
+              onclick={() => (selectedDifferenceAction = "KEEP_REMAINING")}
+              class="w-full text-left p-4 rounded-2xl border transition-all cursor-pointer flex items-start gap-3.5 {selectedDifferenceAction ===
+              'KEEP_REMAINING'
+                ? 'bg-emerald-500/10 border-emerald-500 ring-2 ring-emerald-500/20'
+                : 'bg-surface-soft/40 border-border-subtle hover:bg-surface-soft hover:border-white/20'}"
             >
-              <div class="p-2.5 rounded-xl {selectedDifferenceAction === 'KEEP_REMAINING' ? 'bg-emerald-500 text-white' : 'bg-surface-soft text-text-muted'} shrink-0 mt-0.5">
+              <div
+                class="p-2.5 rounded-xl {selectedDifferenceAction ===
+                'KEEP_REMAINING'
+                  ? 'bg-emerald-500 text-white'
+                  : 'bg-surface-soft text-text-muted'} shrink-0 mt-0.5"
+              >
                 <CheckCircle size={20} />
               </div>
               <div class="flex-1">
                 <div class="flex items-center justify-between gap-2">
-                  <span class="font-bold text-sm text-text-base">Conservar Saldo en {differenceCreditDocType} ({differenceCreditDocNum || 'actual'})</span>
-                  <span class="text-[9px] font-black uppercase px-2 py-0.5 rounded-md bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30">
+                  <span class="font-bold text-sm text-text-base"
+                    >Conservar Saldo en {differenceCreditDocType} ({differenceCreditDocNum ||
+                      "actual"})</span
+                  >
+                  <span
+                    class="text-[9px] font-black uppercase px-2 py-0.5 rounded-md bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30"
+                  >
                     Recomendado • Sin nuevo doc
                   </span>
                 </div>
                 <p class="text-xs text-text-muted mt-1 leading-relaxed">
-                  No crea documentos adicionales ni duplica comprobantes. El remanente de +${differenceSurplusUsd.toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} permanece dentro de la <strong>{differenceCreditDocType} {differenceCreditDocNum}</strong> en Profit Plus para amortizar futuras compras o cobros.
+                  No crea documentos adicionales ni duplica comprobantes. El
+                  remanente de +${differenceSurplusUsd.toLocaleString("de-DE", {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
+                  })} permanece dentro de la
+                  <strong
+                    >{differenceCreditDocType} {differenceCreditDocNum}</strong
+                  > en Profit Plus para amortizar futuras compras o cobros.
                 </p>
               </div>
             </button>
@@ -3814,60 +5055,97 @@
             {#if !hasSelectedPositiveAdjustment}
               <button
                 type="button"
-                onclick={() => (selectedDifferenceAction = 'AJPM')}
-                class="w-full text-left p-4 rounded-2xl border transition-all cursor-pointer flex items-start gap-3.5 {selectedDifferenceAction === 'AJPM' ? 'bg-blue-500/10 border-blue-500 ring-2 ring-blue-500/20' : 'bg-surface-soft/40 border-border-subtle hover:bg-surface-soft hover:border-white/20'}"
+                onclick={() => (selectedDifferenceAction = "AJPM")}
+                class="w-full text-left p-4 rounded-2xl border transition-all cursor-pointer flex items-start gap-3.5 {selectedDifferenceAction ===
+                'AJPM'
+                  ? 'bg-blue-500/10 border-blue-500 ring-2 ring-blue-500/20'
+                  : 'bg-surface-soft/40 border-border-subtle hover:bg-surface-soft hover:border-white/20'}"
               >
-                <div class="p-2.5 rounded-xl {selectedDifferenceAction === 'AJPM' ? 'bg-blue-500 text-white' : 'bg-surface-soft text-text-muted'} shrink-0 mt-0.5">
+                <div
+                  class="p-2.5 rounded-xl {selectedDifferenceAction === 'AJPM'
+                    ? 'bg-blue-500 text-white'
+                    : 'bg-surface-soft text-text-muted'} shrink-0 mt-0.5"
+                >
                   <Wallet size={20} />
                 </div>
                 <div class="flex-1">
                   <div class="flex items-center justify-between gap-2">
-                    <span class="font-bold text-sm text-text-base">Generar Reintegro o Vuelto (AJPM)</span>
-                    <span class="text-[9px] font-black uppercase px-2 py-0.5 rounded-md bg-blue-500/15 text-blue-700 dark:text-blue-400 border border-blue-500/30">
+                    <span class="font-bold text-sm text-text-base"
+                      >Generar Reintegro o Vuelto (AJPM)</span
+                    >
+                    <span
+                      class="text-[9px] font-black uppercase px-2 py-0.5 rounded-md bg-blue-500/15 text-blue-700 dark:text-blue-400 border border-blue-500/30"
+                    >
                       Serie V014
                     </span>
                   </div>
                   <p class="text-xs text-text-muted mt-1 leading-relaxed">
-                    Genera un Ajuste Positivo (<strong>AJPM</strong>) para cruzar y saldar el crédito a $0,00, registrando la devolución del dinero en efectivo o transferencia bancaria al cliente.
+                    Genera un Ajuste Positivo (<strong>AJPM</strong>) para
+                    cruzar y saldar el crédito a $0,00, registrando la
+                    devolución del dinero en efectivo o transferencia bancaria
+                    al cliente.
                   </p>
                 </div>
               </button>
             {/if}
 
             <!-- Explicación contable del por qué no se permite AJNM ni AJPM de AJPM -->
-            <div class="p-3.5 bg-brand-500/10 border border-brand-500/20 rounded-2xl text-xs text-text-base flex items-start gap-2.5 mt-2">
+            <div
+              class="p-3.5 bg-brand-500/10 border border-brand-500/20 rounded-2xl text-xs text-text-base flex items-start gap-2.5 mt-2"
+            >
               <Info size={16} class="text-brand-500 shrink-0 mt-0.5" />
               <span class="text-text-muted leading-relaxed">
-                <strong class="text-text-base">Validación Contable y de Cuadre:</strong> 
+                <strong class="text-text-base"
+                  >Validación Contable y de Cuadre:</strong
+                >
                 {#if hasSelectedPositiveAdjustment}
-                  El cobro ya incluye un Ajuste Positivo ({positiveAdjustmentDocNum || 'AJPM / AJPA'}). En Profit Plus no se puede generar un AJPM de otro AJPM/AJPA ni un AJNM de un crédito; el remanente permanece intacto en su documento original.
+                  El cobro ya incluye un Ajuste Positivo ({positiveAdjustmentDocNum ||
+                    "AJPM / AJPA"}). En Profit Plus no se puede generar un AJPM
+                  de otro AJPM/AJPA ni un AJNM de un crédito; el remanente
+                  permanece intacto en su documento original.
                 {:else}
-                  Al provenir de un documento de crédito ({differenceCreditDocType}), no se puede generar otro documento negativo (AJNM) porque en el cobro ambos montos se sumarían en lugar de restarse a $0,00. El saldo se mantiene en el documento existente o se cruza con un Reintegro positivo (AJPM).
+                  Al provenir de un documento de crédito ({differenceCreditDocType}),
+                  no se puede generar otro documento negativo (AJNM) porque en
+                  el cobro ambos montos se sumarían en lugar de restarse a
+                  $0,00. El saldo se mantiene en el documento existente o se
+                  cruza con un Reintegro positivo (AJPM).
                 {/if}
               </span>
             </div>
-
-          {:else if differenceOriginType === 'INSTRUMENTS'}
+          {:else if differenceOriginType === "INSTRUMENTS"}
             <!-- ORIGEN: INSTRUMENTOS DE PAGO (EFECTIVO O BANCO EN EXCESO) -->
             <!-- El dinero ingresado es positivo (+), por lo que un crédito AJNM (-) sí cuadra el cobro a 0 -->
             <!-- Opción 1: Anticipo (AJNM) -->
             <button
               type="button"
-              onclick={() => (selectedDifferenceAction = 'AJNM')}
-              class="w-full text-left p-4 rounded-2xl border transition-all cursor-pointer flex items-start gap-3.5 {selectedDifferenceAction === 'AJNM' ? 'bg-emerald-500/10 border-emerald-500 ring-2 ring-emerald-500/20' : 'bg-surface-soft/40 border-border-subtle hover:bg-surface-soft hover:border-white/20'}"
+              onclick={() => (selectedDifferenceAction = "AJNM")}
+              class="w-full text-left p-4 rounded-2xl border transition-all cursor-pointer flex items-start gap-3.5 {selectedDifferenceAction ===
+              'AJNM'
+                ? 'bg-emerald-500/10 border-emerald-500 ring-2 ring-emerald-500/20'
+                : 'bg-surface-soft/40 border-border-subtle hover:bg-surface-soft hover:border-white/20'}"
             >
-              <div class="p-2.5 rounded-xl {selectedDifferenceAction === 'AJNM' ? 'bg-emerald-500 text-white' : 'bg-surface-soft text-text-muted'} shrink-0 mt-0.5">
+              <div
+                class="p-2.5 rounded-xl {selectedDifferenceAction === 'AJNM'
+                  ? 'bg-emerald-500 text-white'
+                  : 'bg-surface-soft text-text-muted'} shrink-0 mt-0.5"
+              >
                 <Receipt size={20} />
               </div>
               <div class="flex-1">
                 <div class="flex items-center justify-between gap-2">
-                  <span class="font-bold text-sm text-text-base">Generar Anticipo (AJNM)</span>
-                  <span class="text-[9px] font-black uppercase px-2 py-0.5 rounded-md bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30">
+                  <span class="font-bold text-sm text-text-base"
+                    >Generar Anticipo (AJNM)</span
+                  >
+                  <span
+                    class="text-[9px] font-black uppercase px-2 py-0.5 rounded-md bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30"
+                  >
                     Serie V012 • Recomendado
                   </span>
                 </div>
                 <p class="text-xs text-text-muted mt-1 leading-relaxed">
-                  El cliente entregó dinero de más en efectivo o banco. Crea un documento de crédito <strong>AJNM</strong> a su favor con saldo disponible para futuras compras, cuadrando el cobro a $0,00.
+                  El cliente entregó dinero de más en efectivo o banco. Crea un
+                  documento de crédito <strong>AJNM</strong> a su favor con saldo
+                  disponible para futuras compras, cuadrando el cobro a $0,00.
                 </p>
               </div>
             </button>
@@ -3876,46 +5154,70 @@
             {#if !hasSelectedPositiveAdjustment}
               <button
                 type="button"
-                onclick={() => (selectedDifferenceAction = 'AJPM')}
-                class="w-full text-left p-4 rounded-2xl border transition-all cursor-pointer flex items-start gap-3.5 {selectedDifferenceAction === 'AJPM' ? 'bg-blue-500/10 border-blue-500 ring-2 ring-blue-500/20' : 'bg-surface-soft/40 border-border-subtle hover:bg-surface-soft hover:border-white/20'}"
+                onclick={() => (selectedDifferenceAction = "AJPM")}
+                class="w-full text-left p-4 rounded-2xl border transition-all cursor-pointer flex items-start gap-3.5 {selectedDifferenceAction ===
+                'AJPM'
+                  ? 'bg-blue-500/10 border-blue-500 ring-2 ring-blue-500/20'
+                  : 'bg-surface-soft/40 border-border-subtle hover:bg-surface-soft hover:border-white/20'}"
               >
-                <div class="p-2.5 rounded-xl {selectedDifferenceAction === 'AJPM' ? 'bg-blue-500 text-white' : 'bg-surface-soft text-text-muted'} shrink-0 mt-0.5">
+                <div
+                  class="p-2.5 rounded-xl {selectedDifferenceAction === 'AJPM'
+                    ? 'bg-blue-500 text-white'
+                    : 'bg-surface-soft text-text-muted'} shrink-0 mt-0.5"
+                >
                   <Wallet size={20} />
                 </div>
                 <div class="flex-1">
                   <div class="flex items-center justify-between gap-2">
-                    <span class="font-bold text-sm text-text-base">Generar Reintegro o Vuelto (AJPM)</span>
-                    <span class="text-[9px] font-black uppercase px-2 py-0.5 rounded-md bg-blue-500/15 text-blue-700 dark:text-blue-400 border border-blue-500/30">
+                    <span class="font-bold text-sm text-text-base"
+                      >Generar Reintegro o Vuelto (AJPM)</span
+                    >
+                    <span
+                      class="text-[9px] font-black uppercase px-2 py-0.5 rounded-md bg-blue-500/15 text-blue-700 dark:text-blue-400 border border-blue-500/30"
+                    >
                       Serie V014
                     </span>
                   </div>
                   <p class="text-xs text-text-muted mt-1 leading-relaxed">
-                    Registra un <strong>AJPM</strong> por la salida del dinero entregado como vuelto o devolución de efectivo al cliente.
+                    Registra un <strong>AJPM</strong> por la salida del dinero entregado
+                    como vuelto o devolución de efectivo al cliente.
                   </p>
                 </div>
               </button>
             {/if}
-
           {:else}
             <!-- CASO MIXTO -->
             <!-- Opción 1: Conservar saldo en documento de crédito -->
             <button
               type="button"
-              onclick={() => (selectedDifferenceAction = 'KEEP_REMAINING')}
-              class="w-full text-left p-4 rounded-2xl border transition-all cursor-pointer flex items-start gap-3.5 {selectedDifferenceAction === 'KEEP_REMAINING' ? 'bg-emerald-500/10 border-emerald-500 ring-2 ring-emerald-500/20' : 'bg-surface-soft/40 border-border-subtle hover:bg-surface-soft hover:border-white/20'}"
+              onclick={() => (selectedDifferenceAction = "KEEP_REMAINING")}
+              class="w-full text-left p-4 rounded-2xl border transition-all cursor-pointer flex items-start gap-3.5 {selectedDifferenceAction ===
+              'KEEP_REMAINING'
+                ? 'bg-emerald-500/10 border-emerald-500 ring-2 ring-emerald-500/20'
+                : 'bg-surface-soft/40 border-border-subtle hover:bg-surface-soft hover:border-white/20'}"
             >
-              <div class="p-2.5 rounded-xl {selectedDifferenceAction === 'KEEP_REMAINING' ? 'bg-emerald-500 text-white' : 'bg-surface-soft text-text-muted'} shrink-0 mt-0.5">
+              <div
+                class="p-2.5 rounded-xl {selectedDifferenceAction ===
+                'KEEP_REMAINING'
+                  ? 'bg-emerald-500 text-white'
+                  : 'bg-surface-soft text-text-muted'} shrink-0 mt-0.5"
+              >
                 <CheckCircle size={20} />
               </div>
               <div class="flex-1">
                 <div class="flex items-center justify-between gap-2">
-                  <span class="font-bold text-sm text-text-base">Conservar Saldo en Documento de Crédito</span>
-                  <span class="text-[9px] font-black uppercase px-2 py-0.5 rounded-md bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30">
+                  <span class="font-bold text-sm text-text-base"
+                    >Conservar Saldo en Documento de Crédito</span
+                  >
+                  <span
+                    class="text-[9px] font-black uppercase px-2 py-0.5 rounded-md bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30"
+                  >
                     Recomendado • Sin nuevo doc
                   </span>
                 </div>
                 <p class="text-xs text-text-muted mt-1 leading-relaxed">
-                  Mantiene el remanente en el documento de crédito original sin duplicar documentos.
+                  Mantiene el remanente en el documento de crédito original sin
+                  duplicar documentos.
                 </p>
               </div>
             </button>
@@ -3924,21 +5226,33 @@
             {#if !hasSelectedPositiveAdjustment}
               <button
                 type="button"
-                onclick={() => (selectedDifferenceAction = 'AJPM')}
-                class="w-full text-left p-4 rounded-2xl border transition-all cursor-pointer flex items-start gap-3.5 {selectedDifferenceAction === 'AJPM' ? 'bg-blue-500/10 border-blue-500 ring-2 ring-blue-500/20' : 'bg-surface-soft/40 border-border-subtle hover:bg-surface-soft hover:border-white/20'}"
+                onclick={() => (selectedDifferenceAction = "AJPM")}
+                class="w-full text-left p-4 rounded-2xl border transition-all cursor-pointer flex items-start gap-3.5 {selectedDifferenceAction ===
+                'AJPM'
+                  ? 'bg-blue-500/10 border-blue-500 ring-2 ring-blue-500/20'
+                  : 'bg-surface-soft/40 border-border-subtle hover:bg-surface-soft hover:border-white/20'}"
               >
-                <div class="p-2.5 rounded-xl {selectedDifferenceAction === 'AJPM' ? 'bg-blue-500 text-white' : 'bg-surface-soft text-text-muted'} shrink-0 mt-0.5">
+                <div
+                  class="p-2.5 rounded-xl {selectedDifferenceAction === 'AJPM'
+                    ? 'bg-blue-500 text-white'
+                    : 'bg-surface-soft text-text-muted'} shrink-0 mt-0.5"
+                >
                   <Wallet size={20} />
                 </div>
                 <div class="flex-1">
                   <div class="flex items-center justify-between gap-2">
-                    <span class="font-bold text-sm text-text-base">Generar Reintegro o Vuelto (AJPM)</span>
-                    <span class="text-[9px] font-black uppercase px-2 py-0.5 rounded-md bg-blue-500/15 text-blue-700 dark:text-blue-400 border border-blue-500/30">
+                    <span class="font-bold text-sm text-text-base"
+                      >Generar Reintegro o Vuelto (AJPM)</span
+                    >
+                    <span
+                      class="text-[9px] font-black uppercase px-2 py-0.5 rounded-md bg-blue-500/15 text-blue-700 dark:text-blue-400 border border-blue-500/30"
+                    >
                       Serie V014
                     </span>
                   </div>
                   <p class="text-xs text-text-muted mt-1 leading-relaxed">
-                    Registra un <strong>AJPM</strong> por la entrega del dinero al cliente.
+                    Registra un <strong>AJPM</strong> por la entrega del dinero al
+                    cliente.
                   </p>
                 </div>
               </button>
@@ -3948,7 +5262,9 @@
       </div>
 
       <!-- Pie del Modal -->
-      <div class="p-6 border-t border-border-subtle bg-surface-soft/30 flex items-center justify-end gap-3">
+      <div
+        class="p-6 border-t border-border-subtle bg-surface-soft/30 flex items-center justify-end gap-3"
+      >
         <button
           type="button"
           onclick={() => (showDifferenceModal = false)}
