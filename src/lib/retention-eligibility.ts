@@ -10,6 +10,8 @@ export interface ClientTaxLike {
 	bContribu_E?: boolean | number | string | null;
 	porc_esp?: number | string | null;
 	dePorc_Esp?: number | string | null;
+	tip_cli?: string | null;
+	des_tipo?: string | null;
 }
 
 function toBool(val: unknown): boolean {
@@ -103,6 +105,25 @@ export function getEffectivePorcEsp(client: ClientTaxLike | null | undefined): n
 export function canClientRetainIslr(client: ClientTaxLike | null | undefined): boolean {
 	if (!client) return false;
 	return !isPersonaNaturalClient(client);
+}
+
+/**
+ * Determina si un cliente corresponde a un Ente Gubernamental:
+ * - RIF o código de cliente inicia con 'G' (Gobierno / Entes Públicos).
+ * - O tipo de cliente (tip_cli) es '04' (GUBERNAMENTAL en Profit Plus).
+ * - O descripción de tipo incluye 'GUBERNAMENTAL'.
+ */
+export function isGubernamentalClient(client: ClientTaxLike | null | undefined): boolean {
+	if (!client) return false;
+	const cleanRif = normalizeTaxId(client.rif);
+	if (cleanRif.startsWith('G')) return true;
+	const cleanCoCli = normalizeTaxId(client.co_cli);
+	if (cleanCoCli.startsWith('G')) return true;
+	const tipCli = String(client.tip_cli ?? '').trim();
+	if (tipCli === '04') return true;
+	const desTipo = String(client.des_tipo ?? '').toUpperCase();
+	if (desTipo.includes('GUBERNAMENTAL')) return true;
+	return false;
 }
 
 export interface ServiceItemLike {

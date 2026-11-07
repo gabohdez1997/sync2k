@@ -34,6 +34,7 @@
     isContribuyenteEspecialClient,
     getEffectivePorcEsp,
     canClientRetainIslr,
+    isGubernamentalClient,
   } from "$lib/retention-eligibility";
 
   let { data } = $props();
@@ -920,6 +921,67 @@
   // Modal toggle
   let showImportModal = $state(false);
 
+  // Retención Timbre Fiscal 1x1000 (Entes Gubernamentales)
+  let aplicarTimbreFiscal = $state(false);
+
+  function getDocTimbreFiscal(doc: any): { timbreBs: number; timbreUsd: number; baseBs: number } {
+    if (!aplicarTimbreFiscal || !isGubernamentalClient(selectedClient) || isCreditDoc(doc?.co_tipo_doc)) {
+      return { timbreBs: 0, timbreUsd: 0, baseBs: 0 };
+    }
+    const docTasa = doc?.tasa > 0 ? doc.tasa : currentExchangeRate > 0 ? currentExchangeRate : 1;
+    const baseBs = Math.max(0, Number(doc?.total_neto || 0) - Number(doc?.monto_imp || 0) - Number(doc?.otros1 || 0));
+    const timbreBs = Math.round(baseBs * 0.001 * 100) / 100;
+    const timbreUsd = Math.round((timbreBs / docTasa) * 100) / 100;
+    return { timbreBs, timbreUsd, baseBs };
+  }
+
+  let totalBaseTimbreBs = $derived(
+    Math.round(
+      documentos.reduce((acc, doc) => {
+        const nro = doc.nro_doc.trim();
+        if (!checkedDocs[nro]) return acc;
+        if (isCreditDoc(doc.co_tipo_doc)) return acc;
+        const baseBs = Math.max(0, Number(doc.total_neto || 0) - Number(doc.monto_imp || 0) - Number(doc.otros1 || 0));
+        return acc + baseBs;
+      }, 0) * 100,
+    ) / 100,
+  );
+
+  let totalTimbreFiscalBs = $derived(
+    aplicarTimbreFiscal && isGubernamentalClient(selectedClient)
+      ? Math.round(
+          documentos.reduce((acc, doc) => {
+            const nro = doc.nro_doc.trim();
+            if (!checkedDocs[nro]) return acc;
+            if (isCreditDoc(doc.co_tipo_doc)) return acc;
+            const baseBs = Math.max(0, Number(doc.total_neto || 0) - Number(doc.monto_imp || 0) - Number(doc.otros1 || 0));
+            return acc + Math.round(baseBs * 0.001 * 100) / 100;
+          }, 0) * 100,
+        ) / 100
+      : 0,
+  );
+
+  let totalTimbreFiscalUsd = $derived(
+    aplicarTimbreFiscal && isGubernamentalClient(selectedClient)
+      ? Math.round(
+          documentos.reduce((acc, doc) => {
+            const nro = doc.nro_doc.trim();
+            if (!checkedDocs[nro]) return acc;
+            if (isCreditDoc(doc.co_tipo_doc)) return acc;
+            const docTasa = doc.tasa > 0 ? doc.tasa : currentExchangeRate > 0 ? currentExchangeRate : 1;
+            const baseBs = Math.max(0, Number(doc.total_neto || 0) - Number(doc.monto_imp || 0) - Number(doc.otros1 || 0));
+            const timbreBs = Math.round(baseBs * 0.001 * 100) / 100;
+            return acc + Math.round((timbreBs / docTasa) * 100) / 100;
+          }, 0) * 100,
+        ) / 100
+      : 0,
+  );
+
+  function toggleTimbreFiscal() {
+    aplicarTimbreFiscal = !aplicarTimbreFiscal;
+    syncSinglePaymentInstrument();
+  }
+
   // Deuda total requerida por documentos de débito seleccionados (Facturas, N/DB, etc.)
   let totalDebitNeededBs = $derived(
     Math.round(
@@ -935,6 +997,7 @@
           !inp?.yaTieneRetIslr && inp?.showIslrDetails
             ? Number(inp.reten_islr_bs) || 0
             : 0;
+        const { timbreBs: retTimbreBs } = getDocTimbreFiscal(doc);
 
         const isFactura = doc.co_tipo_doc?.trim()?.toUpperCase() === "FACT";
         const docFecEmisStr = doc.fec_emis
@@ -959,7 +1022,7 @@
           );
         }
 
-        return acc + Math.max(0, doc.saldo - retIvaBs - retIslrBs + diffBs);
+        return acc + Math.max(0, doc.saldo - retIvaBs - retIslrBs - retTimbreBs + diffBs);
       }, 0) * 100,
     ) / 100,
   );
@@ -978,8 +1041,9 @@
           !inp?.yaTieneRetIslr && inp?.showIslrDetails
             ? Number(inp.reten_islr) || 0
             : 0;
+        const { timbreUsd: retTimbreUsd } = getDocTimbreFiscal(doc);
         const docTasa = doc.tasa > 0 ? doc.tasa : 1;
-        return acc + Math.max(0, doc.saldo / docTasa - retIvaUsd - retIslrUsd);
+        return acc + Math.max(0, doc.saldo / docTasa - retIvaUsd - retIslrUsd - retTimbreUsd);
       }, 0) * 100,
     ) / 100,
   );
@@ -1773,6 +1837,7 @@
     docInputs = {};
     formasPago = [];
     checkedDocs = {};
+    aplicarTimbreFiscal = false;
   }
 
   // Helper para calcular el monto neto pendiente que deja el saldo del documento en 0
@@ -1808,6 +1873,7 @@
         !inp?.yaTieneRetIslr && inp?.showIslrDetails
           ? Number(inp.reten_islr) || 0
           : 0;
+      const { timbreBs: retTimbreBs, timbreUsd: retTimbreUsd } = getDocTimbreFiscal(doc);
 
       // Cálculo del diferencial cambiario N/DB EXCLUSIVAMENTE para Facturas de venta (FACT) de una fecha anterior
       const isFactura = doc.co_tipo_doc?.trim()?.toUpperCase() === "FACT";
@@ -1832,8 +1898,8 @@
         );
       }
 
-      const maxBs = Math.max(0, doc.saldo - retIvaBs - retIslrBs + diffBs);
-      const maxUsd = Math.max(0, doc.saldo / docTasa - retIvaUsd - retIslrUsd);
+      const maxBs = Math.max(0, doc.saldo - retIvaBs - retIslrBs - retTimbreBs + diffBs);
+      const maxUsd = Math.max(0, doc.saldo / docTasa - retIvaUsd - retIslrUsd - retTimbreUsd);
 
       totalNeededBs += maxBs;
       totalNeededUsd += maxUsd;
@@ -2373,6 +2439,7 @@
         !inp.yaTieneRetIva && inp.showIvaDetails ? inp.reten_iva_bs || 0 : 0;
       const retIslrBs =
         !inp.yaTieneRetIslr && inp.showIslrDetails ? inp.reten_islr_bs || 0 : 0;
+      const { timbreBs: retTimbreBs } = getDocTimbreFiscal(doc);
 
       const isFactura = doc.co_tipo_doc?.trim()?.toUpperCase() === "FACT";
       const docFecEmisStr = doc.fec_emis
@@ -2397,7 +2464,7 @@
 
       const netDebtBs = Math.max(
         0,
-        Math.round((doc.saldo - retIvaBs - retIslrBs + diffBs) * 100) / 100,
+        Math.round((doc.saldo - retIvaBs - retIslrBs - retTimbreBs + diffBs) * 100) / 100,
       );
       totalDebtToCoverBs += netDebtBs;
       debitDocInfoMap.set(nro, { retIvaBs, retIslrBs, diffBs, netDebtBs });
@@ -2731,6 +2798,16 @@
       formas_pago: active_formas_pago,
       retenciones_iva,
       retenciones_islr,
+      timbre_fiscal:
+        aplicarTimbreFiscal && totalTimbreFiscalBs > 0
+          ? {
+              aplicar: true,
+              monto_bs: totalTimbreFiscalBs,
+              monto_usd: totalTimbreFiscalUsd,
+              base_imponible_bs: totalBaseTimbreBs,
+              porc: 0.001,
+            }
+          : null,
       ajuste_diferencia:
         pendingDifferenceConfirmation &&
         selectedDifferenceAction !== "KEEP_REMAINING" &&
@@ -2957,6 +3034,10 @@
                 <p class="text-xs font-bold text-brand-400">
                   {#if isPersonaNaturalClient(selectedClient)}
                     Persona Natural (No aplica retenciones)
+                  {:else if isGubernamentalClient(selectedClient)}
+                    Ente Gubernamental (Aplica Retención Timbre Fiscal 1x1000) • Tabulador ISLR: {getTabDescription(
+                      getEffectiveClientTab(),
+                    )}
                   {:else if isContribuyenteEspecialClient(selectedClient)}
                     Contribuyente Especial ({getEffectivePorcEsp(
                       selectedClient,
@@ -2974,6 +3055,56 @@
                 </p>
               </div>
             </div>
+
+            {#if isGubernamentalClient(selectedClient)}
+              <div class="pt-4 border-t border-border-subtle/40">
+                <div class="p-4 rounded-2xl bg-indigo-500/10 border border-indigo-500/30 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 animate-in fade-in duration-200">
+                  <div class="flex items-center gap-3">
+                    <div class="p-2.5 rounded-xl bg-indigo-500/20 text-indigo-400 shrink-0">
+                      <Receipt size={20} />
+                    </div>
+                    <div>
+                      <div class="flex items-center gap-2">
+                        <span class="font-bold text-sm text-text-base">Retención Timbre Fiscal (1x1000)</span>
+                        <span class="text-[9px] font-black uppercase px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/40">
+                          Ente Gubernamental
+                        </span>
+                      </div>
+                      <p class="text-xs text-text-muted mt-0.5">
+                        Aplica el 0,1% (0,001) sobre la base imponible y genera automáticamente el ajuste (AJNM) al guardar el cobro.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div class="flex items-center gap-3 self-end sm:self-center shrink-0">
+                    {#if aplicarTimbreFiscal && totalTimbreFiscalBs > 0}
+                      <div class="text-right">
+                        <span class="text-xs font-black text-indigo-400 block font-mono">
+                          -${totalTimbreFiscalUsd.toLocaleString('de-DE', { minimumFractionDigits: 2 })}
+                        </span>
+                        <span class="text-[10px] text-text-muted font-bold block font-mono">
+                          -Bs. {totalTimbreFiscalBs.toLocaleString('de-DE', { minimumFractionDigits: 2 })}
+                        </span>
+                      </div>
+                    {/if}
+                    <button
+                      type="button"
+                      onclick={toggleTimbreFiscal}
+                      class="px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer flex items-center gap-2 {aplicarTimbreFiscal 
+                        ? 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-500/25' 
+                        : 'bg-surface-soft hover:bg-surface-soft/80 text-text-muted border border-border-subtle'}"
+                    >
+                      {#if aplicarTimbreFiscal}
+                        <Check size={14} />
+                        Habilitado (1x1000)
+                      {:else}
+                        Habilitar 1x1000
+                      {/if}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            {/if}
           {/if}
         </div>
 
@@ -3870,6 +4001,22 @@
                             {/if}
                           </div>
 
+                          {#if aplicarTimbreFiscal && isGubernamentalClient(selectedClient) && !isCreditDoc(doc.co_tipo_doc)}
+                            {@const docTimbre = getDocTimbreFiscal(doc)}
+                            {#if docTimbre.timbreBs > 0}
+                              <div class="flex items-center justify-between text-xs py-2 px-3.5 rounded-xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 font-bold animate-in fade-in duration-150">
+                                <span class="flex items-center gap-2">
+                                  <Receipt size={14} class="shrink-0" />
+                                  <span>Retención Timbre Fiscal 1x1000 (0,1% sobre Base Imponible Bs. {docTimbre.baseBs.toLocaleString('de-DE', { minimumFractionDigits: 2 })})</span>
+                                </span>
+                                <span class="font-mono font-black text-right">
+                                  -${docTimbre.timbreUsd.toLocaleString('de-DE', { minimumFractionDigits: 2 })}
+                                  <span class="text-text-muted font-normal text-[10px] block sm:inline sm:ml-1">(-Bs. {docTimbre.timbreBs.toLocaleString('de-DE', { minimumFractionDigits: 2 })})</span>
+                                </span>
+                              </div>
+                            {/if}
+                          {/if}
+
                           <!-- Detalles Retención IVA -->
                           {#if input.showIvaDetails && !input.yaTieneRetIva && canApplyIvaRetentionOnDoc(doc)}
                             <div
@@ -4444,6 +4591,22 @@
                 <span>Retenciones ISLR</span>
                 <span class="font-mono text-amber-700 dark:text-amber-300"
                   >$ {totalRetenidoIslrVista.toLocaleString("de-DE", {
+                    minimumFractionDigits: 2,
+                  })}</span
+                >
+              </div>
+            {/if}
+            {#if totalTimbreFiscalUsd > 0}
+              <div
+                class="flex justify-between items-center text-base font-bold text-indigo-400"
+                transition:slide
+              >
+                <span class="flex items-center gap-1.5">
+                  <Receipt size={16} />
+                  <span>Retención Timbre (1x1000)</span>
+                </span>
+                <span class="font-mono"
+                  >-$ {totalTimbreFiscalUsd.toLocaleString("de-DE", {
                     minimumFractionDigits: 2,
                   })}</span
                 >
