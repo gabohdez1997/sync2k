@@ -2948,23 +2948,6 @@
         </div>
       {/if}
 
-      <!-- Fecha del Cobro Selector -->
-      <div class="w-full sm:w-52 relative group" title="Fecha del Cobro (Clic para cambiar fecha)">
-        <Calendar
-          size={16}
-          class="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted group-focus-within:text-brand-500 transition-colors pointer-events-none"
-        />
-        <input
-          type="date"
-          bind:value={fechaCobro}
-          max={todayDateStr}
-          oninput={(e) => handleFechaCobroInput(e.currentTarget.value)}
-          onchange={(e) => handleFechaCobroInput(e.currentTarget.value)}
-          onclick={(e) => (e.currentTarget as any)?.showPicker?.()}
-          class="w-full h-14 pl-10 pr-4 bg-surface-soft border border-border-subtle rounded-2xl focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none transition-all font-medium text-sm cursor-pointer text-text-base font-mono"
-        />
-      </div>
-
       <!-- Botón Importar Factura (Primary layout style like Importar Pedido) -->
       <button
         onclick={openImportModal}
