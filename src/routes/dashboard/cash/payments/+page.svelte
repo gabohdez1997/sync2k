@@ -1,5 +1,6 @@
 <!-- src/routes/dashboard/cash/payments/+page.svelte -->
 <script lang="ts">
+  import { onMount } from "svelte";
   import { fade, slide } from "svelte/transition";
   import { page } from "$app/stores";
   import { goto } from "$app/navigation";
