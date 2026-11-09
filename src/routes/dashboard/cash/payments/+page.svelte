@@ -582,6 +582,12 @@
   let searchingInvoices = $state(false);
   let loadingDocs = $state(false);
   let currentExchangeRate = $state(1);
+  const todayDateStr = new Date().toISOString().split("T")[0];
+  let fechaCobro = $state(todayDateStr);
+  let generarDiferencial = $state(true);
+  let loadingTasa = $state(false);
+  let tasaFechaInfo = $state<string | null>(null);
+  let tasaEsExacta = $state(true);
 
   // Documentos cargados del cliente
   let documentos = $state<any[]>([]);
@@ -678,10 +684,10 @@
       const docFecEmisStr = doc.fec_emis
         ? new Date(doc.fec_emis).toISOString().split("T")[0]
         : "";
-      const todayStr = new Date().toISOString().split("T")[0];
-      const isPreviousDateDoc = docFecEmisStr && docFecEmisStr < todayStr;
+      const isPreviousDateDoc = docFecEmisStr && docFecEmisStr < fechaCobro;
       let diffBs = 0;
       if (
+        generarDiferencial &&
         isFactura &&
         isPreviousDateDoc &&
         doc.saldo > 0 &&
@@ -1003,11 +1009,11 @@
         const docFecEmisStr = doc.fec_emis
           ? new Date(doc.fec_emis).toISOString().split("T")[0]
           : "";
-        const todayStr = new Date().toISOString().split("T")[0];
-        const isPreviousDateDoc = docFecEmisStr && docFecEmisStr < todayStr;
+        const isPreviousDateDoc = docFecEmisStr && docFecEmisStr < fechaCobro;
         const docTasa = doc.tasa > 0 ? doc.tasa : 1;
         let diffBs = 0;
         if (
+          generarDiferencial &&
           isFactura &&
           isPreviousDateDoc &&
           doc.saldo > 0 &&
@@ -1366,17 +1372,60 @@
     }
   });
 
-  async function loadExchangeRate() {
+  async function loadExchangeRate(targetDate?: string) {
     try {
-      const res = await fetch(`/api/agent/tasa?branch_id=${selectedBranch}`);
+      loadingTasa = true;
+      const dateToUse = targetDate || fechaCobro;
+      const url = dateToUse
+        ? `/api/agent/tasa?branch_id=${selectedBranch}&fecha=${encodeURIComponent(dateToUse)}`
+        : `/api/agent/tasa?branch_id=${selectedBranch}`;
+      const res = await fetch(url);
       if (res.ok) {
         const resJson = await res.json();
         if (resJson.success && resJson.tasa) {
           currentExchangeRate = Number(resJson.tasa) || 1;
+          tasaFechaInfo = resJson.fecha_str || resJson.fecha || null;
+          tasaEsExacta = resJson.es_exacta !== undefined ? Boolean(resJson.es_exacta) : true;
+          syncSinglePaymentInstrument();
         }
       }
     } catch (e) {
       console.error("Error al cargar la tasa de cambio:", e);
+    } finally {
+      loadingTasa = false;
+    }
+  }
+
+  async function handleFechaCobroChange() {
+    if (!fechaCobro) {
+      fechaCobro = todayDateStr;
+    }
+    // Sincronizar fecha en los instrumentos de pago
+    formasPago.forEach((fp) => {
+      fp.fecha_che = fechaCobro;
+    });
+    await loadExchangeRate(fechaCobro);
+    if (tasaFechaInfo) {
+      const parts = String(tasaFechaInfo).split("T")[0].split("-");
+      const formattedDate = parts.length === 3 ? `${parts[2]}/${parts[1]}/${parts[0]}` : tasaFechaInfo;
+      if (tasaEsExacta) {
+        toast.info(`Tasa cargada para el ${formattedDate}: Bs. ${currentExchangeRate.toFixed(2)}`);
+      } else {
+        toast.info(`Tasa más reciente encontrada (${formattedDate}): Bs. ${currentExchangeRate.toFixed(2)}`);
+      }
+    }
+  }
+
+  function toggleGenerarDiferencial() {
+    generarDiferencial = !generarDiferencial;
+    syncSinglePaymentInstrument();
+  }
+
+  function handleManualTasaChange(e: Event) {
+    const val = Number((e.target as HTMLInputElement).value);
+    if (val > 0) {
+      currentExchangeRate = val;
+      syncSinglePaymentInstrument();
     }
   }
 
@@ -1880,10 +1929,10 @@
       const docFecEmisStr = doc.fec_emis
         ? new Date(doc.fec_emis).toISOString().split("T")[0]
         : "";
-      const todayStr = new Date().toISOString().split("T")[0];
-      const isPreviousDateDoc = docFecEmisStr && docFecEmisStr < todayStr;
+      const isPreviousDateDoc = docFecEmisStr && docFecEmisStr < fechaCobro;
       let diffBs = 0;
       if (
+        generarDiferencial &&
         isFactura &&
         isPreviousDateDoc &&
         doc.saldo > 0 &&
@@ -2022,7 +2071,7 @@
       num_doc: "",
       mont_doc: 0,
       mont_doc_bs: 0,
-      fecha_che: new Date().toISOString().substring(0, 10),
+      fecha_che: fechaCobro || new Date().toISOString().substring(0, 10),
       manual_override: false,
     };
     const newIndex = formasPago.length;
@@ -2445,10 +2494,10 @@
       const docFecEmisStr = doc.fec_emis
         ? new Date(doc.fec_emis).toISOString().split("T")[0]
         : "";
-      const todayStr = new Date().toISOString().split("T")[0];
-      const isPreviousDateDoc = docFecEmisStr && docFecEmisStr < todayStr;
+      const isPreviousDateDoc = docFecEmisStr && docFecEmisStr < fechaCobro;
       let diffBs = 0;
       if (
+        generarDiferencial &&
         isFactura &&
         isPreviousDateDoc &&
         doc.saldo > 0 &&
@@ -2787,6 +2836,8 @@
       "I-001";
 
     const payload = {
+      fecha: fechaCobro,
+      generar_diferencial: generarDiferencial,
       co_cli: selectedClient.co_cli,
       co_ven: effectiveCoVen,
       co_mone: safeCollectionCurrency,
@@ -2876,7 +2927,7 @@
     >
       <!-- Sede Selector -->
       {#if data.branches && data.branches.length > 1}
-        <div class="w-full sm:w-56 relative group">
+        <div class="w-full sm:w-52 relative group">
           <Store
             size={16}
             class="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted group-focus-within:text-brand-500 transition-colors pointer-events-none"
@@ -2896,6 +2947,21 @@
           />
         </div>
       {/if}
+
+      <!-- Fecha del Cobro Selector -->
+      <div class="w-full sm:w-52 relative group" title="Fecha del Cobro">
+        <Calendar
+          size={16}
+          class="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted group-focus-within:text-brand-500 transition-colors pointer-events-none"
+        />
+        <input
+          type="date"
+          bind:value={fechaCobro}
+          max={todayDateStr}
+          onchange={handleFechaCobroChange}
+          class="w-full h-14 pl-10 pr-4 bg-surface-soft border border-border-subtle rounded-2xl focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none transition-all font-medium text-sm cursor-pointer text-text-base font-mono"
+        />
+      </div>
 
       <!-- Botón Importar Factura (Primary layout style like Importar Pedido) -->
       <button
@@ -4417,13 +4483,11 @@
                                   .toISOString()
                                   .split("T")[0]
                               : ""}
-                            {@const todayStr = new Date()
-                              .toISOString()
-                              .split("T")[0]}
                             {@const isPreviousDateDoc =
-                              docFecEmisStr && docFecEmisStr < todayStr}
+                              docFecEmisStr && docFecEmisStr < fechaCobro}
                             {@const docTasa = doc.tasa > 0 ? doc.tasa : 1}
                             {@const diffBs =
+                              generarDiferencial &&
                               isPreviousDateDoc &&
                               doc.saldo > 0 &&
                               currentExchangeRate > docTasa
@@ -4447,27 +4511,53 @@
                                   <RefreshCw size={14} />
                                   Diferencial Cambiario (N/DB a generar):
                                 </span>
-                                <div class="text-right">
-                                  <span
-                                    class="font-mono font-black text-blue-400"
+                                <div class="flex items-center gap-3">
+                                  <div class="text-right">
+                                    <span
+                                      class="font-mono font-black text-blue-400"
+                                    >
+                                      {diffBs >= 0 ? "+" : "-"}Bs. {Math.abs(
+                                        diffBs,
+                                      ).toLocaleString("de-DE", {
+                                        minimumFractionDigits: 2,
+                                      })}
+                                    </span>
+                                    <span
+                                      class="block text-xs text-text-muted font-bold mt-0.5"
+                                    >
+                                      {diffBs >= 0 ? "+" : "-"} $ {Math.abs(
+                                        Number(diffBs / currentExchangeRate),
+                                      ).toLocaleString("de-DE", {
+                                        minimumFractionDigits: 2,
+                                        maximumFractionDigits: 2,
+                                      })}
+                                    </span>
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onclick={toggleGenerarDiferencial}
+                                    class="text-[10px] font-black uppercase tracking-wider text-text-muted hover:text-red-400 px-2.5 py-1.5 rounded-xl border border-border-subtle bg-surface-soft hover:bg-red-500/10 transition-all cursor-pointer"
+                                    title="Deshabilitar generación de N/DB por diferencial cambiario"
                                   >
-                                    {diffBs >= 0 ? "+" : "-"}Bs. {Math.abs(
-                                      diffBs,
-                                    ).toLocaleString("de-DE", {
-                                      minimumFractionDigits: 2,
-                                    })}
-                                  </span>
-                                  <span
-                                    class="block text-xs text-text-muted font-bold mt-0.5"
-                                  >
-                                    {diffBs >= 0 ? "+" : "-"} $ {Math.abs(
-                                      Number(diffBs / currentExchangeRate),
-                                    ).toLocaleString("de-DE", {
-                                      minimumFractionDigits: 2,
-                                      maximumFractionDigits: 2,
-                                    })}
-                                  </span>
+                                    Omitir N/DB
+                                  </button>
                                 </div>
+                              </div>
+                            {:else if isPreviousDateDoc && !generarDiferencial && doc.saldo > 0 && currentExchangeRate > docTasa}
+                              <div
+                                class="flex items-center justify-between bg-surface-soft/60 border border-border-subtle p-3 rounded-2xl text-xs mb-3 text-text-muted animate-in fade-in duration-150"
+                              >
+                                <span class="flex items-center gap-1.5 font-bold">
+                                  <Info size={14} class="text-amber-400 shrink-0" />
+                                  <span>Diferencial cambiario desactivado (Se salda a tasa original sin N/DB)</span>
+                                </span>
+                                <button
+                                  type="button"
+                                  onclick={toggleGenerarDiferencial}
+                                  class="text-[10px] font-black uppercase tracking-wider text-blue-400 hover:text-blue-300 px-2.5 py-1.5 rounded-xl border border-blue-500/30 bg-blue-500/10 transition-all cursor-pointer"
+                                >
+                                  Activar N/DB
+                                </button>
                               </div>
                             {/if}
                           {/if}
@@ -4515,6 +4605,79 @@
 
       <!-- SECCIÓN DERECHA: RESUMEN DE TOTALES Y FORMAS DE PAGO (1/3 de ancho) -->
       <div class="xl:col-span-1 space-y-6">
+        <!-- CONTROL DE TASA Y DIFERENCIAL CAMBIARIO -->
+        <div
+          class="glass p-6 rounded-[32px] border border-border-subtle space-y-4 bg-surface-base shadow-xl"
+        >
+          <div class="flex items-center justify-between">
+            <div>
+              <span class="text-[10px] font-black uppercase tracking-[0.2em] text-text-muted block">
+                Tasa Cambiaria del Cobro
+              </span>
+              <div class="flex items-center gap-2 mt-1.5">
+                <input
+                  type="number"
+                  step="any"
+                  bind:value={currentExchangeRate}
+                  oninput={handleManualTasaChange}
+                  class="w-28 h-9 px-2 bg-surface-soft border border-border-subtle rounded-xl text-sm font-mono font-black text-brand-400 text-center outline-none focus:border-brand-500 transition-all"
+                />
+                <span class="text-xs font-bold text-text-muted">Bs/$</span>
+                <button
+                  type="button"
+                  onclick={() => loadExchangeRate(fechaCobro)}
+                  title="Cargar tasa histórica para la fecha de cobro seleccionada"
+                  class="p-1.5 hover:bg-white/5 rounded-xl text-text-muted hover:text-brand-400 transition-all cursor-pointer {loadingTasa ? 'animate-spin text-brand-400' : ''}"
+                >
+                  <RefreshCw size={14} />
+                </button>
+              </div>
+            </div>
+
+            <div class="text-right">
+              <span class="text-[9px] font-black uppercase tracking-wider text-text-muted block">
+                Fecha del Cobro
+              </span>
+              <span class="text-xs font-mono font-bold text-text-base mt-1 block">
+                {fechaCobro ? fechaCobro.split("-").reverse().join("/") : todayDateStr}
+              </span>
+              {#if tasaFechaInfo && !tasaEsExacta}
+                <span class="text-[9px] font-bold text-amber-400 block mt-0.5">
+                  Tasa previa
+                </span>
+              {/if}
+            </div>
+          </div>
+
+          <!-- Switch Habilitar/Deshabilitar Diferencial Cambiario N/DB -->
+          <div
+            class="p-3.5 rounded-2xl border transition-all {generarDiferencial ? 'bg-blue-500/10 border-blue-500/30' : 'bg-surface-soft/60 border-border-subtle'}"
+          >
+            <div class="flex items-center justify-between gap-3">
+              <div class="space-y-0.5">
+                <div class="flex items-center gap-2">
+                  <span class="text-xs font-bold text-text-base">Diferencial (N/DB)</span>
+                  <span class="text-[9px] font-black uppercase px-2 py-0.5 rounded-full {generarDiferencial ? 'bg-blue-500/20 text-blue-300 border border-blue-500/40' : 'bg-surface-strong text-text-muted border border-border-subtle'}">
+                    {generarDiferencial ? 'Habilitado' : 'Omitir N/DB'}
+                  </span>
+                </div>
+                <p class="text-[10px] text-text-muted leading-tight">
+                  {generarDiferencial
+                    ? 'Genera Nota de Débito (N/DB) si la tasa actual supera la de la factura.'
+                    : 'Desactivado: no genera N/DB y salda las facturas a su tasa original.'}
+                </p>
+              </div>
+              <button
+                type="button"
+                onclick={toggleGenerarDiferencial}
+                class="px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer shrink-0 {generarDiferencial ? 'bg-blue-600 hover:bg-blue-500 text-white shadow-md shadow-blue-500/20' : 'bg-surface-strong hover:bg-surface-strong/80 text-text-muted border border-border-subtle'}"
+              >
+                {generarDiferencial ? 'Activo' : 'Desactivado'}
+              </button>
+            </div>
+          </div>
+        </div>
+
         <!-- RESUMEN DE TOTALES -->
         <div
           class="glass p-8 rounded-[32px] border border-border-subtle space-y-6 bg-brand-500/[0.03] backdrop-blur-3xl relative overflow-hidden flex flex-col shadow-xl"
