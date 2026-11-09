@@ -41,6 +41,7 @@
   let loadingDocs = $state(false);
   let currentExchangeRate = $state(data.activeRate || 1);
   let showUSD = $state(true);
+  let paymentDate = $state(new Date().toISOString().split("T")[0]);
 
   function switchCurrency(toUSD: boolean) {
     showUSD = toUSD;
@@ -1252,6 +1253,7 @@
           mont_cob: montCobBs,
           monto_retencion_iva: retIvaBs,
           monto_retencion: retIslrBs,
+          num_comprobante_iva: (inp.num_comprobante_iva || "").trim(),
           parent_doc: !isParent ? parentDocNo : null,
         };
       });
@@ -1341,6 +1343,7 @@
       const payload = {
         co_prov: selectedSupplier.co_prov,
         co_mone: safeCurrency,
+        fecha: paymentDate,
         tasa: Number(currentExchangeRate || 1),
         monto: Math.max(0, Math.round(totalDocBs * 100) / 100),
         descrip: `PAGO PROVEEDOR ${selectedSupplier.co_prov}`,
@@ -1419,6 +1422,16 @@
     </div>
 
     <div class="flex flex-wrap items-center gap-3 w-full lg:w-auto">
+      <!-- Selector de Fecha de Pago -->
+      <div class="relative w-full sm:w-auto">
+        <input
+          type="date"
+          bind:value={paymentDate}
+          class="h-14 px-4 bg-surface-strong border border-border-subtle rounded-2xl text-text-base font-bold text-sm outline-none focus:border-brand-500 transition-all cursor-pointer w-full sm:w-44 shadow-sm"
+          title="Fecha del pago / emisión de retención"
+        />
+      </div>
+
       <!-- Selector de Sucursal -->
       {#if data.branches && data.branches.length > 1}
         <div class="relative w-full sm:w-auto">
@@ -1899,14 +1912,26 @@
                             </div>
                             <div class="grid grid-cols-1 sm:grid-cols-4 gap-3">
                               <div>
-                                <span class="text-[9px] text-text-muted font-bold block mb-1"
-                                  >COMPROBANTE SUGERIDO</span
-                                >
+                                <div class="flex items-center justify-between mb-1">
+                                  <span class="text-[9px] text-text-muted font-bold"
+                                    >NRO. COMPROBANTE</span
+                                  >
+                                  {#if input.num_comprobante_iva?.trim()}
+                                    <span class="text-[9px] font-bold text-amber-400 bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-500/30">
+                                      Manual / Antiguo
+                                    </span>
+                                  {:else}
+                                    <span class="text-[9px] font-normal text-text-muted">
+                                      (Vacío = Auto)
+                                    </span>
+                                  {/if}
+                                </div>
                                 <input
                                   type="text"
-                                  placeholder="Auto-generado al guardar"
+                                  placeholder="Auto-generar o ingresar manual"
                                   bind:value={input.num_comprobante_iva}
-                                  class="w-full bg-surface-soft border border-border-subtle px-2 py-1.5 rounded-lg text-xs font-mono"
+                                  title="Deja vacío para auto-asignar el siguiente correlativo fiscal, o ingresa el número de comprobante antiguo/manual (ej: 20240100004140)."
+                                  class="w-full bg-surface-soft border px-2 py-1.5 rounded-lg text-xs font-mono transition-colors {input.num_comprobante_iva?.trim() ? 'border-amber-500/50 text-amber-300 font-semibold focus:border-amber-400' : 'border-border-subtle text-text-base focus:border-brand-500'}"
                                 />
                               </div>
                               <div>
