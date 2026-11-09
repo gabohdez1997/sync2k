@@ -1319,10 +1319,10 @@
   // Sucursal seleccionada
   let selectedBranch = $state(data.selectedBranchId);
 
-  // Cargar tasa de cambio al inicio
-  $effect(() => {
+  // Sincronizar sucursal inicial y cargar tasa al montar
+  onMount(() => {
     selectedBranch = data.selectedBranchId;
-    loadExchangeRate();
+    loadExchangeRate(fechaCobro);
   });
 
   // Cargar factura precargada si viene por URL
@@ -1387,6 +1387,14 @@
           tasaFechaInfo = resJson.fecha_str || resJson.fecha || null;
           tasaEsExacta = resJson.es_exacta !== undefined ? Boolean(resJson.es_exacta) : true;
           syncSinglePaymentInstrument();
+
+          const infoDate = tasaFechaInfo ? String(tasaFechaInfo).split("T")[0] : dateToUse;
+          const formatted = infoDate.split("-").reverse().join("/");
+          if (tasaEsExacta) {
+            toast.info(`Tasa cargada para el ${formatted}: Bs. ${currentExchangeRate.toFixed(2)}`);
+          } else {
+            toast.info(`Tasa previa encontrada (${formatted}): Bs. ${currentExchangeRate.toFixed(2)}`);
+          }
         }
       }
     } catch (e) {
@@ -1396,24 +1404,15 @@
     }
   }
 
-  async function handleFechaCobroChange() {
-    if (!fechaCobro) {
-      fechaCobro = todayDateStr;
-    }
+  async function handleFechaCobroInput(newDate?: string) {
+    const val = (newDate || fechaCobro || "").trim();
+    if (!val) return;
+    fechaCobro = val;
     // Sincronizar fecha en los instrumentos de pago
     formasPago.forEach((fp) => {
-      fp.fecha_che = fechaCobro;
+      fp.fecha_che = val;
     });
-    await loadExchangeRate(fechaCobro);
-    if (tasaFechaInfo) {
-      const parts = String(tasaFechaInfo).split("T")[0].split("-");
-      const formattedDate = parts.length === 3 ? `${parts[2]}/${parts[1]}/${parts[0]}` : tasaFechaInfo;
-      if (tasaEsExacta) {
-        toast.info(`Tasa cargada para el ${formattedDate}: Bs. ${currentExchangeRate.toFixed(2)}`);
-      } else {
-        toast.info(`Tasa más reciente encontrada (${formattedDate}): Bs. ${currentExchangeRate.toFixed(2)}`);
-      }
-    }
+    await loadExchangeRate(val);
   }
 
   function toggleGenerarDiferencial() {
@@ -2949,7 +2948,7 @@
       {/if}
 
       <!-- Fecha del Cobro Selector -->
-      <div class="w-full sm:w-52 relative group" title="Fecha del Cobro">
+      <div class="w-full sm:w-52 relative group" title="Fecha del Cobro (Clic para cambiar fecha)">
         <Calendar
           size={16}
           class="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted group-focus-within:text-brand-500 transition-colors pointer-events-none"
@@ -2958,7 +2957,9 @@
           type="date"
           bind:value={fechaCobro}
           max={todayDateStr}
-          onchange={handleFechaCobroChange}
+          oninput={(e) => handleFechaCobroInput(e.currentTarget.value)}
+          onchange={(e) => handleFechaCobroInput(e.currentTarget.value)}
+          onclick={(e) => (e.currentTarget as any)?.showPicker?.()}
           class="w-full h-14 pl-10 pr-4 bg-surface-soft border border-border-subtle rounded-2xl focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none transition-all font-medium text-sm cursor-pointer text-text-base font-mono"
         />
       </div>
@@ -4635,15 +4636,28 @@
             </div>
 
             <div class="text-right">
-              <span class="text-[9px] font-black uppercase tracking-wider text-text-muted block">
+              <label for="fecha-cobro-card" class="text-[9px] font-black uppercase tracking-wider text-text-muted block cursor-pointer">
                 Fecha del Cobro
-              </span>
-              <span class="text-xs font-mono font-bold text-text-base mt-1 block">
-                {fechaCobro ? fechaCobro.split("-").reverse().join("/") : todayDateStr}
-              </span>
+              </label>
+              <div class="flex items-center justify-end gap-1.5 mt-1">
+                <input
+                  id="fecha-cobro-card"
+                  type="date"
+                  bind:value={fechaCobro}
+                  max={todayDateStr}
+                  oninput={(e) => handleFechaCobroInput(e.currentTarget.value)}
+                  onchange={(e) => handleFechaCobroInput(e.currentTarget.value)}
+                  onclick={(e) => (e.currentTarget as any)?.showPicker?.()}
+                  class="h-9 px-2.5 bg-surface-soft border border-border-subtle rounded-xl text-xs font-mono font-bold text-text-base cursor-pointer outline-none focus:border-brand-500 transition-all text-center"
+                />
+              </div>
               {#if tasaFechaInfo && !tasaEsExacta}
                 <span class="text-[9px] font-bold text-amber-400 block mt-0.5">
-                  Tasa previa
+                  Tasa previa ({String(tasaFechaInfo).split('T')[0].split('-').reverse().join('/')})
+                </span>
+              {:else if tasaFechaInfo && tasaEsExacta}
+                <span class="text-[9px] font-bold text-emerald-400 block mt-0.5">
+                  Tasa del día ({String(tasaFechaInfo).split('T')[0].split('-').reverse().join('/')})
                 </span>
               {/if}
             </div>

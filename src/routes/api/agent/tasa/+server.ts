@@ -44,16 +44,17 @@ export const GET: RequestHandler = async ({ url, locals, fetch }) => {
 				}, profile, fetch);
 
 				if (targetFecha) {
-					const tasaRes = await agentClient.request<any>(`/catalogos/tasa?fecha=${encodeURIComponent(targetFecha)}`);
+					const cleanDate = targetFecha.split('T')[0].trim();
+					const tasaRes = await agentClient.request<any>(`/catalogos/tasa?fecha=${encodeURIComponent(cleanDate)}`);
 					const data = (tasaRes as any)?.data || (Array.isArray(tasaRes) ? tasaRes : []);
 					const record = data.length > 0 ? data[0] : null;
 					return json({
 						success: true,
-						tasa: record ? record.tasa : null,
+						tasa: record && record.tasa != null ? Number(record.tasa) : null,
 						fecha_str: record ? record.fecha_str : null,
 						fecha: record ? record.fecha : null,
 						es_exacta: record ? Boolean(record.es_exacta) : false,
-						fechaConsultada: targetFecha
+						fechaConsultada: cleanDate
 					});
 				}
 
