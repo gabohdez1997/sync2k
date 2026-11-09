@@ -227,7 +227,13 @@
           : 'bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/20'
       };
     }
-    if (t === 'AJPM' || t === 'AJPA') {
+    if (t === 'AJPA') {
+      return {
+        label: 'AJPA (Dif. Camb.)',
+        class: 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20'
+      };
+    }
+    if (t === 'AJPM') {
       return {
         label: 'Reintegro',
         class: 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20'

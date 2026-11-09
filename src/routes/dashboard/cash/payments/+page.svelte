@@ -3567,7 +3567,7 @@
                                   <span class="text-text-muted text-[11px]">
                                     {activeNcrRetIvaBs > 0
                                       ? "Se descuenta el crédito neto disponible de la deuda y se registra su comprobante de retención de IVA."
-                                      : "Se descuenta de la deuda sin generar N/DB ni retenciones."}
+                                      : "Se descuenta de la deuda sin generar AJPA ni retenciones."}
                                   </span>
                                 </div>
                               </div>
@@ -4478,7 +4478,7 @@
                             </div>
                           {/if}
 
-                          <!-- Alerta Diferencial Cambiario (N/DB) exclusivamente para facturas de venta (FACT) de días anteriores -->
+                          <!-- Alerta Diferencial Cambiario (AJPA) exclusivamente para facturas de venta (FACT) de días anteriores -->
                           {#if doc.co_tipo_doc.trim().toUpperCase() === "FACT"}
                             {@const docFecEmisStr = doc.fec_emis
                               ? new Date(doc.fec_emis)
@@ -4511,7 +4511,7 @@
                                   class="font-bold text-blue-400 flex items-center gap-1.5"
                                 >
                                   <RefreshCw size={14} />
-                                  Diferencial Cambiario (N/DB a generar):
+                                  Diferencial Cambiario (AJPA a generar):
                                 </span>
                                 <div class="flex items-center gap-3">
                                   <div class="text-right">
@@ -4539,9 +4539,9 @@
                                     type="button"
                                     onclick={toggleGenerarDiferencial}
                                     class="text-[10px] font-black uppercase tracking-wider text-text-muted hover:text-red-400 px-2.5 py-1.5 rounded-xl border border-border-subtle bg-surface-soft hover:bg-red-500/10 transition-all cursor-pointer"
-                                    title="Deshabilitar generación de N/DB por diferencial cambiario"
+                                    title="Deshabilitar generación de AJPA por diferencial cambiario"
                                   >
-                                    Omitir N/DB
+                                    Omitir AJPA
                                   </button>
                                 </div>
                               </div>
@@ -4551,14 +4551,14 @@
                               >
                                 <span class="flex items-center gap-1.5 font-bold">
                                   <Info size={14} class="text-amber-400 shrink-0" />
-                                  <span>Diferencial cambiario desactivado (Se salda a tasa original sin N/DB)</span>
+                                  <span>Diferencial cambiario desactivado (Se salda a tasa original sin AJPA)</span>
                                 </span>
                                 <button
                                   type="button"
                                   onclick={toggleGenerarDiferencial}
                                   class="text-[10px] font-black uppercase tracking-wider text-blue-400 hover:text-blue-300 px-2.5 py-1.5 rounded-xl border border-blue-500/30 bg-blue-500/10 transition-all cursor-pointer"
                                 >
-                                  Activar N/DB
+                                  Activar AJPA
                                 </button>
                               </div>
                             {/if}
@@ -4664,22 +4664,22 @@
             </div>
           </div>
 
-          <!-- Switch Habilitar/Deshabilitar Diferencial Cambiario N/DB -->
+          <!-- Switch Habilitar/Deshabilitar Diferencial Cambiario AJPA -->
           <div
             class="p-3.5 rounded-2xl border transition-all {generarDiferencial ? 'bg-blue-500/10 border-blue-500/30' : 'bg-surface-soft/60 border-border-subtle'}"
           >
             <div class="flex items-center justify-between gap-3">
               <div class="space-y-0.5">
                 <div class="flex items-center gap-2">
-                  <span class="text-xs font-bold text-text-base">Diferencial (N/DB)</span>
+                  <span class="text-xs font-bold text-text-base">Diferencial (AJPA)</span>
                   <span class="text-[9px] font-black uppercase px-2 py-0.5 rounded-full {generarDiferencial ? 'bg-blue-500/20 text-blue-300 border border-blue-500/40' : 'bg-surface-strong text-text-muted border border-border-subtle'}">
-                    {generarDiferencial ? 'Habilitado' : 'Omitir N/DB'}
+                    {generarDiferencial ? 'Habilitado' : 'Omitir AJPA'}
                   </span>
                 </div>
                 <p class="text-[10px] text-text-muted leading-tight">
                   {generarDiferencial
-                    ? 'Genera Nota de Débito (N/DB) si la tasa actual supera la de la factura.'
-                    : 'Desactivado: no genera N/DB y salda las facturas a su tasa original.'}
+                    ? 'Genera Ajuste Positivo (AJPA) si la tasa actual supera la de la factura.'
+                    : 'Desactivado: no genera AJPA y salda las facturas a su tasa original.'}
                 </p>
               </div>
               <button
