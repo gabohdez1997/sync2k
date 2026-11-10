@@ -55,3 +55,4 @@ export const load: PageServerLoad = protectLoad('pur_payments', async ({ params,
         throw error(500, err.message || 'Error al cargar el comprobante de retención de ISLR.');
     }
 });
+
