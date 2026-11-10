@@ -13,8 +13,18 @@
     const sealUrl = branch.seal_url || branch.sql_config?.seal_url || null;
 
     const MESES = [
-        "ENERO", "FEBRERO", "MARZO", "ABRIL", "MAYO", "JUNIO",
-        "JULIO", "AGOSTO", "SEPTIEMBRE", "OCTUBRE", "NOVIEMBRE", "DICIEMBRE"
+        "ENERO",
+        "FEBRERO",
+        "MARZO",
+        "ABRIL",
+        "MAYO",
+        "JUNIO",
+        "JULIO",
+        "AGOSTO",
+        "SEPTIEMBRE",
+        "OCTUBRE",
+        "NOVIEMBRE",
+        "DICIEMBRE",
     ];
 
     function formatCurrency(val: number | string) {
@@ -28,35 +38,45 @@
     let rawRetList = payment.retenciones_iva || [];
 
     // Fallback: si no vinieron en retenciones_iva, sintetizar desde renglones del pago
-    if (rawRetList.length === 0 && payment.renglones && payment.renglones.length > 0) {
-        const facturasConReten = payment.renglones.filter((r: any) => 
-            Number(r.monto_retencion_iva || 0) > 0 && r.co_tipo_doc !== 'IVAN' && r.co_tipo_doc !== 'ISLR'
+    if (
+        rawRetList.length === 0 &&
+        payment.renglones &&
+        payment.renglones.length > 0
+    ) {
+        const facturasConReten = payment.renglones.filter(
+            (r: any) =>
+                Number(r.monto_retencion_iva || 0) > 0 &&
+                r.co_tipo_doc !== "IVAN" &&
+                r.co_tipo_doc !== "ISLR",
         );
-        const ivanRow = payment.renglones.find((r: any) => r.co_tipo_doc === 'IVAN');
+        const ivanRow = payment.renglones.find(
+            (r: any) => r.co_tipo_doc === "IVAN",
+        );
 
         if (facturasConReten.length > 0) {
             rawRetList = facturasConReten.map((f: any, idx: number) => {
                 const docNeto = Number(f.total_neto || f.mont_cob || 0);
                 const retIva = Number(f.monto_retencion_iva || 0);
-                const imp = Number(f.monto_imp || (docNeto * 0.16) || 0);
+                const imp = Number(f.monto_imp || docNeto * 0.16 || 0);
                 const base = docNeto - imp;
                 const porc = imp > 0 ? Math.round((retIva / imp) * 100) : 75;
 
                 return {
                     reng_num: idx + 1,
-                    num_comprobante: ivanRow?.nro_doc || payment.recibo || payment.cob_num,
+                    num_comprobante:
+                        ivanRow?.nro_doc || payment.recibo || payment.cob_num,
                     monto_documento: docNeto,
                     base_imponible: base > 0 ? base : docNeto,
                     monto_ret_imp: retIva,
                     alicuota: 16,
                     monto_excento: 0,
                     fecha_documento: f.fec_emis || payment.fecha,
-                    numero_control_documento: f.n_control || '---',
-                    tipo_documento: f.co_tipo_doc || 'FACT',
-                    numero_documento_afectado: '0',
+                    numero_control_documento: f.n_control || "---",
+                    tipo_documento: f.co_tipo_doc || "FACT",
+                    numero_documento_afectado: "0",
                     nro_doc: f.nro_doc,
                     nro_fact: f.nro_fact || f.nro_doc,
-                    porc_ret: porc
+                    porc_ret: porc,
                 };
             });
         }
@@ -64,7 +84,9 @@
 
     // Filtrar por comprobante específico si viene en query
     if (compFilter) {
-        const filtered = rawRetList.filter((r: any) => (r.num_comprobante || '').trim() === compFilter.trim());
+        const filtered = rawRetList.filter(
+            (r: any) => (r.num_comprobante || "").trim() === compFilter.trim(),
+        );
         if (filtered.length > 0) {
             rawRetList = filtered;
         }
@@ -73,7 +95,7 @@
     // Agrupar por número de comprobante para soportar múltiples comprobantes si aplica
     const vouchersMap = new Map<string, any[]>();
     for (const item of rawRetList) {
-        const comp = (item.num_comprobante || payment.cob_num || '').trim();
+        const comp = (item.num_comprobante || payment.cob_num || "").trim();
         if (!vouchersMap.has(comp)) {
             vouchersMap.set(comp, []);
         }
@@ -85,36 +107,51 @@
         vouchersMap.set(payment.cob_num, []);
     }
 
-    const vouchers = Array.from(vouchersMap.entries()).map(([compNum, rows]) => {
-        // Formatear número de comprobante fiscal SENIAT si es corto (ej. YYYYMM + 8 dígitos)
-        let formattedComp = compNum;
-        const pDate = new Date(payment.fecha || Date.now());
-        const defaultYear = pDate.getFullYear();
-        const defaultMonthNum = String(pDate.getMonth() + 1).padStart(2, '0');
-        const defaultPeriodStr = `${defaultYear}${defaultMonthNum}`;
+    const vouchers = Array.from(vouchersMap.entries()).map(
+        ([compNum, rows]) => {
+            // Formatear número de comprobante fiscal SENIAT si es corto (ej. YYYYMM + 8 dígitos)
+            let formattedComp = compNum;
+            const pDate = new Date(payment.fecha || Date.now());
+            const defaultYear = pDate.getFullYear();
+            const defaultMonthNum = String(pDate.getMonth() + 1).padStart(
+                2,
+                "0",
+            );
+            const defaultPeriodStr = `${defaultYear}${defaultMonthNum}`;
 
-        if (formattedComp.length < 14 && /^\d+$/.test(formattedComp)) {
-            formattedComp = `${defaultPeriodStr}${formattedComp.padStart(8, '0')}`;
-        }
+            if (formattedComp.length < 14 && /^\d+$/.test(formattedComp)) {
+                formattedComp = `${defaultPeriodStr}${formattedComp.padStart(8, "0")}`;
+            }
 
-        const firstRow = rows[0] || {};
-        const docDate = firstRow.fecha_documento ? new Date(firstRow.fecha_documento) : pDate;
-        const fiscalYear = docDate.getFullYear();
-        const fiscalMonthName = MESES[docDate.getMonth()] || MESES[pDate.getMonth()];
+            const firstRow = rows[0] || {};
+            const docDate = firstRow.fecha_documento
+                ? new Date(firstRow.fecha_documento)
+                : pDate;
+            const fiscalYear = docDate.getFullYear();
+            const fiscalMonthName =
+                MESES[docDate.getMonth()] || MESES[pDate.getMonth()];
 
-        const totalRetenido = rows.reduce((acc, r) => acc + Number(r.monto_ret_imp || 0), 0);
+            const totalRetenido = rows.reduce(
+                (acc, r) => acc + Number(r.monto_ret_imp || 0),
+                0,
+            );
 
-        return {
-            compNum: formattedComp,
-            rawCompNum: compNum,
-            fiscalYear,
-            fiscalMonthName,
-            fechaEmision: payment.fecha ? dayjs(payment.fecha).format("DD/MM/YYYY") : dayjs().format("DD/MM/YYYY"),
-            fechaEntrega: payment.fecha ? dayjs(payment.fecha).format("DD/MM/YYYY") : dayjs().format("DD/MM/YYYY"),
-            rows,
-            totalRetenido
-        };
-    });
+            return {
+                compNum: formattedComp,
+                rawCompNum: compNum,
+                fiscalYear,
+                fiscalMonthName,
+                fechaEmision: payment.fecha
+                    ? dayjs(payment.fecha).format("DD/MM/YYYY")
+                    : dayjs().format("DD/MM/YYYY"),
+                fechaEntrega: payment.fecha
+                    ? dayjs(payment.fecha).format("DD/MM/YYYY")
+                    : dayjs().format("DD/MM/YYYY"),
+                rows,
+                totalRetenido,
+            };
+        },
+    );
 
     onMount(() => {
         window.scrollTo(0, 0);
@@ -124,17 +161,39 @@
 <svelte:head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Comprobante de Retención IVA - {branch.business_name || branch.name}</title>
+    <title
+        >Comprobante de Retención IVA - {branch.business_name ||
+            branch.name}</title
+    >
 </svelte:head>
 
 <!-- BARRA DE ACCIONES FLOTANTE (NO SE IMPRIME) -->
-<div class="no-print fixed bottom-6 left-4 right-4 md:left-auto md:right-8 flex flex-col md:flex-row gap-3 pointer-events-auto z-[99999] select-none touch-manipulation">
+<div
+    class="no-print fixed bottom-6 left-4 right-4 md:left-auto md:right-8 flex flex-col md:flex-row gap-3 pointer-events-auto z-[99999] select-none touch-manipulation"
+>
     <button
-        onclick={() => { window.focus(); window.print(); }}
+        onclick={() => {
+            window.focus();
+            window.print();
+        }}
         class="w-full md:w-auto justify-center bg-blue-600 hover:bg-blue-500 text-white px-8 py-4 rounded-2xl font-black shadow-2xl shadow-blue-600/40 transition-all active:scale-95 flex items-center gap-3 cursor-pointer text-sm"
     >
-        <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect width="12" height="8" x="6" y="14" rx="1"/><path d="M6 8V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v4"/>
+        <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="22"
+            height="22"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2.5"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+        >
+            <path
+                d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"
+            /><rect width="12" height="8" x="6" y="14" rx="1" /><path
+                d="M6 8V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v4"
+            />
         </svg>
         IMPRIMIR COMPROBANTE IVA
     </button>
@@ -157,16 +216,26 @@
                         <img src={logoUrl} alt="Logo" class="brand-logo" />
                     {/if}
                     <div class="brand-text">
-                        <span class="brand-name">{branch.business_name || branch.name}</span>
+                        <span class="brand-name"
+                            >{branch.business_name || branch.name}</span
+                        >
                         <span class="brand-rif">{branch.rif || ""}</span>
                     </div>
                 </div>
 
                 <!-- TÍTULO CENTRAL Y BASE LEGAL -->
                 <div class="header-center">
-                    <h1 class="main-title">COMPROBANTE DE RETENCION DEL IMPUESTO AL VALOR AGREGADO</h1>
+                    <h1 class="main-title">
+                        COMPROBANTE DE RETENCION DEL IMPUESTO AL VALOR AGREGADO
+                    </h1>
                     <p class="legal-notice">
-                        Ley de IVA Art. 11: "La administracion Tributaria podra designar como responsables del pago del impuesto, en calidad de agentes de retencion a quienes por sus funciones publicas o por razon de sus actividades privadas intervengan en operaciones gravadas con el impuesto establecido en este Decreto con Rango, Valor y Fuerza de Ley"
+                        Ley de IVA Art. 11: "La administracion Tributaria podra
+                        designar como responsables del pago del impuesto, en
+                        calidad de agentes de retencion a quienes por sus
+                        funciones publicas o por razon de sus actividades
+                        privadas intervengan en operaciones gravadas con el
+                        impuesto establecido en este Decreto con Rango, Valor y
+                        Fuerza de Ley"
                     </p>
                 </div>
 
@@ -199,7 +268,9 @@
                             </div>
                             <div class="period-col">
                                 <span class="period-lbl">MES:</span>
-                                <span class="period-val">{v.fiscalMonthName}</span>
+                                <span class="period-val"
+                                    >{v.fiscalMonthName}</span
+                                >
                             </div>
                         </div>
                     </div>
@@ -213,18 +284,32 @@
                     <tbody>
                         <tr>
                             <td class="cell-label-val w-70">
-                                <div class="cell-label">NOMBRE O RAZÓN SOCIAL AGENTE DE RETENCIÓN</div>
-                                <div class="cell-value">{branch.business_name || branch.name}</div>
+                                <div class="cell-label">
+                                    NOMBRE O RAZÓN SOCIAL AGENTE DE RETENCIÓN
+                                </div>
+                                <div class="cell-value">
+                                    {branch.business_name || branch.name}
+                                </div>
                             </td>
                             <td class="cell-label-val w-30">
-                                <div class="cell-label">REGISTRO DE INFORMACIÓN FISCAL (R.I.F.) DEL AGENTE DE RETENCIÓN</div>
-                                <div class="cell-value font-mono font-bold">{branch.rif || "---"}</div>
+                                <div class="cell-label">
+                                    REGISTRO DE INFORMACIÓN FISCAL (R.I.F.) DEL
+                                    AGENTE DE RETENCIÓN
+                                </div>
+                                <div class="cell-value font-mono font-bold">
+                                    {branch.rif || "---"}
+                                </div>
                             </td>
                         </tr>
                         <tr>
                             <td colspan="2" class="cell-label-val">
-                                <div class="cell-label">DIRECCION FISCAL DEL AGENTE DE RETENCIÓN</div>
-                                <div class="cell-value">{branch.address || "Dirección no registrada"}</div>
+                                <div class="cell-label">
+                                    DIRECCION FISCAL DEL AGENTE DE RETENCIÓN
+                                </div>
+                                <div class="cell-value">
+                                    {branch.address ||
+                                        "Dirección no registrada"}
+                                </div>
                             </td>
                         </tr>
                     </tbody>
@@ -235,18 +320,32 @@
                     <tbody>
                         <tr>
                             <td class="cell-label-val w-70">
-                                <div class="cell-label">NOMBRE O RAZÓN SOCIAL DEL SUJETO RETENIDO</div>
-                                <div class="cell-value">{payment.prov_des || payment.co_prov}</div>
+                                <div class="cell-label">
+                                    NOMBRE O RAZÓN SOCIAL DEL SUJETO RETENIDO
+                                </div>
+                                <div class="cell-value">
+                                    {payment.prov_des || payment.co_prov}
+                                </div>
                             </td>
                             <td class="cell-label-val w-30">
-                                <div class="cell-label">REGISTRO DE INFORMACIÓN FISCAL (R.I.F.) DEL SUJETO RETENIDO</div>
-                                <div class="cell-value font-mono font-bold">{payment.rif || payment.co_prov}</div>
+                                <div class="cell-label">
+                                    REGISTRO DE INFORMACIÓN FISCAL (R.I.F.) DEL
+                                    SUJETO RETENIDO
+                                </div>
+                                <div class="cell-value font-mono font-bold">
+                                    {payment.rif || payment.co_prov}
+                                </div>
                             </td>
                         </tr>
                         <tr>
                             <td colspan="2" class="cell-label-val">
-                                <div class="cell-label">DIRECCION FISCAL DEL SUJETO RETENIDO</div>
-                                <div class="cell-value">{payment.direc1 || "Dirección no registrada"}</div>
+                                <div class="cell-label">
+                                    DIRECCION FISCAL DEL SUJETO RETENIDO
+                                </div>
+                                <div class="cell-value">
+                                    {payment.direc1 ||
+                                        "Dirección no registrada"}
+                                </div>
                             </td>
                         </tr>
                     </tbody>
@@ -264,11 +363,20 @@
                             <th rowspan="2" class="col-ctrl">N° CONTROL</th>
                             <th rowspan="2" class="col-sm">N° NOTA DÉBITO</th>
                             <th rowspan="2" class="col-sm">N° NOTA CRÉDITO</th>
-                            <th rowspan="2" class="col-trans">TIPO DE TRANS.</th>
-                            <th rowspan="2" class="col-sm">N° DEL DOCUMENTO AFECTADO</th>
-                            <th rowspan="2" class="col-amount">MONTO TOTAL DE LA FACTURA O NOTA DE DEBITO</th>
-                            <th rowspan="2" class="col-amount">COMPRAS SIN DERECHO A CRÉDITO FISCAL</th>
-                            <th colspan="5" class="col-group">COMPRAS INTERNAS O IMPORTACIONES</th>
+                            <th rowspan="2" class="col-trans">TIPO DE TRANS.</th
+                            >
+                            <th rowspan="2" class="col-sm"
+                                >N° DEL DOCUMENTO AFECTADO</th
+                            >
+                            <th rowspan="2" class="col-amount"
+                                >MONTO TOTAL DE LA FACTURA O NOTA DE DEBITO</th
+                            >
+                            <th rowspan="2" class="col-amount"
+                                >COMPRAS SIN DERECHO A CRÉDITO FISCAL</th
+                            >
+                            <th colspan="5" class="col-group"
+                                >COMPRAS INTERNAS O IMPORTACIONES</th
+                            >
                         </tr>
                         <tr>
                             <th class="col-amount">BASE IMPONIBLE</th>
@@ -282,32 +390,100 @@
                         {#each v.rows as row, idx}
                             {@const base = Number(row.base_imponible || 0)}
                             {@const alic = Number(row.alicuota || 16)}
-                            {@const caus = Number(row.monto_imp_causado || (base * (alic / 100)))}
+                            {@const caus = Number(
+                                row.monto_imp_causado || base * (alic / 100),
+                            )}
                             {@const ret = Number(row.monto_ret_imp || 0)}
-                            {@const porcRet = Number(row.porc_ret || (caus > 0 ? Math.round((ret / caus) * 100) : 75))}
-                            {@const isND = (row.tipo_documento || row.co_tipo_doc || '').trim() === 'NDEB' || (row.tipo_documento || row.co_tipo_doc || '').trim() === 'N/DB'}
-                            {@const isNC = (row.tipo_documento || row.co_tipo_doc || '').trim() === 'N/CR' || (row.tipo_documento || row.co_tipo_doc || '').trim() === 'NCR'}
+                            {@const porcRet = Number(
+                                row.porc_ret ||
+                                    (caus > 0
+                                        ? Math.round((ret / caus) * 100)
+                                        : 75),
+                            )}
+                            {@const isND =
+                                (
+                                    row.tipo_documento ||
+                                    row.co_tipo_doc ||
+                                    ""
+                                ).trim() === "NDEB" ||
+                                (
+                                    row.tipo_documento ||
+                                    row.co_tipo_doc ||
+                                    ""
+                                ).trim() === "N/DB"}
+                            {@const isNC =
+                                (
+                                    row.tipo_documento ||
+                                    row.co_tipo_doc ||
+                                    ""
+                                ).trim() === "N/CR" ||
+                                (
+                                    row.tipo_documento ||
+                                    row.co_tipo_doc ||
+                                    ""
+                                ).trim() === "NCR"}
                             <tr>
                                 <td class="text-center">{idx + 1}</td>
-                                <td class="text-center font-mono">{row.fecha_documento ? dayjs(row.fecha_documento).format("DD/MM/YYYY") : v.fechaEmision}</td>
-                                <td class="text-center font-mono font-bold">{row.nro_fact || row.numero_documento || row.nro_doc || '---'}</td>
-                                <td class="text-center font-mono">{row.numero_control_documento || '---'}</td>
-                                <td class="text-center font-mono">{isND ? (row.nro_doc || '0') : '0'}</td>
-                                <td class="text-center font-mono">{isNC ? (row.nro_doc || '0') : '0'}</td>
-                                <td class="text-center font-bold">{isNC ? '03' : isND ? '02' : '01'}</td>
-                                <td class="text-center font-mono">{row.numero_documento_afectado && row.numero_documento_afectado !== '0' ? row.numero_documento_afectado : '0'}</td>
-                                <td class="text-right font-mono font-bold">{formatCurrency(row.monto_documento)}</td>
-                                <td class="text-right font-mono">{formatCurrency(row.monto_excento || 0)}</td>
-                                <td class="text-right font-mono">{formatCurrency(base)}</td>
+                                <td class="text-center font-mono"
+                                    >{row.fecha_documento
+                                        ? dayjs(row.fecha_documento).format(
+                                              "DD/MM/YYYY",
+                                          )
+                                        : v.fechaEmision}</td
+                                >
+                                <td class="text-center font-mono font-bold"
+                                    >{row.nro_fact ||
+                                        row.numero_documento ||
+                                        row.nro_doc ||
+                                        "---"}</td
+                                >
+                                <td class="text-center font-mono"
+                                    >{row.numero_control_documento || "---"}</td
+                                >
+                                <td class="text-center font-mono"
+                                    >{isND ? row.nro_doc || "0" : "0"}</td
+                                >
+                                <td class="text-center font-mono"
+                                    >{isNC ? row.nro_doc || "0" : "0"}</td
+                                >
+                                <td class="text-center font-bold"
+                                    >{isNC ? "03" : isND ? "02" : "01"}</td
+                                >
+                                <td class="text-center font-mono"
+                                    >{row.numero_documento_afectado &&
+                                    row.numero_documento_afectado !== "0"
+                                        ? row.numero_documento_afectado
+                                        : "0"}</td
+                                >
+                                <td class="text-right font-mono font-bold"
+                                    >{formatCurrency(row.monto_documento)}</td
+                                >
+                                <td class="text-right font-mono"
+                                    >{formatCurrency(
+                                        row.monto_excento || 0,
+                                    )}</td
+                                >
+                                <td class="text-right font-mono"
+                                    >{formatCurrency(base)}</td
+                                >
                                 <td class="text-center font-bold">{alic}%</td>
-                                <td class="text-right font-mono">{formatCurrency(caus)}</td>
-                                <td class="text-right font-mono font-bold">{formatCurrency(ret)}</td>
-                                <td class="text-center font-bold">{porcRet}%</td>
+                                <td class="text-right font-mono"
+                                    >{formatCurrency(caus)}</td
+                                >
+                                <td class="text-right font-mono font-bold"
+                                    >{formatCurrency(ret)}</td
+                                >
+                                <td class="text-center font-bold">{porcRet}%</td
+                                >
                             </tr>
                         {:else}
                             <tr>
-                                <td colspan="15" class="text-center py-6 text-gray-500 italic">
-                                    No se registraron renglones de retención de IVA para este pago.
+                                <td
+                                    colspan="15"
+                                    class="text-center py-6 text-gray-500 italic"
+                                >
+                                    No se registraron renglones de retención de
+                                    IVA para este pago.
                                 </td>
                             </tr>
                         {/each}
@@ -319,7 +495,9 @@
             <div class="totals-section">
                 <div class="total-retenido-box">
                     <span class="total-lbl">Total Retenido al Proveedor:</span>
-                    <span class="total-val">Bs. {formatCurrency(v.totalRetenido)}</span>
+                    <span class="total-val"
+                        >Bs. {formatCurrency(v.totalRetenido)}</span
+                    >
                 </div>
             </div>
 
@@ -328,18 +506,26 @@
                 <!-- AGENTE DE RETENCIÓN -->
                 <div class="sig-block left-sig">
                     <div class="sig-row">
-                        <span class="sig-lbl">Firma del Agente de Retención:</span>
+                        <span class="sig-lbl"
+                            >Firma del Agente de Retención:</span
+                        >
                         <div class="sig-line"></div>
                     </div>
                     <div class="sig-row mt-4">
-                        <span class="sig-lbl">Sello del Agente de Retención:</span>
+                        <span class="sig-lbl"
+                            >Sello del Agente de Retención:</span
+                        >
                         <div class="sig-line"></div>
                     </div>
 
                     <!-- ESTAMPA DE SELLO Y FIRMA OVERLAY -->
                     {#if sealUrl}
                         <div class="seal-overlay">
-                            <img src={sealUrl} alt="Sello y Firma" class="seal-img" />
+                            <img
+                                src={sealUrl}
+                                alt="Sello y Firma"
+                                class="seal-img"
+                            />
                         </div>
                     {/if}
                 </div>
@@ -443,7 +629,7 @@
     }
 
     .main-title {
-        font-size: 13.5px;
+        font-size: 12px;
         font-weight: 900;
         margin: 0 0 4px;
         letter-spacing: -0.2px;
@@ -578,8 +764,12 @@
         vertical-align: top;
     }
 
-    .w-70 { width: 70%; }
-    .w-30 { width: 30%; }
+    .w-70 {
+        width: 70%;
+    }
+    .w-30 {
+        width: 30%;
+    }
 
     .cell-label {
         font-size: 7px;
@@ -626,19 +816,44 @@
         vertical-align: middle;
     }
 
-    .col-sm { width: 4.5%; }
-    .col-date { width: 6.5%; }
-    .col-doc { width: 6.5%; }
-    .col-ctrl { width: 7.5%; }
-    .col-trans { width: 5%; }
-    .col-amount { width: 8.5%; }
-    .col-pct { width: 5.5%; }
-    .col-group { background: #fdfdfd; font-weight: 900; }
+    .col-sm {
+        width: 4.5%;
+    }
+    .col-date {
+        width: 6.5%;
+    }
+    .col-doc {
+        width: 6.5%;
+    }
+    .col-ctrl {
+        width: 7.5%;
+    }
+    .col-trans {
+        width: 5%;
+    }
+    .col-amount {
+        width: 8.5%;
+    }
+    .col-pct {
+        width: 5.5%;
+    }
+    .col-group {
+        background: #fdfdfd;
+        font-weight: 900;
+    }
 
-    .text-center { text-align: center; }
-    .text-right { text-align: right; }
-    .font-mono { font-family: monospace; }
-    .font-bold { font-weight: 700; }
+    .text-center {
+        text-align: center;
+    }
+    .text-right {
+        text-align: right;
+    }
+    .font-mono {
+        font-family: monospace;
+    }
+    .font-bold {
+        font-weight: 700;
+    }
 
     /* TOTALES */
     .totals-section {
@@ -720,7 +935,7 @@
         max-height: 100%;
         object-fit: contain;
         transform: rotate(-1.5deg);
-        filter: drop-shadow(0 1px 2px rgba(0,0,0,0.15));
+        filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.15));
     }
 
     /* MEDIA PRINT */
