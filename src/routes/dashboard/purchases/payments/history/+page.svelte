@@ -749,6 +749,20 @@
           {/if}
         {/if}
       </div>
+
+      {#if detailData && !detailData.anulado && data.canEdit}
+        <div class="p-4 border-t border-border-subtle flex items-center justify-end gap-3 bg-surface-soft/20">
+          <button
+            type="button"
+            onclick={() => { const p = detailData || selectedPayment; detailModalOpen = false; openEditModal(p); }}
+            class="px-4 py-2.5 rounded-xl bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 border border-blue-500/30 text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5"
+            title="Editar este Pago"
+          >
+            <Pen size={14} />
+            Editar Pago
+          </button>
+        </div>
+      {/if}
     </div>
   </div>
 {/if}
@@ -873,16 +887,23 @@
     >
       <div class="p-8 text-center space-y-6">
         <div class="h-20 w-20 rounded-3xl bg-blue-500/20 text-blue-500 flex items-center justify-center mx-auto shadow-lg shadow-blue-500/10">
-          <Edit2 size={40} />
+          <Pen size={40} />
         </div>
 
-        <div class="space-y-2">
+        <div class="space-y-3">
           <h2 class="text-2xl font-black tracking-tight text-text-base">Editar Pago</h2>
           <p class="text-text-muted text-sm px-4">
-            Para editar este pago, se revertirá el pago actual <span class="font-bold text-text-base">{paymentToEdit.cob_num}</span> en Profit Plus para liberar los saldos de sus facturas y serás redirigido al editor con el proveedor cargado.
+            Para editar este pago, se anulará el pago actual <span class="font-bold text-text-base">{paymentToEdit.cob_num}</span> en Profit Plus para liberar los saldos de sus facturas y serás redirigido al editor con el proveedor cargado.
           </p>
 
-          <div class="text-left p-4 rounded-2xl bg-surface-soft border border-border-subtle space-y-2 text-xs mt-4">
+          <div class="p-3.5 bg-amber-500/10 border border-amber-500/20 rounded-2xl text-amber-400 text-xs text-left flex items-start gap-2.5">
+            <AlertTriangle size={16} class="shrink-0 mt-0.5 text-amber-500" />
+            <span class="leading-relaxed">
+              <strong>Aviso Fiscal:</strong> Los documentos fiscales generados por este pago (retenciones de IVA e ISLR) serán <strong>anulados</strong> automáticamente.
+            </span>
+          </div>
+
+          <div class="text-left p-4 rounded-2xl bg-surface-soft border border-border-subtle space-y-2 text-xs">
             <p class="text-text-muted"><span class="font-bold text-text-base">Proveedor:</span> {paymentToEdit.prov_des || paymentToEdit.co_prov}</p>
             <p class="text-text-muted"><span class="font-bold text-text-base">Pago N°:</span> {paymentToEdit.cob_num}</p>
           </div>
@@ -950,7 +971,7 @@
               {#if isEditing}
                 <Loader2 size={18} class="animate-spin" />
               {:else}
-                <Edit2 size={18} />
+                <Pen size={18} />
                 Confirmar y Editar
               {/if}
             </button>
