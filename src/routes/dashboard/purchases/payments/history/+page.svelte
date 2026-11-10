@@ -328,6 +328,16 @@
                         <Printer size={18} />
                       </a>
                     {/if}
+                    {#if p.has_retencion_islr || (p.documentos_asociados && p.documentos_asociados.includes('ISLR'))}
+                      <a
+                        href="/dashboard/purchases/payments/{p.cob_num}/retention-islr/print?branch_id={selectedBranch}"
+                        target="_blank"
+                        class="p-2 text-amber-500 hover:text-amber-400 hover:bg-amber-500/10 rounded-xl transition-all cursor-pointer inline-flex items-center justify-center"
+                        title="Imprimir Comprobante de Retención ISLR"
+                      >
+                        <Receipt size={18} />
+                      </a>
+                    {/if}
                     {#if data.canEdit && !p.anulado}
                       <button 
                         onclick={() => openEditModal(p)}
@@ -719,10 +729,20 @@
             })()}
             {#if uniqueRetIslr.length > 0}
               <div class="space-y-2">
-                <h4 class="text-xs font-black uppercase tracking-wider text-amber-600 dark:text-amber-400 flex items-center gap-2">
-                  <Landmark size={14} />
-                  Retenciones de ISLR
-                </h4>
+                <div class="flex items-center justify-between">
+                  <h4 class="text-xs font-black uppercase tracking-wider text-amber-600 dark:text-amber-400 flex items-center gap-2">
+                    <Landmark size={14} />
+                    Retenciones de ISLR
+                  </h4>
+                  <a
+                    href="/dashboard/purchases/payments/{selectedPayment.cob_num}/retention-islr/print?branch_id={selectedBranch}"
+                    target="_blank"
+                    class="inline-flex items-center gap-1.5 px-3 py-1 bg-amber-600 hover:bg-amber-500 text-white rounded-xl text-xs font-bold transition-all shadow-sm active:scale-95 cursor-pointer"
+                  >
+                    <Printer size={13} />
+                    Imprimir Comprobante ISLR
+                  </a>
+                </div>
                 <div class="bg-amber-500/5 border border-amber-500/20 rounded-2xl p-3 space-y-2 text-xs">
                   {#each uniqueRetIslr as rn}
                     {@const factDisplay = rn.resolvedFactura 
@@ -736,8 +756,18 @@
                           <span class="text-text-muted ml-2">Factura: {factDisplay}</span>
                         {/if}
                       </div>
-                      <div class="font-mono font-bold text-amber-700 dark:text-amber-300">
-                        Retenido: Bs. {Number(rn.monto_reten).toLocaleString('de-DE', {minimumFractionDigits: 2})} (Base: Bs. {Number(rn.monto_obj).toLocaleString('de-DE', {minimumFractionDigits: 2})})
+                      <div class="flex items-center gap-3">
+                        <div class="font-mono font-bold text-amber-700 dark:text-amber-300">
+                          Retenido: Bs. {Number(rn.monto_reten).toLocaleString('de-DE', {minimumFractionDigits: 2})} (Base: Bs. {Number(rn.monto_obj).toLocaleString('de-DE', {minimumFractionDigits: 2})})
+                        </div>
+                        <a
+                          href="/dashboard/purchases/payments/{selectedPayment.cob_num}/retention-islr/print?branch_id={selectedBranch}&co_islr={rn.co_islr}"
+                          target="_blank"
+                          class="p-1 text-amber-600 hover:text-amber-500 hover:bg-amber-500/20 rounded-lg transition-all"
+                          title="Imprimir este Comprobante ISLR"
+                        >
+                          <Printer size={14} />
+                        </a>
                       </div>
                     </div>
                   {/each}
