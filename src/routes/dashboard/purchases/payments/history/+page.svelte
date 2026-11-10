@@ -318,26 +318,6 @@
                     >
                       <Eye size={18} />
                     </button>
-                    {#if p.has_retencion_iva || (p.documentos_asociados && p.documentos_asociados.includes('IVAN'))}
-                      <a
-                        href="/dashboard/purchases/payments/{p.cob_num}/retention-iva/print?branch_id={selectedBranch}"
-                        target="_blank"
-                        class="p-2 text-emerald-500 hover:text-emerald-400 hover:bg-emerald-500/10 rounded-xl transition-all cursor-pointer inline-flex items-center justify-center"
-                        title="Imprimir Comprobante de Retención IVA"
-                      >
-                        <Printer size={18} />
-                      </a>
-                    {/if}
-                    {#if p.has_retencion_islr || (p.documentos_asociados && p.documentos_asociados.includes('ISLR'))}
-                      <a
-                        href="/dashboard/purchases/payments/{p.cob_num}/retention-islr/print?branch_id={selectedBranch}"
-                        target="_blank"
-                        class="p-2 text-amber-500 hover:text-amber-400 hover:bg-amber-500/10 rounded-xl transition-all cursor-pointer inline-flex items-center justify-center"
-                        title="Imprimir Comprobante de Retención ISLR"
-                      >
-                        <Receipt size={18} />
-                      </a>
-                    {/if}
                     {#if data.canEdit && !p.anulado}
                       <button 
                         onclick={() => openEditModal(p)}
