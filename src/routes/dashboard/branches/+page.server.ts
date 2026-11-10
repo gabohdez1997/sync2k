@@ -392,7 +392,6 @@ export const actions: Actions = {
         address,
         phone,
         logo_url: logoUrl,
-        seal_url: sealUrl,
         latitude,
         longitude,
         default_warehouse: defaultWarehouse,
@@ -411,17 +410,16 @@ export const actions: Actions = {
         const { data: current } = await supabaseAdmin.from('branches').select('*').eq('id', branchId).single();
         oldData = current;
 
+        if (current && 'seal_url' in current) {
+          payload.seal_url = sealUrl;
+        }
+
         let { error } = await supabaseAdmin
           .from('branches')
           .update(payload)
           .eq('id', branchId);
 
         // Reintento granular si falla por columna inexistente (default_seller o default_warehouse)
-        if (error && error.message.includes('seal_url')) {
-          delete payload.seal_url;
-          const retry = await supabaseAdmin.from('branches').update(payload).eq('id', branchId);
-          error = retry.error;
-        }
         if (error && error.message.includes('default_seller')) {
           console.warn('[BRANCHES] Reintentando actualización sin default_seller...');
           const { default_seller, ...safePayload } = payload;
