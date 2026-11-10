@@ -179,7 +179,7 @@
                     <div class="logistic-box">
                         <h3 class="section-title">Datos de Operación</h3>
                         <div class="info-row"><span class="label">Cond. Pago:</span><span class="val">{invoice.cond_des || invoice.co_cond || "CONTADO"}</span></div>
-                        <div class="info-row"><span class="label">Registrado:</span><span class="val">{invoice.co_us_in || "---"}</span></div>
+                        <div class="info-row"><span class="label">Registrado:</span><span class="val uppercase">{invoice.user_name || invoice.co_us_in || "---"}</span></div>
                         <div class="info-row"><span class="label">Sucursal:</span><span class="val">{branch.name || "---"}</span></div>
                         {#if invoice.anulado}
                             <div class="info-row mt-1"><span class="label">Estatus:</span><span class="val text-red-600 font-black">ANULADO</span></div>
@@ -393,3 +393,4 @@
         @page { size: letter; margin: 0; }
     }
 </style>
+

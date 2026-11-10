@@ -20,7 +20,10 @@
     X,
     Receipt,
     Trash2,
-    Printer
+    Printer,
+    ArrowUpDown,
+    ArrowUp,
+    ArrowDown
   } from "lucide-svelte";
   import { goto } from "$app/navigation";
   import { page } from "$app/stores";
@@ -74,6 +77,28 @@
     filterFecD = data.filters?.fec_d || "";
     filterFecH = data.filters?.fec_h || "";
   });
+
+  // Estado de Ordenamiento (del lado servidor)
+  let sortBy = $derived(data.filters?.order_by || "fec_emis");
+  let sortAsc = $derived((data.filters?.order_dir || "DESC").toUpperCase() === "ASC");
+
+  function toggleSort(col: string) {
+    const params = new URLSearchParams($page.url.searchParams);
+    const currentOrder = data.filters?.order_by || "fec_emis";
+    const currentDir = (data.filters?.order_dir || "DESC").toUpperCase();
+
+    let nextDir = "DESC";
+    if (currentOrder === col) {
+      nextDir = currentDir === "ASC" ? "DESC" : "ASC";
+    } else {
+      nextDir = ["proveedor", "doc_num", "registrado", "estatus"].includes(col) ? "ASC" : "DESC";
+    }
+
+    params.set("order_by", col);
+    params.set("order_dir", nextDir);
+    params.set("page", "1");
+    goto(`?${params.toString()}`);
+  }
 
   function applyFilters() {
     const params = new URLSearchParams($page.url.searchParams);
@@ -242,17 +267,160 @@
     <div class="overflow-x-auto">
       <table class="w-full text-left border-collapse">
         <thead>
-          <tr class="bg-surface-soft/50 border-b border-border-subtle">
-            <th class="px-6 py-5 text-xs font-black uppercase tracking-[0.1em] text-text-muted">Fecha Emisión</th>
-            <th class="px-6 py-5 text-xs font-black uppercase tracking-[0.1em] text-text-muted">N° Doc / Fiscal</th>
-            <th class="px-6 py-5 text-xs font-black uppercase tracking-[0.1em] text-text-muted">Proveedor</th>
-            <th class="px-6 py-5 text-xs font-black uppercase tracking-[0.1em] text-text-muted text-right">Monto Total</th>
-            <th class="px-6 py-5 text-xs font-black uppercase tracking-[0.1em] text-text-muted text-right">Saldo CxP</th>
+          <tr class="bg-surface-soft/50 border-b border-border-subtle text-xs font-black uppercase tracking-[0.1em] text-text-muted">
+            <!-- Fecha Emisión -->
+            <th class="px-6 py-5">
+              <button
+                type="button"
+                onclick={() => toggleSort("fec_emis")}
+                class="inline-flex items-center gap-1.5 hover:text-text-base transition-colors group/th cursor-pointer select-none"
+                title="Ordenar por Fecha de Emisión"
+              >
+                <span>Fecha Emisión</span>
+                {#if sortBy === 'fec_emis'}
+                  {#if sortAsc}
+                    <ArrowUp size={13} class="text-brand-500 shrink-0" />
+                  {:else}
+                    <ArrowDown size={13} class="text-brand-500 shrink-0" />
+                  {/if}
+                {:else}
+                  <ArrowUpDown size={13} class="opacity-30 group-hover/th:opacity-70 transition-opacity shrink-0" />
+                {/if}
+              </button>
+            </th>
+
+            <!-- N° Doc / Fiscal -->
+            <th class="px-6 py-5">
+              <button
+                type="button"
+                onclick={() => toggleSort("doc_num")}
+                class="inline-flex items-center gap-1.5 hover:text-text-base transition-colors group/th cursor-pointer select-none"
+                title="Ordenar por Número de Documento"
+              >
+                <span>N° Doc / Fiscal</span>
+                {#if sortBy === 'doc_num'}
+                  {#if sortAsc}
+                    <ArrowUp size={13} class="text-brand-500 shrink-0" />
+                  {:else}
+                    <ArrowDown size={13} class="text-brand-500 shrink-0" />
+                  {/if}
+                {:else}
+                  <ArrowUpDown size={13} class="opacity-30 group-hover/th:opacity-70 transition-opacity shrink-0" />
+                {/if}
+              </button>
+            </th>
+
+            <!-- Proveedor -->
+            <th class="px-6 py-5">
+              <button
+                type="button"
+                onclick={() => toggleSort("proveedor")}
+                class="inline-flex items-center gap-1.5 hover:text-text-base transition-colors group/th cursor-pointer select-none"
+                title="Ordenar por Proveedor"
+              >
+                <span>Proveedor</span>
+                {#if sortBy === 'proveedor'}
+                  {#if sortAsc}
+                    <ArrowUp size={13} class="text-brand-500 shrink-0" />
+                  {:else}
+                    <ArrowDown size={13} class="text-brand-500 shrink-0" />
+                  {/if}
+                {:else}
+                  <ArrowUpDown size={13} class="opacity-30 group-hover/th:opacity-70 transition-opacity shrink-0" />
+                {/if}
+              </button>
+            </th>
+
+            <!-- Monto Total -->
+            <th class="px-6 py-5 text-right">
+              <button
+                type="button"
+                onclick={() => toggleSort("monto")}
+                class="inline-flex items-center justify-end gap-1.5 w-full hover:text-text-base transition-colors group/th cursor-pointer select-none"
+                title="Ordenar por Monto Total"
+              >
+                <span>Monto Total</span>
+                {#if sortBy === 'monto'}
+                  {#if sortAsc}
+                    <ArrowUp size={13} class="text-brand-500 shrink-0" />
+                  {:else}
+                    <ArrowDown size={13} class="text-brand-500 shrink-0" />
+                  {/if}
+                {:else}
+                  <ArrowUpDown size={13} class="opacity-30 group-hover/th:opacity-70 transition-opacity shrink-0" />
+                {/if}
+              </button>
+            </th>
+
+            <!-- Saldo CxP -->
+            <th class="px-6 py-5 text-right">
+              <button
+                type="button"
+                onclick={() => toggleSort("saldo")}
+                class="inline-flex items-center justify-end gap-1.5 w-full hover:text-text-base transition-colors group/th cursor-pointer select-none"
+                title="Ordenar por Saldo CxP"
+              >
+                <span>Saldo CxP</span>
+                {#if sortBy === 'saldo'}
+                  {#if sortAsc}
+                    <ArrowUp size={13} class="text-brand-500 shrink-0" />
+                  {:else}
+                    <ArrowDown size={13} class="text-brand-500 shrink-0" />
+                  {/if}
+                {:else}
+                  <ArrowUpDown size={13} class="opacity-30 group-hover/th:opacity-70 transition-opacity shrink-0" />
+                {/if}
+              </button>
+            </th>
+
+            <!-- Registrado Por -->
             {#if data.canSeeOthers}
-              <th class="px-6 py-5 text-xs font-black uppercase tracking-[0.1em] text-text-muted text-center">Registrado Por</th>
+              <th class="px-6 py-5 text-center">
+                <button
+                  type="button"
+                  onclick={() => toggleSort("registrado")}
+                  class="inline-flex items-center justify-center gap-1.5 w-full hover:text-text-base transition-colors group/th cursor-pointer select-none"
+                  title="Ordenar por Registrado Por"
+                >
+                  <span>Registrado Por</span>
+                  {#if sortBy === 'registrado'}
+                    {#if sortAsc}
+                      <ArrowUp size={13} class="text-brand-500 shrink-0" />
+                    {:else}
+                      <ArrowDown size={13} class="text-brand-500 shrink-0" />
+                    {/if}
+                  {:else}
+                    <ArrowUpDown size={13} class="opacity-30 group-hover/th:opacity-70 transition-opacity shrink-0" />
+                  {/if}
+                </button>
+              </th>
             {/if}
-            <th class="px-6 py-5 text-xs font-black uppercase tracking-[0.1em] text-text-muted text-center">Estatus</th>
-            <th class="px-6 py-5 text-xs font-black uppercase tracking-[0.1em] text-text-muted text-center">Acciones</th>
+
+            <!-- Estatus -->
+            <th class="px-6 py-5 text-center">
+              <button
+                type="button"
+                onclick={() => toggleSort("estatus")}
+                class="inline-flex items-center justify-center gap-1.5 w-full hover:text-text-base transition-colors group/th cursor-pointer select-none"
+                title="Ordenar por Estatus"
+              >
+                <span>Estatus</span>
+                {#if sortBy === 'estatus'}
+                  {#if sortAsc}
+                    <ArrowUp size={13} class="text-brand-500 shrink-0" />
+                  {:else}
+                    <ArrowDown size={13} class="text-brand-500 shrink-0" />
+                  {/if}
+                {:else}
+                  <ArrowUpDown size={13} class="opacity-30 group-hover/th:opacity-70 transition-opacity shrink-0" />
+                {/if}
+              </button>
+            </th>
+
+            <!-- Acciones -->
+            <th class="px-6 py-5 text-center text-xs font-black uppercase tracking-[0.1em] text-text-muted">
+              Acciones
+            </th>
           </tr>
         </thead>
         <tbody class="divide-y divide-border-subtle/30">
@@ -339,11 +507,13 @@
                       Pagada
                     </span>
                   {:else}
-                    <div class="text-xs font-black text-amber-400 font-mono">
-                      ${(Number(invoice.saldo) / Number(invoice.tasa || 1)).toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    <div class="text-xs font-black text-amber-400">
+                      <span class="text-amber-400/70 text-[10px] font-medium mr-1">USD</span>
+                      {(Number(invoice.saldo) / Number(invoice.tasa || 1)).toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </div>
                     <div class="text-[10px] text-amber-400/70 font-semibold mt-0.5">
-                      Bs. {Number(invoice.saldo).toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      <span>Bs. </span>
+                      {Number(invoice.saldo).toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </div>
                   {/if}
                 </td>
@@ -477,28 +647,6 @@
           {/if}
         </div>
         <div class="flex items-center gap-2">
-          {#if selectedInvoiceDetail}
-            <a
-              href="/dashboard/purchases/invoices/{encodeURIComponent(selectedInvoiceDetail.doc_num)}/print?branch_id={selectedInvoiceDetail.sede_id || selectedInvoiceDetail._branch_id || filterSede || data.selectedBranchId}"
-              target="_blank"
-              class="h-9 px-3 rounded-xl bg-brand-500/10 hover:bg-brand-500/20 text-brand-500 flex items-center gap-1.5 transition-colors cursor-pointer text-xs font-bold"
-              title="Emitir / Imprimir PDF"
-            >
-              <Printer size={14} />
-              <span>Imprimir PDF</span>
-            </a>
-          {/if}
-          {#if data.canDelete && selectedInvoiceDetail}
-            <button
-              type="button"
-              onclick={() => openDeleteModal(selectedInvoiceDetail)}
-              class="h-9 px-3 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-400 flex items-center gap-1.5 transition-colors cursor-pointer text-xs font-bold"
-              title="Eliminar esta Factura de Compra"
-            >
-              <Trash2 size={14} />
-              <span>Eliminar</span>
-            </button>
-          {/if}
           <button
             type="button"
             onclick={() => (showDetailModal = false)}
@@ -571,13 +719,13 @@
                       {Number(r.cantidad).toFixed(2)} {r.unidad || r.co_uni}
                     </td>
                     <td class="px-4 py-2.5 text-right font-mono text-text-base font-semibold">
-                      ${Number(r.costo_om || (Number(r.costo) / Number(selectedInvoiceDetail.tasa || 1))).toFixed(2)}
+                      <span class="text-text-muted text-[10px] font-medium mr-1">USD</span>{Number(r.costo_om || (Number(r.costo) / Number(selectedInvoiceDetail.tasa || 1))).toFixed(2)}
                     </td>
                     <td class="px-4 py-2.5 text-center font-mono text-text-muted">
                       {Number(r.porc_imp).toFixed(0)}%
                     </td>
                     <td class="px-4 py-2.5 text-right font-mono font-bold text-brand-500">
-                      ${(Number(r.total_renglon) / Number(selectedInvoiceDetail.tasa || 1)).toFixed(2)}
+                      <span class="text-brand-500/70 text-[10px] font-medium mr-1">USD</span>{(Number(r.total_renglon) / Number(selectedInvoiceDetail.tasa || 1)).toFixed(2)}
                     </td>
                   </tr>
                 {/each}
@@ -590,21 +738,21 @@
             <div class="w-72 bg-surface-soft p-4 rounded-2xl border border-border-subtle space-y-2 text-xs">
               <div class="flex justify-between text-text-muted font-bold">
                 <span>Sub-Total:</span>
-                <span class="font-mono text-text-base">${(Number(selectedInvoiceDetail.total_bruto) / Number(selectedInvoiceDetail.tasa || 1)).toFixed(2)}</span>
+                <span class="font-mono text-text-base"><span class="text-text-muted text-[10px] font-medium mr-1">USD</span>{(Number(selectedInvoiceDetail.total_bruto) / Number(selectedInvoiceDetail.tasa || 1)).toFixed(2)}</span>
               </div>
               {#if Number(selectedInvoiceDetail.monto_desc_glob) > 0}
                 <div class="flex justify-between text-text-muted font-bold">
                   <span>Descuento:</span>
-                  <span class="font-mono text-red-500">-${(Number(selectedInvoiceDetail.monto_desc_glob) / Number(selectedInvoiceDetail.tasa || 1)).toFixed(2)}</span>
+                  <span class="font-mono text-red-500">-<span class="text-red-400 text-[10px] font-medium mr-1">USD</span>{(Number(selectedInvoiceDetail.monto_desc_glob) / Number(selectedInvoiceDetail.tasa || 1)).toFixed(2)}</span>
                 </div>
               {/if}
               <div class="flex justify-between text-text-muted font-bold">
                 <span>I.V.A:</span>
-                <span class="font-mono text-brand-500 font-bold">${(Number(selectedInvoiceDetail.monto_imp) / Number(selectedInvoiceDetail.tasa || 1)).toFixed(2)}</span>
+                <span class="font-mono text-brand-500 font-bold"><span class="text-brand-500/70 text-[10px] font-medium mr-1">USD</span>{(Number(selectedInvoiceDetail.monto_imp) / Number(selectedInvoiceDetail.tasa || 1)).toFixed(2)}</span>
               </div>
               <div class="border-t border-border-subtle pt-2 flex justify-between font-black text-sm">
                 <span>Total Neto:</span>
-                <span class="font-mono text-brand-500">${(Number(selectedInvoiceDetail.total_neto) / Number(selectedInvoiceDetail.tasa || 1)).toFixed(2)} USD</span>
+                <span class="font-mono text-brand-500"><span class="text-brand-500/70 text-xs font-medium mr-1">USD</span>{(Number(selectedInvoiceDetail.total_neto) / Number(selectedInvoiceDetail.tasa || 1)).toFixed(2)}</span>
               </div>
               <div class="text-right text-[10px] text-text-muted font-mono">
                 Bs. {Number(selectedInvoiceDetail.total_neto).toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}

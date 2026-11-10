@@ -38,6 +38,25 @@ export const load: PageServerLoad = protectLoad('pur_invoices', async ({ params,
             throw error(404, 'Factura de compra no encontrada.');
         }
 
+        // Consultar nombre completo del usuario que registró
+        if (invoice.co_us_in) {
+            try {
+                const userCode = String(invoice.co_us_in).trim();
+                const { data: profileData } = await supabaseAdmin
+                    .from('profiles')
+                    .select('full_name')
+                    .ilike('profit_user', userCode)
+                    .limit(1)
+                    .maybeSingle();
+
+                if (profileData?.full_name) {
+                    invoice.user_name = profileData.full_name;
+                }
+            } catch (err) {
+                console.warn('[PRINT-PURCHASE-INVOICE] Error resolving user profile:', err);
+            }
+        }
+
         // Sincronizar el membrete a la sede real del documento si difiere de la sucursal de consulta
         const docSede = invoice?.sede_id || invoice?.sede || invoice?._branch_id;
         if (docSede && String(docSede).toLowerCase() !== String(branch.id).toLowerCase()) {
@@ -67,3 +86,4 @@ export const load: PageServerLoad = protectLoad('pur_invoices', async ({ params,
         throw error(err.status || 500, err.message || 'Error interno al generar reporte de factura de compra.');
     }
 });
+

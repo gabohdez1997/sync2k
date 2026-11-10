@@ -9,13 +9,13 @@ import type { PageServerLoad } from './$types';
 export const load: PageServerLoad = protectLoad('pur_invoices', async ({ url, locals, fetch }) => {
     const profile = (locals as any).profile;
     const allowedBranches = profile.allowed_branches || [];
-    
+
     if (allowedBranches.length === 0) {
         return { invoices: [], branches: [], error: 'No tienes sucursales asignadas.' };
     }
 
     const urlBranchId = url.searchParams.get('branch_id');
-    const selectedBranch = urlBranchId 
+    const selectedBranch = urlBranchId
         ? allowedBranches.find((b: any) => b.id === urlBranchId)
         : allowedBranches[0];
 
@@ -24,7 +24,7 @@ export const load: PageServerLoad = protectLoad('pur_invoices', async ({ url, lo
     }
 
     const agentClient = new AgentClient(selectedBranch, profile, fetch);
-    
+
     const page = url.searchParams.get('page') || '1';
     const limit = url.searchParams.get('limit') || '20';
     const doc_num = url.searchParams.get('doc_num') || '';
@@ -33,7 +33,9 @@ export const load: PageServerLoad = protectLoad('pur_invoices', async ({ url, lo
     const search = url.searchParams.get('search') || '';
     const fec_d = url.searchParams.get('fec_d') || '';
     const fec_h = url.searchParams.get('fec_h') || '';
-    
+    const order_by = url.searchParams.get('order_by') || 'fec_emis';
+    const order_dir = url.searchParams.get('order_dir') || 'DESC';
+
     // Lógica de Permisos
     const canSeeOthers = hasPermission(profile, 'pur_invoices', 'others');
     const canVoid = hasPermission(profile, 'pur_invoices', 'void');
@@ -67,7 +69,9 @@ export const load: PageServerLoad = protectLoad('pur_invoices', async ({ url, lo
         search,
         co_us_in: co_us_in || '',
         fec_d,
-        fec_h
+        fec_h,
+        order_by,
+        order_dir
     });
 
     try {
@@ -121,7 +125,7 @@ export const load: PageServerLoad = protectLoad('pur_invoices', async ({ url, lo
             canVoid,
             canDelete,
             canCreate,
-            filters: { doc_num, co_prov, nro_fact, search, co_us_in, fec_d, fec_h }
+            filters: { doc_num, co_prov, nro_fact, search, co_us_in, fec_d, fec_h, order_by, order_dir }
         };
     } catch (e: any) {
         return {
