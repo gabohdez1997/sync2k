@@ -19,7 +19,8 @@
     Calendar,
     X,
     Receipt,
-    Trash2
+    Trash2,
+    Printer
   } from "lucide-svelte";
   import { goto } from "$app/navigation";
   import { page } from "$app/stores";
@@ -382,6 +383,16 @@
                       <Eye size={18} />
                     </button>
 
+                    <!-- Emitir / Imprimir PDF Factura de Compra -->
+                    <a
+                      href="/dashboard/purchases/invoices/{encodeURIComponent(invoice.doc_num)}/print?branch_id={invoice.sede_id || invoice._branch_id || filterSede || data.selectedBranchId}"
+                      target="_blank"
+                      class="p-2 text-text-muted hover:text-brand-500 hover:bg-brand-500/10 rounded-xl transition-all cursor-pointer flex items-center justify-center"
+                      title="Emitir / Imprimir PDF"
+                    >
+                      <Printer size={18} />
+                    </a>
+
                     <!-- Anular -->
                     {#if !invoice.anulado && data.canVoid}
                       <button
@@ -466,6 +477,17 @@
           {/if}
         </div>
         <div class="flex items-center gap-2">
+          {#if selectedInvoiceDetail}
+            <a
+              href="/dashboard/purchases/invoices/{encodeURIComponent(selectedInvoiceDetail.doc_num)}/print?branch_id={selectedInvoiceDetail.sede_id || selectedInvoiceDetail._branch_id || filterSede || data.selectedBranchId}"
+              target="_blank"
+              class="h-9 px-3 rounded-xl bg-brand-500/10 hover:bg-brand-500/20 text-brand-500 flex items-center gap-1.5 transition-colors cursor-pointer text-xs font-bold"
+              title="Emitir / Imprimir PDF"
+            >
+              <Printer size={14} />
+              <span>Imprimir PDF</span>
+            </a>
+          {/if}
           {#if data.canDelete && selectedInvoiceDetail}
             <button
               type="button"
