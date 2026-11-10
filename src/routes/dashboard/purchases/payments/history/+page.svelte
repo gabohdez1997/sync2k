@@ -652,23 +652,83 @@
           {/if}
 
           <!-- Retenciones de ISLR -->
-          {#if detailData.retenciones_islr && detailData.retenciones_islr.length > 0}
-            {@const uniqueRetIslr = (() => {
-              const factRenglones = (detailData.renglones || []).filter(r => r.co_tipo_doc !== 'IVAN' && r.co_tipo_doc !== 'ISLR');
+          {@const rawIslrItems = (() => {
+            let list = detailData.retenciones_islr || [];
+            if ((!list || list.length === 0) && detailData.renglones && detailData.renglones.length > 0) {
+              const facturasConIslr = detailData.renglones.filter((r: any) => 
+                Number(r.monto_retencion || 0) > 0 && r.co_tipo_doc !== 'IVAN' && r.co_tipo_doc !== 'ISLR'
+              );
+              const islrDoc = detailData.renglones.find((r: any) => r.co_tipo_doc === 'ISLR');
 
-              const list = detailData.retenciones_islr.map((rn) => {
+              if (facturasConIslr.length > 0) {
+                list = facturasConIslr.map((f: any, idx: number) => {
+                  const docBruto = Number(f.total_neto || f.mont_cob || 0);
+                  const retIslr = Number(f.monto_retencion || 0);
+                  const base = Number(f.total_bruto || (docBruto - (Number(f.monto_imp) || 0)) || docBruto);
+                  const porc = base > 0 ? Number(((retIslr / base) * 100).toFixed(2)) : 5.0;
+
+                  return {
+                    reng_num: idx + 1,
+                    co_islr: '084',
+                    islr_des: 'Pagos a Empresas Contratistas o Subcontratistas',
+                    monto: docBruto,
+                    monto_obj: base,
+                    monto_reten: retIslr,
+                    porc_retn: porc,
+                    sustraendo: 0,
+                    num_comprobante: islrDoc?.nro_doc || detailData.recibo || detailData.cob_num,
+                    nro_doc_islr: islrDoc?.nro_doc || '',
+                    fecha_documento: f.fec_emis || detailData.fecha,
+                    numero_control_documento: f.n_control || '---',
+                    nro_doc: f.nro_doc,
+                    nro_fact: f.nro_fact || f.nro_doc,
+                    co_tipo_doc: f.co_tipo_doc || 'FACT',
+                    monto_documento: docBruto,
+                    doc_descrip: 'Retención de ISLR'
+                  };
+                });
+              } else if (islrDoc) {
+                const retIslr = Number(islrDoc.mont_cob || 0);
+                list = [{
+                  reng_num: 1,
+                  co_islr: '084',
+                  islr_des: 'Pagos a Empresas Contratistas o Subcontratistas',
+                  monto: retIslr,
+                  monto_obj: retIslr,
+                  monto_reten: retIslr,
+                  porc_retn: 5.0,
+                  sustraendo: 0,
+                  num_comprobante: islrDoc.nro_doc,
+                  nro_doc_islr: islrDoc.nro_doc,
+                  fecha_documento: detailData.fecha,
+                  numero_control_documento: '---',
+                  nro_doc: islrDoc.nro_doc,
+                  nro_fact: '',
+                  co_tipo_doc: 'ISLR',
+                  monto_documento: retIslr,
+                  doc_descrip: 'Retención de ISLR'
+                }];
+              }
+            }
+            return list;
+          })()}
+          {#if rawIslrItems && rawIslrItems.length > 0}
+            {@const uniqueRetIslr = (() => {
+              const factRenglones = (detailData.renglones || []).filter((r: any) => r.co_tipo_doc !== 'IVAN' && r.co_tipo_doc !== 'ISLR');
+
+              const list = rawIslrItems.map((rn: any) => {
                 const rawDoc = (rn.nro_doc || '').trim();
                 const docCode = (rawDoc !== '0' && rawDoc !== '---') ? rawDoc : '';
 
-                let renglon = factRenglones.find((r) => 
+                let renglon = factRenglones.find((r: any) => 
                   (docCode && (r.nro_doc?.trim() === docCode || r.nro_fact?.trim() === docCode)) ||
                   (rn.rowguid_reng_cob && r.rowguid === rn.rowguid_reng_cob)
                 );
 
                 if (!renglon && docCode) {
-                  const islrRow = detailData.renglones?.find(r => r.co_tipo_doc === 'ISLR' && r.nro_doc?.trim() === docCode);
+                  const islrRow = detailData.renglones?.find((r: any) => r.co_tipo_doc === 'ISLR' && r.nro_doc?.trim() === docCode);
                   if (islrRow?.rowguid_reng_ori) {
-                    renglon = factRenglones.find(r => r.rowguid === islrRow.rowguid_reng_ori);
+                    renglon = factRenglones.find((r: any) => r.rowguid === islrRow.rowguid_reng_ori);
                   }
                 }
 
@@ -694,13 +754,13 @@
                 };
               });
 
-              let valid = list.filter((r) => r.hasFacturaOrDoc);
+              let valid = list.filter((r: any) => r.hasFacturaOrDoc);
               if (valid.length === 0 && list.length > 0) {
                 valid = list;
               }
 
               const seen = new Set();
-              return valid.filter((item) => {
+              return valid.filter((item: any) => {
                 const key = `${item.co_islr?.trim()}-${item.resolvedFactura || item.resolvedDoc || ''}-${Number(item.monto_reten || 0).toFixed(2)}`;
                 if (seen.has(key)) return false;
                 seen.add(key);
@@ -712,7 +772,7 @@
                 <div class="flex items-center justify-between">
                   <h4 class="text-xs font-black uppercase tracking-wider text-amber-600 dark:text-amber-400 flex items-center gap-2">
                     <Landmark size={14} />
-                    Retenciones de ISLR
+                    Comprobantes de Retención de ISLR
                   </h4>
                   <a
                     href="/dashboard/purchases/payments/{selectedPayment.cob_num}/retention-islr/print?branch_id={selectedBranch}"
@@ -730,7 +790,10 @@
                       : rn.resolvedDoc}
                     <div class="flex flex-wrap justify-between items-center py-1 border-b border-amber-500/10 last:border-0">
                       <div>
-                        <span class="font-mono font-black text-amber-600 dark:text-amber-400">Concepto: {rn.co_islr}</span>
+                        {#if rn.num_comprobante || rn.nro_doc_islr}
+                          <span class="font-mono font-black text-amber-600 dark:text-amber-400 mr-2">Comp: {rn.num_comprobante || rn.nro_doc_islr}</span>
+                        {/if}
+                        <span class="font-mono font-bold text-amber-600 dark:text-amber-400">Concepto: {rn.co_islr}</span>
                         <span class="text-text-muted ml-2">Porc: {rn.porc_retn}%</span>
                         {#if factDisplay}
                           <span class="text-text-muted ml-2">Factura: {factDisplay}</span>
