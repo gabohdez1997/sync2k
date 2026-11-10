@@ -44,6 +44,8 @@
   let isSaving = $state(false);
   let previewUrl = $state<string | null>(null);
   let fileInput: HTMLInputElement | null = $state(null);
+  let previewSealUrl = $state<string | null>(null);
+  let sealFileInput: HTMLInputElement | null = $state(null);
   let testingBranches = $state<Record<string, boolean>>({});
   let availableBranchIslrConcepts = $state<any[]>([]);
   let loadingBranchIslrConcepts = $state(false);
@@ -185,6 +187,7 @@
       address: "",
       phone: "",
       logo_url: "",
+      seal_url: "",
       latitude: null,
       longitude: null,
       default_warehouse: "",
@@ -197,6 +200,7 @@
       allowed_islr_concepts: [],
     };
     previewUrl = null;
+    previewSealUrl = null;
     islrFilterSearch = "";
     islrTabFilter = "7";
     availableBranchIslrConcepts = populateIslrConcepts(data.conceptosIslr || []);
@@ -301,6 +305,8 @@
       };
     }
     previewUrl = editingBranch.logo_url;
+    previewSealUrl = editingBranch.seal_url || editingBranch.sql_config?.seal_url || null;
+    editingBranch.seal_url = previewSealUrl || "";
     islrFilterSearch = "";
     islrTabFilter = "7";
     availableBranchIslrConcepts = populateIslrConcepts(data.conceptosIslr || []);
@@ -310,6 +316,14 @@
     }
   }
 
+
+  function handleSealFileChange(e: Event) {
+    const target = e.target as HTMLInputElement;
+    if (target.files && target.files[0]) {
+      const file = target.files[0];
+      previewSealUrl = URL.createObjectURL(file);
+    }
+  }
   function handleFileChange(e: Event) {
     const target = e.target as HTMLInputElement;
     if (target.files && target.files[0]) {
@@ -1283,80 +1297,159 @@
             </div>
           </div>
 
-          <div class="space-y-4">
-            <label
-              class="text-xs font-bold text-text-muted ml-1 flex items-center gap-2"
-            >
-              <Image size={14} /> Logo de la Sucursal
-            </label>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div class="space-y-4">
+              <label
+                class="text-xs font-bold text-text-muted ml-1 flex items-center gap-2"
+              >
+                <Image size={14} /> Logo de la Sucursal
+              </label>
 
-            <input
-              type="hidden"
-              name="logo_url"
-              value={editingBranch.logo_url || ""}
-            />
-
-            <div
-              class="relative group cursor-pointer"
-              onclick={() => fileInput?.click()}
-              onkeydown={(e) => e.key === "Enter" && fileInput?.click()}
-              role="button"
-              tabindex="0"
-            >
               <input
-                type="file"
-                name="logo_file"
-                accept="image/*"
-                class="hidden"
-                bind:this={fileInput}
-                onchange={handleFileChange}
+                type="hidden"
+                name="logo_url"
+                value={editingBranch.logo_url || ""}
               />
 
               <div
-                class="w-full h-40 bg-surface-soft border-2 border-dashed border-border-subtle rounded-[32px] flex flex-col items-center justify-center gap-4 group-hover:bg-surface-strong group-hover:border-brand-500/50 transition-all overflow-hidden relative"
+                class="relative group cursor-pointer"
+                onclick={() => fileInput?.click()}
+                onkeydown={(e) => e.key === "Enter" && fileInput?.click()}
+                role="button"
+                tabindex="0"
               >
-                {#if previewUrl}
-                  <img
-                    src={previewUrl}
-                    alt="Logo Preview"
-                    class="h-full w-full object-contain p-4 transition-opacity group-hover:opacity-60"
-                  />
-                  <div
-                    class="absolute inset-0 bg-slate-900/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity backdrop-blur-sm"
-                  >
-                    <div class="flex flex-col items-center gap-2">
-                      <Upload size={24} class="text-white" />
-                      <span
-                        class="text-xs font-bold text-white uppercase tracking-widest"
-                        >Cambiar Imagen</span
-                      >
-                    </div>
-                  </div>
-                {:else}
-                  <div
-                    class="h-16 w-16 rounded-full bg-surface-strong flex items-center justify-center text-text-muted group-hover:text-brand-500 group-hover:scale-110 transition-all"
-                  >
-                    <Upload size={24} />
-                  </div>
-                  <div class="text-center">
-                    <p class="text-sm font-bold text-text-muted">
-                      Haz clic para subir logo
-                    </p>
-                    <p
-                      class="text-[10px] uppercase font-black tracking-tighter text-text-muted/50 mt-1"
+                <input
+                  type="file"
+                  name="logo_file"
+                  accept="image/*"
+                  class="hidden"
+                  bind:this={fileInput}
+                  onchange={handleFileChange}
+                />
+
+                <div
+                  class="w-full h-40 bg-surface-soft border-2 border-dashed border-border-subtle rounded-[32px] flex flex-col items-center justify-center gap-4 group-hover:bg-surface-strong group-hover:border-brand-500/50 transition-all overflow-hidden relative"
+                >
+                  {#if previewUrl}
+                    <img
+                      src={previewUrl}
+                      alt="Logo Preview"
+                      class="h-full w-full object-contain p-4 transition-opacity group-hover:opacity-60"
+                    />
+                    <div
+                      class="absolute inset-0 bg-slate-900/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity backdrop-blur-sm"
                     >
-                      PNG, JPG o WebP hasta 1MB
-                    </p>
-                  </div>
-                {/if}
+                      <div class="flex flex-col items-center gap-2">
+                        <Upload size={24} class="text-white" />
+                        <span
+                          class="text-xs font-bold text-white uppercase tracking-widest"
+                          >Cambiar Imagen</span
+                        >
+                      </div>
+                    </div>
+                  {:else}
+                    <div
+                      class="h-16 w-16 rounded-full bg-surface-strong flex items-center justify-center text-text-muted group-hover:text-brand-500 group-hover:scale-110 transition-all"
+                    >
+                      <Upload size={24} />
+                    </div>
+                    <div class="text-center">
+                      <p class="text-sm font-bold text-text-muted">
+                        Haz clic para subir logo
+                      </p>
+                      <p
+                        class="text-[10px] uppercase font-black tracking-tighter text-text-muted/50 mt-1"
+                      >
+                        PNG, JPG o WebP hasta 1MB
+                      </p>
+                    </div>
+                  {/if}
+                </div>
               </div>
+
+              {#if !previewUrl && editingBranch.logo_url}
+                <p class="text-[10px] text-text-muted/60 italic ml-2">
+                  Cargando logo actual...
+                </p>
+              {/if}
             </div>
 
-            {#if !previewUrl && editingBranch.logo_url}
-              <p class="text-[10px] text-text-muted/60 italic ml-2">
-                Cargando logo actual...
-              </p>
-            {/if}
+            <!-- SELLO Y FIRMA DIGITAL (COMPROBANTES) -->
+            <div class="space-y-4">
+              <label
+                class="text-xs font-bold text-text-muted ml-1 flex items-center gap-2"
+              >
+                <ShieldCheck size={14} class="text-emerald-500" /> Sello y Firma Digital (Comprobantes)
+              </label>
+
+              <input
+                type="hidden"
+                name="seal_url"
+                value={editingBranch.seal_url || ""}
+              />
+
+              <div
+                class="relative group cursor-pointer"
+                onclick={() => sealFileInput?.click()}
+                onkeydown={(e) => e.key === "Enter" && sealFileInput?.click()}
+                role="button"
+                tabindex="0"
+              >
+                <input
+                  type="file"
+                  name="seal_file"
+                  accept="image/*"
+                  class="hidden"
+                  bind:this={sealFileInput}
+                  onchange={handleSealFileChange}
+                />
+
+                <div
+                  class="w-full h-40 bg-surface-soft border-2 border-dashed border-border-subtle rounded-[32px] flex flex-col items-center justify-center gap-4 group-hover:bg-surface-strong group-hover:border-emerald-500/50 transition-all overflow-hidden relative"
+                >
+                  {#if previewSealUrl}
+                    <img
+                      src={previewSealUrl}
+                      alt="Sello Preview"
+                      class="h-full w-full object-contain p-4 transition-opacity group-hover:opacity-60"
+                    />
+                    <div
+                      class="absolute inset-0 bg-slate-900/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity backdrop-blur-sm"
+                    >
+                      <div class="flex flex-col items-center gap-2">
+                        <Upload size={24} class="text-white" />
+                        <span
+                          class="text-xs font-bold text-white uppercase tracking-widest"
+                          >Cambiar Sello/Firma</span
+                        >
+                      </div>
+                    </div>
+                  {:else}
+                    <div
+                      class="h-16 w-16 rounded-full bg-surface-strong flex items-center justify-center text-text-muted group-hover:text-emerald-500 group-hover:scale-110 transition-all"
+                    >
+                      <Upload size={24} />
+                    </div>
+                    <div class="text-center">
+                      <p class="text-sm font-bold text-text-muted">
+                        Subir Sello y Firma
+                      </p>
+                      <p
+                        class="text-[10px] uppercase font-black tracking-tighter text-text-muted/50 mt-1"
+                      >
+                        PNG Transparente recomendado
+                      </p>
+                    </div>
+                  {/if}
+                </div>
+              </div>
+
+              {#if !previewSealUrl && editingBranch.seal_url}
+                <p class="text-[10px] text-text-muted/60 italic ml-2">
+                  Cargando sello actual...
+                </p>
+              {/if}
+            </div>
           </div>
         </div>
 

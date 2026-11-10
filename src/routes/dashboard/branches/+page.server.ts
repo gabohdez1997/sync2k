@@ -65,6 +65,7 @@ export const load: PageServerLoad = protectLoad('sec_branches', async ({ locals,
       const pDef = b.sql_config?.profit_defaults || {};
       return {
         ...b,
+        seal_url: b.seal_url || b.sql_config?.seal_url || null,
         allow_decimals_units: normalizeAllowDecimalsUnits(b.allow_decimals_units),
         default_zone: b.default_zone || pDef.default_zone || '01',
         default_client_type: b.default_client_type || pDef.default_client_type || '01',
@@ -185,6 +186,8 @@ export const actions: Actions = {
       const agentUrl = (formData.get('agent_url') as string)?.trim() || null;
       const agentToken = (formData.get('agent_token') as string)?.trim() || null;
       const logoFile = formData.get('logo_file') as File | null;
+      const sealFile = formData.get('seal_file') as File | null;
+      const rawSealUrl = (formData.get('seal_url') as string)?.trim();
 
       if (!name) return fail(400, { message: 'El nombre de la sucursal es requerido.' });
 
@@ -315,6 +318,65 @@ export const actions: Actions = {
 
         logoUrl = publicData.publicUrl;
       }
+      let sealUrl = rawSealUrl && rawSealUrl !== 'null' && rawSealUrl !== 'undefined' ? rawSealUrl : (sqlConfig?.seal_url || null);
+      if (sealFile && typeof sealFile === 'object' && sealFile.size > 0 && sealFile.name) {
+        const rawExt = (sealFile.name.split('.').pop() || 'png').toLowerCase().replace(/[^a-z0-9]/g, '') || 'png';
+        const safeBase =
+          sealFile.name
+            .replace(/\.[^/.]+$/, '')
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .replace(/[^a-zA-Z0-9_-]/g, '_')
+            .slice(0, 40) || 'seal';
+        const fileName = `${branchId || 'new'}_seal_${Date.now()}_${safeBase}.${rawExt}`;
+        const filePath = `branches/${fileName}`;
+
+        const mimeMap: Record<string, string> = {
+          webp: 'image/webp',
+          png: 'image/png',
+          jpg: 'image/jpeg',
+          jpeg: 'image/jpeg',
+          gif: 'image/gif',
+          svg: 'image/svg+xml'
+        };
+        const contentType = sealFile.type || mimeMap[rawExt] || 'application/octet-stream';
+        const fileBuffer = Buffer.from(await sealFile.arrayBuffer());
+
+        let { data: uploadData, error: uploadErr } = await supabaseAdmin.storage
+          .from('branding')
+          .upload(filePath, fileBuffer, {
+            upsert: true,
+            contentType
+          });
+
+        if (uploadErr && uploadErr.message?.toLowerCase().includes('not found')) {
+          await supabaseAdmin.storage.createBucket('branding', { public: true });
+          const retryUpload = await supabaseAdmin.storage
+            .from('branding')
+            .upload(filePath, fileBuffer, {
+              upsert: true,
+              contentType
+            });
+          uploadData = retryUpload.data;
+          uploadErr = retryUpload.error;
+        }
+
+        if (uploadErr) {
+          console.error('[STORAGE] Error subiendo sello de sucursal:', uploadErr.message);
+          return fail(400, { message: `No se pudo subir el sello (${uploadErr.message}).` });
+        }
+
+        const { data: publicData } = supabaseAdmin.storage
+          .from('branding')
+          .getPublicUrl(uploadData?.path || filePath);
+
+        sealUrl = publicData.publicUrl;
+      }
+
+      if (sqlConfig && typeof sqlConfig === 'object') {
+        sqlConfig.seal_url = sealUrl;
+      }
+
 
       const payload: any = {
         name,
@@ -330,6 +392,7 @@ export const actions: Actions = {
         address,
         phone,
         logo_url: logoUrl,
+        seal_url: sealUrl,
         latitude,
         longitude,
         default_warehouse: defaultWarehouse,
@@ -354,6 +417,11 @@ export const actions: Actions = {
           .eq('id', branchId);
 
         // Reintento granular si falla por columna inexistente (default_seller o default_warehouse)
+        if (error && error.message.includes('seal_url')) {
+          delete payload.seal_url;
+          const retry = await supabaseAdmin.from('branches').update(payload).eq('id', branchId);
+          error = retry.error;
+        }
         if (error && error.message.includes('default_seller')) {
           console.warn('[BRANCHES] Reintentando actualización sin default_seller...');
           const { default_seller, ...safePayload } = payload;

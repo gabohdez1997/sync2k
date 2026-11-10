@@ -6,7 +6,7 @@
   import { 
     Wallet, Search, Plus, Eye, X, Trash2, Pen,
     AlertCircle, RefreshCw, AlertTriangle, Building, CreditCard, Landmark, CheckCircle,
-    FileText, ChevronLeft, ChevronRight, Ban, Store, Lock, Check, Loader2, Clock, Receipt
+    FileText, ChevronLeft, ChevronRight, Ban, Store, Lock, Check, Loader2, Clock, Receipt, Printer
   } from 'lucide-svelte';
   import { fade } from 'svelte/transition';
   import { toast } from 'svelte-sonner';
@@ -318,6 +318,16 @@
                     >
                       <Eye size={18} />
                     </button>
+                    {#if p.has_retencion_iva || (p.documentos_asociados && p.documentos_asociados.includes('IVAN'))}
+                      <a
+                        href="/dashboard/purchases/payments/${p.cob_num}/retention-iva/print?branch_id=${selectedBranch}"
+                        target="_blank"
+                        class="p-2 text-emerald-500 hover:text-emerald-400 hover:bg-emerald-500/10 rounded-xl transition-all cursor-pointer inline-flex items-center justify-center"
+                        title="Imprimir Comprobante de Retención IVA"
+                      >
+                        <Printer size={18} />
+                      </a>
+                    {/if}
                     {#if data.canEdit && !p.anulado}
                       <button 
                         onclick={() => openEditModal(p)}
@@ -607,10 +617,20 @@
             })()}
             {#if uniqueRetIva.length > 0}
               <div class="space-y-2">
-                <h4 class="text-xs font-black uppercase tracking-wider text-emerald-600 dark:text-emerald-400 flex items-center gap-2">
-                  <CheckCircle size={14} />
-                  Comprobantes de Retención de IVA
-                </h4>
+                <div class="flex items-center justify-between">
+                  <h4 class="text-xs font-black uppercase tracking-wider text-emerald-600 dark:text-emerald-400 flex items-center gap-2">
+                    <CheckCircle size={14} />
+                    Comprobantes de Retención de IVA
+                  </h4>
+                  <a
+                    href="/dashboard/purchases/payments/${selectedPayment.cob_num}/retention-iva/print?branch_id=${selectedBranch}"
+                    target="_blank"
+                    class="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition-all shadow-sm active:scale-95 cursor-pointer"
+                  >
+                    <Printer size={13} />
+                    Imprimir Comprobante IVA
+                  </a>
+                </div>
                 <div class="bg-emerald-500/5 border border-emerald-500/20 rounded-2xl p-3 space-y-2 text-xs">
                   {#each uniqueRetIva as ri}
                     {@const factDisplay = ri.resolvedFactura 
@@ -621,8 +641,18 @@
                         <span class="font-mono font-black text-emerald-600 dark:text-emerald-400">Comp: {ri.num_comprobante}</span>
                         <span class="text-text-muted ml-2">Factura: {factDisplay}</span>
                       </div>
-                      <div class="font-mono font-bold text-emerald-700 dark:text-emerald-300">
-                        Retenido: Bs. {Number(ri.monto_ret_imp).toLocaleString('de-DE', {minimumFractionDigits: 2})} (Base: Bs. {Number(ri.base_imponible).toLocaleString('de-DE', {minimumFractionDigits: 2})})
+                      <div class="flex items-center gap-3">
+                        <div class="font-mono font-bold text-emerald-700 dark:text-emerald-300">
+                          Retenido: Bs. {Number(ri.monto_ret_imp).toLocaleString('de-DE', {minimumFractionDigits: 2})} (Base: Bs. {Number(ri.base_imponible).toLocaleString('de-DE', {minimumFractionDigits: 2})})
+                        </div>
+                        <a
+                          href="/dashboard/purchases/payments/${selectedPayment.cob_num}/retention-iva/print?branch_id=${selectedBranch}&comp=${ri.num_comprobante}"
+                          target="_blank"
+                          class="p-1 text-emerald-600 hover:text-emerald-500 hover:bg-emerald-500/20 rounded-lg transition-all"
+                          title="Imprimir este Comprobante"
+                        >
+                          <Printer size={14} />
+                        </a>
                       </div>
                     </div>
                   {/each}

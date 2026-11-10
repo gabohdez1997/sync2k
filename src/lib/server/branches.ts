@@ -39,6 +39,7 @@ export interface BranchRecord {
   address?: string | null;
   phone?: string | null;
   logo_url?: string | null;
+  seal_url?: string | null;
   agent_url: string | null;
   agent_token: string;
   profit_branch_code?: string;
@@ -168,6 +169,7 @@ export async function getActiveBranches(fetchFn?: typeof fetch): Promise<BranchR
           address: b.address || null,
           phone: b.phone || null,
           logo_url: b.logo_url || null,
+          seal_url: b.seal_url || b.sql_config?.seal_url || null,
           agent_url: b.agent_url,
           agent_token: b.agent_token,
           profit_branch_code: defaultCode,
@@ -244,7 +246,7 @@ export async function getBranchById(
     const supabaseAdmin = getSupabaseAdmin(fetchFn);
     const { data, error } = await supabaseAdmin
       .from('branches')
-      .select('id, name, business_name, rif, address, phone, logo_url, agent_url, agent_token, profit_branch_codes, profit_server_id, local_dns_alias, default_warehouse, allow_decimals_units, default_seller, active, sort_order')
+      .select('id, name, business_name, rif, address, phone, logo_url, agent_url, agent_token, profit_branch_codes, profit_server_id, local_dns_alias, default_warehouse, allow_decimals_units, default_seller, sql_config, active, sort_order')
       .or(`id.eq.${targetId},profit_server_id.eq.${targetId},name.eq.${targetId}`)
       .limit(1)
       .maybeSingle();
@@ -252,7 +254,8 @@ export async function getBranchById(
     if (!error && data) {
       return {
         ...data,
-        business_name: data.business_name || data.name
+        business_name: data.business_name || data.name,
+        seal_url: data.seal_url || data.sql_config?.seal_url || null
       } as BranchRecord;
     }
   } catch (e) {
@@ -293,7 +296,8 @@ export async function getBranchById(
         rif: foundAllowed.rif || null,
         address: foundAllowed.address || null,
         phone: foundAllowed.phone || null,
-        logo_url: foundAllowed.logo_url || null
+        logo_url: foundAllowed.logo_url || null,
+        seal_url: foundAllowed.seal_url || foundAllowed.sql_config?.seal_url || null
       } as BranchRecord;
     }
   }
