@@ -320,7 +320,7 @@
                     </button>
                     {#if p.has_retencion_iva || (p.documentos_asociados && p.documentos_asociados.includes('IVAN'))}
                       <a
-                        href="/dashboard/purchases/payments/${p.cob_num}/retention-iva/print?branch_id=${selectedBranch}"
+                        href="/dashboard/purchases/payments/{p.cob_num}/retention-iva/print?branch_id={selectedBranch}"
                         target="_blank"
                         class="p-2 text-emerald-500 hover:text-emerald-400 hover:bg-emerald-500/10 rounded-xl transition-all cursor-pointer inline-flex items-center justify-center"
                         title="Imprimir Comprobante de Retención IVA"
@@ -623,7 +623,7 @@
                     Comprobantes de Retención de IVA
                   </h4>
                   <a
-                    href="/dashboard/purchases/payments/${selectedPayment.cob_num}/retention-iva/print?branch_id=${selectedBranch}"
+                    href="/dashboard/purchases/payments/{selectedPayment.cob_num}/retention-iva/print?branch_id={selectedBranch}"
                     target="_blank"
                     class="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition-all shadow-sm active:scale-95 cursor-pointer"
                   >
@@ -646,7 +646,7 @@
                           Retenido: Bs. {Number(ri.monto_ret_imp).toLocaleString('de-DE', {minimumFractionDigits: 2})} (Base: Bs. {Number(ri.base_imponible).toLocaleString('de-DE', {minimumFractionDigits: 2})})
                         </div>
                         <a
-                          href="/dashboard/purchases/payments/${selectedPayment.cob_num}/retention-iva/print?branch_id=${selectedBranch}&comp=${ri.num_comprobante}"
+                          href="/dashboard/purchases/payments/{selectedPayment.cob_num}/retention-iva/print?branch_id={selectedBranch}&comp={ri.num_comprobante}"
                           target="_blank"
                           class="p-1 text-emerald-600 hover:text-emerald-500 hover:bg-emerald-500/20 rounded-lg transition-all"
                           title="Imprimir este Comprobante"

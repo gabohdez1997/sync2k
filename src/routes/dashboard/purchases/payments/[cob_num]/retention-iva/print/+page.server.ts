@@ -5,9 +5,10 @@ import { error } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
 
 export const load: PageServerLoad = protectLoad('pur_payments', async ({ params, url, locals, fetch }) => {
-    const { cob_num } = params;
+    const rawCob = params.cob_num || '';
+    const cob_num = rawCob.replace(/^\$+/, '').trim();
     const allowedBranches = locals.profile?.allowed_branches || [];
-    let branchId = url.searchParams.get('branch_id') || url.searchParams.get('sede');
+    let branchId = (url.searchParams.get('branch_id') || url.searchParams.get('sede') || '').replace(/^\$+/, '').trim();
 
     if (!cob_num) {
         throw error(400, 'Falta el número de pago.');
