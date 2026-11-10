@@ -26,7 +26,7 @@ export const GET: RequestHandler = async ({ params, url, locals, fetch }) => {
 			agent_api_key: branch.agent_token
 		}, profile, fetch);
 
-		const cleanCobNum = cob_num.trim();
+		const cleanCobNum = cob_num.replace(/^\$+/, '').trim();
 		const endpoint = `/pagos/${encodeURIComponent(cleanCobNum)}?sede=${encodeURIComponent(branch.id)}`;
 		const resData = await agentClient.request<any>(endpoint);
 
@@ -63,7 +63,7 @@ export const DELETE: RequestHandler = async ({ params, url, locals, fetch }) => 
 			agent_api_key: branch.agent_token
 		}, profile, fetch);
 
-		const cleanCobNum = cob_num.trim();
+		const cleanCobNum = cob_num.replace(/^\$+/, '').trim();
 		const endpoint = `/pagos/${encodeURIComponent(cleanCobNum)}/eliminar?sede=${encodeURIComponent(branch.id)}`;
 		const resData = await agentClient.request<any>(endpoint, { method: 'POST' });
 
