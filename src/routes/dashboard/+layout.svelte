@@ -53,6 +53,7 @@
     BarChart2,
     Inbox,
     Boxes,
+    BookOpen,
     Percent,
   } from "lucide-svelte";
   import { slide, fade } from "svelte/transition";
@@ -361,6 +362,13 @@
           href: "/dashboard/reports/sales-analysis",
           icon: ShoppingBag,
         },
+        {
+          id: "reports_sales_book",
+          label: "Libro de Ventas",
+          href: "/dashboard/reports/sales-book",
+          icon: BookOpen,
+        },
+
         {
           id: "reports_exchange_diff",
           label: "Diferencial Cambiario",

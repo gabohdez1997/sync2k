@@ -193,6 +193,13 @@
           onlyRead: true,
         },
         {
+          id: "reports_sales_book",
+          label: "Libro de Ventas",
+          hasOthers: false,
+          hasVoid: false,
+          onlyRead: true,
+        },
+        {
           id: "reports_vendor_performance",
           label: "Rendimiento de Vendedores",
           hasOthers: false,
