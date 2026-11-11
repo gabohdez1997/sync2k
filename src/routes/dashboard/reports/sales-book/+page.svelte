@@ -236,10 +236,21 @@
         const rawItems: any[] = data.reportData || [];
         if (!rawItems || rawItems.length === 0) return;
 
-        const comp = data.company || {};
-        const empName = comp.emp_des || (data.selectedBranch?.name ?? "EMPRESA");
-        const empRif = comp.rif || "";
-        const empDir = comp.direc || "";
+        const comp: any = data.company || {};
+        const branchConfig: any = (data.selectedBranch && data.selectedBranch.id !== 'all')
+            ? data.selectedBranch
+            : (data.branches?.[0] || {});
+
+        const empName = (branchConfig.business_name && branchConfig.business_name.trim())
+            || (comp.emp_des && comp.emp_des.trim())
+            || branchConfig.name
+            || (data.selectedBranch?.name ?? "EMPRESA");
+        const empRif = (branchConfig.rif && branchConfig.rif.trim())
+            || (comp.rif && comp.rif.trim())
+            || "";
+        const empDir = (branchConfig.address && branchConfig.address.trim())
+            || (comp.direc && comp.direc.trim())
+            || "";
 
         // Encabezado institucional
         const rows: any[][] = [

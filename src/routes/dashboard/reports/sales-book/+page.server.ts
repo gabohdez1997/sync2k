@@ -1,6 +1,7 @@
 // src/routes/dashboard/reports/sales-book/+page.server.ts
 import { protectLoad } from '$lib/server/permissions';
 import { AgentClient } from '$lib/server/agent';
+import { getActiveBranches } from '$lib/server/branches';
 import type { PageServerLoad } from './$types';
 
 export const load: PageServerLoad = protectLoad('reports_sales_book', async (event: any) => {
@@ -33,14 +34,30 @@ export const load: PageServerLoad = protectLoad('reports_sales_book', async (eve
         }
     }
 
-    const allowedBranches = profile.allowed_branches || [];
-    if (allowedBranches.length === 0) {
+    const profileAllowed = profile.allowed_branches || [];
+    if (profileAllowed.length === 0) {
         return {
             startDate, endDate, branchId,
             branches: [],
             error: 'No tienes sucursales asignadas.'
         };
     }
+
+    // Obtener detalles completos de configuración de sucursales (business_name, rif, address, etc.)
+    const allDbBranches = await getActiveBranches(fetch);
+    const dbBranchMap = new Map(allDbBranches.map(b => [b.id, b]));
+
+    const allowedBranches = profileAllowed.map((pb: any) => {
+        const full = dbBranchMap.get(pb.id);
+        return {
+            ...pb,
+            name: full?.name || pb.name,
+            business_name: full?.business_name || pb.business_name || '',
+            rif: full?.rif || pb.rif || '',
+            address: full?.address || pb.address || '',
+            phone: full?.phone || pb.phone || ''
+        };
+    });
 
     // Si hay más de 1 sucursal, por defecto podemos consultar "all" (Unificado) o la primera
     const hasMultipleBranches = allowedBranches.length > 1;
@@ -177,6 +194,18 @@ export const load: PageServerLoad = protectLoad('reports_sales_book', async (eve
         const hasReporteZ = mergedDocs.some(d => d.reporte_z && String(d.reporte_z).trim() !== '');
         const hasSerialImp = mergedDocs.some(d => d.serial_imp && String(d.serial_imp).trim() !== '');
 
+        const primaryBranch = allowedBranches[0] || {};
+        const compEmpDes = (primaryBranch.business_name && primaryBranch.business_name.trim())
+            || (primaryCompany?.emp_des && primaryCompany.emp_des.trim())
+            || primaryBranch.name
+            || 'EMPRESA';
+        const compRif = (primaryBranch.rif && primaryBranch.rif.trim())
+            || (primaryCompany?.rif && primaryCompany.rif.trim())
+            || '';
+        const compDirec = (primaryBranch.address && primaryBranch.address.trim())
+            || (primaryCompany?.direc && primaryCompany.direc.trim())
+            || '';
+
         return {
             startDate,
             endDate,
@@ -184,10 +213,10 @@ export const load: PageServerLoad = protectLoad('reports_sales_book', async (eve
             selectedBranch: { id: 'all', name: 'Todas las Sedes (Unificado)' },
             branches: allowedBranches,
             hasMultipleBranches,
-            company: primaryCompany || {
-                emp_des: 'REPORTE CONSOLIDADO DE SEDES',
-                rif: '',
-                direc: ''
+            company: {
+                emp_des: compEmpDes,
+                rif: compRif,
+                direc: compDirec
             },
             kpis: {
                 total_ventas: Math.round(totalVentas * 100) / 100,
@@ -240,6 +269,23 @@ export const load: PageServerLoad = protectLoad('reports_sales_book', async (eve
         );
 
         const resData = response as any;
+        const compEmpDes = (selectedBranch?.business_name && selectedBranch.business_name.trim())
+            || (resData?.company?.emp_des && resData.company.emp_des.trim())
+            || selectedBranch?.name
+            || 'EMPRESA';
+        const compRif = (selectedBranch?.rif && selectedBranch.rif.trim())
+            || (resData?.company?.rif && resData.company.rif.trim())
+            || '';
+        const compDirec = (selectedBranch?.address && selectedBranch.address.trim())
+            || (resData?.company?.direc && resData.company.direc.trim())
+            || '';
+
+        const companyInfo = {
+            emp_des: compEmpDes,
+            rif: compRif,
+            direc: compDirec
+        };
+
         if (resData && resData.success) {
             return {
                 startDate,
@@ -248,11 +294,7 @@ export const load: PageServerLoad = protectLoad('reports_sales_book', async (eve
                 selectedBranch,
                 branches: allowedBranches,
                 hasMultipleBranches,
-                company: resData.company || {
-                    emp_des: selectedBranch.business_name || selectedBranch.name,
-                    rif: selectedBranch.rif || '',
-                    direc: selectedBranch.address || ''
-                },
+                company: companyInfo,
                 kpis: resData.kpis || {},
                 reportData: (resData.data || []).map((doc: any) => ({
                     ...doc,
@@ -267,11 +309,7 @@ export const load: PageServerLoad = protectLoad('reports_sales_book', async (eve
                 selectedBranch,
                 branches: allowedBranches,
                 hasMultipleBranches,
-                company: {
-                    emp_des: selectedBranch.business_name || selectedBranch.name,
-                    rif: selectedBranch.rif || '',
-                    direc: selectedBranch.address || ''
-                },
+                company: companyInfo,
                 kpis: {},
                 reportData: [],
                 error: resData?.message || 'Error al obtener datos del Libro de Ventas.'
