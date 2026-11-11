@@ -45,10 +45,10 @@ export const load: PageServerLoad = protectLoad('reports_sales_book', async (eve
 
     // Obtener detalles completos de configuración de sucursales (business_name, rif, address, etc.)
     const allDbBranches = await getActiveBranches(fetch);
-    const dbBranchMap = new Map(allDbBranches.map(b => [b.id, b]));
+    const dbBranchMap = new Map<string, any>(allDbBranches.map((b: any) => [b.id, b]));
 
     const allowedBranches = profileAllowed.map((pb: any) => {
-        const full = dbBranchMap.get(pb.id);
+        const full: any = dbBranchMap.get(pb.id);
         return {
             ...pb,
             name: full?.name || pb.name,

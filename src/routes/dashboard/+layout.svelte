@@ -54,6 +54,7 @@
     Inbox,
     Boxes,
     BookOpen,
+    BookMarked,
     Percent,
   } from "lucide-svelte";
   import { slide, fade } from "svelte/transition";
@@ -367,6 +368,12 @@
           label: "Libro de Ventas",
           href: "/dashboard/reports/sales-book",
           icon: BookOpen,
+        },
+        {
+          id: "reports_purchases_book",
+          label: "Libro de Compras",
+          href: "/dashboard/reports/purchases-book",
+          icon: BookMarked,
         },
 
         {

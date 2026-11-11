@@ -200,6 +200,13 @@
           onlyRead: true,
         },
         {
+          id: "reports_purchases_book",
+          label: "Libro de Compras",
+          hasOthers: false,
+          hasVoid: false,
+          onlyRead: true,
+        },
+        {
           id: "reports_vendor_performance",
           label: "Rendimiento de Vendedores",
           hasOthers: false,
