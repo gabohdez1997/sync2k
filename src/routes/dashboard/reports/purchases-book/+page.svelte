@@ -33,6 +33,7 @@
     let startDate = $state(data.startDate);
     let endDate = $state(data.endDate);
     let selectedBranch = $state(data.branchId);
+    let onlyWithRetentions = $state(data.onlyWithRetentions !== false);
 
     // Filtros locales
     let searchTerm = $state("");
@@ -46,6 +47,7 @@
         startDate = data.startDate;
         endDate = data.endDate;
         selectedBranch = data.branchId;
+        onlyWithRetentions = data.onlyWithRetentions !== false;
     });
 
     // Opciones de sucursales
@@ -109,6 +111,7 @@
         if (startDate) params.set("startDate", startDate);
         if (endDate) params.set("endDate", endDate);
         if (selectedBranch) params.set("branch_id", selectedBranch);
+        params.set("onlyWithRetentions", String(onlyWithRetentions));
         await goto(`?${params.toString()}`);
         isSyncing = false;
     }
@@ -200,14 +203,7 @@
             totalExento += Number(item.compras_exentas || 0);
             totalBaseGeneral += Number(item.base_general || 0);
             totalCreditoGeneral += Number(item.imp_general || 0);
-
-            if (hasSeparateRetRows) {
-                if (item.tipo_doc === "RET/IVA") {
-                    totalIvaRetenido += Number(item.iva_retenido || 0);
-                }
-            } else {
-                totalIvaRetenido += Number(item.iva_retenido || 0);
-            }
+            totalIvaRetenido += Number(item.iva_retenido || 0);
         }
 
         return {
@@ -251,10 +247,10 @@
             [], // Fila en blanco
         ];
 
-        // Fila de encabezados de la tabla (conforme a SENIAT y a las imágenes de referencia)
+        // Fila de encabezados de la tabla (conforme a SENIAT y a las imágenes de referencia del usuario)
         const headerRow: string[] = [
             "Oper. Nro.",
-            "Fecha",
+            "Fecha Libro / Pago",
             "Tipo Doc",
             ...(data.hasMultipleBranches ? ["Sede"] : []),
             "RIF Proveedor",
@@ -271,8 +267,9 @@
             "Base Imponible General (16%)",
             "% Alícuota",
             "Impuesto IVA (Crédito Fiscal 16%)",
-            "Fecha Emisión Retención",
+            "Fecha de Emisión Factura",
             "Nro. Comp. Retención IVA",
+            "Fecha Emisión Retención",
             "IVA Retenido al Proveedor",
         ];
         rows.push(headerRow);
@@ -281,14 +278,8 @@
         for (const item of rawItems) {
             const isAnulada = Number(item.anulado) === 1 || String(item.status) === "3";
             const isRetRow = item.tipo_doc === "RET/IVA";
-            const rowIvaRetenido = isAnulada
-                ? 0
-                : (hasSeparateRetRows && !isRetRow)
-                    ? 0
-                    : Number(item.iva_retenido || 0);
-            const compIva = (hasSeparateRetRows && !isRetRow)
-                ? ""
-                : (item.num_comprobante_iva || "");
+            const rowIvaRetenido = isAnulada ? 0 : Number(item.iva_retenido || 0);
+            const compIva = item.num_comprobante_iva || "";
 
             const rowData: any[] = [
                 item.oper_nro,
@@ -309,8 +300,9 @@
                 isAnulada ? 0 : Number(item.base_general || 0),
                 isAnulada ? "0%" : "16,00%",
                 isAnulada ? 0 : Number(item.imp_general || 0),
-                item.fec_emis_ret ? formatDate(item.fec_emis_ret) : "",
+                item.fec_factura ? formatDate(item.fec_factura) : formatDate(item.fec_emis),
                 compIva,
+                item.fec_emis_ret ? formatDate(item.fec_emis_ret) : "",
                 rowIvaRetenido,
             ];
             rows.push(rowData);
@@ -458,6 +450,20 @@
                     >
                         <RefreshCw size={13} class={isSyncing ? "animate-spin" : ""} />
                         <span>Filtrar</span>
+                    </button>
+
+                    <!-- Toggle Solo facturas con retención / pagadas -->
+                    <button
+                        type="button"
+                        onclick={() => {
+                            onlyWithRetentions = !onlyWithRetentions;
+                            applyFilters();
+                        }}
+                        class="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all border cursor-pointer {onlyWithRetentions ? 'bg-amber-500/15 border-amber-500/30 text-amber-600 dark:text-amber-400 shadow-xs' : 'bg-surface-sunken border-border-subtle text-text-muted hover:text-text-primary'}"
+                        title="Filtra solo las facturas que tienen retención de IVA aplicada o fueron pagadas en el período"
+                    >
+                        <ShieldCheck size={14} class={onlyWithRetentions ? "text-amber-500" : "text-text-muted"} />
+                        <span>Solo con retención</span>
                     </button>
                 </div>
             </div>
@@ -687,7 +693,14 @@
                             {@const isAnulada = Number(row.anulado) === 1 || String(row.status) === "3"}
                             <tr class="hover:bg-surface-sunken/50 transition-colors {isAnulada ? 'bg-red-500/5 text-red-600 dark:text-red-400' : ''}">
                                 <td class="py-2.5 px-3 font-mono font-bold text-text-muted">{row.oper_nro}</td>
-                                <td class="py-2.5 px-3 font-mono">{formatDate(row.fec_emis)}</td>
+                                <td class="py-2.5 px-3 font-mono">
+                                    <div class="font-bold">{formatDate(row.fec_emis)}</div>
+                                    {#if row.fec_factura && formatDate(row.fec_factura) !== formatDate(row.fec_emis)}
+                                        <div class="text-[9px] text-text-muted font-sans" title="Fecha emisión factura">
+                                            Fac: {formatDate(row.fec_factura)}
+                                        </div>
+                                    {/if}
+                                </td>
                                 <td class="py-2.5 px-2 text-center">
                                     {#if isAnulada}
                                         <span class="px-1.5 py-0.5 rounded-md text-[9px] font-black uppercase bg-red-500/15 text-red-600 border border-red-500/30">
@@ -748,11 +761,11 @@
                                 <td class="py-2.5 px-3 text-right font-mono font-bold text-indigo-600 dark:text-indigo-400 {isAnulada ? 'line-through opacity-50' : ''}">
                                     {formatBs(row.imp_general)}
                                 </td>
-                                <td class="py-2.5 px-3 text-right font-mono font-bold text-amber-600 dark:text-amber-400 {isAnulada ? 'line-through opacity-50' : ''}">
-                                    {formatBs(hasSeparateRetRows && row.tipo_doc !== 'RET/IVA' ? 0 : row.iva_retenido)}
+                                <td class="py-2.5 px-3 text-right font-mono font-bold {isAnulada ? 'line-through opacity-50' : Number(row.iva_retenido) > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-text-muted'}">
+                                    {formatBs(row.iva_retenido)}
                                 </td>
                                 <td class="py-2.5 px-3 font-mono text-[10px] text-text-muted truncate max-w-[130px]" title={row.num_comprobante_iva}>
-                                    {(hasSeparateRetRows && row.tipo_doc !== 'RET/IVA') ? '---' : (row.num_comprobante_iva || '---')}
+                                    {row.num_comprobante_iva || '---'}
                                 </td>
                             </tr>
                         {/each}
@@ -919,3 +932,4 @@
         </div>
     </div>
 </div>
+

@@ -16,6 +16,7 @@ export const load: PageServerLoad = protectLoad('reports_purchases_book', async 
     let startDate = url.searchParams.get('startDate') || url.searchParams.get('desde') || '';
     let endDate = url.searchParams.get('endDate') || url.searchParams.get('hasta') || '';
     let branchId = url.searchParams.get('branch_id') || url.searchParams.get('sede_id') || url.searchParams.get('sede') || '';
+    let onlyWithRetentions = url.searchParams.get('onlyWithRetentions') !== 'false';
 
     // Fechas por defecto: Quincena actual del mes en curso
     if (!startDate || !endDate) {
@@ -37,7 +38,7 @@ export const load: PageServerLoad = protectLoad('reports_purchases_book', async 
     const profileAllowed = profile.allowed_branches || [];
     if (profileAllowed.length === 0) {
         return {
-            startDate, endDate, branchId,
+            startDate, endDate, branchId, onlyWithRetentions,
             branches: [],
             error: 'No tienes sucursales asignadas.'
         };
@@ -81,7 +82,7 @@ export const load: PageServerLoad = protectLoad('reports_purchases_book', async 
         const distinctAgents = Array.from(agentMap.values());
         if (distinctAgents.length === 0) {
             return {
-                startDate, endDate, branchId,
+                startDate, endDate, branchId, onlyWithRetentions,
                 branches: allowedBranches,
                 hasMultipleBranches,
                 error: 'Ninguna de tus sedes asignadas tiene agente configurado.'
@@ -97,7 +98,7 @@ export const load: PageServerLoad = protectLoad('reports_purchases_book', async 
 
             try {
                 const res = await client.request<any>(
-                    `/reportes/libro-compras?sede=all&startDate=${startDate}&endDate=${endDate}`,
+                    `/reportes/libro-compras?sede=all&startDate=${startDate}&endDate=${endDate}&onlyWithRetentions=${onlyWithRetentions}`,
                     { method: 'GET' }
                 );
                 return { branch, res };
@@ -159,8 +160,6 @@ export const load: PageServerLoad = protectLoad('reports_purchases_book', async 
         let cantRetenciones = 0;
         let cantAnuladas = 0;
 
-        const hasSeparateRetRows = mergedDocs.some(d => d.tipo_doc === 'RET/IVA');
-
         for (const doc of mergedDocs) {
             const isAnulada = Number(doc.anulado) === 1 || String(doc.status) === '3';
             if (isAnulada) {
@@ -181,14 +180,7 @@ export const load: PageServerLoad = protectLoad('reports_purchases_book', async 
             totalCreditoReducida += Number(doc.imp_reducida || 0);
             totalBaseAdicional += Number(doc.base_adicional || 0);
             totalCreditoAdicional += Number(doc.imp_adicional || 0);
-
-            if (hasSeparateRetRows) {
-                if (doc.tipo_doc === 'RET/IVA') {
-                    totalIvaRetenido += Number(doc.iva_retenido || 0);
-                }
-            } else {
-                totalIvaRetenido += Number(doc.iva_retenido || 0);
-            }
+            totalIvaRetenido += Number(doc.iva_retenido || 0);
         }
 
         const primaryBranch = allowedBranches[0] || {};
@@ -207,6 +199,7 @@ export const load: PageServerLoad = protectLoad('reports_purchases_book', async 
             startDate,
             endDate,
             branchId: 'all',
+            onlyWithRetentions,
             selectedBranch: { id: 'all', name: 'Todas las Sedes (Unificado)' },
             branches: allowedBranches,
             hasMultipleBranches,
@@ -242,7 +235,7 @@ export const load: PageServerLoad = protectLoad('reports_purchases_book', async 
     const selectedBranch = allowedBranches.find((b: any) => b.id === branchId) || allowedBranches[0];
     if (!selectedBranch || !selectedBranch.agent_url) {
         return {
-            startDate, endDate, branchId,
+            startDate, endDate, branchId, onlyWithRetentions,
             branches: allowedBranches,
             hasMultipleBranches,
             error: 'La sucursal seleccionada no tiene agente configurado.'
@@ -259,7 +252,7 @@ export const load: PageServerLoad = protectLoad('reports_purchases_book', async 
 
     try {
         const response = await agentClient.request<any>(
-            `/reportes/libro-compras?sede=${branchId}&startDate=${startDate}&endDate=${endDate}`,
+            `/reportes/libro-compras?sede=${branchId}&startDate=${startDate}&endDate=${endDate}&onlyWithRetentions=${onlyWithRetentions}`,
             { method: 'GET' }
         );
 
@@ -286,6 +279,7 @@ export const load: PageServerLoad = protectLoad('reports_purchases_book', async 
                 startDate,
                 endDate,
                 branchId,
+                onlyWithRetentions,
                 selectedBranch,
                 branches: allowedBranches,
                 hasMultipleBranches,
@@ -301,6 +295,7 @@ export const load: PageServerLoad = protectLoad('reports_purchases_book', async 
                 startDate,
                 endDate,
                 branchId,
+                onlyWithRetentions,
                 selectedBranch,
                 branches: allowedBranches,
                 hasMultipleBranches,
@@ -316,6 +311,7 @@ export const load: PageServerLoad = protectLoad('reports_purchases_book', async 
             startDate,
             endDate,
             branchId,
+            onlyWithRetentions,
             selectedBranch,
             branches: allowedBranches,
             hasMultipleBranches,
