@@ -106,8 +106,29 @@
   function getConceptosForSupplier(): any[] {
     const currentTab = getEffectiveSupplierTab();
     const list = data.conceptosIslr || [];
-    const filtered = list.filter((c: any) => String(c.co_tab || '').trim() === currentTab);
-    return filtered.length > 0 ? filtered : list;
+    const map = new Map<string, any>();
+
+    // 1. Primero agregamos los conceptos con la tasa del tabulador del proveedor
+    for (const c of list) {
+      const code = String(c.co_islr || '').trim();
+      if (!code) continue;
+      if (String(c.co_tab || '').trim() === currentTab) {
+        map.set(code, c);
+      }
+    }
+
+    // 2. Luego agregamos TODOS los demás conceptos del catálogo para que en pagos se vean todos
+    for (const c of list) {
+      const code = String(c.co_islr || '').trim();
+      if (!code) continue;
+      if (!map.has(code)) {
+        map.set(code, c);
+      }
+    }
+
+    return Array.from(map.values()).sort((a, b) =>
+      String(a.co_islr).localeCompare(String(b.co_islr), undefined, { numeric: true })
+    );
   }
 
   function resolveConceptValues(conceptObj: any, coIslr: string, currentTab: string) {
