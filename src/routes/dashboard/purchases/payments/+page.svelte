@@ -913,7 +913,7 @@
               }
             ],
             showIvaDetails: !yaTieneRetIva && retIvaBs > 0,
-            showIslrDetails: false,
+            showIslrDetails: !yaTieneRetIslr && (Boolean(doc.sujeto_obj_retenISLR_auto) || Boolean(selectedSupplier?.co_tab)),
             yaTieneRetIva,
             nro_comp_iva_previo: doc.nro_comp_iva ? doc.nro_comp_iva.trim() : "",
             monto_ret_iva_previo_bs: montoRetIvaPrevioBs,
