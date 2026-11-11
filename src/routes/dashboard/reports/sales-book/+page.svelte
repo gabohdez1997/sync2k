@@ -157,6 +157,11 @@
         return raw.some((i) => i.serial_imp && String(i.serial_imp).trim() !== "");
     });
 
+    const hasSeparateRetRows = $derived.by(() => {
+        const raw: any[] = data.reportData || [];
+        return raw.some((i) => i.tipo_doc === "RET/IVA");
+    });
+
     // Paginación
     const totalPages = $derived(Math.max(1, Math.ceil(filteredItems.length / pageSize)));
     const paginatedItems = $derived(
@@ -207,7 +212,14 @@
             totalExento += Number(item.ventas_exentas || 0);
             totalBaseGeneral += Number(item.base_general || 0);
             totalDebitoGeneral += Number(item.imp_general || 0);
-            totalIvaRetenido += Number(item.iva_retenido || 0);
+
+            if (hasSeparateRetRows) {
+                if (item.tipo_doc === "RET/IVA") {
+                    totalIvaRetenido += Number(item.iva_retenido || 0);
+                }
+            } else {
+                totalIvaRetenido += Number(item.iva_retenido || 0);
+            }
         }
 
         return {
@@ -269,6 +281,16 @@
         // Filas de datos
         for (const item of rawItems) {
             const isAnulada = Number(item.anulado) === 1 || String(item.status) === "3";
+            const isRetRow = item.tipo_doc === "RET/IVA";
+            const rowIvaRetenido = isAnulada
+                ? 0
+                : (hasSeparateRetRows && !isRetRow)
+                    ? 0
+                    : Number(item.iva_retenido || 0);
+            const compIva = (hasSeparateRetRows && !isRetRow)
+                ? ""
+                : (item.num_comprobante_iva || "");
+
             const rowData: any[] = [
                 item.oper_nro,
                 formatDate(item.fec_emis),
@@ -276,21 +298,21 @@
                 ...(data.hasMultipleBranches ? [item.sede_nombre || ""] : []),
                 item.rif || "",
                 isAnulada ? "ANULADA" : item.cli_des || "",
-                item.num_comprobante_iva || "",
+                compIva,
                 item.tipo_doc === "FAC" ? (item.comp_fiscal_desde || item.doc_num) : "",
                 item.tipo_doc === "ND" ? item.doc_num : "",
                 item.tipo_doc === "NC" ? item.doc_num : "",
                 item.n_control || "",
                 ...(hasReporteZ ? [item.reporte_z || ""] : []),
                 ...(hasSerialImp ? [item.serial_imp || ""] : []),
-                isAnulada ? "03-ANUL" : item.tipo_doc === "RET/IVA" ? "02-RET" : "01-REG",
+                isAnulada ? "03-ANUL" : isRetRow ? "02-RET" : "01-REG",
                 item.doc_afectado || "",
                 isAnulada ? 0 : Number(item.total_neto || 0),
                 isAnulada ? 0 : Number(item.ventas_exentas || 0),
                 isAnulada ? 0 : Number(item.base_general || 0),
                 isAnulada ? "0%" : "16,00%",
                 isAnulada ? 0 : Number(item.imp_general || 0),
-                isAnulada ? 0 : Number(item.iva_retenido || 0),
+                rowIvaRetenido,
             ];
             rows.push(rowData);
         }
@@ -744,10 +766,10 @@
                                     {formatBs(row.imp_general)}
                                 </td>
                                 <td class="py-2.5 px-3 text-right font-mono font-bold text-amber-600 dark:text-amber-400 {isAnulada ? 'line-through opacity-50' : ''}">
-                                    {formatBs(row.iva_retenido)}
+                                    {formatBs(hasSeparateRetRows && row.tipo_doc !== 'RET/IVA' ? 0 : row.iva_retenido)}
                                 </td>
                                 <td class="py-2.5 px-3 font-mono text-[10px] text-text-muted truncate max-w-[130px]" title={row.num_comprobante_iva}>
-                                    {row.num_comprobante_iva || "---"}
+                                    {(hasSeparateRetRows && row.tipo_doc !== 'RET/IVA') ? '---' : (row.num_comprobante_iva || '---')}
                                 </td>
                             </tr>
                         {/each}
