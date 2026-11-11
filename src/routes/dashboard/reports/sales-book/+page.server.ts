@@ -103,7 +103,7 @@ export const load: PageServerLoad = protectLoad('reports_sales_book', async (eve
                     for (const doc of res.data) {
                         mergedDocs.push({
                             ...doc,
-                            sede_nombre: doc.sede_nombre || branch.business_name || branch.name,
+                            sede_nombre: branch.name || doc.sede_nombre || branch.business_name,
                             sede_id: doc.sede_id || branch.id
                         });
                     }
@@ -254,7 +254,10 @@ export const load: PageServerLoad = protectLoad('reports_sales_book', async (eve
                     direc: selectedBranch.address || ''
                 },
                 kpis: resData.kpis || {},
-                reportData: resData.data || []
+                reportData: (resData.data || []).map((doc: any) => ({
+                    ...doc,
+                    sede_nombre: selectedBranch.name || doc.sede_nombre
+                }))
             };
         } else {
             return {

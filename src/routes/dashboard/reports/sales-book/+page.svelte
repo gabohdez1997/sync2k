@@ -701,7 +701,7 @@
                                     {/if}
                                 </td>
                                 {#if data.hasMultipleBranches}
-                                    <td class="py-2.5 px-3 text-text-muted text-[10px] font-bold max-w-[120px] truncate" title={row.sede_nombre}>
+                                    <td class="py-2.5 px-3 text-text-secondary text-[11px] font-bold whitespace-nowrap" title={row.sede_nombre}>
                                         {row.sede_nombre}
                                     </td>
                                 {/if}
