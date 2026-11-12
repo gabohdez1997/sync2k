@@ -382,14 +382,16 @@
     quoteDescription =
       `Ref: Cotización ${q.doc_num} - ` + String(q.descrip || "").trim();
 
-    // Validar que no se mezclen Flete y Corte
-    const hasFleteInQuote = selectedLines.some((r: any) => isFleteServiceItem(r));
-    const hasCorteInQuote = selectedLines.some((r: any) => isCorteOrService09Item(r));
-    if (hasFleteInQuote && hasCorteInQuote) {
-      toast.error(
-        "La cotización contiene servicios de Flete y Corte a la vez. No se pueden mezclar en un mismo pedido debido a que solo se permite un concepto de retención de ISLR por documento.",
-      );
-      return;
+    // Validar que no se mezclen Flete y Corte solo si el cliente es Contribuyente Especial
+    if (isContribuyenteEspecialClient(selectedClient)) {
+      const hasFleteInQuote = selectedLines.some((r: any) => isFleteServiceItem(r));
+      const hasCorteInQuote = selectedLines.some((r: any) => isCorteOrService09Item(r));
+      if (hasFleteInQuote && hasCorteInQuote) {
+        toast.error(
+          "El cliente es Contribuyente Especial y la cotización contiene servicios de Flete y Corte a la vez. No se pueden mezclar en un mismo pedido debido a la retención de ISLR.",
+        );
+        return;
+      }
     }
 
     // 3. Cargar Renglones Seleccionados al Carrito con datos de vinculación
@@ -969,24 +971,26 @@
     // Identify if it's a service (Linea 09 or code starts with 09)
     const isService = article.co_lin?.trim() === "09" || (co_art || "").startsWith("09");
 
-    // Validar que no se mezcle Flete (0901) con Corte (0902)
-    const addingFlete = isFleteServiceItem(article);
-    const addingCorte = isCorteOrService09Item(article);
+    // Validar que no se mezcle Flete (0901) con Corte (0902) solo para Contribuyentes Especiales
+    if (isContribuyenteEspecialClient(selectedClient)) {
+      const addingFlete = isFleteServiceItem(article);
+      const addingCorte = isCorteOrService09Item(article);
 
-    if (addingFlete && cart.some((i) => isCorteOrService09Item(i))) {
-      toast.error(
-        "No se puede agregar servicio de Flete: el pedido ya contiene servicio de Corte. En Profit Plus y en Cobros solo se permite un único concepto de ISLR por documento.",
-        { duration: 5000 }
-      );
-      return;
-    }
+      if (addingFlete && cart.some((i) => isCorteOrService09Item(i))) {
+        toast.error(
+          "El cliente es Contribuyente Especial: no se puede agregar servicio de Flete porque el pedido ya contiene servicio de Corte. En Profit Plus y en Cobros solo se permite un único concepto de ISLR por documento.",
+          { duration: 5000 }
+        );
+        return;
+      }
 
-    if (addingCorte && cart.some((i) => isFleteServiceItem(i))) {
-      toast.error(
-        "No se puede agregar servicio de Corte: el pedido ya contiene servicio de Flete. En Profit Plus y en Cobros solo se permite un único concepto de ISLR por documento.",
-        { duration: 5000 }
-      );
-      return;
+      if (addingCorte && cart.some((i) => isFleteServiceItem(i))) {
+        toast.error(
+          "El cliente es Contribuyente Especial: no se puede agregar servicio de Corte porque el pedido ya contiene servicio de Flete. En Profit Plus y en Cobros solo se permite un único concepto de ISLR por documento.",
+          { duration: 5000 }
+        );
+        return;
+      }
     }
 
     // Obtener almacén seleccionado
@@ -1181,6 +1185,7 @@
   }
 
   const hasConflictingServices = $derived(() => {
+    if (!isContribuyenteEspecialClient(selectedClient)) return false;
     const hasFlete = cart.some((i) => isFleteServiceItem(i));
     const hasCorte = cart.some((i) => isCorteOrService09Item(i));
     return hasFlete && hasCorte;
@@ -3104,9 +3109,9 @@
                 >
                   <AlertCircle size={22} class="shrink-0 text-red-400" />
                   <div>
-                    <p class="font-black uppercase tracking-wider text-[11px] text-red-300">Conflicto de servicios detectado</p>
+                    <p class="font-black uppercase tracking-wider text-[11px] text-red-300">Conflicto de servicios detectado (Contribuyente Especial)</p>
                     <p class="text-text-muted mt-0.5 leading-relaxed">
-                      Este pedido contiene servicios de <strong>Flete</strong> y <strong>Corte</strong> juntos. En Profit Plus y en Cobros solo se puede aplicar un único concepto de retención de ISLR por factura. Por favor elimine uno de los dos servicios para poder guardar el pedido.
+                      El cliente es Contribuyente Especial y este pedido contiene servicios de <strong>Flete</strong> y <strong>Corte</strong> juntos. En Profit Plus y en Cobros solo se puede aplicar un único concepto de retención de ISLR por factura. Por favor elimine uno de los dos servicios para poder guardar el pedido.
                     </p>
                   </div>
                 </div>
@@ -3157,6 +3162,8 @@
                         selectedClient.rif
                           .replace(/[^a-zA-Z0-9]/g, "")
                           .substring(0, 10),
+                      client: selectedClient,
+                      is_contribuyente_especial: isContribuyenteEspecialClient(selectedClient),
                       descrip: quoteDescription || "PEDIDO WEB",
                       comentario:
                         quoteDescription || "Pedido registrado vía portal web.",

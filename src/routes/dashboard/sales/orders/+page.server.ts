@@ -4,7 +4,7 @@ import { hasPermission } from '$lib/server/auth';
 import { logAction } from '$lib/server/audit';
 import { getActiveBranches } from '$lib/server/branches';
 import { supabaseAdmin } from '$lib/server/supabase';
-import { isPersonaNaturalClient, inferTipoPerFromRif, isFleteServiceItem, isCorteOrService09Item } from '$lib/retention-eligibility';
+import { isPersonaNaturalClient, inferTipoPerFromRif, isContribuyenteEspecialClient, isFleteServiceItem, isCorteOrService09Item } from '$lib/retention-eligibility';
 import { redirect, fail, type Actions } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
 
@@ -220,13 +220,14 @@ export const actions: Actions = {
 			if (isEdit && !hasPermission(profile, 'sales_orders', 'update')) return fail(403, { message: 'Sin permiso update' });
 			if (!isEdit && !hasPermission(profile, 'sales_orders', 'create')) return fail(403, { message: 'Sin permiso create' });
 
-			// Validar que no se mezclen servicios de Flete y Corte
-			if (Array.isArray(orderData.renglones)) {
+			// Validar que no se mezclen servicios de Flete y Corte solo para Contribuyentes Especiales
+			const isSpecialTaxpayer = isContribuyenteEspecialClient(orderData.client) || Boolean(orderData.is_contribuyente_especial);
+			if (isSpecialTaxpayer && Array.isArray(orderData.renglones)) {
 				const hasFlete = orderData.renglones.some((r: any) => isFleteServiceItem(r));
 				const hasCorte = orderData.renglones.some((r: any) => isCorteOrService09Item(r));
 				if (hasFlete && hasCorte) {
 					return fail(400, {
-						message: 'No se puede mezclar servicio de Flete con servicio de Corte en un mismo pedido. Debe facturarse en pedidos separados debido a la retención de ISLR.'
+						message: 'El cliente es Contribuyente Especial y no se puede mezclar servicio de Flete con servicio de Corte en un mismo pedido debido a la retención de ISLR.'
 					});
 				}
 			}

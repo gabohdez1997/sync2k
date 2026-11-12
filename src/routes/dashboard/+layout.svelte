@@ -22,6 +22,7 @@
     Key,
     Cpu,
     FileText,
+    FileSpreadsheet,
     ClipboardList,
     Receipt,
     Wallet,
@@ -285,6 +286,12 @@
           icon: Receipt,
         },
         {
+          id: "pur_documents",
+          label: "Documentos de Compra",
+          href: "/dashboard/purchases/documents",
+          icon: FileSpreadsheet,
+        },
+        {
           id: "pur_payments",
           label: "Pagos a Proveedores",
           href: "/dashboard/purchases/payments",
@@ -510,6 +517,7 @@
           'inv_dispatches',
           'pur_orders',
           'pur_invoices',
+          'pur_documents',
           'pur_payments'
         ];
         if (historyModules.includes(item.id)) {

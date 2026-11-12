@@ -117,6 +117,13 @@
           excludeUpdate: true,
         },
         {
+          id: "pur_documents",
+          label: "Documentos de Compra",
+          hasOthers: true,
+          hasVoid: true,
+          excludeUpdate: true,
+        },
+        {
           id: "pur_payments",
           label: "Pagos a Proveedores",
           hasOthers: true,
