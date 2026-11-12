@@ -17,7 +17,11 @@
     Calculator,
     AlertCircle,
     DollarSign,
-    CheckCircle2
+    CheckCircle2,
+    Percent,
+    Tag,
+    Receipt,
+    Sparkles
   } from "lucide-svelte";
   import { toast } from "svelte-sonner";
   import { goto } from "$app/navigation";
@@ -30,6 +34,7 @@
   let filterSede = $state("");
   let showUSD = $state(true);
   let activeTasa = $state(1);
+  let isFetchingRate = $state(false);
 
   $effect(() => {
     if (data.selectedBranchId) filterSede = data.selectedBranchId;
@@ -56,8 +61,13 @@
   });
 
   // Financial Amounts (entered according to showUSD)
-  let baseImponibleInput = $state<number>(0);
+  let montoBrutoInput = $state<number>(0);
+  let porcDescInput = $state<number>(0);
+  let montoDescInput = $state<number>(0);
+  let porcRecaInput = $state<number>(0);
+  let montoRecaInput = $state<number>(0);
   let montoExentoInput = $state<number>(0);
+  let otrosInput = $state<number>(0);
   let alicuotaIva = $state<number>(16);
   let customIvaOverride = $state<number | null>(null);
 
@@ -110,34 +120,106 @@
     }
   });
 
+  // Handlers for dynamic recalculation between % and Monto
+  function handleMontoBrutoChange() {
+    const bruto = Number(montoBrutoInput) || 0;
+    if (porcDescInput > 0) {
+      montoDescInput = Math.round(bruto * (porcDescInput / 100) * 100) / 100;
+    }
+    if (porcRecaInput > 0) {
+      montoRecaInput = Math.round(bruto * (porcRecaInput / 100) * 100) / 100;
+    }
+  }
+
+  function handlePorcDescChange() {
+    const bruto = Number(montoBrutoInput) || 0;
+    const porc = Number(porcDescInput) || 0;
+    montoDescInput = Math.round(bruto * (porc / 100) * 100) / 100;
+  }
+
+  function handleMontoDescChange() {
+    const bruto = Number(montoBrutoInput) || 0;
+    const desc = Number(montoDescInput) || 0;
+    porcDescInput = bruto > 0 ? Math.round((desc / bruto) * 10000) / 100 : 0;
+  }
+
+  function handlePorcRecaChange() {
+    const bruto = Number(montoBrutoInput) || 0;
+    const porc = Number(porcRecaInput) || 0;
+    montoRecaInput = Math.round(bruto * (porc / 100) * 100) / 100;
+  }
+
+  function handleMontoRecaChange() {
+    const bruto = Number(montoBrutoInput) || 0;
+    const reca = Number(montoRecaInput) || 0;
+    porcRecaInput = bruto > 0 ? Math.round((reca / bruto) * 10000) / 100 : 0;
+  }
+
+  function applyIgtf3() {
+    const baseSubject = calculatedTotals.totalSinImpuestoInput + (customIvaOverride !== null ? customIvaOverride : calculatedTotals.ivaInput);
+    const igtf = Math.round(baseSubject * 0.03 * 100) / 100;
+    if (Math.abs(otrosInput - igtf) < 0.01 && otrosInput > 0) {
+      otrosInput = 0;
+      toast.info("IGTF 3% removido.");
+    } else {
+      otrosInput = igtf;
+      toast.success(`IGTF 3% aplicado: ${showUSD ? '$' : 'Bs.'} ${igtf.toLocaleString("es-VE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
+    }
+  }
+
   // Financial Calculations
   const calculatedTotals = $derived.by(() => {
     const rate = Number(activeTasa || 1);
-    const base = Number(baseImponibleInput) || 0;
-    const exento = Number(montoExentoInput) || 0;
+    const brutoInput = Number(montoBrutoInput) || 0;
+    const descInput = Number(montoDescInput) || 0;
+    const recaInput = Number(montoRecaInput) || 0;
+    const exentoInput = Number(montoExentoInput) || 0;
+    const otrosInputVal = Number(otrosInput) || 0;
     const pIva = Number(alicuotaIva) || 0;
 
-    let baseUSD = 0;
-    let baseBS = 0;
-    let exentoUSD = 0;
-    let exentoBS = 0;
+    const totalSinImpuestoInput = Math.max(0, brutoInput - descInput + recaInput);
+
+    let brutoUSD = 0, brutoBS = 0;
+    let descUSD = 0, descBS = 0;
+    let recaUSD = 0, recaBS = 0;
+    let totalSinImpuestoUSD = 0, totalSinImpuestoBS = 0;
+    let exentoUSD = 0, exentoBS = 0;
+    let otrosUSD = 0, otrosBS = 0;
 
     if (showUSD) {
-      baseUSD = base;
-      baseBS = base * rate;
-      exentoUSD = exento;
-      exentoBS = exento * rate;
+      brutoUSD = brutoInput;
+      brutoBS = brutoInput * rate;
+      descUSD = descInput;
+      descBS = descInput * rate;
+      recaUSD = recaInput;
+      recaBS = recaInput * rate;
+      totalSinImpuestoUSD = totalSinImpuestoInput;
+      totalSinImpuestoBS = totalSinImpuestoInput * rate;
+      exentoUSD = exentoInput;
+      exentoBS = exentoInput * rate;
+      otrosUSD = otrosInputVal;
+      otrosBS = otrosInputVal * rate;
     } else {
-      baseBS = base;
-      baseUSD = rate > 0 ? base / rate : 0;
-      exentoBS = exento;
-      exentoUSD = rate > 0 ? exento / rate : 0;
+      brutoBS = brutoInput;
+      brutoUSD = rate > 0 ? brutoInput / rate : 0;
+      descBS = descInput;
+      descUSD = rate > 0 ? descInput / rate : 0;
+      recaBS = recaInput;
+      recaUSD = rate > 0 ? recaInput / rate : 0;
+      totalSinImpuestoBS = totalSinImpuestoInput;
+      totalSinImpuestoUSD = rate > 0 ? totalSinImpuestoInput / rate : 0;
+      exentoBS = exentoInput;
+      exentoUSD = rate > 0 ? exentoInput / rate : 0;
+      otrosBS = otrosInputVal;
+      otrosUSD = rate > 0 ? otrosInputVal / rate : 0;
     }
 
     let ivaUSD = 0;
     let ivaBS = 0;
+    let ivaInput = 0;
 
     if (customIvaOverride !== null && customIvaOverride >= 0) {
+      ivaInput = customIvaOverride;
       if (showUSD) {
         ivaUSD = customIvaOverride;
         ivaBS = customIvaOverride * rate;
@@ -146,21 +228,37 @@
         ivaUSD = rate > 0 ? customIvaOverride / rate : 0;
       }
     } else {
-      ivaUSD = baseUSD * (pIva / 100);
-      ivaBS = baseBS * (pIva / 100);
+      ivaUSD = totalSinImpuestoUSD * (pIva / 100);
+      ivaBS = totalSinImpuestoBS * (pIva / 100);
+      ivaInput = showUSD ? ivaUSD : ivaBS;
     }
 
-    const totalUSD = baseUSD + exentoUSD + ivaUSD;
-    const totalBS = baseBS + exentoBS + ivaBS;
+    const totalUSD = totalSinImpuestoUSD + exentoUSD + ivaUSD + otrosUSD;
+    const totalBS = totalSinImpuestoBS + exentoBS + ivaBS + otrosBS;
 
     return {
       rate,
-      baseUSD,
-      baseBS,
+      brutoInput,
+      descInput,
+      recaInput,
+      totalSinImpuestoInput,
+      exentoInput,
+      otrosInputVal,
+      ivaInput,
+      brutoUSD,
+      brutoBS,
+      descUSD,
+      descBS,
+      recaUSD,
+      recaBS,
+      totalSinImpuestoUSD,
+      totalSinImpuestoBS,
       exentoUSD,
       exentoBS,
       ivaUSD,
       ivaBS,
+      otrosUSD,
+      otrosBS,
       totalUSD,
       totalBS
     };
@@ -173,20 +271,53 @@
     goto(`?${params.toString()}`);
   }
 
+  // Fetch Exchange Rate from Agent
+  async function fetchExchangeRate() {
+    if (!filterSede) return;
+    isFetchingRate = true;
+    try {
+      const res = await fetch(`/api/agent/tasa?branch_id=${filterSede}`);
+      if (res.ok) {
+        const json = await res.json();
+        const newRate = Number(json.tasa || json.data?.tasa || 1);
+        if (newRate > 0) {
+          activeTasa = newRate;
+          toast.success(`Tasa cambiaria actualizada: Bs. ${newRate.toLocaleString("es-VE", { minimumFractionDigits: 2, maximumFractionDigits: 4 })}`);
+        }
+      } else {
+        toast.error("No se pudo obtener la tasa desde el agente.");
+      }
+    } catch (e: any) {
+      toast.error("Error al obtener la tasa: " + e.message);
+    } finally {
+      isFetchingRate = false;
+    }
+  }
+
+  function handleTasaChange() {
+    // Reactive rate updates derived totals automatically
+  }
+
   function switchCurrency(toUSD: boolean) {
     if (showUSD === toUSD) return;
     const rate = Number(activeTasa || 1);
     if (toUSD) {
       // Switching from BS to USD
-      baseImponibleInput = rate > 0 ? Math.round((baseImponibleInput / rate) * 100) / 100 : 0;
+      montoBrutoInput = rate > 0 ? Math.round((montoBrutoInput / rate) * 100) / 100 : 0;
+      montoDescInput = rate > 0 ? Math.round((montoDescInput / rate) * 100) / 100 : 0;
+      montoRecaInput = rate > 0 ? Math.round((montoRecaInput / rate) * 100) / 100 : 0;
       montoExentoInput = rate > 0 ? Math.round((montoExentoInput / rate) * 100) / 100 : 0;
+      otrosInput = rate > 0 ? Math.round((otrosInput / rate) * 100) / 100 : 0;
       if (customIvaOverride !== null) {
         customIvaOverride = rate > 0 ? Math.round((customIvaOverride / rate) * 100) / 100 : 0;
       }
     } else {
       // Switching from USD to BS
-      baseImponibleInput = Math.round((baseImponibleInput * rate) * 100) / 100;
+      montoBrutoInput = Math.round((montoBrutoInput * rate) * 100) / 100;
+      montoDescInput = Math.round((montoDescInput * rate) * 100) / 100;
+      montoRecaInput = Math.round((montoRecaInput * rate) * 100) / 100;
       montoExentoInput = Math.round((montoExentoInput * rate) * 100) / 100;
+      otrosInput = Math.round((otrosInput * rate) * 100) / 100;
       if (customIvaOverride !== null) {
         customIvaOverride = Math.round((customIvaOverride * rate) * 100) / 100;
       }
@@ -243,8 +374,13 @@
       co_cta_ingr_egr: "",
       observa: ""
     };
-    baseImponibleInput = 0;
+    montoBrutoInput = 0;
+    porcDescInput = 0;
+    montoDescInput = 0;
+    porcRecaInput = 0;
+    montoRecaInput = 0;
     montoExentoInput = 0;
+    otrosInput = 0;
     customIvaOverride = null;
     saveSuccess = false;
     savedDocNum = "";
@@ -280,8 +416,13 @@
         co_prov: selectedSupplier.co_prov,
         co_mone: "BS",
         tasa: calculatedTotals.rate,
-        total_bruto: calculatedTotals.baseBS,
-        otros1: calculatedTotals.exentoBS,
+        total_bruto: calculatedTotals.brutoBS,
+        porc_desc_glob: String(porcDescInput || 0),
+        monto_desc_glob: calculatedTotals.descBS,
+        porc_reca: porcRecaInput > 0 ? String(porcRecaInput) : null,
+        monto_reca: calculatedTotals.recaBS,
+        otros1: calculatedTotals.otrosBS,
+        monto_exento: calculatedTotals.exentoBS,
         porc_imp: alicuotaIva,
         monto_imp: calculatedTotals.ivaBS,
         total_neto: calculatedTotals.totalBS,
@@ -412,14 +553,6 @@
           </div>
         {/if}
 
-        <!-- Rate pill -->
-        <div class="flex items-center gap-2 px-4 h-14 rounded-2xl bg-surface-soft border border-border-subtle text-xs font-semibold shrink-0">
-          <span class="text-text-muted">Tasa BCV:</span>
-          <span class="font-mono font-bold text-brand-400">
-            Bs. {Number(activeTasa).toLocaleString("es-VE", { minimumFractionDigits: 2, maximumFractionDigits: 4 })}
-          </span>
-        </div>
-
         <!-- History Button -->
         <button
           onclick={() => {
@@ -471,32 +604,38 @@
               </div>
               <button
                 onclick={() => (showSupplierModal = true)}
-                class="mt-2 flex items-center gap-2 px-5 py-2.5 rounded-xl bg-brand-500/10 hover:bg-brand-500/20 text-brand-400 border border-brand-500/30 text-xs font-bold transition-all cursor-pointer shadow-sm"
+                class="mt-2 px-5 py-2.5 rounded-xl bg-brand-500/10 hover:bg-brand-500/20 text-brand-400 border border-brand-500/30 text-xs font-bold transition-all flex items-center gap-2 cursor-pointer shadow-sm"
               >
                 <Search size={14} />
                 Buscar Proveedor
               </button>
             </div>
           {:else}
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 bg-surface-soft p-5 rounded-2xl border border-border-subtle">
-              <div class="space-y-1">
+            <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 bg-surface-soft/50 p-4 rounded-2xl border border-border-subtle">
+              <div class="sm:col-span-2">
                 <span class="text-[10px] text-text-muted uppercase font-bold tracking-wider">Razón Social</span>
-                <p class="text-sm font-bold text-text-base line-clamp-1">{selectedSupplier.prov_des}</p>
-                <span class="text-xs text-text-muted font-mono">{selectedSupplier.co_prov}</span>
+                <div class="text-base font-bold text-text-base mt-0.5">{selectedSupplier.prov_des}</div>
+                <div class="text-xs text-text-muted mt-0.5 flex gap-3">
+                  <span>Código: <strong class="text-text-base font-mono">{selectedSupplier.co_prov}</strong></span>
+                  <span>RIF: <strong class="text-text-base font-mono">{selectedSupplier.rif || 'N/A'}</strong></span>
+                </div>
               </div>
-              <div class="space-y-1">
-                <span class="text-[10px] text-text-muted uppercase font-bold tracking-wider">RIF / Cédula</span>
-                <p class="text-sm font-mono font-bold text-brand-400">{selectedSupplier.rif || 'N/A'}</p>
-              </div>
-              <div class="space-y-1">
-                <span class="text-[10px] text-text-muted uppercase font-bold tracking-wider">Dirección / Teléfono</span>
-                <p class="text-xs text-text-muted line-clamp-2">{selectedSupplier.direc1 || 'Sin dirección registrada'}</p>
+              <div>
+                <span class="text-[10px] text-text-muted uppercase font-bold tracking-wider">Contacto</span>
+                <div class="text-xs text-text-base font-medium mt-1">
+                  {selectedSupplier.telefonos || 'Sin teléfono'}
+                </div>
+                {#if selectedSupplier.direc1}
+                  <div class="text-[11px] text-text-muted truncate mt-0.5" title={selectedSupplier.direc1}>
+                    {selectedSupplier.direc1}
+                  </div>
+                {/if}
               </div>
             </div>
           {/if}
         </div>
 
-        <!-- 2. DOCUMENT METADATA CARD -->
+        <!-- 2. DOCUMENT FISCAL DATA CARD -->
         <div class="glass p-6 rounded-3xl border border-border-subtle shadow-xl space-y-4">
           <h3 class="text-sm font-black uppercase tracking-widest text-text-muted flex items-center gap-2">
             <FileText size={16} />
@@ -613,95 +752,188 @@
           </div>
         </div>
 
-        <!-- 3. AMOUNTS & TAX INPUT CARD -->
-        <div class="glass p-6 rounded-3xl border border-border-subtle shadow-xl space-y-5">
-          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <!-- 3. AMOUNTS & TAX INPUT CARD (ESTRUCTURA PROFIT PLUS ESCRITORIO) -->
+        <div class="glass p-6 rounded-3xl border border-border-subtle shadow-xl space-y-6">
+          <div class="flex items-center justify-between border-b border-border-subtle pb-4">
             <h3 class="text-sm font-black uppercase tracking-widest text-text-muted flex items-center gap-2">
               <Calculator size={16} />
-              Montos e Impuestos
+              Monto del Documento
             </h3>
+            <span class="text-xs font-semibold text-text-muted">
+              Valores en <strong class="text-brand-400 font-mono">{showUSD ? 'Dólares ($)' : 'Bolívares (Bs.)'}</strong>
+            </span>
+          </div>
 
-            <!-- USD / BS TOGGLE (Idéntico a Factura de Compras) -->
-            <div class="inline-flex p-1 bg-surface-soft rounded-xl border border-border-subtle self-start sm:self-auto">
-              <button
-                type="button"
-                onclick={() => switchCurrency(true)}
-                class="px-4 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer {showUSD ? 'bg-brand-500 text-white shadow' : 'text-text-muted hover:text-text-base'}"
-              >
-                Dólares ($)
-              </button>
-              <button
-                type="button"
-                onclick={() => switchCurrency(false)}
-                class="px-4 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer {!showUSD ? 'bg-brand-500 text-white shadow' : 'text-text-muted hover:text-text-base'}"
-              >
-                Bolívares (Bs.)
-              </button>
+          <!-- FILA 1: MONTO BRUTO -->
+          <div class="bg-surface-soft/60 p-5 rounded-2xl border border-border-subtle space-y-2">
+            <div class="flex justify-between items-center">
+              <label for="monto_bruto" class="text-xs font-bold text-text-base uppercase tracking-wider">
+                Monto Bruto
+              </label>
+              <span class="text-[11px] font-mono text-text-muted">
+                {showUSD
+                  ? `≈ Bs. ${calculatedTotals.brutoBS.toLocaleString("es-VE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                  : `≈ $ ${calculatedTotals.brutoUSD.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+              </span>
+            </div>
+            <div class="relative">
+              <span class="absolute left-4 top-1/2 -translate-y-1/2 text-base font-bold text-text-muted">
+                {showUSD ? '$' : 'Bs.'}
+              </span>
+              <input
+                id="monto_bruto"
+                type="number"
+                step="0.01"
+                min="0"
+                bind:value={montoBrutoInput}
+                oninput={handleMontoBrutoChange}
+                placeholder="0.00"
+                class="w-full h-12 pl-12 pr-4 bg-surface-soft border border-border-subtle rounded-xl text-lg font-mono font-black focus:border-brand-500 outline-none text-text-base transition-all"
+              />
             </div>
           </div>
 
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
-            <!-- Base Imponible -->
-            <div class="bg-surface-soft/60 p-4 rounded-2xl border border-border-subtle space-y-2">
+          <!-- FILA 2: DESCUENTO Y RECARGO (IGUAL QUE EN PROFIT ESCRITORIO) -->
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <!-- % Descuento y Monto Descuento -->
+            <div class="bg-surface-soft/60 p-4 rounded-2xl border border-border-subtle space-y-3">
               <div class="flex justify-between items-center">
-                <label for="base_imp" class="text-xs font-bold text-text-base">
-                  Base Gravada ({alicuotaIva}%)
-                </label>
+                <span class="text-xs font-bold text-text-base flex items-center gap-1.5">
+                  <Tag size={14} class="text-text-muted" />
+                  Descuento Global
+                </span>
                 <span class="text-[11px] font-mono text-text-muted">
-                  {showUSD ? `≈ Bs. ${calculatedTotals.baseBS.toLocaleString("es-VE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : `≈ $ ${calculatedTotals.baseUSD.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                  {showUSD
+                    ? `≈ Bs. ${calculatedTotals.descBS.toLocaleString("es-VE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                    : `≈ $ ${calculatedTotals.descUSD.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                 </span>
               </div>
-              <div class="relative">
-                <span class="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-bold text-text-muted">
-                  {showUSD ? '$' : 'Bs.'}
-                </span>
-                <input
-                  id="base_imp"
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  bind:value={baseImponibleInput}
-                  class="w-full h-12 pl-10 pr-3 bg-surface-soft border border-border-subtle rounded-xl text-base font-mono font-bold focus:border-brand-500 outline-none"
-                />
+              <div class="grid grid-cols-2 gap-2">
+                <div>
+                  <label for="porc_desc" class="text-[10px] font-bold text-text-muted block mb-1">% Descuento</label>
+                  <div class="relative">
+                    <input
+                      id="porc_desc"
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      max="100"
+                      bind:value={porcDescInput}
+                      oninput={handlePorcDescChange}
+                      placeholder="0"
+                      class="w-full h-10 px-2.5 pr-6 bg-surface-soft border border-border-subtle rounded-xl text-xs font-mono font-bold text-right outline-none focus:border-brand-500"
+                    />
+                    <span class="absolute right-2 top-1/2 -translate-y-1/2 text-xs font-bold text-text-muted pointer-events-none">%</span>
+                  </div>
+                </div>
+                <div>
+                  <label for="monto_desc" class="text-[10px] font-bold text-text-muted block mb-1">Monto Descuento</label>
+                  <div class="relative">
+                    <span class="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs font-bold text-text-muted pointer-events-none">
+                      {showUSD ? '$' : 'Bs.'}
+                    </span>
+                    <input
+                      id="monto_desc"
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      bind:value={montoDescInput}
+                      oninput={handleMontoDescChange}
+                      placeholder="0.00"
+                      class="w-full h-10 pl-8 pr-2.5 bg-surface-soft border border-border-subtle rounded-xl text-xs font-mono font-bold text-right outline-none focus:border-brand-500"
+                    />
+                  </div>
+                </div>
               </div>
             </div>
 
-            <!-- Monto Exento -->
-            <div class="bg-surface-soft/60 p-4 rounded-2xl border border-border-subtle space-y-2">
+            <!-- % Recargo y Monto Recargo -->
+            <div class="bg-surface-soft/60 p-4 rounded-2xl border border-border-subtle space-y-3">
               <div class="flex justify-between items-center">
-                <label for="exento" class="text-xs font-bold text-text-base">
-                  Monto Exento (No Gravado)
-                </label>
+                <span class="text-xs font-bold text-text-base flex items-center gap-1.5">
+                  <Percent size={14} class="text-text-muted" />
+                  Recargo
+                </span>
                 <span class="text-[11px] font-mono text-text-muted">
-                  {showUSD ? `≈ Bs. ${calculatedTotals.exentoBS.toLocaleString("es-VE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : `≈ $ ${calculatedTotals.exentoUSD.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                  {showUSD
+                    ? `≈ Bs. ${calculatedTotals.recaBS.toLocaleString("es-VE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                    : `≈ $ ${calculatedTotals.recaUSD.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                 </span>
               </div>
-              <div class="relative">
-                <span class="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-bold text-text-muted">
-                  {showUSD ? '$' : 'Bs.'}
-                </span>
-                <input
-                  id="exento"
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  bind:value={montoExentoInput}
-                  class="w-full h-12 pl-10 pr-3 bg-surface-soft border border-border-subtle rounded-xl text-base font-mono font-bold focus:border-brand-500 outline-none"
-                />
+              <div class="grid grid-cols-2 gap-2">
+                <div>
+                  <label for="porc_reca" class="text-[10px] font-bold text-text-muted block mb-1">% Recargo</label>
+                  <div class="relative">
+                    <input
+                      id="porc_reca"
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      max="100"
+                      bind:value={porcRecaInput}
+                      oninput={handlePorcRecaChange}
+                      placeholder="0"
+                      class="w-full h-10 px-2.5 pr-6 bg-surface-soft border border-border-subtle rounded-xl text-xs font-mono font-bold text-right outline-none focus:border-brand-500"
+                    />
+                    <span class="absolute right-2 top-1/2 -translate-y-1/2 text-xs font-bold text-text-muted pointer-events-none">%</span>
+                  </div>
+                </div>
+                <div>
+                  <label for="monto_reca" class="text-[10px] font-bold text-text-muted block mb-1">Monto Recargo</label>
+                  <div class="relative">
+                    <span class="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs font-bold text-text-muted pointer-events-none">
+                      {showUSD ? '$' : 'Bs.'}
+                    </span>
+                    <input
+                      id="monto_reca"
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      bind:value={montoRecaInput}
+                      oninput={handleMontoRecaChange}
+                      placeholder="0.00"
+                      class="w-full h-10 pl-8 pr-2.5 bg-surface-soft border border-border-subtle rounded-xl text-xs font-mono font-bold text-right outline-none focus:border-brand-500"
+                    />
+                  </div>
+                </div>
               </div>
             </div>
+          </div>
 
+          <!-- FILA 3: TOTAL SIN IMPUESTO (BASE GRAVADA NETA) -->
+          <div class="bg-surface-soft/80 p-4 rounded-2xl border border-border-subtle flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 shadow-inner">
+            <div>
+              <span class="text-xs font-bold text-text-muted uppercase tracking-wider block">
+                Total sin Impuesto (Base Gravada)
+              </span>
+              <span class="text-[11px] text-text-muted">
+                Fórmula Profit: Monto Bruto ({showUSD ? '$' : 'Bs.'} {calculatedTotals.brutoInput.toFixed(2)}) - Descuento ({calculatedTotals.descInput.toFixed(2)}) + Recargo ({calculatedTotals.recaInput.toFixed(2)})
+              </span>
+            </div>
+            <div class="text-left sm:text-right font-mono">
+              <div class="text-lg font-black text-text-base">
+                {showUSD ? '$' : 'Bs.'} {calculatedTotals.totalSinImpuestoInput.toLocaleString("es-VE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </div>
+              <div class="text-xs text-text-muted font-bold">
+                {showUSD
+                  ? `≈ Bs. ${calculatedTotals.totalSinImpuestoBS.toLocaleString("es-VE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                  : `≈ $ ${calculatedTotals.totalSinImpuestoUSD.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+              </div>
+            </div>
+          </div>
+
+          <!-- FILA 4: IVA, EXENTO Y OTROS (IGTF) -->
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
             <!-- Alícuota y Monto IVA -->
             <div class="bg-surface-soft/60 p-4 rounded-2xl border border-border-subtle space-y-2">
               <div class="flex justify-between items-center">
                 <label for="iva_monto" class="text-xs font-bold text-text-base">
-                  Impuesto IVA
+                  Impuesto I.V.A.
                 </label>
                 <div class="flex items-center gap-1">
-                  <span class="text-[10px] text-text-muted font-bold">Alícuota:</span>
                   <select
                     bind:value={alicuotaIva}
-                    class="h-6 px-1.5 bg-surface-soft border border-border-subtle rounded text-[11px] font-bold cursor-pointer"
+                    class="h-6 px-1 bg-surface-soft border border-border-subtle rounded text-[11px] font-bold cursor-pointer"
                   >
                     <option value={16}>16% (General)</option>
                     <option value={8}>8% (Reducida)</option>
@@ -723,31 +955,111 @@
                     const val = Number((e.target as HTMLInputElement).value) || 0;
                     customIvaOverride = val;
                   }}
-                  class="w-full h-12 pl-10 pr-3 bg-surface-soft border border-border-subtle rounded-xl text-base font-mono font-bold focus:border-brand-500 outline-none"
+                  class="w-full h-11 pl-9 pr-3 bg-surface-soft border border-border-subtle rounded-xl text-sm font-mono font-bold focus:border-brand-500 outline-none text-right"
                 />
               </div>
-              <div class="flex justify-between items-center text-[11px] text-text-muted">
-                <span>Calculado automáticamente</span>
-                <span class="font-mono">
-                  {showUSD ? `≈ Bs. ${calculatedTotals.ivaBS.toLocaleString("es-VE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : `≈ $ ${calculatedTotals.ivaUSD.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+              <div class="flex justify-between items-center text-[11px] text-text-muted font-mono">
+                <span>Calculado:</span>
+                <span>
+                  {showUSD
+                    ? `≈ Bs. ${calculatedTotals.ivaBS.toLocaleString("es-VE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                    : `≈ $ ${calculatedTotals.ivaUSD.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                 </span>
               </div>
             </div>
 
-            <!-- Total Calculado Vista Previa -->
-            <div class="bg-brand-500/5 p-4 rounded-2xl border border-brand-500/20 flex flex-col justify-between">
-              <div>
-                <span class="text-[10px] text-brand-400 font-bold uppercase tracking-wider">Total Neto del Documento</span>
-                <div class="text-2xl font-black font-mono text-brand-400 mt-1">
-                  {showUSD ? `$ ${calculatedTotals.totalUSD.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : `Bs. ${calculatedTotals.totalBS.toLocaleString("es-VE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
-                </div>
+            <!-- Monto Exento -->
+            <div class="bg-surface-soft/60 p-4 rounded-2xl border border-border-subtle space-y-2">
+              <div class="flex justify-between items-center">
+                <label for="exento" class="text-xs font-bold text-text-base">
+                  Monto Exento
+                </label>
+                <span class="text-[10px] text-text-muted font-semibold">No sujeto</span>
               </div>
-              <div class="text-xs text-text-muted font-mono pt-2 border-t border-brand-500/10 flex justify-between">
-                <span>Equivalente oficial:</span>
-                <span class="font-bold text-text-base">
-                  {showUSD ? `Bs. ${calculatedTotals.totalBS.toLocaleString("es-VE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : `$ ${calculatedTotals.totalUSD.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+              <div class="relative">
+                <span class="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-bold text-text-muted">
+                  {showUSD ? '$' : 'Bs.'}
+                </span>
+                <input
+                  id="exento"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  bind:value={montoExentoInput}
+                  placeholder="0.00"
+                  class="w-full h-11 pl-9 pr-3 bg-surface-soft border border-border-subtle rounded-xl text-sm font-mono font-bold focus:border-brand-500 outline-none text-right"
+                />
+              </div>
+              <div class="flex justify-between items-center text-[11px] text-text-muted font-mono">
+                <span>Equivalente:</span>
+                <span>
+                  {showUSD
+                    ? `≈ Bs. ${calculatedTotals.exentoBS.toLocaleString("es-VE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                    : `≈ $ ${calculatedTotals.exentoUSD.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                 </span>
               </div>
+            </div>
+
+            <!-- Otros (IGTF / Cargos Adicionales) -->
+            <div class="bg-surface-soft/60 p-4 rounded-2xl border border-border-subtle space-y-2">
+              <div class="flex justify-between items-center">
+                <label for="otros_monto" class="text-xs font-bold text-text-base">
+                  Otros (IGTF)
+                </label>
+                <button
+                  type="button"
+                  onclick={applyIgtf3}
+                  title="Calcular/Alternar IGTF 3% sobre base + IVA"
+                  class="px-2 py-0.5 rounded bg-brand-500/10 hover:bg-brand-500/20 text-brand-400 border border-brand-500/20 text-[10px] font-bold transition-all cursor-pointer flex items-center gap-1"
+                >
+                  <Sparkles size={11} />
+                  + IGTF (3%)
+                </button>
+              </div>
+              <div class="relative">
+                <span class="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-bold text-text-muted">
+                  {showUSD ? '$' : 'Bs.'}
+                </span>
+                <input
+                  id="otros_monto"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  bind:value={otrosInput}
+                  placeholder="0.00"
+                  class="w-full h-11 pl-9 pr-3 bg-surface-soft border border-border-subtle rounded-xl text-sm font-mono font-bold focus:border-brand-500 outline-none text-right"
+                />
+              </div>
+              <div class="flex justify-between items-center text-[11px] text-text-muted font-mono">
+                <span>Equivalente:</span>
+                <span>
+                  {showUSD
+                    ? `≈ Bs. ${calculatedTotals.otrosBS.toLocaleString("es-VE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                    : `≈ $ ${calculatedTotals.otrosUSD.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <!-- TOTAL CALCULADO VISTA PREVIA (MONTO NETO) -->
+          <div class="bg-brand-500/5 p-5 rounded-2xl border border-brand-500/20 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+            <div>
+              <span class="text-[10px] text-brand-400 font-bold uppercase tracking-wider block">
+                Monto Neto Total del Documento (Profit Plus)
+              </span>
+              <div class="text-2xl font-black font-mono text-brand-400 mt-0.5">
+                {showUSD
+                  ? `$ ${calculatedTotals.totalUSD.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                  : `Bs. ${calculatedTotals.totalBS.toLocaleString("es-VE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+              </div>
+            </div>
+            <div class="text-left sm:text-right text-xs text-text-muted font-mono border-t sm:border-t-0 pt-2 sm:pt-0 border-brand-500/10">
+              <span class="block">Equivalente oficial en {showUSD ? 'Bolívares' : 'Dólares'}:</span>
+              <span class="font-bold text-sm text-text-base">
+                {showUSD
+                  ? `Bs. ${calculatedTotals.totalBS.toLocaleString("es-VE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                  : `$ ${calculatedTotals.totalUSD.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+              </span>
             </div>
           </div>
         </div>
@@ -755,52 +1067,169 @@
 
       <!-- RIGHT COLUMN: FINANCIAL SUMMARY & ACTIONS (1 COL) -->
       <div class="space-y-6">
-        <div class="glass p-6 rounded-3xl border border-border-subtle shadow-xl space-y-6 sticky top-6">
-          <h3 class="text-sm font-black uppercase tracking-widest text-text-muted flex items-center gap-2">
+        <div class="glass p-6 sm:p-8 rounded-[32px] border border-border-subtle space-y-6 bg-brand-500/[0.03] backdrop-blur-3xl relative overflow-hidden flex flex-col shadow-xl sticky top-6">
+          <div class="absolute -top-12 -right-12 w-48 h-48 bg-brand-500/10 rounded-full blur-[80px]"></div>
+
+          <!-- Header Tasa Cambiaria y Switcher USD/BS (RÉPLICA EXACTA DE PAGOS A PROVEEDORES) -->
+          <div class="flex items-center justify-between border-b border-border-subtle pb-6 relative z-10">
+            <div>
+              <h4 class="text-[10px] font-black uppercase tracking-[0.2em] text-text-muted">Tasa Cambiaria</h4>
+              <div class="flex items-center gap-2 mt-1.5">
+                <input
+                  type="number"
+                  step="any"
+                  bind:value={activeTasa}
+                  oninput={handleTasaChange}
+                  class="w-28 h-8 px-2 bg-surface-soft border border-border-subtle rounded-xl text-sm font-mono font-black text-brand-400 text-center outline-none focus:border-brand-500 transition-all"
+                />
+                <span class="text-xs font-bold text-text-muted">Bs/$</span>
+                <button
+                  type="button"
+                  onclick={fetchExchangeRate}
+                  disabled={isFetchingRate}
+                  title="Actualizar tasa desde el agente"
+                  class="p-1 hover:bg-white/5 rounded-lg text-text-muted hover:text-brand-400 transition-all cursor-pointer disabled:opacity-50"
+                >
+                  {#if isFetchingRate}
+                    <Loader2 size={13} class="animate-spin text-brand-400" />
+                  {:else}
+                    <RefreshCw size={13} />
+                  {/if}
+                </button>
+              </div>
+            </div>
+
+            <div class="flex bg-surface-base p-1 rounded-xl border border-border-bold shadow-lg">
+              <button
+                type="button"
+                onclick={() => switchCurrency(true)}
+                class={`px-5 py-2 rounded-lg text-xs font-black transition-all duration-300 cursor-pointer ${showUSD ? "bg-brand-600 text-white shadow-lg scale-105" : "text-text-muted hover:text-text-base"}`}
+              >
+                USD
+              </button>
+              <button
+                type="button"
+                onclick={() => switchCurrency(false)}
+                class={`px-5 py-2 rounded-lg text-xs font-black transition-all duration-300 cursor-pointer ${!showUSD ? "bg-brand-600 text-white shadow-lg scale-105" : "text-text-muted hover:text-text-base"}`}
+              >
+                BS
+              </button>
+            </div>
+          </div>
+
+          <h3 class="text-sm font-black uppercase tracking-widest text-text-muted flex items-center gap-2 relative z-10">
             <Calculator size={16} />
             Resumen Financiero
           </h3>
 
-          <div class="space-y-3.5 divide-y divide-border-subtle/50 text-sm">
+          <div class="space-y-3 divide-y divide-border-subtle/50 text-sm relative z-10">
+            <!-- Monto Bruto -->
             <div class="flex justify-between items-center pt-2">
-              <span class="text-text-muted">Base Imponible:</span>
-              <div class="text-right">
-                <div class="font-mono font-bold text-text-base">
-                  $ {calculatedTotals.baseUSD.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              <span class="text-text-muted">Monto Bruto:</span>
+              <div class="text-right font-mono">
+                <div class="font-bold text-text-base">
+                  $ {calculatedTotals.brutoUSD.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </div>
-                <div class="text-xs text-text-muted font-mono">
-                  Bs. {calculatedTotals.baseBS.toLocaleString("es-VE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                <div class="text-xs text-text-muted">
+                  Bs. {calculatedTotals.brutoBS.toLocaleString("es-VE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </div>
               </div>
             </div>
 
-            <div class="flex justify-between items-center pt-2">
-              <span class="text-text-muted">Monto Exento:</span>
-              <div class="text-right">
-                <div class="font-mono font-bold text-text-base">
-                  $ {calculatedTotals.exentoUSD.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            <!-- Descuento -->
+            {#if calculatedTotals.descInput > 0}
+              <div class="flex justify-between items-center pt-2">
+                <span class="text-text-muted flex items-center gap-1">
+                  Descuento ({porcDescInput}%):
+                </span>
+                <div class="text-right font-mono text-emerald-400">
+                  <div class="font-bold">
+                    - $ {calculatedTotals.descUSD.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </div>
+                  <div class="text-xs opacity-80">
+                    - Bs. {calculatedTotals.descBS.toLocaleString("es-VE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </div>
                 </div>
-                <div class="text-xs text-text-muted font-mono">
-                  Bs. {calculatedTotals.exentoBS.toLocaleString("es-VE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </div>
+            {/if}
+
+            <!-- Recargo -->
+            {#if calculatedTotals.recaInput > 0}
+              <div class="flex justify-between items-center pt-2">
+                <span class="text-text-muted flex items-center gap-1">
+                  Recargo ({porcRecaInput}%):
+                </span>
+                <div class="text-right font-mono text-amber-400">
+                  <div class="font-bold">
+                    + $ {calculatedTotals.recaUSD.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </div>
+                  <div class="text-xs opacity-80">
+                    + Bs. {calculatedTotals.recaBS.toLocaleString("es-VE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </div>
+                </div>
+              </div>
+            {/if}
+
+            <!-- Total sin Impuesto -->
+            <div class="flex justify-between items-center pt-2">
+              <span class="text-text-muted font-medium">Total sin Impuesto:</span>
+              <div class="text-right font-mono">
+                <div class="font-bold text-text-base">
+                  $ {calculatedTotals.totalSinImpuestoUSD.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </div>
+                <div class="text-xs text-text-muted">
+                  Bs. {calculatedTotals.totalSinImpuestoBS.toLocaleString("es-VE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </div>
               </div>
             </div>
 
+            <!-- Monto Exento -->
+            {#if calculatedTotals.exentoInput > 0}
+              <div class="flex justify-between items-center pt-2">
+                <span class="text-text-muted">Monto Exento:</span>
+                <div class="text-right font-mono">
+                  <div class="font-bold text-text-base">
+                    $ {calculatedTotals.exentoUSD.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </div>
+                  <div class="text-xs text-text-muted">
+                    Bs. {calculatedTotals.exentoBS.toLocaleString("es-VE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </div>
+                </div>
+              </div>
+            {/if}
+
+            <!-- IVA -->
             <div class="flex justify-between items-center pt-2">
               <span class="text-text-muted">IVA ({alicuotaIva}%):</span>
-              <div class="text-right">
-                <div class="font-mono font-bold text-text-base">
+              <div class="text-right font-mono">
+                <div class="font-bold text-text-base">
                   $ {calculatedTotals.ivaUSD.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </div>
-                <div class="text-xs text-text-muted font-mono">
+                <div class="text-xs text-text-muted">
                   Bs. {calculatedTotals.ivaBS.toLocaleString("es-VE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </div>
               </div>
             </div>
 
+            <!-- Otros (IGTF) -->
+            {#if calculatedTotals.otrosInputVal > 0}
+              <div class="flex justify-between items-center pt-2">
+                <span class="text-text-muted">Otros (IGTF / Cargos):</span>
+                <div class="text-right font-mono">
+                  <div class="font-bold text-text-base">
+                    $ {calculatedTotals.otrosUSD.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </div>
+                  <div class="text-xs text-text-muted">
+                    Bs. {calculatedTotals.otrosBS.toLocaleString("es-VE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </div>
+                </div>
+              </div>
+            {/if}
+
+            <!-- Total a Pagar -->
             <div class="flex justify-between items-baseline pt-4">
               <span class="text-base font-black text-text-base">Total a Pagar:</span>
-              <div class="text-right">
+              <div class="text-right font-mono">
                 <div class="text-2xl font-black font-mono text-brand-400">
                   $ {calculatedTotals.totalUSD.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </div>
@@ -812,7 +1241,7 @@
           </div>
 
           <!-- ACTIONS -->
-          <div class="space-y-3 pt-2">
+          <div class="space-y-3 pt-2 relative z-10">
             <button
               onclick={handleRegisterDocument}
               disabled={isSavingDocument || calculatedTotals.totalBS <= 0}
@@ -925,4 +1354,3 @@
     </div>
   </div>
 {/if}
-

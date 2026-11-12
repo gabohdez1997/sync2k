@@ -594,23 +594,57 @@
         <!-- DESGLOSE DE MONTOS -->
         <div class="space-y-2 text-xs bg-surface-soft/60 p-4 rounded-2xl border border-border-subtle divide-y divide-border-subtle/50">
           <div class="flex justify-between py-1">
-            <span class="text-text-muted">Base Imponible:</span>
+            <span class="text-text-muted">Monto Bruto:</span>
             <span class="font-mono font-bold">
               Bs. {Number(selectedDocDetail.total_bruto || 0).toLocaleString("es-VE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </span>
           </div>
+          {#if Number(selectedDocDetail.monto_desc_glob || 0) > 0}
+            <div class="flex justify-between py-1 text-emerald-400">
+              <span>Descuento ({selectedDocDetail.porc_desc_glob || 0}%):</span>
+              <span class="font-mono font-bold">
+                - Bs. {Number(selectedDocDetail.monto_desc_glob).toLocaleString("es-VE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </span>
+            </div>
+          {/if}
+          {#if Number(selectedDocDetail.monto_reca || 0) > 0}
+            <div class="flex justify-between py-1 text-amber-400">
+              <span>Recargo ({selectedDocDetail.porc_reca || 0}%):</span>
+              <span class="font-mono font-bold">
+                + Bs. {Number(selectedDocDetail.monto_reca).toLocaleString("es-VE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </span>
+            </div>
+          {/if}
+          {#if Number(selectedDocDetail.monto_desc_glob || 0) > 0 || Number(selectedDocDetail.monto_reca || 0) > 0}
+            <div class="flex justify-between py-1 font-semibold">
+              <span class="text-text-muted">Total sin Impuesto:</span>
+              <span class="font-mono font-bold text-text-base">
+                Bs. {(Number(selectedDocDetail.total_bruto || 0) - Number(selectedDocDetail.monto_desc_glob || 0) + Number(selectedDocDetail.monto_reca || 0)).toLocaleString("es-VE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </span>
+            </div>
+          {/if}
+          {#if Number(selectedDocDetail.monto_exento || 0) > 0}
+            <div class="flex justify-between py-1">
+              <span class="text-text-muted">Monto Exento:</span>
+              <span class="font-mono font-bold">
+                Bs. {Number(selectedDocDetail.monto_exento).toLocaleString("es-VE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </span>
+            </div>
+          {/if}
           <div class="flex justify-between py-1">
-            <span class="text-text-muted">Monto Exento:</span>
-            <span class="font-mono font-bold">
-              Bs. {Number(selectedDocDetail.monto_exento || 0).toLocaleString("es-VE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-            </span>
-          </div>
-          <div class="flex justify-between py-1">
-            <span class="text-text-muted">IVA ({selectedDocDetail.porc_imp || 16}%):</span>
+            <span class="text-text-muted">IVA ({selectedDocDetail.porc_imp || '16%'}):</span>
             <span class="font-mono font-bold">
               Bs. {Number(selectedDocDetail.monto_imp || 0).toLocaleString("es-VE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </span>
           </div>
+          {#if Number(selectedDocDetail.otros || 0) > 0}
+            <div class="flex justify-between py-1">
+              <span class="text-text-muted">Otros (IGTF / Cargos):</span>
+              <span class="font-mono font-bold">
+                Bs. {Number(selectedDocDetail.otros).toLocaleString("es-VE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </span>
+            </div>
+          {/if}
           <div class="flex justify-between py-1.5 text-sm">
             <span class="font-bold text-text-base">Total Neto:</span>
             <span class="font-mono font-black text-brand-400">
@@ -623,6 +657,14 @@
               Bs. {Number(selectedDocDetail.saldo || 0).toLocaleString("es-VE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </span>
           </div>
+          {#if Number(selectedDocDetail.tasa || 0) > 0}
+            <div class="flex justify-between py-1 text-[11px] text-text-muted font-mono">
+              <span>Tasa Cambiaria:</span>
+              <span class="font-bold">
+                Bs. {Number(selectedDocDetail.tasa).toLocaleString("es-VE", { minimumFractionDigits: 2, maximumFractionDigits: 4 })}
+              </span>
+            </div>
+          {/if}
         </div>
 
         <!-- PAGOS APLICADOS -->
