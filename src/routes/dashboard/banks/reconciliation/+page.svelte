@@ -312,20 +312,18 @@
 
 <div class="max-w-7xl mx-auto space-y-6 pb-12">
   <!-- HEADER -->
-  <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-    <div class="flex items-center gap-3.5">
-      <div class="p-3 rounded-2xl bg-brand-500/10 text-brand-400 border border-brand-500/20 shadow-sm">
-        <Scale size={28} />
-      </div>
-      <div>
-        <h1 class="text-2xl font-black tracking-tight text-text-base">Conciliación Bancaria</h1>
-        <p class="text-sm text-text-muted">
-          Marca los movimientos confirmados en el estado de cuenta bancario del mes para cuadrar el saldo.
-        </p>
-      </div>
+  <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+    <div>
+      <h1 class="text-4xl font-black tracking-tight flex items-center gap-3">
+        <Scale size={40} class="text-brand-500" />
+        Conciliación Bancaria
+      </h1>
+      <p class="text-text-muted mt-2 text-base">
+        Marca los movimientos confirmados en el estado de cuenta bancario del mes para cuadrar el saldo.
+      </p>
     </div>
 
-    <div class="flex flex-wrap items-center gap-2.5">
+    <div class="flex flex-wrap items-center gap-3">
       <a
         href="/dashboard/banks/movements?branch_id={encodeURIComponent(selectedBranch)}"
         class="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-surface-raised hover:bg-surface-soft text-text-base font-bold text-sm border border-border-subtle transition-all"

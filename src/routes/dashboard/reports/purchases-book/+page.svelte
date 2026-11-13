@@ -359,18 +359,13 @@
 
 <div class="p-4 sm:p-6 lg:p-8 space-y-6 max-w-[1750px] mx-auto min-h-screen">
     <!-- HEADER PRINCIPAL -->
-    <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-border-subtle pb-5">
+    <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-            <div class="flex items-center gap-2.5 text-xs text-brand-600 dark:text-brand-400 font-bold uppercase tracking-wider mb-1">
-                <ShoppingBag size={16} />
-                <span>Libro Fiscal de Compras</span>
-                <span class="text-text-muted">•</span>
-                <span class="text-text-muted">SENIAT</span>
-            </div>
-            <h1 class="text-2xl sm:text-3xl font-black text-text-primary tracking-tight">
+            <h1 class="text-4xl font-black tracking-tight flex items-center gap-3">
+                <ShoppingBag size={40} class="text-brand-500" />
                 Libro de Compras
             </h1>
-            <p class="text-text-muted text-xs sm:text-sm mt-0.5">
+            <p class="text-text-muted mt-2 text-base">
                 {data.company?.emp_des || "Empresa"} {data.company?.rif ? `(${data.company.rif})` : ""} — Período del <b>{formatDate(startDate)}</b> al <b>{formatDate(endDate)}</b>
             </p>
         </div>
