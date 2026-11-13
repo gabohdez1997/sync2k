@@ -35,10 +35,35 @@
   let showUSD = $state(true);
   let activeTasa = $state(1);
   let isFetchingRate = $state(false);
+  let initializedEditKey = $state("");
 
-  $effect(() => {
-    if (data.selectedBranchId) filterSede = data.selectedBranchId;
-    if (data.activeRate) activeTasa = data.activeRate;
+  const isEditing = $derived(Boolean(data.editDocument));
+  const editingKey = $derived(
+    data.editDocument
+      ? {
+          co_tipo_doc: String(data.editDocument.co_tipo_doc || "").trim(),
+          nro_doc: String(data.editDocument.nro_doc || "").trim()
+        }
+      : null
+  );
+
+  const editBlockedReason = $derived.by(() => {
+    const d = data.editDocument;
+    if (!d) return null;
+    if (d.anulado) return "Este documento está anulado y no puede editarse.";
+    const docOrig = String(d.doc_orig || "").trim();
+    const tipo = String(d.co_tipo_doc || "").trim().toUpperCase();
+    if (docOrig === "FACT") {
+      return `Este documento proviene de la Factura de Compra ${d.nro_orig || ""}. Debe administrarse desde el módulo de Facturas de Compra.`;
+    }
+    if (docOrig === "PAGO" || ["IVAN", "ISLR"].includes(tipo)) {
+      return "Este documento fue generado automáticamente por una retención o pago. Debe administrarse desde el módulo de Pagos a Proveedores.";
+    }
+    const activePagos = (d.pagos || []).filter((p: any) => !p.anulado);
+    if (activePagos.length > 0) {
+      return `Este documento tiene ${activePagos.length} pago(s) activo(s) asociado(s) (Ej. Pago N° ${activePagos[0].cob_num}). Anule los pagos antes de editarlo.`;
+    }
+    return null;
   });
 
   // Supplier & Metadata
@@ -78,6 +103,78 @@
   let savedNroFact = $state("");
   let savedTipoDoc = $state("");
   let savedTotalNeto = $state(0);
+  let savedMoneda = $state<"BS" | "USD">("USD");
+  let savedTotalUSD = $state(0);
+
+  $effect(() => {
+    if (data.selectedBranchId) filterSede = data.selectedBranchId;
+    if (!data.editDocument && data.activeRate) activeTasa = data.activeRate;
+  });
+
+  $effect(() => {
+    const d = data.editDocument;
+    if (!d) {
+      initializedEditKey = "";
+      return;
+    }
+    const key = `${String(d.co_tipo_doc || "").trim()}::${String(d.nro_doc || "").trim()}`;
+    if (initializedEditKey === key) return;
+    initializedEditKey = key;
+
+    const docMone = String(d.co_mone || "BS").trim().toUpperCase();
+    const isDocUSD = docMone.includes("US") || docMone.includes("$") || docMone === "DOL";
+    const rate = Number(d.tasa) > 1 ? Number(d.tasa) : (Number(d.tasa_actual) || Number(data.activeRate) || 1);
+    activeTasa = rate;
+    showUSD = isDocUSD;
+
+    selectedSupplier = {
+      co_prov: String(d.co_prov || "").trim(),
+      prov_des: String(d.prov_des || "").trim(),
+      rif: String(d.rif || "").trim(),
+      direc1: String(d.direc1 || "").trim(),
+      telefonos: String(d.telefonos || "").trim(),
+      co_cond: null
+    };
+
+    const fecEmisStr = d.fec_emis ? String(d.fec_emis).split("T")[0] : dayjs().format("YYYY-MM-DD");
+    const fecVencStr = d.fec_venc ? String(d.fec_venc).split("T")[0] : fecEmisStr;
+
+    docMetadata = {
+      co_tipo_doc: String(d.co_tipo_doc || "FACT").trim(),
+      nro_fact: String(d.nro_fact || "").trim(),
+      n_control: String(d.n_control || "").trim(),
+      fec_emis: fecEmisStr,
+      fec_venc: fecVencStr,
+      co_cond: "01",
+      co_cta_ingr_egr: String(d.co_cta_ingr_egr || "").trim(),
+      observa: String(d.observa || "").trim()
+    };
+
+    const brutoBs = Number(d.total_bruto || 0);
+    const descBs = Number(d.monto_desc_glob || 0);
+    const recaBs = Number(d.monto_reca || 0);
+    const exentoBs = Number(d.monto_exento ?? d.otros2 ?? 0);
+    const otrosBs = Number(d.otros ?? 0);
+    const impBs = Number(d.monto_imp || 0);
+    const pImpRaw = Math.round(Number(d.porc_imp ?? (impBs > 0 ? 16 : 0)));
+    const pImp = [0, 8, 16].includes(pImpRaw) ? pImpRaw : (impBs > 0 ? 16 : 0);
+
+    const toEditCurrency = (valBs: number) =>
+      isDocUSD && rate > 0 ? Math.round((valBs / rate) * 100) / 100 : valBs;
+
+    montoBrutoInput = toEditCurrency(brutoBs);
+    montoDescInput = toEditCurrency(descBs);
+    porcDescInput = Number(d.porc_desc_glob || 0) || (brutoBs > 0 && descBs > 0 ? Math.round((descBs / brutoBs) * 10000) / 100 : 0);
+    montoRecaInput = toEditCurrency(recaBs);
+    porcRecaInput = Number(d.porc_reca || 0) || (brutoBs > 0 && recaBs > 0 ? Math.round((recaBs / brutoBs) * 10000) / 100 : 0);
+    montoExentoInput = toEditCurrency(exentoBs);
+    otrosInput = toEditCurrency(otrosBs);
+    alicuotaIva = pImp;
+
+    const baseNetaBs = Math.max(0, brutoBs - descBs + recaBs);
+    const expectedImpBs = baseNetaBs * (pImp / 100);
+    customIvaOverride = Math.abs(impBs - expectedImpBs) > 0.02 ? toEditCurrency(impBs) : null;
+  });
 
   // Sucursal Resolution
   const selectedBranchConfig = $derived(
@@ -107,8 +204,7 @@
     return found ? found.code : "01";
   });
 
-  // Auto calculate Due Date when Payment Condition changes
-  $effect(() => {
+  function updateDueDateFromCondition() {
     if (docMetadata.co_cond && data.paymentConditions) {
       const cond = data.paymentConditions.find(
         (c: any) => c.co_cond?.trim() === docMetadata.co_cond?.trim()
@@ -118,7 +214,7 @@
         docMetadata.fec_venc = dayjs(docMetadata.fec_emis).add(days, "day").format("YYYY-MM-DD");
       }
     }
-  });
+  }
 
   // Handlers for dynamic recalculation between % and Monto
   function handleMontoBrutoChange() {
@@ -233,32 +329,32 @@
       ivaInput = showUSD ? ivaUSD : ivaBS;
     }
 
-    const totalUSD = totalSinImpuestoUSD + exentoUSD + ivaUSD + otrosUSD;
-    const totalBS = totalSinImpuestoBS + exentoBS + ivaBS + otrosBS;
+    const totalUSD = Math.round((totalSinImpuestoUSD + exentoUSD + ivaUSD + otrosUSD) * 100) / 100;
+    const totalBS = Math.round((totalSinImpuestoBS + exentoBS + ivaBS + otrosBS) * 100) / 100;
 
     return {
       rate,
-      brutoInput,
-      descInput,
-      recaInput,
-      totalSinImpuestoInput,
-      exentoInput,
-      otrosInputVal,
-      ivaInput,
-      brutoUSD,
-      brutoBS,
-      descUSD,
-      descBS,
-      recaUSD,
-      recaBS,
-      totalSinImpuestoUSD,
-      totalSinImpuestoBS,
-      exentoUSD,
-      exentoBS,
-      ivaUSD,
-      ivaBS,
-      otrosUSD,
-      otrosBS,
+      brutoInput: Math.round(brutoInput * 100) / 100,
+      descInput: Math.round(descInput * 100) / 100,
+      recaInput: Math.round(recaInput * 100) / 100,
+      totalSinImpuestoInput: Math.round(totalSinImpuestoInput * 100) / 100,
+      exentoInput: Math.round(exentoInput * 100) / 100,
+      otrosInputVal: Math.round(otrosInputVal * 100) / 100,
+      ivaInput: Math.round(ivaInput * 100) / 100,
+      brutoUSD: Math.round(brutoUSD * 100) / 100,
+      brutoBS: Math.round(brutoBS * 100) / 100,
+      descUSD: Math.round(descUSD * 100) / 100,
+      descBS: Math.round(descBS * 100) / 100,
+      recaUSD: Math.round(recaUSD * 100) / 100,
+      recaBS: Math.round(recaBS * 100) / 100,
+      totalSinImpuestoUSD: Math.round(totalSinImpuestoUSD * 100) / 100,
+      totalSinImpuestoBS: Math.round(totalSinImpuestoBS * 100) / 100,
+      exentoUSD: Math.round(exentoUSD * 100) / 100,
+      exentoBS: Math.round(exentoBS * 100) / 100,
+      ivaUSD: Math.round(ivaUSD * 100) / 100,
+      ivaBS: Math.round(ivaBS * 100) / 100,
+      otrosUSD: Math.round(otrosUSD * 100) / 100,
+      otrosBS: Math.round(otrosBS * 100) / 100,
       totalUSD,
       totalBS
     };
@@ -356,6 +452,7 @@
 
     if (selectedSupplier.co_cond) {
       docMetadata.co_cond = selectedSupplier.co_cond;
+      updateDueDateFromCondition();
     }
 
     showSupplierModal = false;
@@ -363,6 +460,10 @@
   }
 
   function resetForm() {
+    if (isEditing) {
+      goto(`/dashboard/purchases/documents?branch_id=${filterSede}`);
+      return;
+    }
     selectedSupplier = null;
     docMetadata = {
       co_tipo_doc: "FACT",
@@ -388,6 +489,10 @@
   }
 
   async function handleRegisterDocument() {
+    if (isEditing && editBlockedReason) {
+      toast.error(editBlockedReason);
+      return;
+    }
     if (!filterSede) {
       toast.error("Debe seleccionar una sucursal.");
       return;
@@ -408,13 +513,14 @@
 
     isSavingDocument = true;
     try {
-      // In Profit Plus, direct purchase documents are saved in national currency (BS) with the active tasa
+      // Profit Plus stores financial amounts in national currency (BS) while recording the document's selected currency (co_mone) and rate
+      const selectedCurrency = showUSD ? "USD" : "BS";
       const documentPayload = {
         co_tipo_doc: docMetadata.co_tipo_doc,
         nro_fact: nroFactClean,
         n_control: (docMetadata.n_control || "N/A").trim() || "N/A",
         co_prov: selectedSupplier.co_prov,
-        co_mone: "BS",
+        co_mone: selectedCurrency,
         tasa: calculatedTotals.rate,
         total_bruto: calculatedTotals.brutoBS,
         porc_desc_glob: String(porcDescInput || 0),
@@ -436,8 +542,12 @@
         co_sucu_in: defaultBranchCode || "01"
       };
 
-      const res = await fetch("/api/agent/documentos-compra", {
-        method: "POST",
+      const endpoint = isEditing && editingKey
+        ? `/api/agent/documentos-compra/${encodeURIComponent(editingKey.co_tipo_doc)}/${encodeURIComponent(editingKey.nro_doc)}`
+        : "/api/agent/documentos-compra";
+
+      const res = await fetch(endpoint, {
+        method: isEditing ? "PUT" : "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           branch_id: filterSede,
@@ -447,14 +557,20 @@
 
       const result = await res.json();
       if (result.success !== false) {
-        savedDocNum = result.doc_num || result.nro_doc || "";
+        savedDocNum = result.doc_num || result.nro_doc || editingKey?.nro_doc || "";
         savedNroFact = nroFactClean;
         savedTipoDoc = docMetadata.co_tipo_doc;
         savedTotalNeto = calculatedTotals.totalBS;
+        savedMoneda = selectedCurrency;
+        savedTotalUSD = calculatedTotals.totalUSD;
         saveSuccess = true;
-        toast.success(`Documento ${savedTipoDoc} ${savedDocNum} registrado con éxito.`);
+        toast.success(
+          isEditing
+            ? `Documento ${savedTipoDoc} ${savedDocNum} actualizado con éxito.`
+            : `Documento ${savedTipoDoc} ${savedDocNum} registrado con éxito.`
+        );
       } else {
-        toast.error(result.message || "Error al registrar el documento.");
+        toast.error(result.message || (isEditing ? "Error al actualizar el documento." : "Error al registrar el documento."));
       }
     } catch (e: any) {
       toast.error("Error al comunicarse con el servidor: " + e.message);
@@ -476,9 +592,9 @@
       <Check size={48} />
     </div>
     <div class="space-y-2">
-      <h2 class="text-3xl font-black text-text-base">¡Documento Registrado!</h2>
+      <h2 class="text-3xl font-black text-text-base">{isEditing ? '¡Documento Actualizado!' : '¡Documento Registrado!'}</h2>
       <p class="text-text-muted text-sm">
-        El documento de compra ha sido registrado exitosamente en Profit Plus (Cuentas por Pagar).
+        El documento de compra ha sido {isEditing ? 'actualizado' : 'registrado'} exitosamente en Profit Plus (Cuentas por Pagar).
       </p>
     </div>
 
@@ -492,10 +608,23 @@
         <div class="text-xl font-black text-text-base mt-0.5 font-mono">{savedNroFact}</div>
       </div>
       <div class="col-span-2 bg-surface-soft/60 px-4 py-3 rounded-2xl border border-border-subtle text-left flex justify-between items-center text-sm">
-        <span class="text-text-muted font-medium">Monto Total Registrado:</span>
-        <span class="font-mono font-bold text-text-base">
-          Bs. {savedTotalNeto.toLocaleString("es-VE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-        </span>
+        <span class="text-text-muted font-medium">Monto Total Registrado ({savedMoneda}):</span>
+        <div class="text-right">
+          <div class="font-mono font-bold text-text-base">
+            {#if savedMoneda === "USD"}
+              $ {savedTotalUSD.toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            {:else}
+              Bs. {savedTotalNeto.toLocaleString("es-VE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            {/if}
+          </div>
+          <div class="text-[11px] font-mono text-text-muted">
+            {#if savedMoneda === "USD"}
+              Bs. {savedTotalNeto.toLocaleString("es-VE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            {:else}
+              Ref: $ {savedTotalUSD.toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            {/if}
+          </div>
+        </div>
       </div>
     </div>
 
@@ -506,26 +635,64 @@
       >
         Ver Historial
       </a>
+      <a
+        href="/dashboard/purchases/documents/{encodeURIComponent(savedTipoDoc)}/{encodeURIComponent(savedDocNum)}/print?branch_id={filterSede}"
+        target="_blank"
+        class="flex-1 text-center bg-surface-soft hover:bg-surface-strong text-text-base px-6 py-3.5 rounded-2xl font-bold transition-all text-sm flex items-center justify-center border border-border-subtle"
+      >
+        Imprimir PDF
+      </a>
       <button
         onclick={resetForm}
         class="flex-1 bg-brand-600 hover:bg-brand-500 text-white px-6 py-3.5 rounded-2xl font-bold transition-all shadow-lg shadow-brand-500/20 text-sm cursor-pointer"
       >
-        Registrar Otro
+        {isEditing ? 'Nuevo Documento' : 'Registrar Otro'}
       </button>
     </div>
   </div>
 {:else}
   <!-- MAIN PURCHASE DOCUMENT INTERFACE -->
   <div class="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
+    {#if data.editError || editBlockedReason}
+      <div
+        class="glass border-amber-500/30 p-5 rounded-3xl flex items-center gap-4 bg-amber-500/5 shadow-lg"
+        in:slide
+      >
+        <div class="h-11 w-11 rounded-2xl bg-amber-500/20 flex items-center justify-center text-amber-500 shrink-0">
+          <AlertCircle size={22} />
+        </div>
+        <div class="flex-1">
+          <h3 class="text-xs font-black text-amber-500 uppercase tracking-widest mb-0.5">
+            Aviso de Edición
+          </h3>
+          <p class="text-text-muted font-semibold text-sm">
+            {data.editError || editBlockedReason}
+          </p>
+        </div>
+        <a
+          href="/dashboard/purchases/documents/history?branch_id={filterSede}"
+          class="px-4 py-2 rounded-xl bg-surface-soft hover:bg-surface-strong text-xs font-bold border border-border-subtle transition-all"
+        >
+          Volver al Historial
+        </a>
+      </div>
+    {/if}
+
     <!-- TOP HEADER -->
     <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
       <div>
         <h1 class="text-4xl font-black tracking-tight flex items-center gap-3">
           <FileSpreadsheet size={40} class="text-brand-500" />
-          Documentos de Compra
+          {#if isEditing && editingKey}
+            Editar Documento {editingKey.co_tipo_doc} #{editingKey.nro_doc}
+          {:else}
+            Documentos de Compra
+          {/if}
         </h1>
         <p class="text-text-muted mt-2 text-base">
-          Registro directo de facturas, notas de crédito y notas de débito de proveedores en Cuentas por Pagar.
+          {isEditing
+            ? 'Modificación de documento de compra registrado directamente en Cuentas por Pagar.'
+            : 'Registro directo de facturas, notas de crédito y notas de débito de proveedores en Cuentas por Pagar.'}
         </p>
       </div>
 
@@ -540,7 +707,8 @@
             <select
               bind:value={filterSede}
               onchange={handleBranchChange}
-              class="w-full h-14 pl-10 pr-10 bg-surface-soft border border-border-subtle rounded-2xl focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none transition-all font-medium text-sm appearance-none cursor-pointer text-text-base"
+              disabled={isEditing}
+              class="w-full h-14 pl-10 pr-10 bg-surface-soft border border-border-subtle rounded-2xl focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none transition-all font-medium text-sm appearance-none cursor-pointer text-text-base disabled:opacity-60 disabled:cursor-not-allowed"
             >
               {#each data.branches as b}
                 <option value={b.id}>{b.name}</option>
@@ -649,7 +817,8 @@
               <select
                 id="tipo_doc"
                 bind:value={docMetadata.co_tipo_doc}
-                class="w-full h-11 px-3 bg-surface-soft border border-border-subtle rounded-xl text-sm font-semibold focus:border-brand-500 outline-none cursor-pointer"
+                disabled={isEditing}
+                class="w-full h-11 px-3 bg-surface-soft border border-border-subtle rounded-xl text-sm font-semibold focus:border-brand-500 outline-none cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
               >
                 <option value="FACT">FACT - Factura</option>
                 <option value="N/CR">N/CR - Nota de Crédito</option>
@@ -693,6 +862,7 @@
                 id="fec_emis"
                 type="date"
                 bind:value={docMetadata.fec_emis}
+                onchange={() => { if (!isEditing) updateDueDateFromCondition(); }}
                 class="w-full h-11 px-3 bg-surface-soft border border-border-subtle rounded-xl text-sm font-medium focus:border-brand-500 outline-none cursor-pointer"
               />
             </div>
@@ -703,6 +873,7 @@
               <select
                 id="co_cond"
                 bind:value={docMetadata.co_cond}
+                onchange={updateDueDateFromCondition}
                 class="w-full h-11 px-3 bg-surface-soft border border-border-subtle rounded-xl text-sm font-semibold focus:border-brand-500 outline-none cursor-pointer"
               >
                 {#each data.paymentConditions as cond}
@@ -933,6 +1104,7 @@
                 <div class="flex items-center gap-1">
                   <select
                     bind:value={alicuotaIva}
+                    onchange={() => (customIvaOverride = null)}
                     class="h-6 px-1 bg-surface-soft border border-border-subtle rounded text-[11px] font-bold cursor-pointer"
                   >
                     <option value={16}>16% (General)</option>
@@ -1244,15 +1416,15 @@
           <div class="space-y-3 pt-2 relative z-10">
             <button
               onclick={handleRegisterDocument}
-              disabled={isSavingDocument || calculatedTotals.totalBS <= 0}
+              disabled={isSavingDocument || calculatedTotals.totalBS <= 0 || Boolean(isEditing && editBlockedReason) || Boolean(data.editError)}
               class="w-full h-14 rounded-2xl bg-brand-600 hover:bg-brand-500 disabled:opacity-50 text-white font-bold transition-all shadow-lg shadow-brand-500/20 active:scale-95 flex items-center justify-center gap-2 cursor-pointer disabled:cursor-not-allowed"
             >
               {#if isSavingDocument}
                 <Loader2 size={18} class="animate-spin" />
-                Registrando en Profit...
+                {isEditing ? 'Guardando cambios...' : 'Registrando en Profit...'}
               {:else}
                 <Check size={18} />
-                Registrar Documento
+                {isEditing ? 'Guardar Cambios' : 'Registrar Documento'}
               {/if}
             </button>
 
@@ -1261,7 +1433,7 @@
               type="button"
               class="w-full h-11 rounded-xl bg-surface-soft hover:bg-surface-strong text-text-muted hover:text-text-base text-xs font-bold transition-all border border-border-subtle cursor-pointer"
             >
-              Limpiar Formulario
+              {isEditing ? 'Cancelar Edición' : 'Limpiar Formulario'}
             </button>
           </div>
         </div>

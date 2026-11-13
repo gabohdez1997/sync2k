@@ -8,8 +8,14 @@ export const load: PageServerLoad = protectLoad('pur_documents', async ({ url, l
     const profile = (locals as any).profile;
     if (!profile) throw new Error('Perfil no cargado.');
 
+    const editTipo = url.searchParams.get('edit_tipo')?.trim() || '';
+    const editNro = url.searchParams.get('edit_nro')?.trim() || '';
+    const isEditMode = Boolean(editTipo && editNro);
+
     const canCreate = hasPermission(profile, 'pur_documents', 'create');
-    if (!canCreate) {
+    const canEdit = hasPermission(profile, 'pur_documents', 'update') || canCreate;
+
+    if ((!isEditMode && !canCreate) || (isEditMode && !canEdit)) {
         throw redirect(303, '/dashboard/purchases/documents/history');
     }
 
@@ -23,6 +29,8 @@ export const load: PageServerLoad = protectLoad('pur_documents', async ({ url, l
             paymentConditions: [],
             expenseAccounts: [],
             docTypes: [],
+            editDocument: null,
+            editError: null,
             error: 'No tienes sucursales asignadas.'
         };
     }
@@ -38,6 +46,8 @@ export const load: PageServerLoad = protectLoad('pur_documents', async ({ url, l
     let paymentConditions: any[] = [];
     let expenseAccounts: any[] = [];
     let docTypes: any[] = [];
+    let editDocument: any = null;
+    let editError: string | null = null;
 
     if (selectedBranch && selectedBranch.agent_url) {
         try {
@@ -47,12 +57,22 @@ export const load: PageServerLoad = protectLoad('pur_documents', async ({ url, l
                 agent_api_key: selectedBranch.agent_token
             }, profile, fetch);
 
-            const [tasaRes, condRes, ctasRes, tiposRes] = await Promise.all([
+            const requests: Promise<any>[] = [
                 agentClient.request<any>('/catalogos/tasa').catch(() => null),
                 agentClient.request<any>('/catalogos/condiciones-pago').catch(() => null),
                 agentClient.request<any>('/documentos-compra/cuentas').catch(() => null),
                 agentClient.request<any>('/documentos-compra/tipos').catch(() => null)
-            ]);
+            ];
+
+            if (isEditMode) {
+                requests.push(
+                    agentClient.request<any>(
+                        `/documentos-compra/${encodeURIComponent(editTipo)}/${encodeURIComponent(editNro)}?sede=${encodeURIComponent(selectedBranch.id)}`
+                    ).catch((err: any) => ({ success: false, message: err.message }))
+                );
+            }
+
+            const [tasaRes, condRes, ctasRes, tiposRes, docRes] = await Promise.all(requests);
 
             const tasaData = (tasaRes as any)?.data || (Array.isArray(tasaRes) ? tasaRes : []);
             if (tasaData.length > 0 && Number(tasaData[0].tasa) > 0) {
@@ -62,20 +82,31 @@ export const load: PageServerLoad = protectLoad('pur_documents', async ({ url, l
             paymentConditions = (condRes as any)?.data || (Array.isArray(condRes) ? condRes : []);
             expenseAccounts = (ctasRes as any)?.data || [];
             docTypes = (tiposRes as any)?.data || [];
+
+            if (isEditMode) {
+                if (docRes?.success && docRes?.data) {
+                    editDocument = docRes.data;
+                } else {
+                    editError = docRes?.message || `No se pudo cargar el documento ${editTipo} ${editNro} para editar.`;
+                }
+            }
         } catch (e: any) {
             console.warn('[DOCS COMPRA LOAD] Error al cargar catálogos:', e.message);
         }
     }
 
     return {
-        title: 'Documentos de Compra',
+        title: isEditMode ? `Editar Documento ${editTipo} ${editNro}` : 'Documentos de Compra',
         branches: allowedBranches,
         selectedBranchId: selectedBranch ? selectedBranch.id : '',
         activeRate,
         paymentConditions,
         expenseAccounts,
         docTypes,
+        editDocument,
+        editError,
         canCreate,
+        canEdit,
         canSeeOthers
     };
 });

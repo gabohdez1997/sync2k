@@ -128,7 +128,7 @@ export const POST: RequestHandler = async ({ request, locals, fetch: svelteFetch
 
         if (response && response.success !== false) {
             try {
-                const docNum = response.doc_num || response.nro_doc || '';
+                const docNum = (response as any).doc_num || (response as any).nro_doc || '';
                 await supabaseAdmin.from('audit_log').insert({
                     action: 'CREATE',
                     module: 'pur_documents',

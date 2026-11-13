@@ -10,6 +10,13 @@ export const load: PageServerLoad = protectLoad('pur_documents', async ({ url, l
     const profile = (locals as any).profile;
     const allowedBranches = profile.allowed_branches || [];
 
+    // Lógica de Permisos
+    const canSeeOthers = hasPermission(profile, 'pur_documents', 'others');
+    const canVoid = hasPermission(profile, 'pur_documents', 'void');
+    const canDelete = hasPermission(profile, 'pur_documents', 'delete');
+    const canCreate = hasPermission(profile, 'pur_documents', 'create');
+    const canEdit = hasPermission(profile, 'pur_documents', 'update') || canCreate;
+
     if (allowedBranches.length === 0) {
         return {
             documents: [],
@@ -17,10 +24,12 @@ export const load: PageServerLoad = protectLoad('pur_documents', async ({ url, l
             metrics: {},
             branches: [],
             selectedBranchId: '',
-            canSeeOthers: false,
-            canVoid: false,
-            canDelete: false,
-            canCreate: false,
+            activeRate: 1,
+            canSeeOthers,
+            canVoid,
+            canDelete,
+            canCreate,
+            canEdit,
             filters: {},
             error: 'No tienes sucursales asignadas.'
         };
@@ -38,10 +47,12 @@ export const load: PageServerLoad = protectLoad('pur_documents', async ({ url, l
             metrics: {},
             branches: allowedBranches,
             selectedBranchId: '',
+            activeRate: 1,
             canSeeOthers,
             canVoid,
             canDelete,
             canCreate,
+            canEdit,
             filters: {},
             error: 'Sucursal no configurada.'
         };
@@ -62,12 +73,6 @@ export const load: PageServerLoad = protectLoad('pur_documents', async ({ url, l
     const order_by = url.searchParams.get('order_by') || 'fec_emis';
     const order_dir = url.searchParams.get('order_dir') || 'DESC';
 
-    // Lógica de Permisos
-    const canSeeOthers = hasPermission(profile, 'pur_documents', 'others');
-    const canVoid = hasPermission(profile, 'pur_documents', 'void');
-    const canDelete = hasPermission(profile, 'pur_documents', 'delete');
-    const canCreate = hasPermission(profile, 'pur_documents', 'create');
-
     let co_us_in = url.searchParams.get('co_us_in') || '';
 
     if (!canSeeOthers) {
@@ -79,10 +84,12 @@ export const load: PageServerLoad = protectLoad('pur_documents', async ({ url, l
                 metrics: {},
                 branches: allowedBranches,
                 selectedBranchId: selectedBranch.id,
+                activeRate: 1,
                 canSeeOthers,
                 canVoid,
                 canDelete,
                 canCreate,
+                canEdit,
                 filters: {},
                 error: 'Tu perfil no tiene asociado un código de Usuario de Profit Plus. No puedes visualizar documentos de compra.'
             };
@@ -107,7 +114,17 @@ export const load: PageServerLoad = protectLoad('pur_documents', async ({ url, l
     });
 
     try {
-        const res = await agentClient.request<any>(`/documentos-compra?${queryParams.toString()}`);
+        const [res, tasaRes] = await Promise.all([
+            agentClient.request<any>(`/documentos-compra?${queryParams.toString()}`),
+            agentClient.request<any>('/catalogos/tasa').catch(() => null)
+        ]);
+
+        let activeRate = 1;
+        const tasaData = (tasaRes as any)?.data || (Array.isArray(tasaRes) ? tasaRes : []);
+        if (tasaData.length > 0 && Number(tasaData[0].tasa) > 0) {
+            activeRate = Number(tasaData[0].tasa);
+        }
+
         if (!res.success) {
             return {
                 documents: [],
@@ -115,11 +132,13 @@ export const load: PageServerLoad = protectLoad('pur_documents', async ({ url, l
                 metrics: {},
                 branches: allowedBranches,
                 selectedBranchId: selectedBranch.id,
+                activeRate,
                 error: res.message || 'Error al obtener documentos de compra',
                 canSeeOthers,
                 canVoid,
                 canDelete,
                 canCreate,
+                canEdit,
                 filters: {}
             };
         }
@@ -161,10 +180,12 @@ export const load: PageServerLoad = protectLoad('pur_documents', async ({ url, l
             metrics: metricsData,
             branches: allowedBranches,
             selectedBranchId: selectedBranch.id,
+            activeRate,
             canSeeOthers,
             canVoid,
             canDelete,
             canCreate,
+            canEdit,
             filters: { doc_num, co_prov, nro_fact, co_tipo_doc, status, search, co_us_in, fec_d, fec_h, order_by, order_dir }
         };
     } catch (e: any) {
@@ -174,11 +195,13 @@ export const load: PageServerLoad = protectLoad('pur_documents', async ({ url, l
             metrics: {},
             branches: allowedBranches,
             selectedBranchId: selectedBranch.id,
+            activeRate: 1,
             error: 'Error al conectar con el Agente: ' + e.message,
             canSeeOthers,
             canVoid,
             canDelete,
             canCreate,
+            canEdit,
             filters: {}
         };
     }
@@ -247,6 +270,7 @@ export const actions = {
         const co_tipo_doc = String(formData.get('co_tipo_doc') || '').trim();
         const nro_doc = String(formData.get('nro_doc') || '').trim();
         const branch_id = String(formData.get('branch_id') || '').trim();
+        const password = String(formData.get('password') || '');
         const profile = (locals as any).profile;
 
         if (!hasPermission(profile, 'pur_documents', 'delete')) {
@@ -255,6 +279,16 @@ export const actions = {
 
         if (!co_tipo_doc || !nro_doc) return fail(400, { success: false, message: 'Documento no válido.' });
         if (!branch_id) return fail(400, { success: false, message: 'Sucursal no válida.' });
+        if (!password) {
+            return fail(400, { success: false, message: 'La contraseña es requerida para confirmar la eliminación.' });
+        }
+
+        const email = locals.session?.user?.email;
+        if (!email) return fail(401, { success: false, message: 'Sesión no válida.' });
+
+        // Confirmación de seguridad
+        const { error: authErr } = await locals.supabase.auth.signInWithPassword({ email, password });
+        if (authErr) return fail(401, { success: false, message: 'Contraseña de confirmación incorrecta.' });
 
         const branch = profile.allowed_branches?.find((b: any) => b.id === branch_id);
         if (!branch) return fail(403, { success: false, message: 'Sucursal no autorizada.' });
