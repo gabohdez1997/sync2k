@@ -20,6 +20,7 @@
     FileText,
     Settings,
     Key,
+    Landmark,
   } from "lucide-svelte";
   import type { PageData, ActionData } from "./$types";
 
@@ -128,6 +129,25 @@
           label: "Pagos a Proveedores",
           hasOthers: true,
           hasVoid: true,
+        },
+      ],
+    },
+    {
+      id: "banks",
+      label: "Bancos",
+      icon: Landmark,
+      options: [
+        {
+          id: "bank_movements",
+          label: "Movimientos Bancarios",
+          hasOthers: true,
+          hasVoid: true,
+        },
+        {
+          id: "bank_reconciliation",
+          label: "Conciliación Bancaria",
+          hasOthers: true,
+          hasVoid: false,
         },
       ],
     },
@@ -291,6 +311,7 @@
     cash: true,
     warehouse: true,
     purchases: true,
+    banks: true,
     reports: true,
     security: true,
   });
@@ -456,7 +477,7 @@
     const option = navStructure
       .flatMap((n) => n.options)
       .find((o) => o.id === optionId);
-    if (!option || option.onlyRead || option.id === "cash_exchange") return;
+    if (!option || (option as any).onlyRead || option.id === "cash_exchange") return;
 
     const supportsOthers = (option as any)?.hasOthers || false;
     const supportsVoid = (option as any)?.hasVoid || false;
@@ -955,7 +976,7 @@
                       <td
                         class="px-6 py-4 text-center border-b border-border-subtle"
                       >
-                        {#if opt.id !== "cash_exchange" && !opt.onlyRead}
+                        {#if opt.id !== "cash_exchange" && !(opt as any).onlyRead}
                           <button
                             type="button"
                             onclick={() => toggleAll(opt.id)}

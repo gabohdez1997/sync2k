@@ -57,6 +57,8 @@
     BookOpen,
     BookMarked,
     Percent,
+    Landmark,
+    Scale,
   } from "lucide-svelte";
   import { slide, fade } from "svelte/transition";
   import { onMount } from "svelte";
@@ -300,6 +302,25 @@
       ],
     },
     {
+      id: "banks",
+      label: "Bancos",
+      icon: Landmark,
+      subItems: [
+        {
+          id: "bank_movements",
+          label: "Movimientos",
+          href: "/dashboard/banks/movements",
+          icon: ArrowRightLeft,
+        },
+        {
+          id: "bank_reconciliation",
+          label: "Conciliación",
+          href: "/dashboard/banks/reconciliation",
+          icon: Scale,
+        },
+      ],
+    },
+    {
       id: "reports",
       label: "Reportes",
       icon: FileText,
@@ -448,6 +469,7 @@
     cash: false,
     warehouse: false,
     purchases: false,
+    banks: false,
     reports: false,
     security: false,
   });
@@ -518,7 +540,8 @@
           'pur_orders',
           'pur_invoices',
           'pur_documents',
-          'pur_payments'
+          'pur_payments',
+          'bank_movements'
         ];
         if (historyModules.includes(item.id)) {
           return `${item.href}/history`;
