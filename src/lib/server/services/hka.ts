@@ -317,31 +317,54 @@ export interface EmitInvoiceInput {
  * Parsea y estandariza la cédula o RIF al formato exacto requerido por The Factory HKA
  */
 export function parseClientCedula(
-  cedulaOrRif?: string,
-  tipoPersona?: string
+  cedulaOrRif?: string | null,
+  tipoPersona?: string | number | null
 ): {
   tipoIdentificacion: 'V' | 'J' | 'G' | 'E' | 'P';
   numeroIdentificacion: string;
+  tipo: 'V' | 'J' | 'G' | 'E' | 'P';
+  cleanDoc: string;
+  formattedRif: string;
 } {
-  const clean = (cedulaOrRif || '').trim().toUpperCase();
-  const match = clean.match(/^([VJGEP])[-_.\s]*([0-9]+)/);
-  if (match) {
+  const isMoral =
+    tipoPersona === 2 ||
+    tipoPersona === '2' ||
+    String(tipoPersona ?? '').toLowerCase().includes('moral') ||
+    String(tipoPersona ?? '').toLowerCase().includes('jurid');
+
+  const defaultTipo: 'V' | 'J' = isMoral ? 'J' : 'V';
+  const raw = (cedulaOrRif || '').trim().toUpperCase();
+  if (!raw) {
     return {
-      tipoIdentificacion: match[1] as any,
-      numeroIdentificacion: match[2]
+      tipoIdentificacion: defaultTipo,
+      numeroIdentificacion: '00000000',
+      tipo: defaultTipo,
+      cleanDoc: '',
+      formattedRif: ''
     };
   }
-  const digitsOnly = clean.replace(/[^0-9]/g, '');
-  if (digitsOnly) {
-    const isMoral = tipoPersona === 'moral' || tipoPersona === 'juridica';
+
+  const prefixMatch = raw.match(/^([VJGEP])/);
+  const tipo = (prefixMatch ? prefixMatch[1] : defaultTipo) as 'V' | 'J' | 'G' | 'E' | 'P';
+  const digits = raw.replace(/[^0-9]/g, '');
+
+  if (digits.length > 0) {
+    const cleanDoc = digits.slice(0, 19);
     return {
-      tipoIdentificacion: isMoral ? 'J' : 'V',
-      numeroIdentificacion: digitsOnly
+      tipoIdentificacion: tipo,
+      numeroIdentificacion: digits.slice(0, 20),
+      tipo,
+      cleanDoc,
+      formattedRif: `${tipo}${cleanDoc}`
     };
   }
+
   return {
-    tipoIdentificacion: 'V',
-    numeroIdentificacion: '00000000'
+    tipoIdentificacion: defaultTipo,
+    numeroIdentificacion: '00000000',
+    tipo: defaultTipo,
+    cleanDoc: '',
+    formattedRif: ''
   };
 }
 

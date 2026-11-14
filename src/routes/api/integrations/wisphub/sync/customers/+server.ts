@@ -48,12 +48,31 @@ export const POST: RequestHandler = async ({ request, locals, fetch }) => {
       }
       clientsToSync = [singleRes.client];
     } else {
-      // Si no vienen clientes específicos, traer los primeros activos o según filtros
-      const listRes = await getWisphubClientes({ limit: 100, estado: '1' });
-      if (!listRes.success || !listRes.results) {
-        return json({ success: false, message: listRes.error || 'No se pudieron consultar clientes de WispHub' }, { status: 400 });
+      // Traer todos los clientes de WispHub paginando en bloques de 300
+      const pageSize = 300;
+      let offset = 0;
+      while (true) {
+        const listRes = await getWisphubClientes({
+          limit: pageSize,
+          offset,
+          estado: options.estado
+        });
+        if (!listRes.success || !listRes.results) {
+          if (clientsToSync.length === 0) {
+            return json(
+              { success: false, message: listRes.error || 'No se pudieron consultar clientes de WispHub' },
+              { status: 400 }
+            );
+          }
+          break;
+        }
+        clientsToSync.push(...listRes.results);
+        const totalCount = listRes.count ?? listRes.results.length;
+        if (listRes.results.length < pageSize || clientsToSync.length >= totalCount || listRes.results.length === 0) {
+          break;
+        }
+        offset += listRes.results.length;
       }
-      clientsToSync = listRes.results;
     }
 
     // Defaults de Profit Plus obtenidos de la configuración de la Sucursal o de la integración
@@ -110,7 +129,7 @@ export const POST: RequestHandler = async ({ request, locals, fetch }) => {
             }
           }, fetch);
         }
-      } catch {}
+      } catch { }
     }
 
     const summary = await syncBatchWisphubCustomers(clientsToSync, agentClient, syncOptions);

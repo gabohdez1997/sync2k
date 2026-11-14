@@ -1,5 +1,6 @@
 // src/lib/server/services/wisphubSync.ts
 import { AgentClient } from '$lib/server/agent';
+import { inferTipCliFromRif } from '$lib/retention-eligibility';
 import { parseClientCedula } from './hka';
 import { getExchangeRateResolver } from './exchangeRates';
 import type { WisphubClient, WisphubInvoice, WisphubPlan } from './wisphub';
@@ -118,9 +119,9 @@ export function mapWisphubClientToProfit(
   } else {
     // 'cedula_or_id' (Por defecto)
     if (parsed.cleanDoc) {
-      co_cli = `${parsed.tipo}${parsed.cleanDoc}`;
+      co_cli = `${parsed.tipo}${parsed.cleanDoc}`.slice(0, 16);
     } else {
-      co_cli = `WISP-${client.id_servicio}`;
+      co_cli = `WISP-${client.id_servicio}`.slice(0, 16);
     }
   }
 
@@ -137,8 +138,10 @@ export function mapWisphubClientToProfit(
     cli_des = nomCompleto || razonSoc || `CLIENTE WISPHUB ${client.id_servicio}`;
   }
 
-  // 3. RIF Formateado
-  const rif = parsed.formattedRif || (parsed.cleanDoc ? `${parsed.tipo}-${parsed.cleanDoc}` : co_cli);
+  // 3. RIF Formateado (ej. V123456789, sin guiones ni puntos)
+  const rif = parsed.cleanDoc
+    ? `${parsed.tipo}${parsed.cleanDoc}`.slice(0, 18)
+    : co_cli;
 
   // 4. Tipo de persona y contribuyente según tipo de documento
   const isJuridica = parsed.tipo === 'J' || parsed.tipo === 'G';
@@ -156,7 +159,7 @@ export function mapWisphubClientToProfit(
 
   // 7. Catálogos por defecto según sucursal u opciones
   const co_zon = (options.default_zone || '01').trim().slice(0, 6);
-  const tip_cli = (options.default_client_type || '01').trim().slice(0, 6);
+  const tip_cli = inferTipCliFromRif(co_cli, (options.default_client_type || '01').trim()).slice(0, 6);
   const co_ven = (options.default_seller || '01').trim().slice(0, 10);
   const co_seg = (options.default_segment || '01').trim().slice(0, 6);
   const co_mone = (options.default_currency || 'USD').trim().slice(0, 6);
@@ -199,7 +202,19 @@ export async function syncWisphubCustomerToProfit(
   agentClient: AgentClient,
   options: CustomerSyncOptions = {}
 ): Promise<CustomerSyncResult> {
+  const coCliSource = options.field_mappings?.co_cli_source || 'cedula_or_id';
   const mapped = mapWisphubClientToProfit(client, options);
+
+  if (coCliSource === 'cedula_or_id' && mapped.co_cli.startsWith('WISP-')) {
+    return {
+      success: true,
+      co_cli: mapped.co_cli,
+      id_servicio: client.id_servicio,
+      nombre: mapped.cli_des,
+      action: 'skipped',
+      message: 'Omitido: cliente sin cédula/RIF en WispHub.'
+    };
+  }
 
   try {
     // 1. Verificar si el cliente ya existe en Profit Plus
@@ -274,8 +289,13 @@ export async function syncWisphubCustomerToProfit(
   }
 }
 
+function isWisphubClientActive(client: WisphubClient): boolean {
+  const est = String(client.estado ?? '').trim().toLowerCase();
+  return est === '1' || est === 'activo';
+}
+
 /**
- * Sincroniza un lote de clientes de WispHub hacia Profit Plus
+ * Sincroniza un lote de clientes de WispHub hacia Profit Plus evitando duplicados
  */
 export async function syncBatchWisphubCustomers(
   clients: WisphubClient[],
@@ -291,14 +311,44 @@ export async function syncBatchWisphubCustomers(
     results: []
   };
 
-  for (const client of clients) {
-    const res = await syncWisphubCustomerToProfit(client, agentClient, options);
-    summary.results.push(res);
+  // Priorizar servicios activos cuando un mismo titular posee múltiples servicios en WispHub
+  const prioritized = [...clients].sort((a, b) => Number(isWisphubClientActive(b)) - Number(isWisphubClientActive(a)));
 
-    if (res.action === 'created') summary.created++;
-    else if (res.action === 'updated') summary.updated++;
-    else if (res.action === 'skipped') summary.skipped++;
-    else if (res.action === 'failed') summary.failed++;
+  const seenCodes = new Set<string>();
+  const uniqueClients: WisphubClient[] = [];
+
+  for (const client of prioritized) {
+    const mapped = mapWisphubClientToProfit(client, options);
+    const codeKey = mapped.co_cli.trim().toUpperCase();
+    if (seenCodes.has(codeKey)) {
+      summary.skipped++;
+      summary.results.push({
+        success: true,
+        co_cli: mapped.co_cli,
+        id_servicio: client.id_servicio,
+        nombre: mapped.cli_des,
+        action: 'skipped',
+        message: 'Servicio adicional del mismo titular (cédula ya sincronizada en este lote).'
+      });
+      continue;
+    }
+    seenCodes.add(codeKey);
+    uniqueClients.push(client);
+  }
+
+  const CONCURRENCY = 8;
+  for (let i = 0; i < uniqueClients.length; i += CONCURRENCY) {
+    const batch = uniqueClients.slice(i, i + CONCURRENCY);
+    const batchResults = await Promise.all(
+      batch.map((client) => syncWisphubCustomerToProfit(client, agentClient, options))
+    );
+    for (const res of batchResults) {
+      summary.results.push(res);
+      if (res.action === 'created') summary.created++;
+      else if (res.action === 'updated') summary.updated++;
+      else if (res.action === 'skipped') summary.skipped++;
+      else if (res.action === 'failed') summary.failed++;
+    }
   }
 
   return summary;

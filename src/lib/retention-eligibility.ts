@@ -77,6 +77,26 @@ export function inferTipoPerFromRif(rif: string | null | undefined, currentTipoP
 }
 
 /**
+ * Infiere el código de Tipo de Cliente (tip_cli en saTipoCliente) según la letra inicial del código o RIF:
+ * - V / E / P (o numérico) => '01' (PERSONAL)
+ * - J => '02' (JURIDICO)
+ * - C => '03' (CONSEJO COMUNAL)
+ * - G => '04' (GUBERNAMENTAL)
+ */
+export function inferTipCliFromRif(rifOrCode: string | null | undefined, fallback = '01'): string {
+	const clean = normalizeTaxId(rifOrCode);
+	if (!clean) return fallback;
+	const first = clean.charAt(0);
+	if (first === 'V' || first === 'E' || first === 'P' || /^\d+$/.test(clean)) return '01';
+	if (first === 'J') return '02';
+	if (first === 'C') return '03';
+	if (first === 'G') return '04';
+	return fallback;
+}
+
+export const inferTipCliFromCodeOrRif = inferTipCliFromRif;
+
+/**
  * Determina si el cliente califica como Agente de Retención de IVA (Contribuyente Especial):
  * 1) NO es Persona Natural,
  * 2) Posee marca de Contribuyente Especial activa (contribu_e),
