@@ -18,6 +18,7 @@
     ArrowUpDown,
     ArrowUp,
     ArrowDown,
+    ExternalLink,
   } from "lucide-svelte";
   import { goto } from "$app/navigation";
   import { page } from "$app/stores";
@@ -48,28 +49,36 @@
   async function printCancellationTicket(invoice: any) {
     if (printingCancelDoc) return;
     printingCancelDoc = invoice.doc_num;
-    toast.info(`Enviando notificación de anulación de ${invoice.doc_num} a almacén...`);
+    toast.info(
+      `Enviando notificación de anulación de ${invoice.doc_num} a almacén...`,
+    );
 
     try {
-      const response = await fetch('/api/agent/billing/print-cancel', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      const response = await fetch("/api/agent/billing/print-cancel", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          branch_id: invoice.sede_id || invoice._branch_id || filterSede || data.selectedBranchId,
+          branch_id:
+            invoice.sede_id ||
+            invoice._branch_id ||
+            filterSede ||
+            data.selectedBranchId,
           doc_num: invoice.doc_num,
-          action_type: 'ANULACION',
-          invoice: invoice
-        })
+          action_type: "ANULACION",
+          invoice: invoice,
+        }),
       });
       const res = await response.json();
       if (res.success) {
-        toast.success(res.message || 'Ticket de notificación enviado a almacén.');
+        toast.success(
+          res.message || "Ticket de notificación enviado a almacén.",
+        );
       } else {
-        toast.error(res.message || 'Error al enviar ticket a almacén.');
+        toast.error(res.message || "Error al enviar ticket a almacén.");
       }
     } catch (err: any) {
-      console.error('Error al reimprimir notificación:', err);
-      toast.error('Error al conectar con el servicio de impresión.');
+      console.error("Error al reimprimir notificación:", err);
+      toast.error("Error al conectar con el servicio de impresión.");
     } finally {
       printingCancelDoc = null;
     }
@@ -110,7 +119,9 @@
 
   // Estado de Ordenamiento (del lado servidor)
   let sortBy = $derived(data.filters?.order_by || "fec_emis");
-  let sortAsc = $derived((data.filters?.order_dir || "DESC").toUpperCase() === "ASC");
+  let sortAsc = $derived(
+    (data.filters?.order_dir || "DESC").toUpperCase() === "ASC",
+  );
 
   function toggleSort(col: string) {
     const params = new URLSearchParams($page.url.searchParams);
@@ -122,7 +133,15 @@
       nextDir = currentDir === "ASC" ? "DESC" : "ASC";
     } else {
       // Dirección inicial: alfabéticos en ASC, fechas y montos en DESC
-      nextDir = ["cliente", "doc_num", "cajero", "vendedor", "estatus"].includes(col) ? "ASC" : "DESC";
+      nextDir = [
+        "cliente",
+        "doc_num",
+        "cajero",
+        "vendedor",
+        "estatus",
+      ].includes(col)
+        ? "ASC"
+        : "DESC";
     }
 
     params.set("order_by", col);
@@ -140,28 +159,42 @@
     goto(`?${params.toString()}`);
   }
 
+  function getInvoiceHkaUrl(invoice: any): string {
+    const url = String(invoice?.hka_url || "").trim();
+    return url.startsWith("http") ? url : "";
+  }
+
   function isFiscalInvoice(invoice: any) {
     if (Number(invoice.monto_imp) > 0) return true;
-    
+
     // Buscar configuración de la sede de esta factura
-    const bConfig = data.branches?.find((b: any) => String(b.id).toLowerCase() === String(invoice.sede_id).toLowerCase());
+    const bConfig = data.branches?.find(
+      (b: any) =>
+        String(b.id).toLowerCase() === String(invoice.sede_id).toLowerCase(),
+    );
     if (!bConfig) return false;
-    
+
     let codes = bConfig.profit_branch_codes;
     if (typeof codes === "string") {
-      try { codes = JSON.parse(codes); } catch (e) {}
+      try {
+        codes = JSON.parse(codes);
+      } catch (e) {}
     }
     if (!Array.isArray(codes)) return false;
-    
+
     const found = codes.find(
       (c: any) =>
         c.is_default === true ||
         String(c.is_default) === "true" ||
-        c.default === true
+        c.default === true,
     );
     if (!found) return false;
-    
-    return String(invoice.co_sucu_in || '').trim().toUpperCase() === String(found.code).trim().toUpperCase();
+
+    return (
+      String(invoice.co_sucu_in || "")
+        .trim()
+        .toUpperCase() === String(found.code).trim().toUpperCase()
+    );
   }
 
   function openVoidModal(invoice: any) {
@@ -169,8 +202,6 @@
     voidPassword = "";
     showVoidModal = true;
   }
-
-
 </script>
 
 <div class="space-y-6 animate-in fade-in duration-500" in:fade>
@@ -185,10 +216,14 @@
         <AlertCircle size={24} />
       </div>
       <div class="flex-1">
-        <h3 class="text-sm font-black text-red-500 uppercase tracking-widest mb-1">
+        <h3
+          class="text-sm font-black text-red-500 uppercase tracking-widest mb-1"
+        >
           Restricción de Acceso
         </h3>
-        <p class="text-text-muted font-bold text-sm leading-relaxed">{data.error}</p>
+        <p class="text-text-muted font-bold text-sm leading-relaxed">
+          {data.error}
+        </p>
       </div>
       <button
         onclick={() => window.location.reload()}
@@ -230,7 +265,10 @@
     {#if data.branches && data.branches.length > 1}
       <div class="w-full">
         <Combobox
-          options={data.branches.map((b: any) => ({ value: b.id, label: b.name }))}
+          options={data.branches.map((b: any) => ({
+            value: b.id,
+            label: b.name,
+          }))}
           bind:value={filterSede}
           placeholder="Sucursal..."
           allLabel="Todas las Sucursales"
@@ -241,10 +279,14 @@
       </div>
     {/if}
 
-    <div class="w-full {!(data.branches && data.branches.length > 1) ? 'md:col-span-2' : ''}">
+    <div
+      class="w-full {!(data.branches && data.branches.length > 1)
+        ? 'md:col-span-2'
+        : ''}"
+    >
       <SearchBar
         bind:value={filterSearch}
-        isSearching={isSearching}
+        {isSearching}
         onsubmit={applyFilters}
         placeholder="Buscar por factura, cliente o RIF..."
         className="w-full h-12"
@@ -283,7 +325,9 @@
     <div class="overflow-x-auto">
       <table class="w-full text-left border-collapse">
         <thead>
-          <tr class="bg-surface-soft/50 border-b border-border-subtle text-xs font-black uppercase tracking-[0.1em] text-text-muted">
+          <tr
+            class="bg-surface-soft/50 border-b border-border-subtle text-xs font-black uppercase tracking-[0.1em] text-text-muted"
+          >
             <!-- Fecha Emisión -->
             <th class="px-6 py-5">
               <button
@@ -293,14 +337,17 @@
                 title="Ordenar por Fecha de Emisión"
               >
                 <span>Fecha Emisión</span>
-                {#if sortBy === 'fec_emis'}
+                {#if sortBy === "fec_emis"}
                   {#if sortAsc}
                     <ArrowUp size={13} class="text-brand-500 shrink-0" />
                   {:else}
                     <ArrowDown size={13} class="text-brand-500 shrink-0" />
                   {/if}
                 {:else}
-                  <ArrowUpDown size={13} class="opacity-30 group-hover/th:opacity-70 transition-opacity shrink-0" />
+                  <ArrowUpDown
+                    size={13}
+                    class="opacity-30 group-hover/th:opacity-70 transition-opacity shrink-0"
+                  />
                 {/if}
               </button>
             </th>
@@ -314,14 +361,17 @@
                 title="Ordenar por Factura / Documento"
               >
                 <span>Factura / Documento</span>
-                {#if sortBy === 'doc_num'}
+                {#if sortBy === "doc_num"}
                   {#if sortAsc}
                     <ArrowUp size={13} class="text-brand-500 shrink-0" />
                   {:else}
                     <ArrowDown size={13} class="text-brand-500 shrink-0" />
                   {/if}
                 {:else}
-                  <ArrowUpDown size={13} class="opacity-30 group-hover/th:opacity-70 transition-opacity shrink-0" />
+                  <ArrowUpDown
+                    size={13}
+                    class="opacity-30 group-hover/th:opacity-70 transition-opacity shrink-0"
+                  />
                 {/if}
               </button>
             </th>
@@ -335,14 +385,17 @@
                 title="Ordenar por Cliente"
               >
                 <span>Cliente</span>
-                {#if sortBy === 'cliente'}
+                {#if sortBy === "cliente"}
                   {#if sortAsc}
                     <ArrowUp size={13} class="text-brand-500 shrink-0" />
                   {:else}
                     <ArrowDown size={13} class="text-brand-500 shrink-0" />
                   {/if}
                 {:else}
-                  <ArrowUpDown size={13} class="opacity-30 group-hover/th:opacity-70 transition-opacity shrink-0" />
+                  <ArrowUpDown
+                    size={13}
+                    class="opacity-30 group-hover/th:opacity-70 transition-opacity shrink-0"
+                  />
                 {/if}
               </button>
             </th>
@@ -356,14 +409,17 @@
                 title="Ordenar por Monto"
               >
                 <span>Monto</span>
-                {#if sortBy === 'monto'}
+                {#if sortBy === "monto"}
                   {#if sortAsc}
                     <ArrowUp size={13} class="text-brand-500 shrink-0" />
                   {:else}
                     <ArrowDown size={13} class="text-brand-500 shrink-0" />
                   {/if}
                 {:else}
-                  <ArrowUpDown size={13} class="opacity-30 group-hover/th:opacity-70 transition-opacity shrink-0" />
+                  <ArrowUpDown
+                    size={13}
+                    class="opacity-30 group-hover/th:opacity-70 transition-opacity shrink-0"
+                  />
                 {/if}
               </button>
             </th>
@@ -377,14 +433,17 @@
                 title="Ordenar por Saldo"
               >
                 <span>Saldo</span>
-                {#if sortBy === 'saldo'}
+                {#if sortBy === "saldo"}
                   {#if sortAsc}
                     <ArrowUp size={13} class="text-brand-500 shrink-0" />
                   {:else}
                     <ArrowDown size={13} class="text-brand-500 shrink-0" />
                   {/if}
                 {:else}
-                  <ArrowUpDown size={13} class="opacity-30 group-hover/th:opacity-70 transition-opacity shrink-0" />
+                  <ArrowUpDown
+                    size={13}
+                    class="opacity-30 group-hover/th:opacity-70 transition-opacity shrink-0"
+                  />
                 {/if}
               </button>
             </th>
@@ -399,14 +458,17 @@
                   title="Ordenar por Cajero"
                 >
                   <span>Cajero</span>
-                  {#if sortBy === 'cajero'}
+                  {#if sortBy === "cajero"}
                     {#if sortAsc}
                       <ArrowUp size={13} class="text-brand-500 shrink-0" />
                     {:else}
                       <ArrowDown size={13} class="text-brand-500 shrink-0" />
                     {/if}
                   {:else}
-                    <ArrowUpDown size={13} class="opacity-30 group-hover/th:opacity-70 transition-opacity shrink-0" />
+                    <ArrowUpDown
+                      size={13}
+                      class="opacity-30 group-hover/th:opacity-70 transition-opacity shrink-0"
+                    />
                   {/if}
                 </button>
               </th>
@@ -421,14 +483,17 @@
                 title="Ordenar por Vendedor"
               >
                 <span>Vendedor</span>
-                {#if sortBy === 'vendedor'}
+                {#if sortBy === "vendedor"}
                   {#if sortAsc}
                     <ArrowUp size={13} class="text-brand-500 shrink-0" />
                   {:else}
                     <ArrowDown size={13} class="text-brand-500 shrink-0" />
                   {/if}
                 {:else}
-                  <ArrowUpDown size={13} class="opacity-30 group-hover/th:opacity-70 transition-opacity shrink-0" />
+                  <ArrowUpDown
+                    size={13}
+                    class="opacity-30 group-hover/th:opacity-70 transition-opacity shrink-0"
+                  />
                 {/if}
               </button>
             </th>
@@ -442,30 +507,36 @@
                 title="Ordenar por Estatus"
               >
                 <span>Estatus</span>
-                {#if sortBy === 'estatus'}
+                {#if sortBy === "estatus"}
                   {#if sortAsc}
                     <ArrowUp size={13} class="text-brand-500 shrink-0" />
                   {:else}
                     <ArrowDown size={13} class="text-brand-500 shrink-0" />
                   {/if}
                 {:else}
-                  <ArrowUpDown size={13} class="opacity-30 group-hover/th:opacity-70 transition-opacity shrink-0" />
+                  <ArrowUpDown
+                    size={13}
+                    class="opacity-30 group-hover/th:opacity-70 transition-opacity shrink-0"
+                  />
                 {/if}
               </button>
             </th>
 
             <!-- Acciones -->
-            <th class="px-6 py-5 text-center">
-              Acciones
-            </th>
+            <th class="px-6 py-5 text-center"> Acciones </th>
           </tr>
         </thead>
         <tbody class="divide-y divide-border-subtle/30">
           {#if !sortedInvoices || sortedInvoices.length === 0}
             <tr>
-              <td colspan={data.canSeeOthers ? 9 : 8} class="px-6 py-32 text-center">
+              <td
+                colspan={data.canSeeOthers ? 9 : 8}
+                class="px-6 py-32 text-center"
+              >
                 <FileText size={48} class="mx-auto text-text-muted/20 mb-4" />
-                <p class="text-text-muted font-bold text-lg">No se encontraron facturas</p>
+                <p class="text-text-muted font-bold text-lg">
+                  No se encontraron facturas
+                </p>
                 <button
                   onclick={() => {
                     filterSearch = "";
@@ -480,7 +551,13 @@
             </tr>
           {:else}
             {#each sortedInvoices as invoice}
-              {@const effectiveTasa = Number(invoice.tasa) > 1 ? Number(invoice.tasa) : (Number(invoice.tasa_fecha) > 1 ? Number(invoice.tasa_fecha) : 1)}
+              {@const effectiveTasa =
+                Number(invoice.tasa) > 1
+                  ? Number(invoice.tasa)
+                  : Number(invoice.tasa_fecha) > 1
+                    ? Number(invoice.tasa_fecha)
+                    : 1}
+              {@const hkaUrl = getInvoiceHkaUrl(invoice)}
               <tr class="hover:bg-brand-500/5 transition-colors group">
                 <td class="px-6 py-5">
                   <div class="text-xs font-bold text-text-base">
@@ -497,9 +574,29 @@
                     >
                       {invoice.doc_num}
                     </span>
-                    <span class="text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded-md {isFiscalInvoice(invoice) ? 'bg-purple-500/10 text-purple-400 border border-purple-500/20' : 'bg-amber-500/10 text-amber-400 border border-amber-500/20'}">
-                      {isFiscalInvoice(invoice) ? 'Factura' : 'Nota de Entrega'}
-                    </span>
+                    <div class="flex items-center gap-1 flex-wrap">
+                      <span
+                        class="text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded-md {isFiscalInvoice(
+                          invoice,
+                        )
+                          ? 'bg-purple-500/10 text-purple-400 border border-purple-500/20'
+                          : 'bg-amber-500/10 text-amber-400 border border-amber-500/20'}"
+                      >
+                        {isFiscalInvoice(invoice)
+                          ? "Factura"
+                          : "Nota de Entrega"}
+                      </span>
+                      {#if hkaUrl || invoice.campo1 === "HKA-EMIT" || invoice.campo1 === "HKA-SYNC"}
+                        <span
+                          class="text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded-md bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+                          title={invoice.hka_control
+                            ? `Control HKA: ${invoice.hka_control}`
+                            : "Emitida vía The Factory HKA"}
+                        >
+                          HKA
+                        </span>
+                      {/if}
+                    </div>
                   </div>
                 </td>
                 <td class="px-6 py-5">
@@ -507,39 +604,67 @@
                     <span class="text-sm font-bold text-text-base truncate"
                       >{invoice.cli_des || "CLIENTE GENERAL"}</span
                     >
-                    <span class="text-[10px] text-text-muted font-black tracking-widest"
+                    <span
+                      class="text-[10px] text-text-muted font-black tracking-widest"
                       >{invoice.co_cli}</span
                     >
                   </div>
                 </td>
                 <td class="px-6 py-5 text-right font-bold">
                   <div class="text-base text-text-base">
-                    <span class="text-text-muted text-xs font-medium mr-1">USD</span>
-                    {(Number(invoice.total_neto) / effectiveTasa).toLocaleString('de-DE', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+                    <span class="text-text-muted text-xs font-medium mr-1"
+                      >USD</span
+                    >
+                    {(
+                      Number(invoice.total_neto) / effectiveTasa
+                    ).toLocaleString("de-DE", {
+                      minimumFractionDigits: 2,
+                      maximumFractionDigits: 2,
+                    })}
                   </div>
                   <div class="text-xs text-text-muted/60 mt-0.5">
                     <span>Bs. </span>
-                    {Number(invoice.total_neto).toLocaleString('de-DE', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
-                    <span class="text-[10px] text-text-muted/40 ml-1">(Tasa: {effectiveTasa.toLocaleString('de-DE', {minimumFractionDigits: 2, maximumFractionDigits: 2})})</span>
+                    {Number(invoice.total_neto).toLocaleString("de-DE", {
+                      minimumFractionDigits: 2,
+                      maximumFractionDigits: 2,
+                    })}
+                    <span class="text-[10px] text-text-muted/40 ml-1"
+                      >(Tasa: {effectiveTasa.toLocaleString("de-DE", {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                      })})</span
+                    >
                   </div>
                 </td>
                 <td class="px-6 py-5 text-right font-bold">
                   {#if invoice.anulado}
-                    <span class="px-2.5 py-1 rounded-lg bg-red-500/10 text-red-400 border border-red-500/20 text-xs font-black uppercase tracking-wider">
+                    <span
+                      class="px-2.5 py-1 rounded-lg bg-red-500/10 text-red-400 border border-red-500/20 text-xs font-black uppercase tracking-wider"
+                    >
                       Anulada
                     </span>
                   {:else if Number(invoice.saldo ?? 0) <= 0.001}
-                    <span class="px-2 py-0.5 rounded-md bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[10px] font-black uppercase tracking-wider">
+                    <span
+                      class="px-2 py-0.5 rounded-md bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[10px] font-black uppercase tracking-wider"
+                    >
                       Pagada
                     </span>
                   {:else}
                     <div class="text-sm font-black text-amber-400">
-                      <span class="text-amber-500/70 text-xs font-medium mr-1">USD</span>
-                      {(Number(invoice.saldo) / effectiveTasa).toLocaleString('de-DE', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+                      <span class="text-amber-500/70 text-xs font-medium mr-1"
+                        >USD</span
+                      >
+                      {(Number(invoice.saldo) / effectiveTasa).toLocaleString(
+                        "de-DE",
+                        { minimumFractionDigits: 2, maximumFractionDigits: 2 },
+                      )}
                     </div>
                     <div class="text-xs text-amber-400/70 font-semibold mt-0.5">
                       <span>Bs. </span>
-                      {Number(invoice.saldo).toLocaleString('de-DE', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+                      {Number(invoice.saldo).toLocaleString("de-DE", {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                      })}
                     </div>
                   {/if}
                 </td>
@@ -551,9 +676,15 @@
                       >
                         {invoice.co_us_in || "---"}
                       </span>
-                      <div class="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover/tooltip:block bg-surface-raised border border-border-subtle px-3 py-1.5 rounded-xl text-xs font-black uppercase tracking-wider text-text-base whitespace-nowrap shadow-2xl z-30 pointer-events-none transition-all">
-                        {String(invoice.cashier_name || invoice.co_us_in || "---").toUpperCase()}
-                        <div class="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-border-subtle"></div>
+                      <div
+                        class="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover/tooltip:block bg-surface-raised border border-border-subtle px-3 py-1.5 rounded-xl text-xs font-black uppercase tracking-wider text-text-base whitespace-nowrap shadow-2xl z-30 pointer-events-none transition-all"
+                      >
+                        {String(
+                          invoice.cashier_name || invoice.co_us_in || "---",
+                        ).toUpperCase()}
+                        <div
+                          class="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-border-subtle"
+                        ></div>
                       </div>
                     </div>
                   </td>
@@ -565,9 +696,15 @@
                     >
                       {invoice.co_ven || "---"}
                     </span>
-                    <div class="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover/tooltip:block bg-surface-raised border border-border-subtle px-3 py-1.5 rounded-xl text-xs font-black uppercase tracking-wider text-text-base whitespace-nowrap shadow-2xl z-30 pointer-events-none transition-all">
-                      {String(invoice.ven_des || invoice.co_ven || "---").toUpperCase()}
-                      <div class="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-border-subtle"></div>
+                    <div
+                      class="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover/tooltip:block bg-surface-raised border border-border-subtle px-3 py-1.5 rounded-xl text-xs font-black uppercase tracking-wider text-text-base whitespace-nowrap shadow-2xl z-30 pointer-events-none transition-all"
+                    >
+                      {String(
+                        invoice.ven_des || invoice.co_ven || "---",
+                      ).toUpperCase()}
+                      <div
+                        class="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-border-subtle"
+                      ></div>
                     </div>
                   </div>
                 </td>
@@ -588,15 +725,34 @@
                 </td>
                 <td class="px-6 py-5">
                   <div class="flex items-center justify-center gap-2">
-                    <!-- Reimprimir Factura -->
-                    <a
-                      href="/dashboard/billing/{encodeURIComponent(invoice.doc_num)}/print?branch_id={invoice.sede_id || invoice._branch_id || filterSede || data.selectedBranchId}"
-                      target="_blank"
-                      class="p-2 text-text-muted hover:text-brand-500 hover:bg-brand-500/10 rounded-xl transition-all cursor-pointer flex items-center justify-center"
-                      title={isFiscalInvoice(invoice) ? 'Reimprimir Factura' : 'Reimprimir Nota de Entrega'}
-                    >
-                      <Printer size={18} />
-                    </a>
+                    <!-- Previsualizar Documento (HKA si existe enlace, si no PDF tradicional) -->
+                    {#if hkaUrl}
+                      <a
+                        href={hkaUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        class="p-2 text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10 rounded-xl transition-all cursor-pointer flex items-center justify-center"
+                        title="Ver Factura Electrónica en HKA"
+                      >
+                        <ExternalLink size={18} />
+                      </a>
+                    {:else}
+                      <a
+                        href="/dashboard/billing/{encodeURIComponent(
+                          invoice.doc_num,
+                        )}/print?branch_id={invoice.sede_id ||
+                          invoice._branch_id ||
+                          filterSede ||
+                          data.selectedBranchId}"
+                        target="_blank"
+                        class="p-2 text-text-muted hover:text-brand-500 hover:bg-brand-500/10 rounded-xl transition-all cursor-pointer flex items-center justify-center"
+                        title={isFiscalInvoice(invoice)
+                          ? "Reimprimir Factura"
+                          : "Reimprimir Nota de Entrega"}
+                      >
+                        <Printer size={18} />
+                      </a>
+                    {/if}
 
                     <!-- Notificación de Anulación en Despacho -->
                     {#if invoice.anulado}
@@ -607,7 +763,10 @@
                         title="Reimprimir Notificación de Anulación en Despacho"
                       >
                         {#if printingCancelDoc === invoice.doc_num}
-                          <Loader2 size={18} class="animate-spin text-amber-500" />
+                          <Loader2
+                            size={18}
+                            class="animate-spin text-amber-500"
+                          />
                         {:else}
                           <BellRing size={18} />
                         {/if}
@@ -619,7 +778,9 @@
                       <button
                         onclick={() => openVoidModal(invoice)}
                         class="p-2 text-text-muted hover:text-amber-500 hover:bg-amber-500/10 rounded-xl transition-all cursor-pointer"
-                        title={isFiscalInvoice(invoice) ? 'Anular Factura' : 'Anular Nota de Entrega'}
+                        title={isFiscalInvoice(invoice)
+                          ? "Anular Factura"
+                          : "Anular Nota de Entrega"}
                       >
                         <Ban size={18} />
                       </button>
@@ -630,7 +791,9 @@
                       <button
                         onclick={() => openDeleteModal(invoice)}
                         class="p-2 text-text-muted hover:text-red-500 hover:bg-red-500/10 rounded-xl transition-all cursor-pointer"
-                        title={isFiscalInvoice(invoice) ? 'Eliminar Factura Permanentemente' : 'Eliminar Nota de Entrega Permanentemente'}
+                        title={isFiscalInvoice(invoice)
+                          ? "Eliminar Factura Permanentemente"
+                          : "Eliminar Nota de Entrega Permanentemente"}
                       >
                         <Trash2 size={18} />
                       </button>
@@ -649,9 +812,15 @@
       <div
         class="px-8 py-6 bg-white/[0.02] border-t border-white/5 flex items-center justify-between"
       >
-        <p class="text-[10px] font-black uppercase tracking-[0.2em] text-text-muted">
-          Página <span class="text-text-base">{data.pagination.currentPage}</span> de
-          <span class="text-text-base">{data.pagination.pages}</span> (Total: {data.pagination.total})
+        <p
+          class="text-[10px] font-black uppercase tracking-[0.2em] text-text-muted"
+        >
+          Página <span class="text-text-base"
+            >{data.pagination.currentPage}</span
+          >
+          de
+          <span class="text-text-base">{data.pagination.pages}</span> (Total: {data
+            .pagination.total})
         </p>
 
         <div class="flex items-center gap-2">
@@ -681,7 +850,8 @@
     <div
       class="absolute inset-0 bg-black/60 backdrop-blur-sm"
       onclick={() => !isVoiding && (showVoidModal = false)}
-      onkeydown={(e) => e.key === "Escape" && !isVoiding && (showVoidModal = false)}
+      onkeydown={(e) =>
+        e.key === "Escape" && !isVoiding && (showVoidModal = false)}
       role="button"
       tabindex="-1"
     ></div>
@@ -698,12 +868,15 @@
         </div>
 
         <div class="space-y-2">
-          <h2 class="text-2xl font-black tracking-tight text-text-base">Confirmar Anulación</h2>
+          <h2 class="text-2xl font-black tracking-tight text-text-base">
+            Confirmar Anulación
+          </h2>
           <p class="text-text-muted text-sm px-4">
             ¿Estás seguro de que deseas anular la factura
-            <span class="text-text-base font-bold">{invoiceToVoid?.doc_num}</span>? Esto
-            revertirá el stock y las cantidades pendientes de los pedidos asociados en Profit
-            Plus.
+            <span class="text-text-base font-bold"
+              >{invoiceToVoid?.doc_num}</span
+            >? Esto revertirá el stock y las cantidades pendientes de los
+            pedidos asociados en Profit Plus.
           </p>
         </div>
 
@@ -718,8 +891,13 @@
 
               if (result.type === "success") {
                 showVoidModal = false;
-                toast.success((result as any).data?.message || "Factura anulada con éxito");
-              } else if (result.type === "failure" && (result as any).data?.message) {
+                toast.success(
+                  (result as any).data?.message || "Factura anulada con éxito",
+                );
+              } else if (
+                result.type === "failure" &&
+                (result as any).data?.message
+              ) {
                 toast.error((result as any).data.message);
               } else {
                 toast.error("Error al anular la factura");
@@ -787,7 +965,8 @@
     <div
       class="absolute inset-0 bg-black/60 backdrop-blur-sm"
       onclick={() => !isDeleting && (showDeleteModal = false)}
-      onkeydown={(e) => e.key === "Escape" && !isDeleting && (showDeleteModal = false)}
+      onkeydown={(e) =>
+        e.key === "Escape" && !isDeleting && (showDeleteModal = false)}
       role="button"
       tabindex="-1"
     ></div>
@@ -804,11 +983,15 @@
         </div>
 
         <div class="space-y-2">
-          <h2 class="text-2xl font-black tracking-tight text-text-base">Confirmar Eliminación</h2>
+          <h2 class="text-2xl font-black tracking-tight text-text-base">
+            Confirmar Eliminación
+          </h2>
           <p class="text-text-muted text-sm px-4">
             ¿Estás seguro de que deseas eliminar permanentemente la factura
-            <span class="text-text-base font-bold font-mono">{invoiceToDelete?.doc_num}</span>?
-            Esta acción eliminará el registro en Profit Plus y devolverá el stock disponible.
+            <span class="text-text-base font-bold font-mono"
+              >{invoiceToDelete?.doc_num}</span
+            >? Esta acción eliminará el registro en Profit Plus y devolverá el
+            stock disponible.
           </p>
         </div>
 
@@ -823,8 +1006,14 @@
 
               if (result.type === "success") {
                 showDeleteModal = false;
-                toast.success((result as any).data?.message || "Factura eliminada con éxito");
-              } else if (result.type === "failure" && (result as any).data?.message) {
+                toast.success(
+                  (result as any).data?.message ||
+                    "Factura eliminada con éxito",
+                );
+              } else if (
+                result.type === "failure" &&
+                (result as any).data?.message
+              ) {
                 toast.error((result as any).data.message);
               } else {
                 toast.error("Error al eliminar la factura");
@@ -833,7 +1022,11 @@
           }}
           class="space-y-4 pt-4"
         >
-          <input type="hidden" name="doc_num" value={invoiceToDelete?.doc_num} />
+          <input
+            type="hidden"
+            name="doc_num"
+            value={invoiceToDelete?.doc_num}
+          />
           <input type="hidden" name="branch_id" value={data.selectedBranchId} />
 
           <div class="space-y-2 text-left">

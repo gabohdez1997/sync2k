@@ -32,6 +32,7 @@
     Sparkles,
     ShoppingBag,
     Printer,
+    ExternalLink,
   } from "lucide-svelte";
   import { toast } from "svelte-sonner";
   import { goto } from "$app/navigation";
@@ -58,7 +59,43 @@
   let comentarioDevolucion = $state("");
   let isSavingReturn = $state(false);
   let saveSuccess = $state(false);
-  let generatedResult = $state<any>(null);
+  let generatedResult = $state<{
+    doc_num?: string;
+    nro_doc?: string;
+    hkaDocNum?: string;
+    hkaControlNum?: string;
+    hkaUrl?: string;
+    [key: string]: any;
+  } | null>(null);
+
+  function getDevHkaUrl(dev: any): string {
+    const url = String(dev?.hka_url || dev?.hkaUrl || "").trim();
+    return url.startsWith("http") ? url : "";
+  }
+
+  function parseBuyerIdentification(
+    rifRaw?: string,
+    fallbackCode?: string,
+  ): {
+    tipoIdentificacion: "V" | "J" | "G" | "E" | "P";
+    numeroIdentificacion: string;
+  } {
+    const clean = String(rifRaw || fallbackCode || "")
+      .trim()
+      .toUpperCase();
+    const match = clean.match(/^([VJGEP])[-_.\s]*([0-9]+)/);
+    if (match) {
+      return {
+        tipoIdentificacion: match[1] as "V" | "J" | "G" | "E" | "P",
+        numeroIdentificacion: match[2],
+      };
+    }
+    const digits = clean.replace(/[^0-9]/g, "");
+    return {
+      tipoIdentificacion: "V",
+      numeroIdentificacion: digits || "00000000",
+    };
+  }
 
   // Search/Import Modal State
   let showImportModal = $state(false);
@@ -502,8 +539,12 @@
                 factura_origen: selectedInvoice.doc_num.trim(),
                 cli_des: selectedInvoice.cli_des,
                 rif: selectedInvoice.rif,
-                vendedor: selectedInvoice.ven_des || selectedInvoice.vendedor || "",
-                cajero: data.userProfile?.full_name || data.userProfile?.profit_user || "",
+                vendedor:
+                  selectedInvoice.ven_des || selectedInvoice.vendedor || "",
+                cajero:
+                  data.userProfile?.full_name ||
+                  data.userProfile?.profit_user ||
+                  "",
                 comentario:
                   comentarioDevolucion.trim() ||
                   `Devolución s/ Factura N° ${selectedInvoice.doc_num.trim()}`,
@@ -520,13 +561,123 @@
           });
           const printJson = await printRes.json();
           if (printJson.success) {
-            toast.success(printJson.message || "Ticket de devolución enviado a almacén.");
+            toast.success(
+              printJson.message || "Ticket de devolución enviado a almacén.",
+            );
           } else {
-            toast.warning(`Devolución guardada, pero ticket no impreso: ${printJson.message}`);
+            toast.warning(
+              `Devolución guardada, pero ticket no impreso: ${printJson.message}`,
+            );
           }
         } catch (printErr: any) {
           console.error("Error al imprimir ticket de devolución:", printErr);
-          toast.warning(`Devolución guardada, pero ocurrió un error al imprimir ticket: ${printErr.message}`);
+          toast.warning(
+            `Devolución guardada, pero ocurrió un error al imprimir ticket: ${printErr.message}`,
+          );
+        }
+
+        // Emitir Nota de Crédito Electrónica en The Factory HKA (si está activa y factura origen es fiscal)
+        const isOriginFiscal = isDocumentoFiscal(
+          selectedInvoice.co_sucu_in,
+          Number(selectedInvoice.monto_imp || 0),
+          filterSede,
+        );
+
+        if (data.hkaActive && isOriginFiscal) {
+          toast.info(
+            "Emitiendo Nota de Crédito Electrónica en The Factory HKA...",
+          );
+          try {
+            const buyerId = parseBuyerIdentification(
+              selectedInvoice.rif,
+              selectedInvoice.co_cli,
+            );
+            const rateBs = Number(activeTasa || 1);
+            const motDevolucion =
+              comentarioDevolucion.trim() ||
+              `Devolución s/ Factura N° ${selectedInvoice.doc_num.trim()}`;
+
+            const hkaItems = activeLines.map((l) => {
+              const isExento =
+                l.tipo_imp === "0" || Number(l.porc_imp || 0) === 0;
+              return {
+                codigo: (l.co_art || "ART").trim(),
+                descripcion: (l.art_des || "ARTICULO").trim(),
+                cantidad: Number(l.cantidad_devolver || 1),
+                precioUnitario: Number(
+                  (Number(l.precio_usd || 0) * rateBs).toFixed(2),
+                ),
+                tasaIVA: isExento ? 0 : Number(l.porc_imp || 16),
+                codigoImpuesto: (isExento ? "E" : "G") as "E" | "G",
+                unidadMedida: (l.co_uni || l.unidad || "UND").trim(),
+              };
+            });
+
+            const fechaAfectada = dayjs(selectedInvoice.fec_emis).isValid()
+              ? dayjs(selectedInvoice.fec_emis).format("DD/MM/YYYY")
+              : dayjs().format("DD/MM/YYYY");
+            const montoAfectado =
+              Number(selectedInvoice.total_neto || 0) > 0
+                ? Number(selectedInvoice.total_neto)
+                : Number(totals.totalBs || 0);
+
+            const hkaRes = await fetch("/api/integrations/hka/emit", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                require_active: true,
+                profit_doc_num: newDevNum,
+                profit_ncr_num: (json.data?.nro_doc || newDevNum).trim(),
+                profit_factura_origen: selectedInvoice.doc_num.trim(),
+                branch_id: filterSede,
+                monto_usd: Number(totals.totalUSD || 0),
+                input: {
+                  tipoDocumento: "03",
+                  comprador: {
+                    tipoIdentificacion: buyerId.tipoIdentificacion,
+                    numeroIdentificacion: buyerId.numeroIdentificacion,
+                    razonSocial:
+                      selectedInvoice.cli_des || selectedInvoice.co_cli,
+                    direccion:
+                      selectedInvoice.direc1 || "VALENCIA, EDO. CARABOBO",
+                    telefono: selectedInvoice.telefonos || "",
+                    correo: selectedInvoice.email || "",
+                  },
+                  items: hkaItems,
+                  moneda: "VES",
+                  tipoDePago: "01",
+                  formaDePagoDescripcion: "NOTA DE CREDITO",
+                  observacion: motDevolucion,
+                  numeroFacturaAfectada: selectedInvoice.doc_num.trim(),
+                  fechaFacturaAfectada: fechaAfectada,
+                  montoFacturaAfectada: montoAfectado,
+                  comentarioFacturaAfectada: motDevolucion,
+                },
+              }),
+            });
+
+            const hkaJson = await hkaRes.json();
+            if (hkaJson.success && hkaJson.hkaResult) {
+              generatedResult = {
+                ...generatedResult,
+                hkaDocNum: hkaJson.hkaResult.numeroDocumento,
+                hkaControlNum: hkaJson.hkaResult.numeroControl,
+                hkaUrl: hkaJson.hkaResult.urlConsulta,
+              };
+              toast.success(
+                `Nota de Crédito HKA #${hkaJson.hkaResult.numeroDocumento} emitida (Control: ${hkaJson.hkaResult.numeroControl}).`,
+              );
+            } else if (!hkaJson.skipped) {
+              toast.warning(
+                `Devolución guardada en Profit (#${newDevNum}), pero The Factory HKA reportó: ${hkaJson.message || "Error al emitir Nota de Crédito"}`,
+              );
+            }
+          } catch (hkaErr: any) {
+            console.error("Error al emitir Nota de Crédito en HKA:", hkaErr);
+            toast.warning(
+              `Devolución guardada en Profit (#${newDevNum}), pero no se pudo conectar con The Factory HKA: ${hkaErr.message}`,
+            );
+          }
         }
       } else {
         toast.error(json.message || "Error al procesar la devolución.");
@@ -550,7 +701,8 @@
     toast.info(`Enviando ticket de devolución ${docNum} a almacén...`);
 
     try {
-      const branchId = dev.sede_id || dev._branch_id || filterSede || data.selectedBranchId;
+      const branchId =
+        dev.sede_id || dev._branch_id || filterSede || data.selectedBranchId;
       const response = await fetch("/api/agent/credits/print", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -568,7 +720,9 @@
       }
     } catch (err: any) {
       console.error("Error al reimprimir ticket de devolución:", err);
-      toast.error("Error al conectar con el servicio de impresión: " + err.message);
+      toast.error(
+        "Error al conectar con el servicio de impresión: " + err.message,
+      );
     } finally {
       printingCreditDoc = null;
     }
@@ -680,14 +834,18 @@
     }
   }
 
-  function isDocumentoFiscal(co_sucu_in: string, monto_imp: number, sede_id: string) {
+  function isDocumentoFiscal(
+    co_sucu_in: string,
+    monto_imp: number,
+    sede_id: string,
+  ) {
     if (Number(monto_imp) > 0) return true;
-    
+
     const bConfig = data.branches?.find(
-      (b: any) => String(b.id).toLowerCase() === String(sede_id).toLowerCase()
+      (b: any) => String(b.id).toLowerCase() === String(sede_id).toLowerCase(),
     );
     if (!bConfig) return false;
-    
+
     let codes = bConfig.profit_branch_codes;
     if (typeof codes === "string") {
       try {
@@ -695,18 +853,19 @@
       } catch (e) {}
     }
     if (!Array.isArray(codes)) return false;
-    
+
     const found = codes.find(
       (c: any) =>
         c.is_default === true ||
         String(c.is_default) === "true" ||
-        c.default === true
+        c.default === true,
     );
     if (!found) return false;
-    
+
     return (
-      String(co_sucu_in || "").trim().toUpperCase() ===
-      String(found.code).trim().toUpperCase()
+      String(co_sucu_in || "")
+        .trim()
+        .toUpperCase() === String(found.code).trim().toUpperCase()
     );
   }
 
@@ -723,13 +882,15 @@
     if (t === "N/CR" || t === "NCR") {
       return {
         label: "Nota de Crédito",
-        class: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20",
+        class:
+          "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20",
       };
     }
     if (t === "DEVO") {
       return {
         label: "Devolución",
-        class: "bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20",
+        class:
+          "bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20",
       };
     }
     return {
@@ -747,15 +908,19 @@
       dev.factura_origen ||
       dev.nro_orig ||
       dev.num_doc_factura ||
-      (dev.renglones?.find((r: any) => r.num_doc)?.num_doc) ||
+      dev.renglones?.find((r: any) => r.num_doc)?.num_doc ||
       ""
     ).trim();
 
     if (num) {
       const isFiscal = isDocumentoFiscal(
         dev.co_sucu_in_orig || dev.co_sucu_in,
-        Number(dev.monto_imp_orig !== undefined ? dev.monto_imp_orig : dev.monto_imp || 0),
-        dev.sede_id || filterSede
+        Number(
+          dev.monto_imp_orig !== undefined
+            ? dev.monto_imp_orig
+            : dev.monto_imp || 0,
+        ),
+        dev.sede_id || filterSede,
       );
       return {
         num,
@@ -765,12 +930,14 @@
     }
 
     if (dev.descrip) {
-      const match = dev.descrip.match(/(?:FAC(?:TURA)?|PEDIDO)[:\s#-]+([A-Za-z0-9_-]+)/i);
+      const match = dev.descrip.match(
+        /(?:FAC(?:TURA)?|PEDIDO)[:\s#-]+([A-Za-z0-9_-]+)/i,
+      );
       if (match && match[1]) {
         const isFiscal = isDocumentoFiscal(
           dev.co_sucu_in,
           Number(dev.monto_imp || 0),
-          dev.sede_id || filterSede
+          dev.sede_id || filterSede,
         );
         return {
           num: match[1],
@@ -823,30 +990,80 @@
       </div>
     </div>
 
+    {#if generatedResult?.hkaControlNum}
+      <div
+        class="w-full bg-emerald-500/10 border border-emerald-500/20 px-6 py-4 rounded-2xl space-y-1.5 text-center"
+      >
+        <span
+          class="text-[10px] font-black uppercase tracking-widest text-emerald-400 block"
+        >
+          Nota de Crédito Electrónica The Factory HKA
+        </span>
+        <div
+          class="flex flex-wrap items-center justify-center gap-4 text-sm font-mono"
+        >
+          <span class="font-black text-text-base">
+            Doc: <span class="text-emerald-400"
+              >{generatedResult.hkaDocNum}</span
+            >
+          </span>
+          <span class="font-black text-text-base">
+            Control: <span class="text-emerald-400"
+              >{generatedResult.hkaControlNum}</span
+            >
+          </span>
+        </div>
+        {#if generatedResult.hkaUrl}
+          <a
+            href={generatedResult.hkaUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            class="inline-block text-xs font-bold text-emerald-300 hover:underline mt-1"
+          >
+            Ver comprobante digital HKA →
+          </a>
+        {/if}
+      </div>
+    {/if}
+
     <div class="flex flex-col sm:flex-row gap-3 w-full">
       {#if generatedResult?.doc_num}
-        <a
-          href="/dashboard/cash/credits/{encodeURIComponent(generatedResult.doc_num.trim())}/print?branch_id={filterSede || data.selectedBranchId}"
-          target="_blank"
-          class="flex-1 bg-blue-600 hover:bg-blue-500 text-white px-6 py-3.5 rounded-2xl font-bold transition-all shadow-lg shadow-blue-500/20 text-sm flex items-center justify-center gap-2 cursor-pointer"
-        >
-          <Printer size={18} />
-          <span>Imprimir PDF</span>
-        </a>
+        {#if getDevHkaUrl(generatedResult)}
+          <a
+            href={getDevHkaUrl(generatedResult)}
+            target="_blank"
+            rel="noopener noreferrer"
+            class="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white px-6 py-3.5 rounded-2xl font-bold transition-all shadow-lg shadow-emerald-500/20 text-sm flex items-center justify-center gap-2 cursor-pointer"
+          >
+            <ExternalLink size={18} />
+            <span>Ver Documento HKA</span>
+          </a>
+        {:else}
+          <a
+            href="/dashboard/cash/credits/{encodeURIComponent(
+              generatedResult.doc_num.trim(),
+            )}/print?branch_id={filterSede || data.selectedBranchId}"
+            target="_blank"
+            class="flex-1 bg-blue-600 hover:bg-blue-500 text-white px-6 py-3.5 rounded-2xl font-bold transition-all shadow-lg shadow-blue-500/20 text-sm flex items-center justify-center gap-2 cursor-pointer"
+          >
+            <Printer size={18} />
+            <span>Imprimir PDF</span>
+          </a>
+        {/if}
 
         <button
           type="button"
           onclick={() =>
             handlePrintCreditTicket({
-              doc_num: generatedResult.doc_num,
-              nro_doc: generatedResult.nro_doc,
+              doc_num: generatedResult?.doc_num,
+              nro_doc: generatedResult?.nro_doc,
               sede_id: filterSede || data.selectedBranchId,
             })}
-          disabled={printingCreditDoc === generatedResult.doc_num}
+          disabled={printingCreditDoc === generatedResult?.doc_num}
           class="flex-1 bg-amber-500/10 hover:bg-amber-500/20 text-amber-500 border border-amber-500/20 px-6 py-3.5 rounded-2xl font-bold transition-all text-sm flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
           title="Reimprimir Ticket de Devolución en Almacén"
         >
-          {#if printingCreditDoc === generatedResult.doc_num}
+          {#if printingCreditDoc === generatedResult?.doc_num}
             <Loader2 size={18} class="animate-spin text-amber-500" />
             <span>Enviando...</span>
           {:else}
@@ -1677,6 +1894,7 @@
                       (Number(dev.tasa || 1) > 0 ? Number(dev.tasa || 1) : 1)}
                     {@const totalBs = Number(dev.total_neto || 0)}
                     {@const orig = getOriginDoc(dev)}
+                    {@const actionDevHkaUrl = getDevHkaUrl(dev)}
                     <tr
                       class="hover:bg-white/[0.02] transition-colors group {dev.anulado
                         ? 'opacity-50 bg-red-500/[0.02]'
@@ -1717,11 +1935,23 @@
                               >
                                 {dev.nro_doc}
                               </span>
-                              <span
-                                class="text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded-md bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20"
-                              >
-                                Nota de Crédito
-                              </span>
+                              <div class="flex items-center gap-1 flex-wrap">
+                                <span
+                                  class="text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded-md bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20"
+                                >
+                                  Nota de Crédito
+                                </span>
+                                {#if getDevHkaUrl(dev) || dev.campo1 === "HKA-EMIT" || dev.campo1 === "HKA-SYNC"}
+                                  <span
+                                    class="text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded-md bg-teal-500/10 text-teal-400 border border-teal-500/20"
+                                    title={dev.hka_control
+                                      ? `Control HKA: ${dev.hka_control}`
+                                      : "Emitida vía The Factory HKA"}
+                                  >
+                                    HKA
+                                  </span>
+                                {/if}
+                              </div>
                             </div>
                           {/if}
                         </div>
@@ -1730,7 +1960,10 @@
                       <!-- Documento Origen -->
                       <td class="px-6 py-5">
                         {#if orig}
-                          {@const badge = getDocTypeBadge(orig.tipo, orig.isFiscal)}
+                          {@const badge = getDocTypeBadge(
+                            orig.tipo,
+                            orig.isFiscal,
+                          )}
                           <div class="flex flex-col gap-1 items-start">
                             <span
                               class="px-2.5 py-1 rounded-lg bg-surface-soft border border-border-subtle text-xs font-black text-brand-500 group-hover:bg-brand-500 group-hover:border-brand-500 group-hover:text-white transition-all inline-block font-mono"
@@ -1744,7 +1977,9 @@
                             </span>
                           </div>
                         {:else}
-                          <span class="text-xs text-text-muted/50 font-mono">---</span>
+                          <span class="text-xs text-text-muted/50 font-mono"
+                            >---</span
+                          >
                         {/if}
                       </td>
 
@@ -1812,15 +2047,32 @@
                       <!-- Acciones -->
                       <td class="px-6 py-5 text-center">
                         <div class="flex items-center justify-center gap-2">
-                          <!-- Imprimir Devolución PDF -->
-                          <a
-                            href="/dashboard/cash/credits/{encodeURIComponent(dev.doc_num.trim())}/print?branch_id={dev.sede_id || dev._branch_id || filterSede || data.selectedBranchId}"
-                            target="_blank"
-                            class="p-2 text-text-muted hover:text-blue-500 hover:bg-blue-500/10 rounded-xl transition-all cursor-pointer flex items-center justify-center"
-                            title="Imprimir PDF Devolución"
-                          >
-                            <Printer size={18} />
-                          </a>
+                          <!-- Previsualizar Nota de Crédito en HKA o PDF tradicional -->
+                          {#if actionDevHkaUrl}
+                            <a
+                              href={actionDevHkaUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              class="p-2 text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10 rounded-xl transition-all cursor-pointer flex items-center justify-center"
+                              title="Ver Nota de Crédito Electrónica en HKA"
+                            >
+                              <ExternalLink size={18} />
+                            </a>
+                          {:else}
+                            <a
+                              href="/dashboard/cash/credits/{encodeURIComponent(
+                                dev.doc_num.trim(),
+                              )}/print?branch_id={dev.sede_id ||
+                                dev._branch_id ||
+                                filterSede ||
+                                data.selectedBranchId}"
+                              target="_blank"
+                              class="p-2 text-text-muted hover:text-blue-500 hover:bg-blue-500/10 rounded-xl transition-all cursor-pointer flex items-center justify-center"
+                              title="Imprimir PDF Devolución"
+                            >
+                              <Printer size={18} />
+                            </a>
+                          {/if}
 
                           <!-- Reimprimir Ticket Devolución Almacén -->
                           <button
@@ -1830,7 +2082,10 @@
                             title="Reimprimir Ticket de Devolución en Almacén"
                           >
                             {#if printingCreditDoc === dev.doc_num}
-                              <Loader2 size={18} class="animate-spin text-amber-500" />
+                              <Loader2
+                                size={18}
+                                class="animate-spin text-amber-500"
+                              />
                             {:else}
                               <Receipt size={18} />
                             {/if}
@@ -2091,7 +2346,8 @@
             {#if getOriginDoc(selectedDetailDev)}
               {@const orig = getOriginDoc(selectedDetailDev)}
               {@const badge = getDocTypeBadge(orig.tipo, orig.isFiscal)}
-              • Doc. Origen: <strong class="text-brand-400 font-mono">{orig.num}</strong>
+              • Doc. Origen:
+              <strong class="text-brand-400 font-mono">{orig.num}</strong>
               <span
                 class="text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded-md {badge.class} ml-1"
               >
@@ -2101,15 +2357,33 @@
           </span>
         </div>
         <div class="flex items-center gap-2">
-          <a
-            href="/dashboard/cash/credits/{encodeURIComponent(selectedDetailDev.doc_num.trim())}/print?branch_id={selectedDetailDev.sede_id || selectedDetailDev._branch_id || filterSede || data.selectedBranchId}"
-            target="_blank"
-            class="p-2 rounded-xl bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 hover:text-blue-300 transition-colors cursor-pointer flex items-center gap-1.5 text-xs font-bold px-3 border border-blue-500/20"
-            title="Imprimir Reporte PDF"
-          >
-            <Printer size={16} />
-            <span>Imprimir PDF</span>
-          </a>
+          {#if getDevHkaUrl(selectedDetailDev)}
+            <a
+              href={getDevHkaUrl(selectedDetailDev)}
+              target="_blank"
+              rel="noopener noreferrer"
+              class="p-2 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 hover:text-emerald-300 transition-colors cursor-pointer flex items-center gap-1.5 text-xs font-bold px-3 border border-emerald-500/20"
+              title="Ver Nota de Crédito Electrónica en HKA"
+            >
+              <ExternalLink size={16} />
+              <span>Ver en HKA</span>
+            </a>
+          {:else}
+            <a
+              href="/dashboard/cash/credits/{encodeURIComponent(
+                selectedDetailDev.doc_num.trim(),
+              )}/print?branch_id={selectedDetailDev.sede_id ||
+                selectedDetailDev._branch_id ||
+                filterSede ||
+                data.selectedBranchId}"
+              target="_blank"
+              class="p-2 rounded-xl bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 hover:text-blue-300 transition-colors cursor-pointer flex items-center gap-1.5 text-xs font-bold px-3 border border-blue-500/20"
+              title="Imprimir Reporte PDF"
+            >
+              <Printer size={16} />
+              <span>Imprimir PDF</span>
+            </a>
+          {/if}
           <button
             onclick={() => (showDetailModal = false)}
             class="p-2 rounded-xl hover:bg-surface-soft text-text-muted hover:text-text-base transition-colors cursor-pointer"

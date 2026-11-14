@@ -43,6 +43,30 @@
   let billingLines = $state<any[]>([]);
   let saveSuccess = $state(false);
   let generatedDocNum = $state("");
+  let hkaEmittedInfo = $state<{
+    numeroDocumento: string;
+    numeroControl: string;
+    urlConsulta?: string;
+  } | null>(null);
+
+  function parseBuyerIdentification(rifRaw?: string, fallbackCode?: string): {
+    tipoIdentificacion: 'V' | 'J' | 'G' | 'E' | 'P';
+    numeroIdentificacion: string;
+  } {
+    const clean = String(rifRaw || fallbackCode || '').trim().toUpperCase();
+    const match = clean.match(/^([VJGEP])[-_.\s]*([0-9]+)/);
+    if (match) {
+      return {
+        tipoIdentificacion: match[1] as 'V' | 'J' | 'G' | 'E' | 'P',
+        numeroIdentificacion: match[2]
+      };
+    }
+    const digits = clean.replace(/[^0-9]/g, '');
+    return {
+      tipoIdentificacion: 'V',
+      numeroIdentificacion: digits || '00000000'
+    };
+  }
   const uniqueOrigins = $derived.by(() => {
     const origins = new Set();
     for (const line of billingLines) {
@@ -417,6 +441,7 @@
     importedOrdersInfo = {};
     enableIgtf = false;
     igtfMontoDivisa = null;
+    hkaEmittedInfo = null;
     toast.success("Factura descartada");
   }
 
@@ -592,6 +617,7 @@
     }
 
     isSavingInvoice = true;
+    hkaEmittedInfo = null;
 
     const tasa = activeTasa;
 
@@ -656,13 +682,81 @@
 
       // DETERMINAR SI LA FACTURA ES FISCAL (IVA > 0 o forzada como fiscal)
       const isFiscalInvoice = montoImp > 0 || (forceSucu !== null && defaultBranchCode !== null && forceSucu === defaultBranchCode);
+      const clientCondForHka = String(selectedClient?.co_cond || '').trim().toUpperCase();
+      const isContadoForHka = clientCondForHka === '01' || clientCondForHka === 'CONTADO';
 
       if (isFiscalInvoice) {
         // =========================================================================
         // === FACTURA FISCAL ===
-        // Se manda SOLO por la impresora fiscal disponible en la sede y NO por
-        // las demás impresoras de facturación (no enviar a Nota de Entrega ni a despacho).
+        // Se manda a The Factory HKA (si está activa) y/o por la impresora fiscal
+        // disponible en la sede (no enviar a Nota de Entrega).
         // =========================================================================
+        if (data.hkaActive) {
+          toast.info("Emitiendo Factura Electrónica en The Factory HKA...");
+          try {
+            const buyerId = parseBuyerIdentification(selectedClient.rif, selectedClient.co_cli);
+            const rateBs = Number(activeTasa || 1);
+            const hkaItems = activeLines.map((line: any) => {
+              const isExento = line.tipo_imp === '0' || Number(line.porc_imp) === 0;
+              return {
+                codigo: (line.co_art || 'ART').trim(),
+                descripcion: (line.art_des || 'ARTICULO').trim(),
+                cantidad: Number(line.cantidad || 1),
+                precioUnitario: Number((Number(line.precio || 0) * rateBs).toFixed(2)),
+                tasaIVA: isExento ? 0 : Number(line.porc_imp || 16),
+                codigoImpuesto: (isExento ? 'E' : 'G') as 'E' | 'G',
+                unidadMedida: (line.co_uni || 'UND').trim()
+              };
+            });
+
+            const hkaRes = await fetch("/api/integrations/hka/emit", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                require_active: true,
+                profit_doc_num: String(realDocNum).trim(),
+                branch_id: filterSede,
+                monto_usd: Number(invoiceTotals.totalFactura || 0),
+                input: {
+                  tipoDocumento: '01',
+                  comprador: {
+                    tipoIdentificacion: buyerId.tipoIdentificacion,
+                    numeroIdentificacion: buyerId.numeroIdentificacion,
+                    razonSocial: selectedClient.cli_des || selectedClient.co_cli,
+                    direccion: selectedClient.direc1 || 'VALENCIA, EDO. CARABOBO',
+                    telefono: selectedClient.telefonos || '',
+                    correo: selectedClient.email || ''
+                  },
+                  items: hkaItems,
+                  moneda: 'VES',
+                  tipoDePago: isContadoForHka ? '01' : '02',
+                  formaDePagoDescripcion: isContadoForHka ? 'CONTADO' : 'CREDITO',
+                  observacion: invoiceData.descrip
+                }
+              })
+            });
+
+            const hkaJson = await hkaRes.json();
+            if (hkaJson.success && hkaJson.hkaResult) {
+              hkaEmittedInfo = {
+                numeroDocumento: hkaJson.hkaResult.numeroDocumento,
+                numeroControl: hkaJson.hkaResult.numeroControl,
+                urlConsulta: hkaJson.hkaResult.urlConsulta
+              };
+              toast.success(
+                `Factura Electrónica HKA #${hkaEmittedInfo.numeroDocumento} emitida (Control: ${hkaEmittedInfo.numeroControl}).`
+              );
+            } else if (!hkaJson.skipped) {
+              toast.warning(
+                `Factura guardada en Profit (#${realDocNum}), pero The Factory HKA reportó: ${hkaJson.message || 'Error al emitir'}`
+              );
+            }
+          } catch (hkaErr: any) {
+            console.error("Error al emitir factura en HKA:", hkaErr);
+            toast.warning(`Factura guardada en Profit (#${realDocNum}), pero no se pudo conectar con The Factory HKA: ${hkaErr.message}`);
+          }
+        }
+
         if (fiscalPrinter) {
           toast.info(`Imprimiendo Factura Fiscal en [${fiscalPrinter.name}]...`);
           try {
@@ -698,7 +792,7 @@
             console.error("Error al imprimir en impresora fiscal:", fiscalErr);
             toast.warning(`Factura guardada pero no se pudo conectar con la impresora fiscal: ${fiscalErr.message}`);
           }
-        } else {
+        } else if (!data.hkaActive) {
           toast.warning("Factura fiscal registrada, pero no hay impresora fiscal activa configurada en esta sede.");
         }
       } else {
@@ -985,15 +1079,40 @@
         La factura a crédito ha sido guardada exitosamente en Profit Plus.
       </p>
     </div>
-    <div class="bg-white/5 px-6 py-4 rounded-2xl border border-white/5">
+    <div class="bg-white/5 px-6 py-4 rounded-2xl border border-white/5 w-full">
       <span
         class="text-xs text-text-muted/60 uppercase font-bold tracking-wider"
         >Factura Generada</span
       >
-      <div class="text-2xl font-black text-brand-500 mt-1">
+      <div class="text-2xl font-black text-brand-500 mt-1 font-mono">
         {generatedDocNum}
       </div>
     </div>
+    {#if hkaEmittedInfo}
+      <div class="w-full bg-emerald-500/10 border border-emerald-500/20 px-6 py-4 rounded-2xl space-y-1.5 text-center">
+        <span class="text-[10px] font-black uppercase tracking-widest text-emerald-400 block">
+          Factura Electrónica The Factory HKA
+        </span>
+        <div class="flex flex-wrap items-center justify-center gap-4 text-sm font-mono">
+          <span class="font-black text-text-base">
+            Doc: <span class="text-emerald-400">{hkaEmittedInfo.numeroDocumento}</span>
+          </span>
+          <span class="font-black text-text-base">
+            Control: <span class="text-emerald-400">{hkaEmittedInfo.numeroControl}</span>
+          </span>
+        </div>
+        {#if hkaEmittedInfo.urlConsulta}
+          <a
+            href={hkaEmittedInfo.urlConsulta}
+            target="_blank"
+            rel="noopener noreferrer"
+            class="inline-block text-xs font-bold text-emerald-300 hover:underline mt-1"
+          >
+            Ver comprobante digital HKA →
+          </a>
+        {/if}
+      </div>
+    {/if}
     <div class="flex gap-4 w-full">
       <a
         href="/dashboard/billing/history?branch_id={filterSede}"
@@ -1011,6 +1130,7 @@
           importedOrdersInfo = {};
           enableIgtf = false;
           igtfMontoDivisa = null;
+          hkaEmittedInfo = null;
         }}
         class="flex-1 bg-brand-600 hover:bg-brand-500 text-white px-6 py-3.5 rounded-2xl font-bold transition-all shadow-lg shadow-brand-500/20 text-sm"
       >

@@ -1607,6 +1607,12 @@ export function generateHkaReplicationSql(plan: HkaReplicationPlan, ctx?: Profit
     const headerTipoImp = inv.renglones[0]?.tipo_imp || '1';
     const headerPorcImp = inv.renglones[0]?.porc_imp ?? 16;
 
+    const rawHkaUrl = (inv.url_consulta || '').trim();
+    const hkaUrlDirEnt = rawHkaUrl ? sqlStr(rawHkaUrl, 500) : 'NULL';
+    const hkaUrlPart1 = rawHkaUrl ? sqlStr(rawHkaUrl.slice(0, 60), 60) : 'NULL';
+    const hkaUrlPart2 = rawHkaUrl.length > 60 ? sqlStr(rawHkaUrl.slice(60, 120), 60) : 'NULL';
+    const hkaUrlPart3 = rawHkaUrl.length > 120 ? sqlStr(rawHkaUrl.slice(120, 180), 60) : 'NULL';
+
     lines.push(`    -- Documento ${inv.tipo_doc_profit} ${inv.doc_num_profit} | Control: ${inv.n_control} | Fecha: ${inv.fec_emis_iso} | Cliente: ${inv.co_cli}`);
     if (inv.tipo_doc_profit === 'FACT') {
       lines.push(`    IF NOT EXISTS (SELECT 1 FROM dbo.saFacturaVenta WHERE LTRIM(RTRIM(doc_num)) = ${sqlStr(inv.doc_num_profit, 20)})`);
@@ -1643,7 +1649,7 @@ export function generateHkaReplicationSql(plan: HkaReplicationPlan, ctx?: Profit
       lines.push(`            @deTotal_Neto = ${sqlDec(inv.total_neto_bs, 2)},`);
       lines.push(`            @sDis_Cen = NULL,`);
       lines.push(`            @sComentario = ${sqlStr(comentario)},`);
-      lines.push(`            @sDir_Ent = NULL,`);
+      lines.push(`            @sDir_Ent = ${hkaUrlDirEnt},`);
       lines.push(`            @bContrib = ${inv.contribuyente ? 1 : 0},`);
       lines.push(`            @bImpresa = ${inv.impresa ? 1 : 0},`);
       lines.push(`            @sSalestax = @sTaxDefault,`);
@@ -1654,7 +1660,7 @@ export function generateHkaReplicationSql(plan: HkaReplicationPlan, ctx?: Profit
       lines.push(`            @sCampo1 = 'HKA-SYNC',`);
       lines.push(`            @sCampo2 = ${sqlStr(inv.n_control, 60)},`);
       lines.push(`            @sCampo3 = ${sqlStr(inv.estado_hka, 60)},`);
-      lines.push(`            @sCampo4 = ${inv.url_consulta ? sqlStr(inv.url_consulta, 60) : 'NULL'}, @sCampo5 = NULL, @sCampo6 = NULL, @sCampo7 = NULL, @sCampo8 = NULL,`);
+      lines.push(`            @sCampo4 = ${hkaUrlPart1}, @sCampo5 = ${hkaUrlPart2}, @sCampo6 = ${hkaUrlPart3}, @sCampo7 = NULL, @sCampo8 = NULL,`);
       lines.push(`            @sCo_Us_In = 'PROFIT',`);
       lines.push(`            @sCo_Sucu_In = ${sqlStr(inv.co_sucu, 6)},`);
       lines.push(`            @sRevisado = NULL, @sTrasnfe = NULL,`);
@@ -1765,7 +1771,7 @@ export function generateHkaReplicationSql(plan: HkaReplicationPlan, ctx?: Profit
     lines.push(`            @sCampo1 = 'HKA-SYNC',`);
     lines.push(`            @sCampo2 = ${sqlStr(inv.n_control, 60)},`);
     lines.push(`            @sCampo3 = ${sqlStr(inv.estado_hka, 60)},`);
-    lines.push(`            @sCampo4 = ${inv.url_consulta ? sqlStr(inv.url_consulta, 60) : 'NULL'}, @sCampo5 = NULL, @sCampo6 = NULL, @sCampo7 = NULL, @sCampo8 = NULL,`);
+    lines.push(`            @sCampo4 = ${hkaUrlPart1}, @sCampo5 = ${hkaUrlPart2}, @sCampo6 = ${hkaUrlPart3}, @sCampo7 = NULL, @sCampo8 = NULL,`);
     lines.push(`            @sRevisado = NULL, @sTrasnfe = NULL,`);
     lines.push(`            @sCo_Sucu_In = ${sqlStr(inv.co_sucu, 6)},`);
     lines.push(`            @sCo_Us_In = 'PROFIT',`);

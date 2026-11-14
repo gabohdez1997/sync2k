@@ -305,6 +305,12 @@ export interface EmitInvoiceInput {
   observacion?: string;
   numeroDocumentoAfectado?: string; // Requerido para Notas de Crédito / Débito
   motivoModificacion?: string;
+  // Campos oficiales V2 para Notas de Crédito / Débito
+  numeroFacturaAfectada?: string;
+  serieFacturaAfectada?: string;
+  fechaFacturaAfectada?: string; // DD/MM/YYYY
+  montoFacturaAfectada?: number | string;
+  comentarioFacturaAfectada?: string;
 }
 
 /**
@@ -524,9 +530,9 @@ export async function emitInvoiceHka(
   let totalIva = 0;
 
   const formattedItems = input.items.map((item, idx) => {
-    const tasa = item.tasaIVA ?? 16;
+    const isExento = item.codigoImpuesto === 'E' || item.tasaIVA === 0;
+    const tasa = isExento ? 0 : (item.tasaIVA ?? 16);
     const baseItem = item.cantidad * item.precioUnitario;
-    const isExento = item.codigoImpuesto === 'E' || tasa === 0;
 
     let itemIva = 0;
     if (isExento) {
@@ -592,19 +598,84 @@ export async function emitInvoiceHka(
     }
   }
 
+  const tipoDoc = input.tipoDocumento || '01';
+  const tipoTransaccion = tipoDoc === '03' ? '03' : tipoDoc === '02' ? '02' : '01';
+  const serieUpper = serieFinal ? serieFinal.trim().toUpperCase() : '';
+
+  const normalizeAffectedDate = (rawDate?: string): string => {
+    const val = (rawDate || '').trim();
+    if (/^\d{2}\/\d{2}\/\d{4}$/.test(val)) return val;
+    const isoMatch = val.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (isoMatch) return `${isoMatch[3]}/${isoMatch[2]}/${isoMatch[1]}`;
+    if (val) {
+      const parsed = new Date(val);
+      if (!isNaN(parsed.getTime())) {
+        return formatHkaDateTime(parsed).fechaEmision;
+      }
+    }
+    return fechaEmision;
+  };
+
+  const rawAffectedNum = String(input.numeroFacturaAfectada || input.numeroDocumentoAfectado || '').trim();
+  const affectedDocNum = rawAffectedNum.replace(/\D/g, '') || rawAffectedNum;
+  const affectedSerie =
+    input.serieFacturaAfectada !== undefined
+      ? String(input.serieFacturaAfectada).trim().toUpperCase()
+      : serieUpper;
+
+  const impuestosSubtotal: Array<{
+    codigoTotalImp: string;
+    alicuotaImp: string;
+    baseImponibleImp: string;
+    valorTotalImp: string;
+  }> = [];
+
+  if (totalGravado > 0) {
+    impuestosSubtotal.push({
+      codigoTotalImp: 'G',
+      alicuotaImp: '16.00',
+      baseImponibleImp: totalGravado.toFixed(2),
+      valorTotalImp: totalIva.toFixed(2)
+    });
+  }
+  if (totalExento > 0) {
+    impuestosSubtotal.push({
+      codigoTotalImp: 'E',
+      alicuotaImp: '0.00',
+      baseImponibleImp: totalExento.toFixed(2),
+      valorTotalImp: '0.00'
+    });
+  }
+
   const payload: any = {
     documentoElectronico: {
       encabezado: {
         identificacionDocumento: {
-          tipoDocumento: input.tipoDocumento || '01',
-          serie: serieFinal ? serieFinal.trim().toUpperCase() : '',
+          tipoDocumento: tipoDoc,
+          serie: serieUpper,
           numeroDocumento: String(numeroDocumentoFinal),
           tipoDeVenta: '01', // 01 = Interna (Requerido por HKA V2)
-          tipoTransaccion: '01', // Venta
+          tipoTransaccion,
           fechaEmision,
           horaEmision,
           tipoDePago: input.tipoDePago || '01',
-          moneda: (input.moneda || cfg.moneda_default || 'VES').trim().toUpperCase()
+          moneda: (input.moneda || cfg.moneda_default || 'VES').trim().toUpperCase(),
+          ...(tipoDoc === '02' || tipoDoc === '03'
+            ? {
+                numeroFacturaAfectada: affectedDocNum,
+                ...(affectedSerie ? { serieFacturaAfectada: affectedSerie } : {}),
+                fechaFacturaAfectada: normalizeAffectedDate(input.fechaFacturaAfectada),
+                montoFacturaAfectada: Number(input.montoFacturaAfectada || totalGeneral).toFixed(2),
+                comentarioFacturaAfectada: (
+                  input.comentarioFacturaAfectada ||
+                  input.motivoModificacion ||
+                  'DEVOLUCION DE VENTA'
+                )
+                  .trim()
+                  .toUpperCase()
+                  .slice(0, 255)
+              }
+            : {})
         },
         vendedor: {
           nombre: (cfg.emisor_nombre || 'EMPRESA').trim().toUpperCase().slice(0, 255)
@@ -627,20 +698,10 @@ export async function emitInvoiceHka(
           totalIVA: totalIva.toFixed(2),
           montoTotalConIVA: totalGeneral.toFixed(2),
           totalAPagar: totalGeneral.toFixed(2),
-          impuestosSubtotal:
-            totalGravado > 0
-              ? [
-                  {
-                    codigoTotalImp: 'G',
-                    alicuotaImp: '16.00',
-                    baseImponibleImp: totalGravado.toFixed(2),
-                    valorTotalImp: totalIva.toFixed(2)
-                  }
-                ]
-              : [],
+          impuestosSubtotal,
           formasPago: [
             {
-              forma: '01',
+              forma: input.tipoDePago || '01',
               descripcion: (input.formaDePagoDescripcion || 'TRANSFERENCIA BANCARIA').trim().toUpperCase(),
               monto: totalGeneral.toFixed(2),
               moneda: (input.moneda || cfg.moneda_default || 'VES').trim().toUpperCase()

@@ -71,6 +71,45 @@ export const DEFAULT_INTEGRATIONS: Record<string, IntegrationConfig> = {
     last_test_status: null,
     last_test_message: null
   },
+  bancaribe: {
+    id: 'bancaribe',
+    provider: 'bancaribe',
+    category: 'banking',
+    name: 'Bancaribe Open Banking',
+    description: 'Suite oficial Open Banking Bancaribe: Consulta Operaciones Plus (PM/TRF/DEPO), Últimos Movimientos, Extracto Bancario, Cobro C2P, Pago B2P, Transferencia Inmediata CRIN, Cobranza Digital DBIN, Tasas BCV y Webhook de Notificaciones.',
+    environment: 'sandbox',
+    base_url: 'https://bcapidesa-bancaribe365.msappproxy.net',
+    is_active: false,
+    credentials: {
+      consumer_key: '',
+      consumer_secret: '',
+      hash: '',
+      x_api_key: '',
+      webhook_api_key: ''
+    },
+    options: {
+      token_url: 'https://bcapidesa-bancaribe365.msappproxy.net/token',
+      rif: 'J401750354',
+      nombre_comercio: 'INVERSIONES GALPE, C.A',
+      numero_cuenta: '',
+      telefono_comercio: '',
+      ip_origen: '10.10.0.1',
+      terminal: 'WEB01',
+      tipo_terminal: 'WEB',
+      caja_terminal: 1,
+      canal_virtual: 1,
+      sucursal: 1,
+      oficina: 800,
+      vendedor: 1,
+      codigo_moneda: 928,
+      contrato_cobranza: '1',
+      allow_self_signed: true
+    },
+    last_tested_at: null,
+    last_test_status: null,
+    last_test_message: null
+  }
+  /* Integraciones deshabilitadas temporalmente por no contar aún con API/librería desarrollada:
   mikrowisp: {
     id: 'mikrowisp',
     provider: 'mikrowisp',
@@ -174,6 +213,7 @@ export const DEFAULT_INTEGRATIONS: Record<string, IntegrationConfig> = {
     last_test_status: null,
     last_test_message: null
   }
+  */
 };
 
 const LOCAL_DATA_DIR = path.resolve('data');
@@ -182,36 +222,60 @@ const LOCAL_INTEGRATIONS_FILE = path.join(LOCAL_DATA_DIR, 'integrations.json');
 // Memory cache for serverless environments
 let memoryCache: Record<string, IntegrationConfig> | null = null;
 
+function mergeAllowedIntegrations(parsed: Record<string, any> | null | undefined): Record<string, IntegrationConfig> {
+  const result: Record<string, IntegrationConfig> = {};
+  for (const key of Object.keys(DEFAULT_INTEGRATIONS)) {
+    const def = DEFAULT_INTEGRATIONS[key];
+    const saved = parsed?.[key];
+    if (saved) {
+      result[key] = {
+        ...def,
+        ...saved,
+        credentials: { ...(def.credentials || {}), ...(saved.credentials || {}) },
+        options: { ...(def.options || {}), ...(saved.options || {}) }
+      };
+    } else {
+      result[key] = {
+        ...def,
+        credentials: { ...(def.credentials || {}) },
+        options: { ...(def.options || {}) }
+      };
+    }
+  }
+  return result;
+}
+
 function readLocalFallback(): Record<string, IntegrationConfig> {
   if (memoryCache) return memoryCache;
   try {
     if (fs.existsSync(LOCAL_INTEGRATIONS_FILE)) {
       const raw = fs.readFileSync(LOCAL_INTEGRATIONS_FILE, 'utf-8');
       const parsed = JSON.parse(raw);
-      memoryCache = { ...DEFAULT_INTEGRATIONS, ...parsed };
-      return memoryCache!;
+      memoryCache = mergeAllowedIntegrations(parsed);
+      return memoryCache;
     }
   } catch (err) {
     console.warn('[INTEGRATIONS] Fallback local no legible:', err);
   }
-  memoryCache = { ...DEFAULT_INTEGRATIONS };
+  memoryCache = mergeAllowedIntegrations(null);
   return memoryCache;
 }
 
 function writeLocalFallback(configs: Record<string, IntegrationConfig>) {
-  memoryCache = configs;
+  const filtered = mergeAllowedIntegrations(configs);
+  memoryCache = filtered;
   try {
     if (!fs.existsSync(LOCAL_DATA_DIR)) {
       fs.mkdirSync(LOCAL_DATA_DIR, { recursive: true });
     }
-    fs.writeFileSync(LOCAL_INTEGRATIONS_FILE, JSON.stringify(configs, null, 2), 'utf-8');
+    fs.writeFileSync(LOCAL_INTEGRATIONS_FILE, JSON.stringify(filtered, null, 2), 'utf-8');
   } catch (err) {
     console.warn('[INTEGRATIONS] No se pudo escribir fallback local en disco (posible serverless):', err);
   }
 }
 
 /**
- * Obtiene todas las integraciones combinando defaults, Supabase y fallback local.
+ * Obtiene todas las integraciones habilitadas combinando defaults, Supabase y fallback local.
  */
 export async function getAllIntegrations(fetchFn?: typeof fetch): Promise<IntegrationConfig[]> {
   const local = readLocalFallback();
@@ -225,13 +289,23 @@ export async function getAllIntegrations(fetchFn?: typeof fetch): Promise<Integr
     if (!error && Array.isArray(data)) {
       const merged: Record<string, IntegrationConfig> = { ...local };
       for (const item of data) {
-        if (item.id) {
+        // Filtrar para mostrar únicamente las integraciones con librería desarrollada
+        if (item.id && DEFAULT_INTEGRATIONS[item.id]) {
+          const def = DEFAULT_INTEGRATIONS[item.id];
           merged[item.id] = {
-            ...(DEFAULT_INTEGRATIONS[item.id] || {}),
+            ...def,
             ...merged[item.id],
             ...item,
-            credentials: item.credentials || merged[item.id]?.credentials || {},
-            options: item.options || merged[item.id]?.options || {}
+            credentials: {
+              ...(def.credentials || {}),
+              ...(merged[item.id]?.credentials || {}),
+              ...(item.credentials || {})
+            },
+            options: {
+              ...(def.options || {}),
+              ...(merged[item.id]?.options || {}),
+              ...(item.options || {})
+            }
           };
         }
       }
@@ -423,6 +497,11 @@ export async function testIntegrationConnection(
       await saveIntegration(id, { last_tested_at: now, last_test_status: 'failed', last_test_message: msg }, fetchFn);
       return { success: false, statusCode: 500, message: msg, latencyMs };
     }
+  }
+
+  if (id === 'bancaribe') {
+    const { testBancaribeConnection } = await import('$lib/server/services/bancaribe');
+    return await testBancaribeConnection(config, credentialsOverride, fetchFn);
   }
 
   // Prueba genérica de ping HTTP para otros servicios

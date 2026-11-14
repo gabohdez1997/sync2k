@@ -2,10 +2,11 @@
 import { protectLoad } from '$lib/server/permissions';
 import { supabaseAdmin } from '$lib/server/supabase';
 import { hasPermission } from '$lib/server/auth';
+import { getHkaConfig } from '$lib/server/services/hka';
 import { redirect } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
 
-export const load: PageServerLoad = protectLoad('cash_billing', async ({ url, locals }) => {
+export const load: PageServerLoad = protectLoad('cash_billing', async ({ url, locals, fetch }) => {
     const profile = (locals as any).profile;
     if (!profile) throw new Error('Perfil no cargado.');
 
@@ -14,12 +15,18 @@ export const load: PageServerLoad = protectLoad('cash_billing', async ({ url, lo
         throw redirect(303, '/dashboard/billing/history');
     }
 
+    const hkaConfig = await getHkaConfig(fetch).catch(() => null);
+    const hkaActive = Boolean(hkaConfig?.is_active && hkaConfig?.token_empresa && hkaConfig?.token_clave);
+    const hkaEnvironment = hkaConfig?.environment || 'demo';
+
     const allowedBranches = profile.allowed_branches || [];
     if (allowedBranches.length === 0) {
         return {
             branches: [],
             printers: [],
             selectedBranchId: '',
+            hkaActive,
+            hkaEnvironment,
             error: 'No tienes sucursales asignadas.'
         };
     }
@@ -47,7 +54,9 @@ export const load: PageServerLoad = protectLoad('cash_billing', async ({ url, lo
         branches: allowedBranches,
         printers,
         userProfile: profile,
-        selectedBranchId: selectedBranch ? selectedBranch.id : ''
+        selectedBranchId: selectedBranch ? selectedBranch.id : '',
+        hkaActive,
+        hkaEnvironment
     };
 });
 

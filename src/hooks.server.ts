@@ -15,6 +15,7 @@ const PUBLIC_ROUTES = [
   '/auth/forgot-password',
   '/auth/logout',
   '/api/login',
+  '/api/integrations/bancaribe/notifications',
 ];
 
 // Caché en memoria de tokens validados recientemente (evita peticiones HTTP repetidas a /auth/v1/user)

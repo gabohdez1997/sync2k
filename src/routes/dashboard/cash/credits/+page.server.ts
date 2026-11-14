@@ -2,9 +2,10 @@
 import { protectLoad } from '$lib/server/permissions';
 import { supabaseAdmin } from '$lib/server/supabase';
 import { hasPermission } from '$lib/server/auth';
+import { getHkaConfig } from '$lib/server/services/hka';
 import type { PageServerLoad } from './$types';
 
-export const load: PageServerLoad = protectLoad('cash_credits', async ({ url, locals }) => {
+export const load: PageServerLoad = protectLoad('cash_credits', async ({ url, locals, fetch }) => {
     const profile = (locals as any).profile;
     if (!profile) throw new Error('Perfil no cargado.');
 
@@ -17,6 +18,10 @@ export const load: PageServerLoad = protectLoad('cash_credits', async ({ url, lo
         canSeeOthers: hasPermission(profile, 'cash_credits', 'others')
     };
 
+    const hkaConfig = await getHkaConfig(fetch).catch(() => null);
+    const hkaActive = Boolean(hkaConfig?.is_active && hkaConfig?.token_empresa && hkaConfig?.token_clave);
+    const hkaEnvironment = hkaConfig?.environment || 'demo';
+
     if (allowedBranches.length === 0) {
         return {
             title: 'Devoluciones de Ventas',
@@ -24,6 +29,8 @@ export const load: PageServerLoad = protectLoad('cash_credits', async ({ url, lo
             printers: [],
             selectedBranchId: '',
             permissions,
+            hkaActive,
+            hkaEnvironment,
             error: 'No tienes sucursales asignadas.'
         };
     }
@@ -51,6 +58,8 @@ export const load: PageServerLoad = protectLoad('cash_credits', async ({ url, lo
         printers,
         userProfile: profile,
         selectedBranchId: selectedBranch ? selectedBranch.id : '',
-        permissions
+        permissions,
+        hkaActive,
+        hkaEnvironment
     };
 });
