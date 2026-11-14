@@ -159,7 +159,7 @@ export function mapWisphubClientToProfit(
   const tip_cli = (options.default_client_type || '01').trim().slice(0, 6);
   const co_ven = (options.default_seller || '01').trim().slice(0, 10);
   const co_seg = (options.default_segment || '01').trim().slice(0, 6);
-  const co_mone = (options.default_currency || 'US$').trim().slice(0, 6);
+  const co_mone = (options.default_currency || 'USD').trim().slice(0, 6);
   const co_cond = (options.default_cond || '01').trim().slice(0, 6);
 
   // 8. Campos adicionales de trazabilidad (campo1, campo2, campo3)

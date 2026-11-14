@@ -66,7 +66,7 @@ export const POST: RequestHandler = async ({ request, locals, fetch }) => {
     const defaultCta = (options.default_cta_ingr_egr || branchPreset.default_cta_ingr_egr || targetBranch.default_cta_ingr_egr || 'I-001').trim();
     const defaultSeller = (options.default_seller || branchPreset.default_seller || targetBranch.default_seller || '01').trim();
     const defaultSegment = (options.default_segment || branchPreset.default_segment || targetBranch.default_segment || '01').trim();
-    const defaultCurrency = (options.default_currency || branchPreset.default_currency || 'US$').trim();
+    const defaultCurrency = (options.default_currency || branchPreset.default_currency || 'USD').trim();
     const defaultCond = (options.default_cond || branchPreset.default_cond || '01').trim();
 
     const syncOptions: CustomerSyncOptions = {
