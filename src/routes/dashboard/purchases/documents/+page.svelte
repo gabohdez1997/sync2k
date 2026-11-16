@@ -109,6 +109,47 @@
   let savedMoneda = $state<"BS" | "USD">("USD");
   let savedTotalUSD = $state(0);
 
+  // Duplicate Check Across Branches
+  let duplicateFound = $state<any>(null);
+  let isCheckingDuplicate = $state(false);
+  let checkDuplicateTimeout: any = null;
+
+  function triggerDuplicateCheck() {
+    if (checkDuplicateTimeout) clearTimeout(checkDuplicateTimeout);
+    const cleanNroFact = (docMetadata.nro_fact || "").trim();
+    const cleanCoProv = selectedSupplier?.co_prov || "";
+    const cleanRif = selectedSupplier?.rif || "";
+
+    if (!cleanNroFact || (!cleanCoProv && !cleanRif) || !filterSede) {
+      duplicateFound = null;
+      return;
+    }
+
+    checkDuplicateTimeout = setTimeout(async () => {
+      isCheckingDuplicate = true;
+      try {
+        const params = new URLSearchParams({
+          branch_id: filterSede,
+          co_prov: cleanCoProv,
+          rif: cleanRif,
+          nro_fact: cleanNroFact,
+          exclude_doc: editingKey?.nro_doc || ""
+        });
+        const res = await fetch(`/api/agent/documentos-compra/check-duplicate?${params.toString()}`);
+        const result = await res.json();
+        if (result.success !== false && result.duplicate) {
+          duplicateFound = result.duplicate;
+        } else {
+          duplicateFound = null;
+        }
+      } catch (e) {
+        console.warn("Error al verificar duplicados entre sucursales:", e);
+      } finally {
+        isCheckingDuplicate = false;
+      }
+    }, 350);
+  }
+
   $effect(() => {
     if (data.selectedBranchId) filterSede = data.selectedBranchId;
     if (!data.editDocument && data.activeRate) activeTasa = data.activeRate;
@@ -230,7 +271,24 @@
       if (cond && cond.dias_cred != null) {
         const days = Number(cond.dias_cred) || 0;
         docMetadata.fec_venc = dayjs(docMetadata.fec_emis).add(days, "day").format("YYYY-MM-DD");
+      } else {
+        docMetadata.fec_venc = docMetadata.fec_emis;
       }
+    }
+    if (docMetadata.fec_venc && docMetadata.fec_emis && docMetadata.fec_venc < docMetadata.fec_emis) {
+      docMetadata.fec_venc = docMetadata.fec_emis;
+    }
+  }
+
+  function handleFechaEmisionChange() {
+    if (!isEditing) {
+      updateDueDateFromCondition();
+    }
+    if (docMetadata.fec_reg && docMetadata.fec_emis && docMetadata.fec_reg < docMetadata.fec_emis) {
+      docMetadata.fec_reg = docMetadata.fec_emis;
+    }
+    if (docMetadata.fec_venc && docMetadata.fec_emis && docMetadata.fec_venc < docMetadata.fec_emis) {
+      docMetadata.fec_venc = docMetadata.fec_emis;
     }
   }
 
@@ -475,6 +533,7 @@
 
     showSupplierModal = false;
     toast.success(`Proveedor seleccionado: ${selectedSupplier.prov_des}`);
+    triggerDuplicateCheck();
   }
 
   function resetForm() {
@@ -483,6 +542,7 @@
       return;
     }
     selectedSupplier = null;
+    duplicateFound = null;
     docMetadata = {
       co_tipo_doc: "FACT",
       nro_fact: "",
@@ -527,6 +587,18 @@
       toast.error("El número de factura / documento fiscal del proveedor es obligatorio.");
       return;
     }
+    if (duplicateFound) {
+      toast.error(`El documento fiscal N° "${nroFactClean}" ya fue registrado en la sucursal "${duplicateFound.branch_name}" (${duplicateFound.co_tipo_doc} #${duplicateFound.nro_doc}).`);
+      return;
+    }
+    if (docMetadata.fec_reg && docMetadata.fec_emis && docMetadata.fec_reg < docMetadata.fec_emis) {
+      toast.error("La Fecha de registro no puede ser menor a la Fecha de emisión.");
+      return;
+    }
+    if (docMetadata.fec_venc && docMetadata.fec_emis && docMetadata.fec_venc < docMetadata.fec_emis) {
+      toast.error("La Fecha de vencimiento no puede ser menor a la Fecha de emisión.");
+      return;
+    }
     if (calculatedTotals.totalBS <= 0) {
       toast.error("El monto total del documento debe ser mayor a 0.");
       return;
@@ -541,6 +613,7 @@
         nro_fact: nroFactClean,
         n_control: (docMetadata.n_control || "N/A").trim() || "N/A",
         co_prov: selectedSupplier.co_prov,
+        rif: selectedSupplier.rif || null,
         co_mone: selectedCurrency,
         tasa: calculatedTotals.rate,
         total_bruto: calculatedTotals.brutoBS,
@@ -859,16 +932,33 @@
               </select>
             </div>
 
-            <!-- Doc. Prov. -->
-            <div>
-              <label for="nro_fact" class="text-xs font-bold text-text-muted block mb-1.5">Doc. Prov. *</label>
+            <!-- N° documento proveedor -->
+            <div class="relative">
+              <label for="nro_fact" class="text-xs font-bold text-text-muted block mb-1.5 flex items-center justify-between">
+                <span>N° documento proveedor *</span>
+                {#if isCheckingDuplicate}
+                  <span class="text-[10px] text-text-muted flex items-center gap-1 font-normal">
+                    <Loader2 size={10} class="animate-spin" /> Verificando...
+                  </span>
+                {/if}
+              </label>
               <input
                 id="nro_fact"
                 type="text"
                 bind:value={docMetadata.nro_fact}
+                oninput={triggerDuplicateCheck}
                 placeholder="Ej. 13784 o Factura"
-                class="w-full h-11 px-3 bg-surface-soft border border-border-subtle rounded-xl text-sm font-mono font-bold focus:border-brand-500 outline-none uppercase"
+                class={`w-full h-11 px-3 bg-surface-soft border rounded-xl text-sm font-mono font-bold outline-none uppercase transition-colors ${duplicateFound ? 'border-rose-500 bg-rose-500/5 focus:border-rose-500 text-rose-500' : 'border-border-subtle focus:border-brand-500'}`}
               />
+              {#if duplicateFound}
+                <div class="mt-1.5 p-2 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 text-[11px] flex items-start gap-1.5">
+                  <AlertCircle size={13} class="shrink-0 mt-0.5 text-rose-500" />
+                  <div>
+                    <span class="font-bold text-rose-400">Ya existe en sucursal "{duplicateFound.branch_name}"</span>
+                    <span class="text-text-muted"> ({duplicateFound.co_tipo_doc} #{duplicateFound.nro_doc})</span>
+                  </div>
+                </div>
+              {/if}
             </div>
 
             <!-- N° control -->
@@ -883,36 +973,50 @@
               />
             </div>
 
-            <!-- Fecha -->
+            <!-- Fecha emisión -->
             <div>
-              <label for="fec_emis" class="text-xs font-bold text-text-muted block mb-1.5">Fecha *</label>
+              <label for="fec_emis" class="text-xs font-bold text-text-muted block mb-1.5">Fecha emisión *</label>
               <input
                 id="fec_emis"
                 type="date"
                 bind:value={docMetadata.fec_emis}
-                onchange={() => { if (!isEditing) updateDueDateFromCondition(); }}
+                onchange={handleFechaEmisionChange}
                 class="w-full h-11 px-3 bg-surface-soft border border-border-subtle rounded-xl text-sm font-medium focus:border-brand-500 outline-none cursor-pointer"
               />
             </div>
 
-            <!-- Fecha reg. -->
+            <!-- Fecha registro -->
             <div>
-              <label for="fec_reg" class="text-xs font-bold text-text-muted block mb-1.5">Fecha reg.</label>
+              <label for="fec_reg" class="text-xs font-bold text-text-muted block mb-1.5">Fecha registro</label>
               <input
                 id="fec_reg"
                 type="date"
                 bind:value={docMetadata.fec_reg}
+                min={docMetadata.fec_emis}
+                onchange={() => {
+                  if (docMetadata.fec_reg && docMetadata.fec_emis && docMetadata.fec_reg < docMetadata.fec_emis) {
+                    toast.error("La Fecha de registro no puede ser menor a la Fecha de emisión.");
+                    docMetadata.fec_reg = docMetadata.fec_emis;
+                  }
+                }}
                 class="w-full h-11 px-3 bg-surface-soft border border-border-subtle rounded-xl text-sm font-medium focus:border-brand-500 outline-none cursor-pointer"
               />
             </div>
 
-            <!-- Venc. -->
+            <!-- Fecha vencimiento -->
             <div>
-              <label for="fec_venc" class="text-xs font-bold text-text-muted block mb-1.5">Venc.</label>
+              <label for="fec_venc" class="text-xs font-bold text-text-muted block mb-1.5">Fecha vencimiento</label>
               <input
                 id="fec_venc"
                 type="date"
                 bind:value={docMetadata.fec_venc}
+                min={docMetadata.fec_emis}
+                onchange={() => {
+                  if (docMetadata.fec_venc && docMetadata.fec_emis && docMetadata.fec_venc < docMetadata.fec_emis) {
+                    toast.error("La Fecha de vencimiento no puede ser menor a la Fecha de emisión.");
+                    docMetadata.fec_venc = docMetadata.fec_emis;
+                  }
+                }}
                 class="w-full h-11 px-3 bg-surface-soft border border-border-subtle rounded-xl text-sm font-medium focus:border-brand-500 outline-none cursor-pointer"
               />
             </div>
@@ -932,9 +1036,9 @@
               </select>
             </div>
 
-            <!-- Doc. asoc. -->
+            <!-- Documento asociado -->
             <div>
-              <label for="doc_orig" class="text-xs font-bold text-text-muted block mb-1.5">Doc. asoc.</label>
+              <label for="doc_orig" class="text-xs font-bold text-text-muted block mb-1.5">Documento asociado</label>
               <select
                 id="doc_orig"
                 bind:value={docMetadata.doc_orig}
