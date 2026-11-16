@@ -79,8 +79,11 @@
     nro_fact: "",
     n_control: "",
     fec_emis: dayjs().format("YYYY-MM-DD"),
+    fec_reg: dayjs().format("YYYY-MM-DD"),
     fec_venc: dayjs().format("YYYY-MM-DD"),
     co_cond: "01",
+    doc_orig: "",
+    nro_orig: "",
     co_cta_ingr_egr: "",
     observa: ""
   });
@@ -137,6 +140,7 @@
     };
 
     const fecEmisStr = d.fec_emis ? String(d.fec_emis).split("T")[0] : dayjs().format("YYYY-MM-DD");
+    const fecRegStr = d.fec_reg ? String(d.fec_reg).split("T")[0] : fecEmisStr;
     const fecVencStr = d.fec_venc ? String(d.fec_venc).split("T")[0] : fecEmisStr;
 
     docMetadata = {
@@ -144,8 +148,11 @@
       nro_fact: String(d.nro_fact || "").trim(),
       n_control: String(d.n_control || "").trim(),
       fec_emis: fecEmisStr,
+      fec_reg: fecRegStr,
       fec_venc: fecVencStr,
-      co_cond: "01",
+      co_cond: String(d.co_cond || "01").trim() || "01",
+      doc_orig: String(d.doc_orig || "").trim(),
+      nro_orig: String(d.nro_orig || "").trim(),
       co_cta_ingr_egr: String(d.co_cta_ingr_egr || "").trim(),
       observa: String(d.observa || "").trim()
     };
@@ -180,6 +187,17 @@
   const selectedBranchConfig = $derived(
     (data.branches || []).find((b: any) => b.id === filterSede)
   );
+
+  const selectedDocTypeObj = $derived(
+    (data.docTypes || []).find((td: any) => td.co_tipo_doc?.trim() === docMetadata.co_tipo_doc?.trim())
+  );
+  const tipoMovLabel = $derived.by(() => {
+    const mov = selectedDocTypeObj?.tipo_mov?.trim().toUpperCase();
+    if (mov === "D" || mov === "DEBITO" || mov === "DÉBITO") return "Débito";
+    if (mov === "C" || mov === "CREDITO" || mov === "CRÉDITO") return "Crédito";
+    if (docMetadata.co_tipo_doc === "N/CR") return "Crédito";
+    return "Débito";
+  });
 
   const profitBranchCodes = $derived.by(() => {
     if (!selectedBranchConfig?.profit_branch_codes) return [];
@@ -470,8 +488,11 @@
       nro_fact: "",
       n_control: "",
       fec_emis: dayjs().format("YYYY-MM-DD"),
+      fec_reg: dayjs().format("YYYY-MM-DD"),
       fec_venc: dayjs().format("YYYY-MM-DD"),
       co_cond: "01",
+      doc_orig: "",
+      nro_orig: "",
       co_cta_ingr_egr: "",
       observa: ""
     };
@@ -535,7 +556,9 @@
         saldo: calculatedTotals.totalBS,
         fec_emis: docMetadata.fec_emis,
         fec_venc: docMetadata.fec_venc,
-        fec_reg: docMetadata.fec_emis,
+        fec_reg: docMetadata.fec_reg || docMetadata.fec_emis,
+        doc_orig: docMetadata.doc_orig ? docMetadata.doc_orig.trim() : null,
+        nro_orig: docMetadata.nro_orig ? docMetadata.nro_orig.trim() : null,
         co_cond: docMetadata.co_cond,
         co_cta_ingr_egr: docMetadata.co_cta_ingr_egr || null,
         observa: docMetadata.observa || `${docMetadata.co_tipo_doc} N° ${nroFactClean} - ${selectedSupplier.prov_des}`,
@@ -810,19 +833,24 @@
             Datos del Documento
           </h3>
 
-          <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-            <!-- Tipo de Documento -->
+          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            <!-- Documento -->
             <div>
-              <label for="tipo_doc" class="text-xs font-bold text-text-muted block mb-1.5">Tipo de Documento *</label>
+              <div class="flex items-center justify-between mb-1.5">
+                <label for="tipo_doc" class="text-xs font-bold text-text-muted">Documento *</label>
+                <span class="text-[10px] font-bold px-2 py-0.5 rounded-md {tipoMovLabel === 'Crédito' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-blue-500/10 text-blue-400 border border-blue-500/20'}">
+                  Tipo Mov.: {tipoMovLabel}
+                </span>
+              </div>
               <select
                 id="tipo_doc"
                 bind:value={docMetadata.co_tipo_doc}
                 disabled={isEditing}
                 class="w-full h-11 px-3 bg-surface-soft border border-border-subtle rounded-xl text-sm font-semibold focus:border-brand-500 outline-none cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
               >
-                <option value="FACT">FACT - Factura</option>
-                <option value="N/CR">N/CR - Nota de Crédito</option>
-                <option value="N/DB">N/DB - Nota de Débito</option>
+                <option value="FACT">FACT - FACTURA</option>
+                <option value="N/CR">N/CR - NOTA DE CREDITO</option>
+                <option value="N/DB">N/DB - NOTA DE DEBITO</option>
                 {#each data.docTypes as td}
                   {#if !['FACT', 'N/CR', 'N/DB'].includes(td.co_tipo_doc?.trim())}
                     <option value={td.co_tipo_doc?.trim()}>{td.co_tipo_doc?.trim()} - {td.descrip?.trim()}</option>
@@ -831,38 +859,60 @@
               </select>
             </div>
 
-            <!-- Nro Factura Proveedor -->
+            <!-- Doc. Prov. -->
             <div>
-              <label for="nro_fact" class="text-xs font-bold text-text-muted block mb-1.5">N° Factura Fiscal *</label>
+              <label for="nro_fact" class="text-xs font-bold text-text-muted block mb-1.5">Doc. Prov. *</label>
               <input
                 id="nro_fact"
                 type="text"
                 bind:value={docMetadata.nro_fact}
-                placeholder="Ej. 0001482"
+                placeholder="Ej. 13784 o Factura"
                 class="w-full h-11 px-3 bg-surface-soft border border-border-subtle rounded-xl text-sm font-mono font-bold focus:border-brand-500 outline-none uppercase"
               />
             </div>
 
-            <!-- Nro de Control -->
+            <!-- N° control -->
             <div>
-              <label for="n_control" class="text-xs font-bold text-text-muted block mb-1.5">N° de Control Fiscal</label>
+              <label for="n_control" class="text-xs font-bold text-text-muted block mb-1.5">N° control</label>
               <input
                 id="n_control"
                 type="text"
                 bind:value={docMetadata.n_control}
-                placeholder="Ej. 00-001234 o N/A"
+                placeholder="Ej. 00-181178 o N/A"
                 class="w-full h-11 px-3 bg-surface-soft border border-border-subtle rounded-xl text-sm font-mono font-bold focus:border-brand-500 outline-none uppercase"
               />
             </div>
 
-            <!-- Fecha Emisión -->
+            <!-- Fecha -->
             <div>
-              <label for="fec_emis" class="text-xs font-bold text-text-muted block mb-1.5">Fecha de Emisión *</label>
+              <label for="fec_emis" class="text-xs font-bold text-text-muted block mb-1.5">Fecha *</label>
               <input
                 id="fec_emis"
                 type="date"
                 bind:value={docMetadata.fec_emis}
                 onchange={() => { if (!isEditing) updateDueDateFromCondition(); }}
+                class="w-full h-11 px-3 bg-surface-soft border border-border-subtle rounded-xl text-sm font-medium focus:border-brand-500 outline-none cursor-pointer"
+              />
+            </div>
+
+            <!-- Fecha reg. -->
+            <div>
+              <label for="fec_reg" class="text-xs font-bold text-text-muted block mb-1.5">Fecha reg.</label>
+              <input
+                id="fec_reg"
+                type="date"
+                bind:value={docMetadata.fec_reg}
+                class="w-full h-11 px-3 bg-surface-soft border border-border-subtle rounded-xl text-sm font-medium focus:border-brand-500 outline-none cursor-pointer"
+              />
+            </div>
+
+            <!-- Venc. -->
+            <div>
+              <label for="fec_venc" class="text-xs font-bold text-text-muted block mb-1.5">Venc.</label>
+              <input
+                id="fec_venc"
+                type="date"
+                bind:value={docMetadata.fec_venc}
                 class="w-full h-11 px-3 bg-surface-soft border border-border-subtle rounded-xl text-sm font-medium focus:border-brand-500 outline-none cursor-pointer"
               />
             </div>
@@ -882,19 +932,43 @@
               </select>
             </div>
 
-            <!-- Fecha Vencimiento -->
+            <!-- Doc. asoc. -->
             <div>
-              <label for="fec_venc" class="text-xs font-bold text-text-muted block mb-1.5">Fecha de Vencimiento</label>
-              <input
-                id="fec_venc"
-                type="date"
-                bind:value={docMetadata.fec_venc}
+              <label for="doc_orig" class="text-xs font-bold text-text-muted block mb-1.5">Doc. asoc.</label>
+              <select
+                id="doc_orig"
+                bind:value={docMetadata.doc_orig}
                 class="w-full h-11 px-3 bg-surface-soft border border-border-subtle rounded-xl text-sm font-medium focus:border-brand-500 outline-none cursor-pointer"
+              >
+                <option value="">(Ninguno)</option>
+                <option value="FACT">FACT - FACTURA</option>
+                <option value="N/CR">N/CR - NOTA DE CREDITO</option>
+                <option value="N/DB">N/DB - NOTA DE DEBITO</option>
+                <option value="GIRO">GIRO - GIRO</option>
+                <option value="CHEQ">CHEQ - CHEQUE</option>
+                {#each data.docTypes as td}
+                  {#if !['FACT', 'N/CR', 'N/DB', 'GIRO', 'CHEQ'].includes(td.co_tipo_doc?.trim())}
+                    <option value={td.co_tipo_doc?.trim()}>{td.co_tipo_doc?.trim()} - {td.descrip?.trim()}</option>
+                  {/if}
+                {/each}
+              </select>
+            </div>
+
+            <!-- N° registro -->
+            <div>
+              <label for="nro_orig" class="text-xs font-bold text-text-muted block mb-1.5">N° registro</label>
+              <input
+                id="nro_orig"
+                type="text"
+                bind:value={docMetadata.nro_orig}
+                placeholder="Ej. 0000000566"
+                maxlength="20"
+                class="w-full h-11 px-3 bg-surface-soft border border-border-subtle rounded-xl text-sm font-mono font-medium focus:border-brand-500 outline-none uppercase"
               />
             </div>
 
             <!-- Cuenta de Costo/Gasto -->
-            <div class="sm:col-span-2 md:col-span-1">
+            <div>
               <label for="co_cta" class="text-xs font-bold text-text-muted block mb-1.5">Cuenta de Gasto/Costo</label>
               <select
                 id="co_cta"
@@ -908,9 +982,9 @@
               </select>
             </div>
 
-            <!-- Observaciones / Concepto -->
-            <div class="sm:col-span-2">
-              <label for="observa" class="text-xs font-bold text-text-muted block mb-1.5">Concepto / Observaciones</label>
+            <!-- Descripción (ancho de 2 columnas en pantallas medianas y grandes) -->
+            <div class="sm:col-span-2 lg:col-span-2">
+              <label for="observa" class="text-xs font-bold text-text-muted block mb-1.5">Descripción</label>
               <input
                 id="observa"
                 type="text"
@@ -1300,10 +1374,14 @@
               <span class="text-text-muted">Monto Bruto:</span>
               <div class="text-right font-mono">
                 <div class="font-bold text-text-base">
-                  $ {calculatedTotals.brutoUSD.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  {showUSD
+                    ? `$ ${calculatedTotals.brutoUSD.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                    : `Bs. ${calculatedTotals.brutoBS.toLocaleString("es-VE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                 </div>
                 <div class="text-xs text-text-muted">
-                  Bs. {calculatedTotals.brutoBS.toLocaleString("es-VE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  {showUSD
+                    ? `Bs. ${calculatedTotals.brutoBS.toLocaleString("es-VE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                    : `$ ${calculatedTotals.brutoUSD.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                 </div>
               </div>
             </div>
@@ -1316,10 +1394,14 @@
                 </span>
                 <div class="text-right font-mono text-emerald-400">
                   <div class="font-bold">
-                    - $ {calculatedTotals.descUSD.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    {showUSD
+                      ? `- $ ${calculatedTotals.descUSD.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                      : `- Bs. ${calculatedTotals.descBS.toLocaleString("es-VE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                   </div>
                   <div class="text-xs opacity-80">
-                    - Bs. {calculatedTotals.descBS.toLocaleString("es-VE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    {showUSD
+                      ? `- Bs. ${calculatedTotals.descBS.toLocaleString("es-VE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                      : `- $ ${calculatedTotals.descUSD.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                   </div>
                 </div>
               </div>
@@ -1333,10 +1415,14 @@
                 </span>
                 <div class="text-right font-mono text-amber-400">
                   <div class="font-bold">
-                    + $ {calculatedTotals.recaUSD.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    {showUSD
+                      ? `+ $ ${calculatedTotals.recaUSD.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                      : `+ Bs. ${calculatedTotals.recaBS.toLocaleString("es-VE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                   </div>
                   <div class="text-xs opacity-80">
-                    + Bs. {calculatedTotals.recaBS.toLocaleString("es-VE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    {showUSD
+                      ? `+ Bs. ${calculatedTotals.recaBS.toLocaleString("es-VE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                      : `+ $ ${calculatedTotals.recaUSD.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                   </div>
                 </div>
               </div>
@@ -1347,10 +1433,14 @@
               <span class="text-text-muted font-medium">Total sin Impuesto:</span>
               <div class="text-right font-mono">
                 <div class="font-bold text-text-base">
-                  $ {calculatedTotals.totalSinImpuestoUSD.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  {showUSD
+                    ? `$ ${calculatedTotals.totalSinImpuestoUSD.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                    : `Bs. ${calculatedTotals.totalSinImpuestoBS.toLocaleString("es-VE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                 </div>
                 <div class="text-xs text-text-muted">
-                  Bs. {calculatedTotals.totalSinImpuestoBS.toLocaleString("es-VE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  {showUSD
+                    ? `Bs. ${calculatedTotals.totalSinImpuestoBS.toLocaleString("es-VE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                    : `$ ${calculatedTotals.totalSinImpuestoUSD.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                 </div>
               </div>
             </div>
@@ -1361,10 +1451,14 @@
                 <span class="text-text-muted">Monto Exento:</span>
                 <div class="text-right font-mono">
                   <div class="font-bold text-text-base">
-                    $ {calculatedTotals.exentoUSD.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    {showUSD
+                      ? `$ ${calculatedTotals.exentoUSD.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                      : `Bs. ${calculatedTotals.exentoBS.toLocaleString("es-VE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                   </div>
                   <div class="text-xs text-text-muted">
-                    Bs. {calculatedTotals.exentoBS.toLocaleString("es-VE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    {showUSD
+                      ? `Bs. ${calculatedTotals.exentoBS.toLocaleString("es-VE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                      : `$ ${calculatedTotals.exentoUSD.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                   </div>
                 </div>
               </div>
@@ -1375,10 +1469,14 @@
               <span class="text-text-muted">IVA ({alicuotaIva}%):</span>
               <div class="text-right font-mono">
                 <div class="font-bold text-text-base">
-                  $ {calculatedTotals.ivaUSD.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  {showUSD
+                    ? `$ ${calculatedTotals.ivaUSD.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                    : `Bs. ${calculatedTotals.ivaBS.toLocaleString("es-VE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                 </div>
                 <div class="text-xs text-text-muted">
-                  Bs. {calculatedTotals.ivaBS.toLocaleString("es-VE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  {showUSD
+                    ? `Bs. ${calculatedTotals.ivaBS.toLocaleString("es-VE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                    : `$ ${calculatedTotals.ivaUSD.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                 </div>
               </div>
             </div>
@@ -1389,10 +1487,14 @@
                 <span class="text-text-muted">Otros (IGTF / Cargos):</span>
                 <div class="text-right font-mono">
                   <div class="font-bold text-text-base">
-                    $ {calculatedTotals.otrosUSD.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    {showUSD
+                      ? `$ ${calculatedTotals.otrosUSD.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                      : `Bs. ${calculatedTotals.otrosBS.toLocaleString("es-VE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                   </div>
                   <div class="text-xs text-text-muted">
-                    Bs. {calculatedTotals.otrosBS.toLocaleString("es-VE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    {showUSD
+                      ? `Bs. ${calculatedTotals.otrosBS.toLocaleString("es-VE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                      : `$ ${calculatedTotals.otrosUSD.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                   </div>
                 </div>
               </div>
@@ -1403,10 +1505,14 @@
               <span class="text-base font-black text-text-base">Total a Pagar:</span>
               <div class="text-right font-mono">
                 <div class="text-2xl font-black font-mono text-brand-400">
-                  $ {calculatedTotals.totalUSD.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  {showUSD
+                    ? `$ ${calculatedTotals.totalUSD.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                    : `Bs. ${calculatedTotals.totalBS.toLocaleString("es-VE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                 </div>
                 <div class="text-xs font-bold text-text-muted font-mono mt-0.5">
-                  Bs. {calculatedTotals.totalBS.toLocaleString("es-VE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  {showUSD
+                    ? `Bs. ${calculatedTotals.totalBS.toLocaleString("es-VE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                    : `$ ${calculatedTotals.totalUSD.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                 </div>
               </div>
             </div>
