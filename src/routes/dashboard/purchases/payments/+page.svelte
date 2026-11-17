@@ -72,9 +72,10 @@
   }
 
   function getPorcRetIva(): number {
-    return selectedSupplier && selectedSupplier.contribu_e
+    const raw = selectedSupplier && selectedSupplier.contribu_e
       ? Number(selectedSupplier.porc_esp) || 75
       : 75;
+    return raw >= 88 ? 100 : 75;
   }
 
   function resolveTabulador(tab: string | undefined | null, rif: string | undefined | null, tipoPer: string | undefined | null): string {
@@ -334,6 +335,13 @@
 
   function getDocBaseBs(doc: any): number {
     return r2(doc.base_imponible > 0 ? doc.base_imponible : (doc.total_neto - doc.monto_imp));
+  }
+
+  function getDocIvaBaseBs(doc: any): number {
+    if (Number(doc.monto_exento || 0) > 0 || Number(doc.base_imponible || 0) > 0) {
+      return r2(Number(doc.base_imponible) || 0);
+    }
+    return r2(Math.max(0, (Number(doc.total_neto) || 0) - (Number(doc.monto_imp) || 0)));
   }
 
   function getAppliedRetIvaBs(inp: any): number {
@@ -891,6 +899,7 @@
 
           // Base imponible del documento en Bs (exacta, tal como está en la factura)
           const baseImpBs = getDocBaseBs(doc);
+          const baseImpIvaBs = getDocIvaBaseBs(doc);
 
           // Retención de IVA por defecto (75% / 100%) sobre el IVA en Bs - Solo si NO tiene retención previa
           const ivaBs = Number(doc.monto_imp) || 0;
@@ -909,9 +918,9 @@
             reten_iva_bs: retIvaBs,
             num_comprobante_iva: "",
             porc_ret_iva: porcRetIva,
-            base_imponible_iva: toUsd(baseImpBs),
-            base_imponible_iva_bs: baseImpBs,
-            alicuota_iva: doc.porc_imp || 16,
+            base_imponible_iva: toUsd(baseImpIvaBs),
+            base_imponible_iva_bs: baseImpIvaBs,
+            alicuota_iva: doc.porc_imp != null ? doc.porc_imp : 16,
             reten_islr: 0,
             reten_islr_bs: 0,
             co_islr: defaultIslrConcept,
@@ -990,9 +999,9 @@
     if (!inp) return;
 
     // Base imponible: Bs exactos del documento; USD solo referencial
-    const baseImpBs = getDocBaseBs(doc);
-    inp.base_imponible_iva_bs = baseImpBs;
-    inp.base_imponible_iva = toUsd(baseImpBs);
+    const baseImpIvaBs = getDocIvaBaseBs(doc);
+    inp.base_imponible_iva_bs = baseImpIvaBs;
+    inp.base_imponible_iva = toUsd(baseImpIvaBs);
     inp.monto_ret_iva_previo_usd = toUsd(inp.monto_ret_iva_previo_bs || 0);
     inp.monto_ret_islr_previo_usd = toUsd(inp.monto_ret_islr_previo_bs || 0);
 
@@ -1287,13 +1296,12 @@
         })
         .map((doc) => {
           const inp = docInputs[doc.nro_doc.trim()];
-          const affectedDocNo = doc.nro_orig
-            ? doc.nro_orig.trim()
-            : doc.nro_fact
-              ? doc.nro_fact.trim()
-              : doc.doc_orig === 'FACT'
-                ? doc.nro_doc.trim()
-                : '0';
+          const tipoUpper = (doc.co_tipo_doc || '').trim().toUpperCase();
+          const isNcOrNd = ['N/CR', 'NCR', 'N/DB', 'NDEB'].includes(tipoUpper);
+          const affectedDocNo = isNcOrNd
+            ? ((doc.nro_fact_afectado || doc.nro_orig || '0').trim() || '0')
+            : '0';
+          const exentoMonto = Number(doc.monto_exento || 0);
           return {
             nro_doc_asoc: doc.nro_doc.trim(),
             rif_comprador: selectedSupplier.rif || doc.rif,
@@ -1301,11 +1309,11 @@
             numero_control_documento: doc.n_control ? doc.n_control.trim() : "",
             numero_documento_afectado: affectedDocNo,
             monto_documento: doc.total_neto,
-            base_imponible: inp.base_imponible_iva_bs || (doc.total_neto - doc.monto_imp),
+            base_imponible: inp.base_imponible_iva_bs || Math.max(0, Number(doc.total_neto || 0) - Number(doc.monto_imp || 0) - exentoMonto),
             monto_ret_imp: inp.reten_iva_bs,
             num_comprobante: (inp.num_comprobante_iva || "").trim(),
-            monto_excento: 0,
-            alicuota: inp.alicuota_iva || 16,
+            monto_excento: exentoMonto,
+            alicuota: inp.alicuota_iva != null ? inp.alicuota_iva : 16,
           };
         });
 

@@ -34,8 +34,157 @@
         });
     }
 
+    function parseSafeDate(val: any): Date {
+        if (!val) return new Date();
+        const s = String(val).trim();
+        if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+            const [y, m, d] = s.split("-").map(Number);
+            return new Date(y, m - 1, d, 12, 0, 0);
+        }
+        return new Date(val);
+    }
+
+    function formatSqlDate(val: any, fallback?: any): string {
+        const target = val || fallback;
+        if (!target) return dayjs().format("DD/MM/YYYY");
+        const s = String(target).trim();
+        if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+            const [y, m, d] = s.split("-");
+            return `${d}/${m}/${y}`;
+        }
+        return dayjs(target).format("DD/MM/YYYY");
+    }
+
     // Preparar lista de renglones de retención
     let rawRetList = payment.retenciones_iva || [];
+
+    const invoiceRows = (payment.renglones || []).filter(
+        (r: any) =>
+            !["IVAN", "ISLR", "AJPA", "AJNA"].includes(
+                (r.co_tipo_doc || "").trim().toUpperCase(),
+            ),
+    );
+    const ivanRowGlobal = (payment.renglones || []).find(
+        (r: any) => (r.co_tipo_doc || "").trim().toUpperCase() === "IVAN",
+    );
+
+    // Enriquecer y sanear cada renglón existente de retenciones_iva con los datos reales de la factura del pago
+    if (rawRetList.length > 0 && invoiceRows.length > 0) {
+        rawRetList = rawRetList.map((item: any, idx: number) => {
+            // Buscar documento factura correspondiente en los renglones del pago
+            let matched = invoiceRows.find(
+                (inv: any) =>
+                    (item.rowguid_reng_cob && inv.rowguid === item.rowguid_reng_cob) ||
+                    (item.nro_doc && (inv.nro_doc === item.nro_doc || inv.nro_fact === item.nro_doc)) ||
+                    (item.nro_fact && (inv.nro_fact === item.nro_fact || inv.nro_doc === item.nro_fact)),
+            );
+            if (!matched) {
+                matched = invoiceRows[idx] || invoiceRows[0];
+            }
+
+            const tipoDoc = (
+                matched?.co_tipo_doc ||
+                item.tipo_documento ||
+                item.co_tipo_doc ||
+                "FACT"
+            )
+                .trim()
+                .toUpperCase();
+            const isNcOrNd = ["N/CR", "NCR", "N/DB", "NDEB"].includes(tipoDoc);
+
+            // Nro. de Factura del proveedor (saDocumentoCompra.nro_fact)
+            let resolvedNroFact = item.nro_fact;
+            const isSuspiciousDoc =
+                !resolvedNroFact ||
+                resolvedNroFact === "---" ||
+                resolvedNroFact === item.num_comprobante ||
+                (ivanRowGlobal &&
+                    (resolvedNroFact === ivanRowGlobal.nro_doc ||
+                        resolvedNroFact === ivanRowGlobal.n_control));
+
+            if ((isSuspiciousDoc || !resolvedNroFact) && matched?.nro_fact) {
+                resolvedNroFact = matched.nro_fact;
+            }
+            if (!resolvedNroFact && matched?.nro_doc) {
+                resolvedNroFact = matched.nro_doc;
+            }
+
+            // Fecha de emisión de la factura (saFacturaCompra.fec_emis / saDocumentoCompra.fec_emis)
+            let resolvedFechaDoc = matched?.fec_emis || item.fecha_documento;
+
+            // Monto exento (compras sin derecho a crédito fiscal)
+            const docTotal = Number(matched?.total_neto || item.monto_documento || 0);
+            const docBase = Number(matched?.base_imponible || item.base_imponible || 0);
+            const docImp = Number(matched?.monto_imp || item.monto_imp_causado || (docBase * (Number(item.alicuota || 16) / 100)));
+            const calculatedExento = (docTotal > 0 && docBase > 0 && (docTotal - docBase - docImp) > 1)
+                ? Number((docTotal - docBase - docImp).toFixed(2))
+                : 0;
+
+            const resolvedExento =
+                (matched?.monto_exento != null && Number(matched.monto_exento) > 0)
+                    ? Number(matched.monto_exento)
+                    : (item.monto_excento != null && Number(item.monto_excento) > 0)
+                        ? Number(item.monto_excento)
+                        : (calculatedExento > 1 ? calculatedExento : 0);
+
+            // Base imponible
+            const resolvedBase =
+                matched?.base_imponible != null && Number(matched.base_imponible) > 0
+                    ? Number(matched.base_imponible)
+                    : Number(item.base_imponible || 0);
+
+            // Documento afectado: 0 si es factura; si es N/CR debe ser nro_fact afectado
+            let resolvedDocAfectado = "0";
+            if (isNcOrNd) {
+                resolvedDocAfectado =
+                    matched?.nro_fact_afectado ||
+                    matched?.nro_orig ||
+                    (item.numero_documento_afectado &&
+                    item.numero_documento_afectado !== "0" &&
+                    item.numero_documento_afectado !== resolvedNroFact
+                        ? item.numero_documento_afectado
+                        : "0");
+            }
+
+            // Porcentaje retenido: estrictamente 75 o 100 según el proveedor
+            const rawPorc = Number(
+                item.porc_ret ||
+                    payment.porc_esp ||
+                    (Number(item.monto_imp_causado) > 0
+                        ? Math.round(
+                              (Number(item.monto_ret_imp) /
+                                  Number(item.monto_imp_causado)) *
+                                  100,
+                          )
+                        : 75),
+            );
+            const porcRet = rawPorc >= 88 ? 100 : 75;
+
+            return {
+                ...item,
+                nro_fact: resolvedNroFact,
+                numero_documento: resolvedNroFact,
+                fecha_documento: resolvedFechaDoc,
+                fec_emis_ivan:
+                    ivanRowGlobal?.fec_emis ||
+                    item.fec_emis_ivan ||
+                    payment.fecha,
+                monto_excento: resolvedExento,
+                base_imponible:
+                    resolvedBase > 0 ? resolvedBase : item.base_imponible,
+                monto_documento: matched?.total_neto
+                    ? Number(matched.total_neto)
+                    : item.monto_documento,
+                numero_control_documento:
+                    matched?.n_control && matched.n_control !== "---"
+                        ? matched.n_control
+                        : item.numero_control_documento || "---",
+                tipo_documento: tipoDoc,
+                numero_documento_afectado: resolvedDocAfectado,
+                porc_ret: porcRet,
+            };
+        });
+    }
 
     // Fallback: si no vinieron en retenciones_iva, sintetizar desde renglones del pago
     if (
@@ -57,23 +206,37 @@
             rawRetList = facturasConReten.map((f: any, idx: number) => {
                 const docNeto = Number(f.total_neto || f.mont_cob || 0);
                 const retIva = Number(f.monto_retencion_iva || 0);
-                const imp = Number(f.monto_imp || docNeto * 0.16 || 0);
-                const base = docNeto - imp;
-                const porc = imp > 0 ? Math.round((retIva / imp) * 100) : 75;
+                const exento = Number(f.monto_exento || 0);
+                const imp = Number(f.monto_imp || 0);
+                const base = Number(
+                    f.base_imponible ||
+                        Math.max(0, docNeto - imp - exento),
+                );
+                const porc =
+                    Number(payment.porc_esp || 0) >= 88 ||
+                    (imp > 0 && retIva / imp >= 0.88)
+                        ? 100
+                        : 75;
+                const tipoUpper = (f.co_tipo_doc || "FACT").trim().toUpperCase();
+                const isNcOrNd = ["N/CR", "NCR", "N/DB", "NDEB"].includes(tipoUpper);
 
                 return {
                     reng_num: idx + 1,
                     num_comprobante:
                         ivanRow?.nro_doc || payment.recibo || payment.cob_num,
+                    fec_emis_ivan: ivanRow?.fec_emis || payment.fecha,
                     monto_documento: docNeto,
-                    base_imponible: base > 0 ? base : docNeto,
+                    base_imponible: base > 0 ? base : 0,
+                    monto_imp_causado: imp,
                     monto_ret_imp: retIva,
-                    alicuota: 16,
-                    monto_excento: 0,
+                    alicuota: Number(f.porc_imp || (imp > 0 ? 16 : 0)),
+                    monto_excento: exento,
                     fecha_documento: f.fec_emis || payment.fecha,
                     numero_control_documento: f.n_control || "---",
                     tipo_documento: f.co_tipo_doc || "FACT",
-                    numero_documento_afectado: "0",
+                    numero_documento_afectado: isNcOrNd
+                        ? f.nro_fact_afectado || f.nro_orig || "0"
+                        : "0",
                     nro_doc: f.nro_doc,
                     nro_fact: f.nro_fact || f.nro_doc,
                     porc_ret: porc,
@@ -107,46 +270,48 @@
         vouchersMap.set(payment.cob_num, []);
     }
 
+    const ivanRengGlobal = (payment.renglones || []).find(
+        (r: any) => (r.co_tipo_doc || "").trim().toUpperCase() === "IVAN",
+    );
+
     const vouchers = Array.from(vouchersMap.entries()).map(
         ([compNum, rows]) => {
-            // Formatear número de comprobante fiscal SENIAT si es corto (ej. YYYYMM + 8 dígitos)
-            let formattedComp = compNum;
-            const pDate = new Date(payment.fecha || Date.now());
-            const defaultYear = pDate.getFullYear();
-            const defaultMonthNum = String(pDate.getMonth() + 1).padStart(
+            const firstRow = rows[0] || {};
+            const ivanDateRaw =
+                firstRow.fec_emis_ivan ||
+                ivanRengGlobal?.fec_emis ||
+                payment.fecha;
+            const ivanDate = parseSafeDate(ivanDateRaw || Date.now());
+            const defaultYear = ivanDate.getFullYear();
+            const defaultMonthNum = String(ivanDate.getMonth() + 1).padStart(
                 2,
                 "0",
             );
             const defaultPeriodStr = `${defaultYear}${defaultMonthNum}`;
 
+            // Formatear número de comprobante fiscal SENIAT si es corto (ej. YYYYMM + 8 dígitos)
+            let formattedComp = compNum;
             if (formattedComp.length < 14 && /^\d+$/.test(formattedComp)) {
                 formattedComp = `${defaultPeriodStr}${formattedComp.padStart(8, "0")}`;
             }
 
-            const firstRow = rows[0] || {};
-            const docDate = firstRow.fecha_documento
-                ? new Date(firstRow.fecha_documento)
-                : pDate;
-            const fiscalYear = docDate.getFullYear();
-            const fiscalMonthName =
-                MESES[docDate.getMonth()] || MESES[pDate.getMonth()];
+            const fiscalYear = ivanDate.getFullYear();
+            const fiscalMonthName = MESES[ivanDate.getMonth()] || MESES[0];
 
             const totalRetenido = rows.reduce(
                 (acc, r) => acc + Number(r.monto_ret_imp || 0),
                 0,
             );
 
+            const fechaIvanFormatted = formatSqlDate(ivanDateRaw);
+
             return {
                 compNum: formattedComp,
                 rawCompNum: compNum,
                 fiscalYear,
                 fiscalMonthName,
-                fechaEmision: payment.fecha
-                    ? dayjs(payment.fecha).format("DD/MM/YYYY")
-                    : dayjs().format("DD/MM/YYYY"),
-                fechaEntrega: payment.fecha
-                    ? dayjs(payment.fecha).format("DD/MM/YYYY")
-                    : dayjs().format("DD/MM/YYYY"),
+                fechaEmision: fechaIvanFormatted,
+                fechaEntrega: fechaIvanFormatted,
                 rows,
                 totalRetenido,
             };
@@ -389,70 +554,68 @@
                     <tbody>
                         {#each v.rows as row, idx}
                             {@const base = Number(row.base_imponible || 0)}
-                            {@const alic = Number(row.alicuota || 16)}
+                            {@const alic = row.alicuota != null ? Number(row.alicuota) : 16}
                             {@const caus = Number(
-                                row.monto_imp_causado || base * (alic / 100),
+                                row.monto_imp_causado != null
+                                    ? row.monto_imp_causado
+                                    : base * (alic / 100),
                             )}
                             {@const ret = Number(row.monto_ret_imp || 0)}
-                            {@const porcRet = Number(
+                            {@const rawPorc = Number(
                                 row.porc_ret ||
+                                    payment.porc_esp ||
                                     (caus > 0
                                         ? Math.round((ret / caus) * 100)
                                         : 75),
                             )}
+                            {@const porcRet = rawPorc >= 88 ? 100 : 75}
+                            {@const tipoDocUpper = (
+                                row.tipo_documento ||
+                                row.co_tipo_doc ||
+                                ""
+                            )
+                                .trim()
+                                .toUpperCase()}
                             {@const isND =
-                                (
-                                    row.tipo_documento ||
-                                    row.co_tipo_doc ||
-                                    ""
-                                ).trim() === "NDEB" ||
-                                (
-                                    row.tipo_documento ||
-                                    row.co_tipo_doc ||
-                                    ""
-                                ).trim() === "N/DB"}
+                                tipoDocUpper === "NDEB" ||
+                                tipoDocUpper === "N/DB"}
                             {@const isNC =
-                                (
-                                    row.tipo_documento ||
-                                    row.co_tipo_doc ||
-                                    ""
-                                ).trim() === "N/CR" ||
-                                (
-                                    row.tipo_documento ||
-                                    row.co_tipo_doc ||
-                                    ""
-                                ).trim() === "NCR"}
+                                tipoDocUpper === "N/CR" ||
+                                tipoDocUpper === "NCR"}
+                            {@const docFiscalNum =
+                                row.nro_fact ||
+                                row.numero_documento ||
+                                row.nro_doc ||
+                                "---"}
                             <tr>
                                 <td class="text-center">{idx + 1}</td>
                                 <td class="text-center font-mono"
-                                    >{row.fecha_documento
-                                        ? dayjs(row.fecha_documento).format(
-                                              "DD/MM/YYYY",
-                                          )
-                                        : v.fechaEmision}</td
+                                    >{formatSqlDate(
+                                        row.fecha_documento,
+                                        v.fechaEmision,
+                                    )}</td
                                 >
                                 <td class="text-center font-mono font-bold"
-                                    >{row.nro_fact ||
-                                        row.numero_documento ||
-                                        row.nro_doc ||
-                                        "---"}</td
+                                    >{!isND && !isNC ? docFiscalNum : "0"}</td
                                 >
                                 <td class="text-center font-mono"
                                     >{row.numero_control_documento || "---"}</td
                                 >
                                 <td class="text-center font-mono"
-                                    >{isND ? row.nro_doc || "0" : "0"}</td
+                                    >{isND ? docFiscalNum : "0"}</td
                                 >
                                 <td class="text-center font-mono"
-                                    >{isNC ? row.nro_doc || "0" : "0"}</td
+                                    >{isNC ? docFiscalNum : "0"}</td
                                 >
                                 <td class="text-center font-bold"
                                     >{isNC ? "03" : isND ? "02" : "01"}</td
                                 >
                                 <td class="text-center font-mono"
-                                    >{row.numero_documento_afectado &&
-                                    row.numero_documento_afectado !== "0"
-                                        ? row.numero_documento_afectado
+                                    >{isNC || isND
+                                        ? row.numero_documento_afectado &&
+                                          row.numero_documento_afectado !== "0"
+                                            ? row.numero_documento_afectado
+                                            : "0"
                                         : "0"}</td
                                 >
                                 <td class="text-right font-mono font-bold"

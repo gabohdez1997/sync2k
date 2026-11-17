@@ -44,6 +44,76 @@ export const load: PageServerLoad = protectLoad('pur_payments', async ({ params,
             if (realBranch) branch = realBranch;
         }
 
+        // 3. Enriquecer datos fiscales de facturas desde saFacturaCompra
+        const facturasAbonadas = (payment.renglones || []).filter(
+            (r: any) => !['IVAN', 'ISLR', 'AJPA', 'AJNA'].includes((r.co_tipo_doc || '').trim().toUpperCase())
+        );
+
+        for (const fact of facturasAbonadas) {
+            const docNum = (fact.nro_doc || '').trim();
+            if (docNum) {
+                try {
+                    const factRes = await agentClient.request<any>(
+                        `/facturas-compras/${encodeURIComponent(docNum)}?sede=${encodeURIComponent(branch.id)}`
+                    );
+                    const factData = factRes.data && (Array.isArray(factRes.data) ? factRes.data[0] : factRes.data);
+                    if (factData && !factData.error) {
+                        fact.fec_emis = factData.fec_emis || fact.fec_emis;
+                        fact.nro_fact = factData.nro_fact || fact.nro_fact;
+                        fact.n_control = factData.n_control || fact.n_control;
+                        fact.total_neto = factData.total_neto != null ? Number(factData.total_neto) : fact.total_neto;
+                        fact.total_bruto = factData.total_bruto != null ? Number(factData.total_bruto) : fact.total_bruto;
+                        fact.monto_imp = factData.monto_imp != null ? Number(factData.monto_imp) : fact.monto_imp;
+
+                        // Sumar renglones exentos (porc_imp = 0)
+                        if (factData.renglones && Array.isArray(factData.renglones)) {
+                            const exentoReng = factData.renglones
+                                .filter((rg: any) => Number(rg.porc_imp || 0) === 0)
+                                .reduce((acc: number, rg: any) => acc + Number(rg.total_renglon || rg.reng_neto || 0), 0);
+                            const gravadoReng = factData.renglones
+                                .filter((rg: any) => Number(rg.porc_imp || 0) > 0)
+                                .reduce((acc: number, rg: any) => acc + Number(rg.total_renglon || rg.reng_neto || 0), 0);
+
+                            if (exentoReng > 0) {
+                                fact.monto_exento = exentoReng;
+                            }
+                            if (gravadoReng > 0) {
+                                fact.base_imponible = gravadoReng;
+                            }
+                        }
+                    }
+                } catch (eFact) {
+                    console.warn(`[PRINT-RETENTION-IVA] No se pudo cargar detalle de factura ${docNum}:`, eFact);
+                }
+            }
+        }
+
+        // Sincronizar también retenciones_iva si vinieron del backend
+        if (payment.retenciones_iva && Array.isArray(payment.retenciones_iva)) {
+            payment.retenciones_iva.forEach((ret: any) => {
+                const matchedFact = facturasAbonadas.find((f: any) => 
+                    (ret.rowguid_reng_cob && f.rowguid === ret.rowguid_reng_cob) ||
+                    (f.nro_doc && (f.nro_doc === ret.nro_doc || f.nro_fact === ret.nro_doc)) ||
+                    (f.nro_fact && (f.nro_fact === ret.nro_fact || f.nro_doc === ret.nro_fact))
+                ) || facturasAbonadas[0];
+
+                if (matchedFact) {
+                    if (matchedFact.fec_emis) ret.fecha_documento = matchedFact.fec_emis;
+                    if (matchedFact.nro_fact) ret.nro_fact = matchedFact.nro_fact;
+                    if (matchedFact.n_control && matchedFact.n_control !== '---') ret.numero_control_documento = matchedFact.n_control;
+                    if (matchedFact.monto_exento != null && Number(matchedFact.monto_exento) > 0) {
+                        ret.monto_excento = Number(matchedFact.monto_exento);
+                    }
+                    if (matchedFact.base_imponible != null && Number(matchedFact.base_imponible) > 0) {
+                        ret.base_imponible = Number(matchedFact.base_imponible);
+                    }
+                    if (matchedFact.total_neto != null && Number(matchedFact.total_neto) > 0) {
+                        ret.monto_documento = Number(matchedFact.total_neto);
+                    }
+                }
+            });
+        }
+
         return {
             payment,
             branch,

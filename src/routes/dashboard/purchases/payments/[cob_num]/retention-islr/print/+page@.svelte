@@ -39,8 +39,119 @@
         ? "NO DOMICILIADO" 
         : (isPersonaJuridica ? "DOMICILIADO" : "RESIDENCIADO");
 
+    function parseSafeDate(val: any): Date {
+        if (!val) return new Date();
+        const s = String(val).trim();
+        if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+            const [y, m, d] = s.split('-').map(Number);
+            return new Date(y, m - 1, d, 12, 0, 0);
+        }
+        return new Date(val);
+    }
+
+    function formatSqlDate(val: any, fallback?: any): string {
+        const target = val || fallback;
+        if (!target) return dayjs().format("DD/MM/YYYY");
+        const s = String(target).trim();
+        if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+            const [y, m, d] = s.split('-');
+            return `${d}/${m}/${y}`;
+        }
+        return dayjs(target).format("DD/MM/YYYY");
+    }
+
     // Preparar lista de renglones de ISLR
     let rawIslrList = payment.retenciones_islr || [];
+
+    const invoiceRows = (payment.renglones || []).filter(
+        (r: any) =>
+            !["IVAN", "ISLR", "AJPA", "AJNA"].includes(
+                (r.co_tipo_doc || "").trim().toUpperCase(),
+            ),
+    );
+    const islrRowGlobal = (payment.renglones || []).find(
+        (r: any) => (r.co_tipo_doc || "").trim().toUpperCase() === "ISLR",
+    );
+
+    // Enriquecer y sanear cada renglón de ISLR con la información de la factura
+    if (rawIslrList.length > 0 && invoiceRows.length > 0) {
+        rawIslrList = rawIslrList.map((item: any, idx: number) => {
+            let matched = invoiceRows.find(
+                (inv: any) =>
+                    (item.rowguid_reng_cob && inv.rowguid === item.rowguid_reng_cob) ||
+                    (item.nro_doc && (inv.nro_doc === item.nro_doc || inv.nro_fact === item.nro_doc)) ||
+                    (item.nro_fact && (inv.nro_fact === item.nro_fact || inv.nro_doc === item.nro_fact)),
+            );
+            if (!matched) {
+                matched = invoiceRows[idx] || invoiceRows[0];
+            }
+
+            // Nro. de Factura del proveedor (saDocumentoCompra.nro_fact)
+            let resolvedNroFact = item.nro_fact;
+            const isSuspiciousDoc =
+                !resolvedNroFact ||
+                resolvedNroFact === "---" ||
+                resolvedNroFact === item.num_comprobante ||
+                (islrRowGlobal &&
+                    (resolvedNroFact === islrRowGlobal.nro_doc ||
+                        resolvedNroFact === islrRowGlobal.n_control));
+
+            if ((isSuspiciousDoc || !resolvedNroFact) && matched?.nro_fact) {
+                resolvedNroFact = matched.nro_fact;
+            }
+            if (!resolvedNroFact && matched?.nro_doc) {
+                resolvedNroFact = matched.nro_doc;
+            }
+
+            // Fecha de emisión de la factura (saFacturaCompra.fec_emis / saDocumentoCompra.fec_emis)
+            let resolvedFechaDoc = matched?.fec_emis || item.fecha_documento;
+
+            // Base imponible y Flete (Concepto 072)
+            const exentoVal = Number(matched?.monto_exento || 0);
+            const retMonto = Number(item.monto_reten || 0);
+            const isFlete = (String(item.co_islr || '').trim() === '072') || (exentoVal > 0 && (
+                Math.abs(retMonto - Number((exentoVal * 0.03).toFixed(2))) <= 0.05 ||
+                Math.abs((retMonto / exentoVal) - 0.03) <= 0.005
+            ));
+
+            let resolvedBase = Number(item.monto_obj || item.base_imponible || 0);
+            let resolvedPorc = Number(item.porc_retn || 0);
+            let resolvedConcept = item.islr_des;
+            let resolvedCoIslr = item.co_islr;
+
+            if (isFlete) {
+                resolvedCoIslr = '072';
+                resolvedConcept = 'FLETES PAGADOS A PERSONAS JURÍDICAS O NATURALES';
+                resolvedBase = exentoVal > 0 ? exentoVal : (resolvedBase > 0 ? resolvedBase : Number((retMonto / 0.03).toFixed(2)));
+                resolvedPorc = 3.0;
+            } else if (resolvedBase <= 0 && matched?.base_imponible != null && Number(matched.base_imponible) > 0) {
+                resolvedBase = Number(matched.base_imponible);
+            }
+
+            return {
+                ...item,
+                co_islr: resolvedCoIslr,
+                islr_des: resolvedConcept,
+                porc_retn: resolvedPorc > 0 ? resolvedPorc : (resolvedBase > 0 ? Number(((retMonto / resolvedBase) * 100).toFixed(2)) : 2.0),
+                nro_fact: resolvedNroFact,
+                numero_documento: resolvedNroFact,
+                fecha_documento: resolvedFechaDoc,
+                fec_emis_islr:
+                    islrRowGlobal?.fec_emis ||
+                    item.fec_emis_islr ||
+                    payment.fecha,
+                monto_obj: resolvedBase > 0 ? resolvedBase : item.monto_obj,
+                monto_documento: matched?.total_neto
+                    ? Number(matched.total_neto)
+                    : item.monto_documento,
+                numero_control_documento:
+                    matched?.n_control && matched.n_control !== "---"
+                        ? matched.n_control
+                        : item.numero_control_documento || "---",
+                co_tipo_doc: matched?.co_tipo_doc || item.co_tipo_doc || "FACT",
+            };
+        });
+    }
 
     // Fallback: si no vinieron en retenciones_islr, sintetizar desde renglones del pago
     if (rawIslrList.length === 0 && payment.renglones && payment.renglones.length > 0) {
@@ -53,13 +164,21 @@
             rawIslrList = facturasConIslr.map((f: any, idx: number) => {
                 const docBruto = Number(f.total_neto || f.mont_cob || 0);
                 const retIslr = Number(f.monto_retencion || 0);
-                const base = Number(f.total_bruto || (docBruto - (Number(f.monto_imp) || 0)) || docBruto);
-                const porc = base > 0 ? Number(((retIslr / base) * 100).toFixed(2)) : 2.0;
+                const exentoVal = Number(f.monto_exento || f.exento_reng || 0);
+                const isFlete = exentoVal > 0 && (
+                    Math.abs(retIslr - Number((exentoVal * 0.03).toFixed(2))) <= 0.05 ||
+                    Math.abs((retIslr / exentoVal) - 0.03) <= 0.005
+                );
+
+                const coIslr = isFlete ? '072' : '055';
+                const islrDes = isFlete ? 'FLETES PAGADOS A PERSONAS JURÍDICAS O NATURALES' : 'Pagos a Empresas Contratistas o Subcontratistas';
+                const base = isFlete ? exentoVal : Number(f.base_imponible || f.total_bruto || (docBruto - (Number(f.monto_imp) || 0) - exentoVal) || docBruto);
+                const porc = isFlete ? 3.0 : (base > 0 ? Number(((retIslr / base) * 100).toFixed(2)) : 2.0);
 
                 return {
                     reng_num: idx + 1,
-                    co_islr: '055',
-                    islr_des: 'Pagos a Empresas Contratistas o Subcontratistas',
+                    co_islr: coIslr,
+                    islr_des: islrDes,
                     monto: docBruto,
                     monto_obj: base,
                     monto_reten: retIslr,
@@ -67,6 +186,7 @@
                     sustraendo: 0,
                     num_comprobante: islrRow?.nro_doc || payment.recibo || payment.cob_num,
                     nro_doc_islr: islrRow?.nro_doc || '',
+                    fec_emis_islr: islrRow?.fec_emis || payment.fecha,
                     fecha_documento: f.fec_emis || payment.fecha,
                     numero_control_documento: f.n_control || '---',
                     nro_doc: f.nro_doc,
@@ -105,27 +225,31 @@
         vouchersMap.set(payment.cob_num, []);
     }
 
+    const islrRengGlobal = (payment.renglones || []).find(
+        (r: any) => (r.co_tipo_doc || '').trim().toUpperCase() === 'ISLR'
+    );
+
     const vouchers = Array.from(vouchersMap.entries()).map(([compNum, rows]) => {
-        // Formatear comprobante fiscal SENIAT (YYYYMM + 8 dígitos)
-        let formattedComp = compNum;
-        const pDate = new Date(payment.fecha || Date.now());
-        const defaultYear = pDate.getFullYear();
-        const defaultMonthNum = String(pDate.getMonth() + 1).padStart(2, '0');
+        const firstRow = rows[0] || {};
+        const islrDateRaw = firstRow.fec_emis_islr || islrRengGlobal?.fec_emis || payment.fecha;
+        const islrDate = parseSafeDate(islrDateRaw || Date.now());
+        const defaultYear = islrDate.getFullYear();
+        const defaultMonthNum = String(islrDate.getMonth() + 1).padStart(2, '0');
         const defaultPeriodStr = `${defaultYear}${defaultMonthNum}`;
 
+        // Formatear comprobante fiscal SENIAT (YYYYMM + 8 dígitos)
+        let formattedComp = compNum;
         if (formattedComp.length < 14 && /^\d+$/.test(formattedComp)) {
             formattedComp = `${defaultPeriodStr}${formattedComp.padStart(8, '0')}`;
         }
 
-        const firstRow = rows[0] || {};
-        const docDate = firstRow.fecha_documento ? new Date(firstRow.fecha_documento) : pDate;
-        const fiscalYear = docDate.getFullYear();
-        const fiscalMonthName = MESES[docDate.getMonth()] || MESES[pDate.getMonth()];
-        const fechaEmision = payment.fecha ? dayjs(payment.fecha).format("DD/MM/YYYY") : dayjs().format("DD/MM/YYYY");
+        const fiscalYear = islrDate.getFullYear();
+        const fiscalMonthName = MESES[islrDate.getMonth()] || MESES[0];
+        const fechaEmision = formatSqlDate(islrDateRaw);
 
         const totalRetenido = rows.reduce((acc, r) => acc + Number(r.monto_reten || 0), 0);
-        const primaryConcept = firstRow.islr_des || "Pagos a Empresas Contratistas o Subcontratistas";
-        const primaryPercent = firstRow.porc_retn ? `${Number(firstRow.porc_retn)}%` : "2%";
+        const primaryConcept = firstRow.islr_des || (firstRow.co_islr === '072' ? "FLETES PAGADOS A PERSONAS JURÍDICAS O NATURALES" : "Pagos a Empresas Contratistas o Subcontratistas");
+        const primaryPercent = firstRow.porc_retn ? `${Number(firstRow.porc_retn)}%` : (firstRow.co_islr === '072' ? "3%" : "2%");
 
         return {
             compNum: formattedComp,
@@ -309,7 +433,7 @@
                             {@const ret = Number(row.monto_reten || 0)}
                             {@const docNum = row.nro_fact && row.nro_fact !== '---' ? row.nro_fact : row.nro_doc}
                             <tr>
-                                <td class="text-center font-mono">{row.fecha_documento ? dayjs(row.fecha_documento).format("DD/MM/YYYY") : v.fechaEmision}</td>
+                                <td class="text-center font-mono">{formatSqlDate(row.fecha_documento, v.fechaEmision)}</td>
                                 <td class="text-center font-mono font-bold">{docNum || '---'}</td>
                                 <td class="text-center font-mono">{row.numero_control_documento || '---'}</td>
                                 <td class="text-center font-bold text-gray-700">{row.doc_descrip && row.doc_descrip !== '0' ? row.doc_descrip : '0'}</td>
