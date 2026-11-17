@@ -289,10 +289,21 @@
             );
             const defaultPeriodStr = `${defaultYear}${defaultMonthNum}`;
 
-            // Formatear número de comprobante fiscal SENIAT si es corto (ej. YYYYMM + 8 dígitos)
+            // Formatear número de comprobante fiscal SENIAT si es corto o viene en formato serie interna
             let formattedComp = compNum;
-            if (formattedComp.length < 14 && /^\d+$/.test(formattedComp)) {
-                formattedComp = `${defaultPeriodStr}${formattedComp.padStart(8, "0")}`;
+            const compStr = String(compNum || "").trim();
+            if (/^20\d{12}$/.test(compStr)) {
+                formattedComp = compStr;
+            } else {
+                const digits = compStr.replace(/\D/g, "");
+                if (digits.length === 14 && /^20\d{12}$/.test(digits)) {
+                    formattedComp = digits;
+                } else if (digits.length > 0) {
+                    const seq8 = digits.length >= 8 ? digits.slice(-8) : digits.padStart(8, "0");
+                    formattedComp = `${defaultPeriodStr}${seq8}`;
+                } else {
+                    formattedComp = `${defaultPeriodStr}00000001`;
+                }
             }
 
             const fiscalYear = ivanDate.getFullYear();

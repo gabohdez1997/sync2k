@@ -121,6 +121,23 @@ export const load: PageServerLoad = protectLoad('pur_payments', async ({ params,
                             ret.porc_retn = Number(((retMonto / Number(ret.monto_obj)) * 100).toFixed(2));
                         }
                     }
+
+                    // Formatear num_comprobante al estándar fiscal SENIAT (14 dígitos)
+                    const rawVal = ret.num_comprobante || ret.nro_doc_islr;
+                    if (rawVal) {
+                        const islrDateVal = ret.fec_emis_islr || payment.fecha || new Date();
+                        const dObj = new Date(islrDateVal);
+                        const pYear = isNaN(dObj.getFullYear()) ? new Date().getFullYear() : dObj.getFullYear();
+                        const pMonth = isNaN(dObj.getMonth()) ? String(new Date().getMonth() + 1).padStart(2, '0') : String(dObj.getMonth() + 1).padStart(2, '0');
+                        const periodStr = `${pYear}${pMonth}`;
+                        const digits = String(rawVal).replace(/\D/g, '');
+                        if (digits.length === 14 && /^20\d{12}$/.test(digits)) {
+                            ret.num_comprobante = digits;
+                        } else if (digits.length > 0) {
+                            const seq8 = digits.length >= 8 ? digits.slice(-8) : digits.padStart(8, '0');
+                            ret.num_comprobante = `${periodStr}${seq8}`;
+                        }
+                    }
                 }
             });
         }

@@ -124,6 +124,20 @@
       };
     }).filter(d => d.doc);
   }
+
+  function formatFiscalVoucherNumber(val: any, fallbackDate: any): string {
+    if (!val) return '';
+    const s = String(val).trim();
+    if (/^20\d{12}$/.test(s)) return s;
+    const digits = s.replace(/\D/g, '');
+    if (digits.length === 14 && /^20\d{12}$/.test(digits)) return digits;
+    const d = fallbackDate ? new Date(fallbackDate) : new Date();
+    const y = isNaN(d.getFullYear()) ? new Date().getFullYear() : d.getFullYear();
+    const m = isNaN(d.getMonth()) ? String(new Date().getMonth() + 1).padStart(2, '0') : String(d.getMonth() + 1).padStart(2, '0');
+    const periodStr = `${y}${m}`;
+    const seq8 = digits.length >= 8 ? digits.slice(-8) : digits.padStart(8, '0');
+    return `${periodStr}${seq8}`;
+  }
 </script>
 
 <svelte:head>
@@ -664,19 +678,29 @@
                 list = facturasConIslr.map((f: any, idx: number) => {
                   const docBruto = Number(f.total_neto || f.mont_cob || 0);
                   const retIslr = Number(f.monto_retencion || 0);
-                  const base = Number(f.total_bruto || (docBruto - (Number(f.monto_imp) || 0)) || docBruto);
-                  const porc = base > 0 ? Number(((retIslr / base) * 100).toFixed(2)) : 5.0;
+                  const exentoVal = Number(f.monto_exento || f.exento_reng || f.otros1 || 0);
+                  const isFlete = exentoVal > 0 && (
+                    Math.abs(retIslr - Number((exentoVal * 0.03).toFixed(2))) <= 0.05 ||
+                    Math.abs((retIslr / exentoVal) - 0.03) <= 0.005
+                  );
+                  const coIslr = isFlete ? '072' : '055';
+                  const islrDes = isFlete ? 'FLETES PAGADOS A PERSONAS JURÍDICAS O NATURALES' : 'Pagos a Empresas Contratistas o Subcontratistas';
+                  const base = isFlete ? exentoVal : Number(f.base_imponible || f.total_bruto || (docBruto - (Number(f.monto_imp) || 0) - exentoVal) || docBruto);
+                  const porc = isFlete ? 3.0 : (base > 0 ? Number(((retIslr / base) * 100).toFixed(2)) : 2.0);
+
+                  const rawDocNum = islrDoc?.nro_doc || detailData.recibo || detailData.cob_num;
+                  const compFormatted = formatFiscalVoucherNumber(rawDocNum, detailData.fecha);
 
                   return {
                     reng_num: idx + 1,
-                    co_islr: '084',
-                    islr_des: 'Pagos a Empresas Contratistas o Subcontratistas',
+                    co_islr: coIslr,
+                    islr_des: islrDes,
                     monto: docBruto,
                     monto_obj: base,
                     monto_reten: retIslr,
                     porc_retn: porc,
                     sustraendo: 0,
-                    num_comprobante: islrDoc?.nro_doc || detailData.recibo || detailData.cob_num,
+                    num_comprobante: compFormatted,
                     nro_doc_islr: islrDoc?.nro_doc || '',
                     fecha_documento: f.fec_emis || detailData.fecha,
                     numero_control_documento: f.n_control || '---',
@@ -689,16 +713,18 @@
                 });
               } else if (islrDoc) {
                 const retIslr = Number(islrDoc.mont_cob || 0);
+                const rawDocNum = islrDoc.nro_doc;
+                const compFormatted = formatFiscalVoucherNumber(rawDocNum, detailData.fecha);
                 list = [{
                   reng_num: 1,
-                  co_islr: '084',
+                  co_islr: '055',
                   islr_des: 'Pagos a Empresas Contratistas o Subcontratistas',
                   monto: retIslr,
                   monto_obj: retIslr,
                   monto_reten: retIslr,
-                  porc_retn: 5.0,
+                  porc_retn: 2.0,
                   sustraendo: 0,
-                  num_comprobante: islrDoc.nro_doc,
+                  num_comprobante: compFormatted,
                   nro_doc_islr: islrDoc.nro_doc,
                   fecha_documento: detailData.fecha,
                   numero_control_documento: '---',
@@ -791,7 +817,7 @@
                     <div class="flex flex-wrap justify-between items-center py-1 border-b border-amber-500/10 last:border-0">
                       <div>
                         {#if rn.num_comprobante || rn.nro_doc_islr}
-                          <span class="font-mono font-black text-amber-600 dark:text-amber-400 mr-2">Comp: {rn.num_comprobante || rn.nro_doc_islr}</span>
+                          <span class="font-mono font-black text-amber-600 dark:text-amber-400 mr-2">Comp: {formatFiscalVoucherNumber(rn.num_comprobante || rn.nro_doc_islr, detailData?.fecha)}</span>
                         {/if}
                         <span class="font-mono font-bold text-amber-600 dark:text-amber-400">Concepto: {rn.co_islr}</span>
                         <span class="text-text-muted ml-2">Porc: {rn.porc_retn}%</span>
