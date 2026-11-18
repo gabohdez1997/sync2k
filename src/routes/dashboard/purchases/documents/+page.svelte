@@ -588,7 +588,7 @@
       return;
     }
     if (duplicateFound) {
-      toast.error(`El documento fiscal N° "${nroFactClean}" ya fue registrado en la sucursal "${duplicateFound.branch_name}" (${duplicateFound.co_tipo_doc} #${duplicateFound.nro_doc}).`);
+      toast.error(`El documento fiscal N° "${nroFactClean}" ya fue registrado en la sucursal "${duplicateFound.branch_name}" (${duplicateFound.co_tipo_doc} #${duplicateFound.nro_doc}). No se permite registrar documentos duplicados.`);
       return;
     }
     if (docMetadata.fec_reg && docMetadata.fec_emis && docMetadata.fec_reg < docMetadata.fec_emis) {
@@ -606,6 +606,26 @@
 
     isSavingDocument = true;
     try {
+      // Verificación estricta anti-duplicados en tiempo real antes de guardar
+      try {
+        const checkParams = new URLSearchParams({
+          branch_id: filterSede,
+          co_prov: selectedSupplier.co_prov,
+          rif: selectedSupplier.rif || "",
+          nro_fact: nroFactClean,
+          exclude_doc: editingKey?.nro_doc || ""
+        });
+        const checkRes = await fetch(`/api/agent/documentos-compra/check-duplicate?${checkParams.toString()}`);
+        const checkData = await checkRes.json().catch(() => null);
+        if (checkData?.duplicate) {
+          duplicateFound = checkData.duplicate;
+          toast.error(`El documento fiscal N° "${nroFactClean}" ya fue registrado en la sucursal "${checkData.duplicate.branch_name}" (${checkData.duplicate.co_tipo_doc} #${checkData.duplicate.nro_doc}). No se permite registrar documentos duplicados.`);
+          isSavingDocument = false;
+          return;
+        }
+      } catch (eDup) {
+        console.warn("No se pudo verificar duplicado previo a guardar:", eDup);
+      }
       // Profit Plus stores financial amounts in national currency (BS) while recording the document's selected currency (co_mone) and rate
       const selectedCurrency = showUSD ? "USD" : "BS";
       const documentPayload = {
@@ -1626,7 +1646,7 @@
           <div class="space-y-3 pt-2 relative z-10">
             <button
               onclick={handleRegisterDocument}
-              disabled={isSavingDocument || calculatedTotals.totalBS <= 0 || Boolean(isEditing && editBlockedReason) || Boolean(data.editError)}
+              disabled={isSavingDocument || isCheckingDuplicate || Boolean(duplicateFound) || calculatedTotals.totalBS <= 0 || Boolean(isEditing && editBlockedReason) || Boolean(data.editError)}
               class="w-full h-14 rounded-2xl bg-brand-600 hover:bg-brand-500 disabled:opacity-50 text-white font-bold transition-all shadow-lg shadow-brand-500/20 active:scale-95 flex items-center justify-center gap-2 cursor-pointer disabled:cursor-not-allowed"
             >
               {#if isSavingDocument}

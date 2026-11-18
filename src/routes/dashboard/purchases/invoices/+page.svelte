@@ -571,6 +571,25 @@
         }))
       };
 
+      // Verificación estricta anti-duplicados entre todas las sucursales
+      try {
+        const checkParams = new URLSearchParams({
+          branch_id: filterSede,
+          co_prov: selectedSupplier.co_prov,
+          rif: selectedSupplier.rif || "",
+          nro_fact: nroFactClean
+        });
+        const checkRes = await fetch(`/api/agent/documentos-compra/check-duplicate?${checkParams.toString()}`);
+        const checkData = await checkRes.json().catch(() => null);
+        if (checkData?.duplicate) {
+          toast.error(`El documento fiscal N° "${nroFactClean}" ya fue registrado en la sucursal "${checkData.duplicate.branch_name}" (${checkData.duplicate.co_tipo_doc} #${checkData.duplicate.nro_doc}). No se permite registrar facturas duplicadas.`);
+          isSavingInvoice = false;
+          return;
+        }
+      } catch (eDup) {
+        console.warn("No se pudo verificar duplicado previo a guardar:", eDup);
+      }
+
       const res = await fetch("/api/agent/facturas-compras", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
