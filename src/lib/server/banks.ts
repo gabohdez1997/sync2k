@@ -43,7 +43,7 @@ export async function assertBankMovementOwnership(
 	branchId: string,
 	movNum: string,
 	profile: Profile,
-	module: 'bank_movements' | 'bank_reconciliation' = 'bank_movements'
+	module: 'bank_movements' | 'bank_reconciliation' | 'bank_income_expense' = 'bank_movements'
 ): Promise<{ allowed: boolean; message?: string; status?: number }> {
 	if (hasPermission(profile, module, 'others')) {
 		return { allowed: true };
@@ -79,7 +79,7 @@ export async function assertBankMovementOwnership(
 
 export async function logBankAudit(params: {
 	action: 'CREATE' | 'UPDATE' | 'VOID' | 'DELETE' | 'RECONCILE';
-	module: 'bank_movements' | 'bank_reconciliation';
+	module: 'bank_movements' | 'bank_reconciliation' | 'bank_income_expense';
 	recordId: string;
 	userEmail: string;
 	branchId: string;

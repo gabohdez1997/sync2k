@@ -1,7 +1,7 @@
 <!-- src/lib/components/ui/Combobox.svelte -->
 <script lang="ts">
-  import { ChevronDown, Search, X } from 'lucide-svelte';
-  import { tick } from 'svelte';
+  import { ChevronDown, Search, X } from "lucide-svelte";
+  import { tick } from "svelte";
 
   interface Option {
     value: string;
@@ -18,6 +18,7 @@
     onopen?: () => void | Promise<void>;
     buttonClass?: string;
     loading?: boolean;
+    direction?: "down" | "up";
     class?: string;
     id?: string;
     name?: string;
@@ -25,67 +26,70 @@
 
   let {
     options = [],
-    value = $bindable(''),
-    placeholder = 'Seleccionar...',
-    allLabel = '',
+    value = $bindable(""),
+    placeholder = "Seleccionar...",
+    allLabel = "",
     icon: Icon = null,
     onchange,
     onopen,
-    buttonClass = 'h-14',
+    buttonClass = "h-14",
     loading = false,
-    class: extraClass = '',
-    id = '',
-    name = ''
+    direction = "down",
+    class: extraClass = "",
+    id = "",
+    name = "",
   }: Props = $props();
 
   let isOpen = $state(false);
-  let searchTerm = $state('');
+  let searchTerm = $state("");
   let inputEl: HTMLInputElement | null = $state(null);
   let containerEl: HTMLDivElement | null = $state(null);
   let activeIndex = $state(-1);
 
   const safeOptions = $derived(
     Array.isArray(options)
-      ? options.filter(Boolean).map(o => ({
-          value: String(o?.value ?? ''),
-          label: String(o?.label ?? o?.value ?? '')
+      ? options.filter(Boolean).map((o) => ({
+          value: String(o?.value ?? ""),
+          label: String(o?.label ?? o?.value ?? ""),
         }))
-      : []
+      : [],
   );
 
   const selectedLabel = $derived(
-    safeOptions.find(o => o.value === value)?.label ?? ''
+    safeOptions.find((o) => o.value === value)?.label ?? "",
   );
 
   const filtered = $derived(
-    searchTerm.trim() === ''
+    searchTerm.trim() === ""
       ? safeOptions
-      : safeOptions.filter(o => {
+      : safeOptions.filter((o) => {
           const term = searchTerm.toLowerCase().trim();
-          const cleanTerm = term.replace(/[\s\-_]/g, '');
+          const cleanTerm = term.replace(/[\s\-_]/g, "");
           const labelNorm = o.label.toLowerCase();
           const valueNorm = o.value.toLowerCase();
-          const cleanLabel = labelNorm.replace(/[\s\-_]/g, '');
-          const cleanValue = valueNorm.replace(/[\s\-_]/g, '');
+          const cleanLabel = labelNorm.replace(/[\s\-_]/g, "");
+          const cleanValue = valueNorm.replace(/[\s\-_]/g, "");
           return (
             labelNorm.includes(term) ||
             valueNorm.includes(term) ||
-            (cleanTerm.length > 1 && (cleanLabel.includes(cleanTerm) || cleanValue.includes(cleanTerm)))
+            (cleanTerm.length > 1 &&
+              (cleanLabel.includes(cleanTerm) ||
+                cleanValue.includes(cleanTerm)))
           );
-        })
+        }),
   );
 
   async function open() {
     isOpen = true;
     onopen?.();
-    activeIndex = filtered.findIndex(o => o.value === value);
+    activeIndex = filtered.findIndex((o) => o.value === value);
     await tick();
     inputEl?.focus();
   }
 
   function close() {
     isOpen = false;
-    searchTerm = '';
+    searchTerm = "";
     activeIndex = -1;
   }
 
@@ -97,8 +101,8 @@
 
   function clear(e: MouseEvent) {
     e.stopPropagation();
-    value = '';
-    onchange?.('');
+    value = "";
+    onchange?.("");
     close();
   }
 
@@ -106,24 +110,26 @@
     if (!isOpen) return;
     const total = filtered.length + (allLabel ? 1 : 0);
     switch (e.key) {
-      case 'ArrowDown':
+      case "ArrowDown":
         e.preventDefault();
         activeIndex = Math.min(activeIndex + 1, total - 1);
         break;
-      case 'ArrowUp':
+      case "ArrowUp":
         e.preventDefault();
         activeIndex = Math.max(activeIndex - 1, -1);
         break;
-      case 'Enter':
+      case "Enter":
         e.preventDefault();
         if (allLabel && activeIndex === 0) {
-          value = ''; onchange?.(''); close();
+          value = "";
+          onchange?.("");
+          close();
         } else {
           const idx = allLabel ? activeIndex - 1 : activeIndex;
           if (idx >= 0 && filtered[idx]) select(filtered[idx]);
         }
         break;
-      case 'Escape':
+      case "Escape":
         close();
         break;
     }
@@ -145,7 +151,9 @@
     type="button"
     onclick={() => (isOpen ? close() : open())}
     class="w-full bg-surface-base/80 rounded-2xl border transition-all font-bold text-sm cursor-pointer hover:bg-surface-soft flex items-center gap-0 pr-4 text-left {buttonClass}
-      {isOpen ? 'border-brand-500/50 ring-1 ring-brand-500/20' : 'border-border-subtle'}
+      {isOpen
+      ? 'border-brand-500/50 ring-1 ring-brand-500/20'
+      : 'border-border-subtle'}
       {value ? 'text-brand-500' : 'text-text-muted'}"
   >
     {#if Icon}
@@ -171,7 +179,11 @@
       </button>
     {/if}
 
-    <span class="flex-shrink-0 text-text-muted transition-transform duration-200 {isOpen ? 'rotate-180' : ''}">
+    <span
+      class="flex-shrink-0 text-text-muted transition-transform duration-200 {isOpen
+        ? 'rotate-180'
+        : ''}"
+    >
       <ChevronDown size={16} />
     </span>
   </button>
@@ -179,12 +191,15 @@
   <!-- Dropdown panel (position: absolute, elevado con z-[200]) -->
   {#if isOpen}
     <div
-      class="absolute z-[200] mt-2 w-full bg-surface-raised border border-border-subtle rounded-2xl shadow-2xl shadow-black/40 overflow-hidden"
+      class={`absolute z-[200] ${direction === "up" ? "bottom-full mb-2" : "mt-2"} w-full bg-surface-raised border border-border-subtle rounded-2xl shadow-2xl shadow-black/40 overflow-hidden`}
       style="min-width: 220px;"
     >
       <!-- Search input -->
       <div class="p-2 border-b border-border-subtle relative">
-        <Search size={14} class="absolute left-5 top-1/2 -translate-y-1/2 text-text-muted" />
+        <Search
+          size={14}
+          class="absolute left-5 top-1/2 -translate-y-1/2 text-text-muted"
+        />
         <input
           bind:this={inputEl}
           bind:value={searchTerm}
@@ -198,7 +213,9 @@
       <!-- Options list -->
       <ul class="max-h-60 overflow-y-auto py-1 custom-scrollbar">
         {#if loading}
-          <li class="px-4 py-4 text-xs text-brand-400 flex items-center justify-center gap-2">
+          <li
+            class="px-4 py-4 text-xs text-brand-400 flex items-center justify-center gap-2"
+          >
             <span class="animate-spin">⟳</span>
             <span>Cargando opciones...</span>
           </li>
@@ -207,16 +224,24 @@
             <li>
               <button
                 type="button"
-                onclick={() => { value = ''; onchange?.(''); close(); }}
+                onclick={() => {
+                  value = "";
+                  onchange?.("");
+                  close();
+                }}
                 onmouseenter={() => (activeIndex = 0)}
                 class="w-full text-left px-4 py-2.5 text-sm transition-colors flex items-center gap-2
                   {!value
-                    ? 'bg-brand-500/20 text-brand-300 font-bold'
-                    : activeIndex === 0
-                      ? 'bg-white/5 text-text-base'
-                      : 'text-text-muted hover:bg-white/5 hover:text-text-base'}"
+                  ? 'bg-brand-500/20 text-brand-300 font-bold'
+                  : activeIndex === 0
+                    ? 'bg-white/5 text-text-base'
+                    : 'text-text-muted hover:bg-white/5 hover:text-text-base'}"
               >
-                <span class="w-1.5 h-1.5 rounded-full {!value ? 'bg-brand-400' : ''} flex-shrink-0"></span>
+                <span
+                  class="w-1.5 h-1.5 rounded-full {!value
+                    ? 'bg-brand-400'
+                    : ''} flex-shrink-0"
+                ></span>
                 <span class="truncate italic opacity-80">{allLabel}</span>
               </button>
             </li>
@@ -236,12 +261,16 @@
                   onmouseenter={() => (activeIndex = rowIndex)}
                   class="w-full text-left px-4 py-2.5 text-sm transition-colors flex items-center gap-2
                     {value === option.value
-                      ? 'bg-brand-500/20 text-brand-500 font-bold'
-                      : activeIndex === rowIndex
-                        ? 'bg-surface-soft text-text-base'
-                        : 'text-text-muted hover:bg-surface-soft hover:text-text-base'}"
+                    ? 'bg-brand-500/20 text-brand-500 font-bold'
+                    : activeIndex === rowIndex
+                      ? 'bg-surface-soft text-text-base'
+                      : 'text-text-muted hover:bg-surface-soft hover:text-text-base'}"
                 >
-                  <span class="w-1.5 h-1.5 rounded-full {value === option.value ? 'bg-brand-400' : ''} flex-shrink-0"></span>
+                  <span
+                    class="w-1.5 h-1.5 rounded-full {value === option.value
+                      ? 'bg-brand-400'
+                      : ''} flex-shrink-0"
+                  ></span>
                   <span class="truncate">{option.label}</span>
                 </button>
               </li>
@@ -251,14 +280,19 @@
       </ul>
 
       <!-- Footer -->
-      <div class="px-4 py-2 border-t border-border-subtle flex items-center justify-between">
+      <div
+        class="px-4 py-2 border-t border-border-subtle flex items-center justify-between"
+      >
         <span class="text-[10px] text-text-muted/50 font-mono">
           {filtered.length} de {options.length} opciones
         </span>
         {#if searchTerm}
           <button
             type="button"
-            onclick={() => { searchTerm = ''; inputEl?.focus(); }}
+            onclick={() => {
+              searchTerm = "";
+              inputEl?.focus();
+            }}
             class="text-[10px] text-brand-400/70 hover:text-brand-400 transition-colors"
           >
             Limpiar búsqueda

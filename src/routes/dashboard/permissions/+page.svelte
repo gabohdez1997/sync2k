@@ -149,6 +149,12 @@
           hasOthers: true,
           hasVoid: false,
         },
+        {
+          id: "bank_income_expense",
+          label: "Cuentas de Ingresos y Egresos",
+          hasOthers: false,
+          hasVoid: false,
+        },
       ],
     },
     {

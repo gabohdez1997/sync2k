@@ -318,6 +318,12 @@
           href: "/dashboard/banks/reconciliation",
           icon: Scale,
         },
+        {
+          id: "bank_income_expense",
+          label: "Cuentas Ingresos y Egresos",
+          href: "/dashboard/banks/accounts-ing-egr",
+          icon: Layers,
+        },
       ],
     },
     {
