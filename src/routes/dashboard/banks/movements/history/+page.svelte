@@ -75,6 +75,19 @@
     })),
   ]);
 
+  const globalPrintUrl = $derived.by(() => {
+    const q = new URLSearchParams();
+    if (selectedBranch) q.set("branch_id", selectedBranch);
+    if (searchInput) q.set("search", searchInput);
+    if (filterCodCta) q.set("cod_cta", filterCodCta);
+    if (filterTipoOp) q.set("tipo_op", filterTipoOp);
+    if (filterOrigen) q.set("origen", filterOrigen);
+    if (filterEstado && filterEstado !== "all") q.set("estado", filterEstado);
+    if (filterFecD) q.set("fecha_d", filterFecD);
+    if (filterFecH) q.set("fecha_h", filterFecH);
+    return `/dashboard/banks/movements/print?${q.toString()}`;
+  });
+
   function formatDate(val: any) {
     if (!val) return "-";
     const d = new Date(val);
@@ -207,6 +220,15 @@
 
     <div class="flex flex-wrap items-center gap-3">
       <a
+        href={globalPrintUrl}
+        target="_blank"
+        class="h-12 px-5 rounded-2xl bg-surface-strong hover:bg-surface-base text-text-base border border-border-subtle font-bold text-sm flex items-center gap-2 transition-all"
+      >
+        <Printer size={17} class="text-brand-400" />
+        Reporte PDF
+      </a>
+
+      <a
         href="/dashboard/banks/reconciliation?branch_id={encodeURIComponent(selectedBranch)}"
         class="h-12 px-5 rounded-2xl bg-surface-strong hover:bg-surface-base text-text-base border border-border-subtle font-bold text-sm flex items-center gap-2 transition-all"
       >
@@ -280,7 +302,7 @@
   </div>
 
   <!-- FILTERS BAR -->
-  <div class="glass p-4 rounded-3xl border border-border-subtle shadow-xl space-y-3">
+  <div class="glass relative z-30 p-4 rounded-3xl border border-border-subtle shadow-xl space-y-3">
     <div class="grid grid-cols-1 md:grid-cols-12 gap-3 items-center">
       {#if data.branches && data.branches.length > 1}
         <div class="md:col-span-2 relative">
@@ -391,7 +413,7 @@
   </div>
 
   <!-- TABLE -->
-  <div class="glass rounded-3xl border border-border-subtle shadow-xl overflow-hidden">
+  <div class="glass relative z-10 rounded-3xl border border-border-subtle shadow-xl overflow-hidden">
     <div class="overflow-x-auto">
       <table class="w-full text-left border-collapse">
         <thead>
@@ -618,30 +640,51 @@
 
 <!-- DETAIL MODAL -->
 {#if showDetailModal && detailData}
-  <div class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" transition:fade={{ duration: 150 }}>
-    <div class="glass w-full max-w-2xl rounded-3xl border border-border-subtle shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
-      <div class="p-6 border-b border-border-subtle flex items-center justify-between">
+  <div class="fixed inset-0 z-[100] flex items-center justify-center p-4" transition:fade={{ duration: 150 }}>
+    <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
+    <div
+      class="absolute inset-0 bg-slate-900/50 dark:bg-black/80 backdrop-blur-sm"
+      onclick={() => (showDetailModal = false)}
+    ></div>
+
+    <div class="relative z-10 bg-surface-raised text-text-base w-full max-w-2xl rounded-3xl border border-border-bold shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+      <div class="p-6 border-b border-border-subtle flex items-center justify-between bg-surface-raised">
         <div>
-          <span class="text-[11px] font-black uppercase tracking-widest text-brand-400">Detalle de Movimiento Bancario</span>
-          <h3 class="text-2xl font-black font-mono text-text-base mt-0.5">{detailData.mov_num}</h3>
+          <span class="text-[11px] font-black uppercase tracking-widest text-brand-600 dark:text-brand-400">Detalle de Movimiento Bancario</span>
+          <div class="flex items-center gap-3 mt-0.5">
+            <h3 class="text-2xl font-black font-mono text-text-base">{detailData.mov_num}</h3>
+            {#if detailData.anulado}
+              <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-black bg-rose-500/15 text-rose-600 dark:text-rose-400 border border-rose-500/25">
+                Anulado
+              </span>
+            {:else if detailData.conciliado}
+              <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-black bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/25">
+                <CheckCircle2 size={12} /> Conciliado
+              </span>
+            {:else}
+              <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-black bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/25">
+                <Clock size={12} /> Pendiente
+              </span>
+            {/if}
+          </div>
         </div>
         <button
           type="button"
           onclick={() => (showDetailModal = false)}
-          class="p-2 rounded-xl hover:bg-surface-strong text-text-muted hover:text-text-base cursor-pointer"
+          class="p-2 rounded-xl hover:bg-surface-strong text-text-muted hover:text-text-base cursor-pointer transition-colors"
         >
           <X size={20} />
         </button>
       </div>
 
-      <div class="p-6 overflow-y-auto space-y-5 text-sm">
+      <div class="p-6 overflow-y-auto space-y-5 text-sm bg-surface-raised">
         {#if loadingDetail}
           <div class="flex items-center gap-2 text-xs text-text-muted">
             <Loader2 size={14} class="animate-spin" /> Cargando información completa...
           </div>
         {/if}
 
-        <div class="grid grid-cols-2 sm:grid-cols-3 gap-4 bg-surface-soft/50 p-4 rounded-2xl border border-border-subtle">
+        <div class="grid grid-cols-2 sm:grid-cols-3 gap-4 bg-surface-soft p-4 rounded-2xl border border-border-subtle">
           <div>
             <span class="text-[10px] uppercase font-bold text-text-muted block">Tipo Operación</span>
             <span class="font-bold text-text-base">{detailData.tipo_op} · {detailData.tipo_op_label}</span>
@@ -664,33 +707,38 @@
           </div>
           <div>
             <span class="text-[10px] uppercase font-bold text-text-muted block">Monto ({detailData.co_mone})</span>
-            <span class="font-mono font-black text-brand-400">{formatAmount(detailData.monto, detailData.co_mone)}</span>
+            <span class="font-mono font-black text-brand-600 dark:text-brand-400">{formatAmount(detailData.monto, detailData.co_mone)}</span>
+            {#if detailData.idb > 0 && detailData.tipo_op !== "ID"}
+              <span class="block text-[11px] font-mono text-amber-600 dark:text-amber-400">
+                IDB: {formatAmount(detailData.idb, detailData.co_mone)}
+              </span>
+            {/if}
           </div>
         </div>
 
-        <div class="bg-surface-soft/40 p-4 rounded-2xl border border-border-subtle space-y-1.5">
+        <div class="bg-surface-soft p-4 rounded-2xl border border-border-subtle space-y-1.5">
           <span class="text-[10px] uppercase font-bold text-text-muted block">Concepto / Descripción</span>
           <p class="text-text-base font-medium">{detailData.descrip || "Sin descripción"}</p>
           <p class="text-xs text-text-muted pt-1">
-            Cta. Ingreso/Egreso: <strong>{detailData.co_cta_ingr_egr}</strong> · {detailData.cta_ing_egr_des || ""}
+            Cta. Ingreso/Egreso: <strong class="text-text-base">{detailData.co_cta_ingr_egr}</strong> · {detailData.cta_ing_egr_des || ""}
           </p>
         </div>
 
         {#if detailData.transferencia}
           <div class="bg-brand-500/5 p-4 rounded-2xl border border-brand-500/20 space-y-3">
             <div class="flex items-center justify-between">
-              <span class="text-xs font-black uppercase tracking-wider text-brand-400 flex items-center gap-1.5">
+              <span class="text-xs font-black uppercase tracking-wider text-brand-600 dark:text-brand-400 flex items-center gap-1.5">
                 <ArrowRightLeft size={14} /> Transferencia entre Cuentas #{detailData.transferencia.co_trans_ban}
               </span>
-              <span class="text-xs font-bold">{detailData.transferencia.procesado ? "Activa" : "Anulada"}</span>
+              <span class="text-xs font-bold text-text-base">{detailData.transferencia.procesado ? "Activa" : "Anulada"}</span>
             </div>
             <div class="space-y-2">
               {#each detailData.transferencia.movimientos_vinculados || [] as leg}
-                <div class="flex items-center justify-between text-xs bg-surface-base/60 p-2.5 rounded-xl border border-border-subtle">
+                <div class="flex items-center justify-between text-xs bg-surface-raised p-2.5 rounded-xl border border-border-subtle">
                   <div>
-                    <span class="font-mono font-black">{leg.tipo_op}</span> · {leg.mov_num} ({leg.des_ban} / {leg.cod_cta})
+                    <span class="font-mono font-black text-text-base">{leg.tipo_op}</span> · {leg.mov_num} ({leg.des_ban} / {leg.cod_cta})
                   </div>
-                  <div class="font-mono font-bold">
+                  <div class="font-mono font-bold text-text-base">
                     {leg.tipo_op === "TP"
                       ? `+ ${formatAmount(leg.monto_h, leg.co_mone)}`
                       : `- ${formatAmount(leg.monto_d, leg.co_mone)}`}
@@ -702,18 +750,18 @@
         {/if}
       </div>
 
-      <div class="p-4 border-t border-border-subtle flex justify-end gap-3 bg-surface-soft/30">
+      <div class="p-4 border-t border-border-subtle flex justify-end gap-3 bg-surface-soft">
         <a
           href="/dashboard/banks/movements/{encodeURIComponent(detailData.mov_num)}/print?branch_id={encodeURIComponent(selectedBranch)}"
           target="_blank"
-          class="px-5 py-2.5 rounded-xl bg-surface-strong hover:bg-surface-base text-text-base font-bold text-xs flex items-center gap-2 border border-border-subtle"
+          class="px-5 py-2.5 rounded-xl bg-surface-strong hover:bg-surface-base text-text-base font-bold text-xs flex items-center gap-2 border border-border-subtle transition-colors"
         >
           <Printer size={15} /> Imprimir Comprobante
         </a>
         {#if detailData.origen === "BAN" && !detailData.anulado && !detailData.conciliado && data.canEdit}
           <a
             href="/dashboard/banks/movements?branch_id={encodeURIComponent(selectedBranch)}&edit_mov={encodeURIComponent(detailData.mov_num)}"
-            class="px-5 py-2.5 rounded-xl bg-brand-600 hover:bg-brand-500 text-white font-bold text-xs flex items-center gap-2"
+            class="px-5 py-2.5 rounded-xl bg-brand-600 hover:bg-brand-500 text-white font-bold text-xs flex items-center gap-2 transition-colors"
           >
             <Pen size={15} /> Editar
           </a>
@@ -725,7 +773,7 @@
 
 <!-- VOID MODAL -->
 {#if showVoidModal && movToVoid}
-  <div class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" transition:fade={{ duration: 150 }}>
+  <div class="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/50 dark:bg-black/80 backdrop-blur-sm" transition:fade={{ duration: 150 }}>
     <form
       method="POST"
       action="?/voidMovement"
@@ -743,7 +791,7 @@
           }
         };
       }}
-      class="glass w-full max-w-md rounded-3xl border border-amber-500/30 p-6 space-y-5 shadow-2xl"
+      class="bg-surface-raised text-text-base w-full max-w-md rounded-3xl border border-amber-500/30 p-6 space-y-5 shadow-2xl"
     >
       <input type="hidden" name="mov_num" value={movToVoid.mov_num} />
       <input type="hidden" name="branch_id" value={selectedBranch} />
@@ -801,7 +849,7 @@
 
 <!-- DELETE MODAL -->
 {#if showDeleteModal && movToDelete}
-  <div class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" transition:fade={{ duration: 150 }}>
+  <div class="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/50 dark:bg-black/80 backdrop-blur-sm" transition:fade={{ duration: 150 }}>
     <form
       method="POST"
       action="?/deleteMovement"
@@ -819,7 +867,7 @@
           }
         };
       }}
-      class="glass w-full max-w-md rounded-3xl border border-rose-500/30 p-6 space-y-5 shadow-2xl"
+      class="bg-surface-raised text-text-base w-full max-w-md rounded-3xl border border-rose-500/30 p-6 space-y-5 shadow-2xl"
     >
       <input type="hidden" name="mov_num" value={movToDelete.mov_num} />
       <input type="hidden" name="branch_id" value={selectedBranch} />

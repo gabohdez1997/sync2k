@@ -19,6 +19,7 @@
     Coins,
     ShieldCheck,
     Loader2,
+    Printer,
   } from "lucide-svelte";
   import { fade } from "svelte/transition";
   import { toast } from "svelte-sonner";
@@ -757,6 +758,15 @@
             <ChevronDown size={16} class="absolute right-4 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none" />
           </div>
         {/if}
+
+        <a
+          href="/dashboard/banks/movements/print?branch_id={encodeURIComponent(filterSede)}"
+          target="_blank"
+          class="flex items-center justify-center gap-2 px-5 h-14 rounded-2xl bg-surface-strong hover:bg-surface-base text-text-base border border-border-subtle transition-all font-bold active:scale-95 shadow-sm shrink-0"
+        >
+          <Printer size={18} class="text-brand-400" />
+          Reporte PDF
+        </a>
 
         <button
           onclick={() => goto(`/dashboard/banks/movements/history?branch_id=${encodeURIComponent(filterSede)}`)}
