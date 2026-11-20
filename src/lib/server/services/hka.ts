@@ -40,7 +40,7 @@ export const DEFAULT_HKA_CONFIG: HkaConfig = {
   emisor_telefono: '02129000000',
   emisor_correo: 'FACTURACION@ALDANET.COM.VE',
   correo_adicional: '',
-  serie_default: 'A',
+  serie_default: '',
   moneda_default: 'VES',
   is_active: true
 };
@@ -70,7 +70,10 @@ export async function getHkaConfig(fetchFn?: typeof fetch): Promise<HkaConfig> {
     emisor_telefono: String(opts.emisor_telefono || DEFAULT_HKA_CONFIG.emisor_telefono).trim(),
     emisor_correo: String(opts.emisor_correo || DEFAULT_HKA_CONFIG.emisor_correo).trim(),
     correo_adicional: String(opts.correo_adicional || '').trim(),
-    serie_default: String(opts.serie_default || DEFAULT_HKA_CONFIG.serie_default).trim(),
+    serie_default:
+      opts.serie_default !== undefined && opts.serie_default !== null
+        ? String(opts.serie_default).trim()
+        : DEFAULT_HKA_CONFIG.serie_default,
     moneda_default: String(opts.moneda_default || DEFAULT_HKA_CONFIG.moneda_default).trim(),
     is_active: Boolean(integration.is_active),
     last_tested_at: integration.last_tested_at,
@@ -125,6 +128,7 @@ interface CachedToken {
   expiracion: number;
 }
 let tokenCache: CachedToken | null = null;
+const lastDocNumberCache = new Map<string, number>();
 
 /**
  * Formatea fecha y hora según los regex estrictos de The Factory HKA (.swaggerHKA)
@@ -294,7 +298,7 @@ export interface InvoiceClientInput {
 }
 
 export interface EmitInvoiceInput {
-  tipoDocumento?: '01' | '02' | '03'; // '01' = Factura, '02' = Nota de Débito, '03' = Nota de Crédito
+  tipoDocumento?: '01' | '02' | '03'; // '01' = Factura, '02' = Nota de Crédito, '03' = Nota de Débito
   serie?: string;
   numeroDocumento?: string;
   comprador: InvoiceClientInput;
@@ -415,10 +419,12 @@ export function formatHkaValidationErrors(validaciones?: string[] | null, mensaj
 
 /**
  * Consulta el último número de documento emitido en HKA: POST /api/UltimoDocumento
+ * Con fallback automático a ListadoAsignaciones y caché local ante límite de 30s (código 99)
+ * o primer documento del tipo/serie (código 203).
  */
 export async function getLastHkaDocumentNumber(
   tipoDocumento = '01',
-  serie = '',
+  serie?: string,
   configOverride?: Partial<HkaConfig>
 ): Promise<{
   success: boolean;
@@ -440,6 +446,8 @@ export async function getLastHkaDocumentNumber(
 
   const baseUrl = (cfg.base_url || 'https://demoemision.thefactoryhka.com.ve').replace(/\/+$/, '');
   const url = `${baseUrl}/api/UltimoDocumento`;
+  const serieClean = String(serie !== undefined ? serie : (cfg.serie_default ?? '')).trim().toUpperCase();
+  const cacheKey = `${baseUrl}__${tipoDocumento}__${serieClean}`;
 
   try {
     const res = await fetch(url, {
@@ -451,7 +459,7 @@ export async function getLastHkaDocumentNumber(
       },
       body: JSON.stringify({
         tipoDocumento,
-        serie: serie ?? (cfg.serie_default || '')
+        serie: serieClean
       })
     });
 
@@ -462,8 +470,9 @@ export async function getLastHkaDocumentNumber(
       resData = { raw: await res.text() };
     }
 
-    if (res.ok && (resData?.codigo === '200' || resData?.codigo === 200) && resData?.numeroDocumento !== undefined) {
-      const lastNum = Number(resData.numeroDocumento);
+    if (res.ok && String(resData?.codigo) === '200' && resData?.numeroDocumento !== undefined) {
+      const lastNum = Math.max(Number(resData.numeroDocumento) || 0, lastDocNumberCache.get(cacheKey) || 0);
+      lastDocNumberCache.set(cacheKey, lastNum);
       const nextNum = String(lastNum + 1);
       return {
         success: true,
@@ -471,6 +480,45 @@ export async function getLastHkaDocumentNumber(
         siguienteNumero: nextNum,
         codigo: resData.codigo,
         mensaje: resData.mensaje || 'Consulta realizada exitosamente'
+      };
+    }
+
+    // Fallback ante código 99 (cooldown 30s) o 203 (primer documento de este tipo/serie)
+    const listRes = await listHkaAssignments({ tipoDocumento, serie: serieClean }, cfg);
+    let maxFromList = 0;
+    if (listRes.success && Array.isArray(listRes.asignaciones)) {
+      for (const it of listRes.asignaciones) {
+        if (
+          String(it.tipoDocumento || '').trim() === String(tipoDocumento).trim() &&
+          String(it.serie || '').trim().toUpperCase() === serieClean
+        ) {
+          const n = Number(it.numeroDocumento);
+          if (!isNaN(n) && n > maxFromList) {
+            maxFromList = n;
+          }
+        }
+      }
+    }
+
+    const bestLast = Math.max(maxFromList, lastDocNumberCache.get(cacheKey) || 0);
+    if (bestLast > 0) {
+      lastDocNumberCache.set(cacheKey, bestLast);
+      return {
+        success: true,
+        numeroDocumento: bestLast,
+        siguienteNumero: String(bestLast + 1),
+        codigo: 200,
+        mensaje: 'Correlativo resuelto desde asignaciones HKA'
+      };
+    }
+
+    if (String(resData?.codigo) === '203' || listRes.success) {
+      return {
+        success: true,
+        numeroDocumento: 0,
+        siguienteNumero: '1',
+        codigo: 200,
+        mensaje: 'Primer documento del tipo/serie'
       };
     }
 
@@ -535,7 +583,7 @@ export async function emitInvoiceHka(
 
   // 2. Determinar número de documento correlativo
   let numeroDocumentoFinal = input.numeroDocumento;
-  const serieFinal = input.serie !== undefined ? input.serie : (cfg.serie_default || '');
+  const serieFinal = input.serie !== undefined ? input.serie : (cfg.serie_default ?? '');
 
   if (!numeroDocumentoFinal) {
     const lastDoc = await getLastHkaDocumentNumber(input.tipoDocumento || '01', serieFinal, cfg);
@@ -555,18 +603,20 @@ export async function emitInvoiceHka(
   const formattedItems = input.items.map((item, idx) => {
     const isExento = item.codigoImpuesto === 'E' || item.tasaIVA === 0;
     const tasa = isExento ? 0 : (item.tasaIVA ?? 16);
-    const baseItem = item.cantidad * item.precioUnitario;
+    const qty = Number(item.cantidad || 1);
+    const unitPrice = Number(item.precioUnitario || 0);
+    const baseItem = Math.round(qty * unitPrice * 100) / 100;
 
     let itemIva = 0;
     if (isExento) {
-      totalExento += baseItem;
+      totalExento = Math.round((totalExento + baseItem) * 100) / 100;
     } else {
-      itemIva = baseItem * (tasa / 100);
-      totalGravado += baseItem;
-      totalIva += itemIva;
+      itemIva = Math.round(baseItem * (tasa / 100) * 100) / 100;
+      totalGravado = Math.round((totalGravado + baseItem) * 100) / 100;
+      totalIva = Math.round((totalIva + itemIva) * 100) / 100;
     }
 
-    const valorTotalItem = baseItem + itemIva;
+    const valorTotalItem = Math.round((baseItem + itemIva) * 100) / 100;
     const codigoFinal = (
       item.codigo ||
       extractPlanCapacity(item.descripcion) ||
@@ -581,9 +631,9 @@ export async function emitInvoiceHka(
       codigoPLU: codigoFinal,
       indicadorBienoServicio: '2', // 2 = Servicio / Bien estándar
       descripcion: item.descripcion.trim().toUpperCase().slice(0, 1000),
-      cantidad: Number(item.cantidad || 1).toFixed(2),
+      cantidad: qty.toFixed(2),
       unidadMedida: (item.unidadMedida || 'UND').trim().toUpperCase().slice(0, 10),
-      precioUnitario: item.precioUnitario.toFixed(4),
+      precioUnitario: unitPrice.toFixed(4),
       precioItem: baseItem.toFixed(2),
       codigoImpuesto: isExento ? 'E' : (item.codigoImpuesto || 'G').trim().toUpperCase(),
       tasaIVA: tasa.toFixed(2),
@@ -592,8 +642,8 @@ export async function emitInvoiceHka(
     };
   });
 
-  const subtotal = totalGravado + totalExento;
-  const totalGeneral = subtotal + totalIva;
+  const subtotal = Math.round((totalGravado + totalExento) * 100) / 100;
+  const totalGeneral = Math.round((subtotal + totalIva) * 100) / 100;
 
   // 4. Formatear comprador y correos de notificación
   const cleanCedula = input.comprador.numeroIdentificacion.replace(/[^0-9]/g, '');
@@ -640,7 +690,8 @@ export async function emitInvoiceHka(
   };
 
   const rawAffectedNum = String(input.numeroFacturaAfectada || input.numeroDocumentoAfectado || '').trim();
-  const affectedDocNum = rawAffectedNum.replace(/\D/g, '') || rawAffectedNum;
+  const affectedDigits = rawAffectedNum.replace(/\D/g, '');
+  const affectedDocNum = (affectedDigits ? affectedDigits.replace(/^0+(?=\d)/, '') : rawAffectedNum) || '1';
   const affectedSerie =
     input.serieFacturaAfectada !== undefined
       ? String(input.serieFacturaAfectada).trim().toUpperCase()
@@ -685,19 +736,19 @@ export async function emitInvoiceHka(
           moneda: (input.moneda || cfg.moneda_default || 'VES').trim().toUpperCase(),
           ...(tipoDoc === '02' || tipoDoc === '03'
             ? {
-                numeroFacturaAfectada: affectedDocNum,
-                ...(affectedSerie ? { serieFacturaAfectada: affectedSerie } : {}),
-                fechaFacturaAfectada: normalizeAffectedDate(input.fechaFacturaAfectada),
-                montoFacturaAfectada: Number(input.montoFacturaAfectada || totalGeneral).toFixed(2),
-                comentarioFacturaAfectada: (
-                  input.comentarioFacturaAfectada ||
-                  input.motivoModificacion ||
-                  'DEVOLUCION DE VENTA'
-                )
-                  .trim()
-                  .toUpperCase()
-                  .slice(0, 255)
-              }
+              serieFacturaAfectada: affectedSerie,
+              numeroFacturaAfectada: affectedDocNum,
+              fechaFacturaAfectada: normalizeAffectedDate(input.fechaFacturaAfectada),
+              montoFacturaAfectada: Number(input.montoFacturaAfectada || totalGeneral).toFixed(2),
+              comentarioFacturaAfectada: (
+                input.comentarioFacturaAfectada ||
+                input.motivoModificacion ||
+                'DEVOLUCION DE VENTA'
+              )
+                .trim()
+                .toUpperCase()
+                .slice(0, 255)
+            }
             : {})
         },
         vendedor: {
@@ -740,7 +791,7 @@ export async function emitInvoiceHka(
   const baseUrl = (cfg.base_url || 'https://demoemision.thefactoryhka.com.ve').replace(/\/+$/, '');
   const url = `${baseUrl}/api/Emision`;
 
-  try {
+  const sendEmision = async (bodyPayload: any) => {
     const res = await fetch(url, {
       method: 'POST',
       headers: {
@@ -748,7 +799,7 @@ export async function emitInvoiceHka(
         'Accept': 'application/json',
         'Authorization': `Bearer ${auth.token}`
       },
-      body: JSON.stringify(payload)
+      body: JSON.stringify(bodyPayload)
     });
 
     let resData: any = null;
@@ -757,14 +808,82 @@ export async function emitInvoiceHka(
     } catch {
       resData = { raw: await res.text() };
     }
+    return { res, resData };
+  };
 
+  try {
+    let { res, resData } = await sendEmision(payload);
+
+    // Fallback automático si se configuró una serie sin rango asignado y HKA responde código 203
+    const validacionesArr = Array.isArray(resData?.validaciones) ? resData.validaciones : [];
+    const isNoRange =
+      String(resData?.codigo) === '203' &&
+      validacionesArr.some((v: any) => String(v || '').toLowerCase().includes('rango de numeraci'));
+
+    if (isNoRange && payload.documentoElectronico.encabezado.identificacionDocumento.serie !== '') {
+      payload.documentoElectronico.encabezado.identificacionDocumento.serie = '';
+      if ((tipoDoc === '02' || tipoDoc === '03') && input.serieFacturaAfectada === undefined) {
+        payload.documentoElectronico.encabezado.identificacionDocumento.serieFacturaAfectada = '';
+      }
+      if (!input.numeroDocumento) {
+        const fallbackLast = await getLastHkaDocumentNumber(tipoDoc, '', cfg);
+        if (fallbackLast.success && fallbackLast.siguienteNumero) {
+          numeroDocumentoFinal = fallbackLast.siguienteNumero;
+          payload.documentoElectronico.encabezado.identificacionDocumento.numeroDocumento = String(numeroDocumentoFinal);
+        }
+      }
+      ({ res, resData } = await sendEmision(payload));
+    }
+
+    // Reintentar una vez con el siguiente correlativo real si /api/Emision devuelve código 201 (duplicado)
+    if (!input.numeroDocumento && String(resData?.codigo) === '201') {
+      const activeSerie = String(
+        payload.documentoElectronico.encabezado.identificacionDocumento.serie ?? ''
+      )
+        .trim()
+        .toUpperCase();
+      const listRes = await listHkaAssignments({ tipoDocumento: tipoDoc, serie: activeSerie }, cfg);
+      let maxNum = 0;
+      if (listRes.success && Array.isArray(listRes.asignaciones)) {
+        for (const it of listRes.asignaciones) {
+          if (
+            String(it.tipoDocumento || '').trim() === tipoDoc &&
+            String(it.serie || '').trim().toUpperCase() === activeSerie
+          ) {
+            const n = Number(it.numeroDocumento);
+            if (!isNaN(n) && n > maxNum) {
+              maxNum = n;
+            }
+          }
+        }
+      }
+      const nextNum = Math.max(maxNum, Number(numeroDocumentoFinal) || 0) + 1;
+      numeroDocumentoFinal = String(nextNum);
+      payload.documentoElectronico.encabezado.identificacionDocumento.numeroDocumento = numeroDocumentoFinal;
+      ({ res, resData } = await sendEmision(payload));
+    }
+
+    const isSuccess = res.ok && String(resData?.codigo) === '200';
     const isDuplicate =
+      String(resData?.codigo) === '201' ||
       String(resData?.codigo) === '99' ||
-      String(resData?.mensaje || '')
-        .toLowerCase()
-        .includes('enviado previamente');
+      String(resData?.mensaje || '').toLowerCase().includes('duplicado') ||
+      String(resData?.mensaje || '').toLowerCase().includes('enviado previamente');
 
-    if (res.ok && (resData?.codigo === '200' || resData?.codigo === 200 || resData?.resultado)) {
+    if (isSuccess) {
+      const activeSerie = String(
+        resData?.resultado?.serie ??
+        payload.documentoElectronico.encabezado.identificacionDocumento.serie ??
+        ''
+      )
+        .trim()
+        .toUpperCase();
+      const cacheKey = `${baseUrl}__${tipoDoc}__${activeSerie}`;
+      const emittedNum = Number(resData?.resultado?.numeroDocumento || numeroDocumentoFinal);
+      if (!isNaN(emittedNum) && emittedNum > 0) {
+        lastDocNumberCache.set(cacheKey, Math.max(emittedNum, lastDocNumberCache.get(cacheKey) || 0));
+      }
+
       return {
         success: true,
         codigo: resData.codigo,

@@ -48,7 +48,7 @@
     Smartphone,
     Send,
     Copy,
-    Trash2
+    Trash2,
   } from "lucide-svelte";
   import type { PageData, ActionData } from "./$types";
 
@@ -343,15 +343,23 @@
     const branchPreset = wisp?.options?.branch_presets?.[branchId];
 
     if (branchPreset) {
-      if (branchPreset.default_cta_ingr_egr) defaultCtaIngrEgr = branchPreset.default_cta_ingr_egr;
-      if (branchPreset.default_client_type) defaultClientType = branchPreset.default_client_type;
+      if (branchPreset.default_cta_ingr_egr)
+        defaultCtaIngrEgr = branchPreset.default_cta_ingr_egr;
+      if (branchPreset.default_client_type)
+        defaultClientType = branchPreset.default_client_type;
       if (branchPreset.default_zone) defaultZone = branchPreset.default_zone;
-      if (branchPreset.default_seller) defaultSeller = branchPreset.default_seller;
-      if (branchPreset.default_segment) defaultSegment = branchPreset.default_segment;
-      if (branchPreset.field_mappings?.co_cli_source) coCliSource = branchPreset.field_mappings.co_cli_source;
-      if (branchPreset.field_mappings?.campo1_source) campo1Source = branchPreset.field_mappings.campo1_source;
-      if (branchPreset.field_mappings?.campo2_source) campo2Source = branchPreset.field_mappings.campo2_source;
-      if (branchPreset.field_mappings?.campo3_source) campo3Source = branchPreset.field_mappings.campo3_source;
+      if (branchPreset.default_seller)
+        defaultSeller = branchPreset.default_seller;
+      if (branchPreset.default_segment)
+        defaultSegment = branchPreset.default_segment;
+      if (branchPreset.field_mappings?.co_cli_source)
+        coCliSource = branchPreset.field_mappings.co_cli_source;
+      if (branchPreset.field_mappings?.campo1_source)
+        campo1Source = branchPreset.field_mappings.campo1_source;
+      if (branchPreset.field_mappings?.campo2_source)
+        campo2Source = branchPreset.field_mappings.campo2_source;
+      if (branchPreset.field_mappings?.campo3_source)
+        campo3Source = branchPreset.field_mappings.campo3_source;
     } else {
       defaultZone = branch.default_zone || "01";
       defaultClientType = branch.default_client_type || "01";
@@ -366,47 +374,73 @@
     editingItem = JSON.parse(JSON.stringify(item));
     if (editingItem.id === "wisphub") {
       if (!editingItem.options) editingItem.options = {};
-      if (!editingItem.options.default_cta_ingr_egr) editingItem.options.default_cta_ingr_egr = "I-001";
-      if (!editingItem.options.default_client_type) editingItem.options.default_client_type = "DET";
-      if (!editingItem.options.default_zone) editingItem.options.default_zone = "004";
-      if (!editingItem.options.default_seller) editingItem.options.default_seller = "01";
-      if (!editingItem.options.default_segment) editingItem.options.default_segment = "01";
-      if (!editingItem.options.default_cond) editingItem.options.default_cond = "01";
+      if (!editingItem.options.default_cta_ingr_egr)
+        editingItem.options.default_cta_ingr_egr = "I-001";
+      if (!editingItem.options.default_client_type)
+        editingItem.options.default_client_type = "DET";
+      if (!editingItem.options.default_zone)
+        editingItem.options.default_zone = "004";
+      if (!editingItem.options.default_seller)
+        editingItem.options.default_seller = "01";
+      if (!editingItem.options.default_segment)
+        editingItem.options.default_segment = "01";
+      if (!editingItem.options.default_cond)
+        editingItem.options.default_cond = "01";
       if (!editingItem.options.field_mappings) {
         editingItem.options.field_mappings = {
           co_cli_source: "cedula_or_id",
           campo1_source: "id_servicio",
           campo2_source: "usuario",
-          campo3_source: "ip"
+          campo3_source: "ip",
         };
       }
     } else if (editingItem.id === "bancaribe") {
       if (!editingItem.credentials) editingItem.credentials = {};
-      if (editingItem.credentials.consumer_key === undefined) editingItem.credentials.consumer_key = "";
-      if (editingItem.credentials.consumer_secret === undefined) editingItem.credentials.consumer_secret = "";
-      if (editingItem.credentials.hash === undefined) editingItem.credentials.hash = "";
-      if (editingItem.credentials.x_api_key === undefined) editingItem.credentials.x_api_key = "";
-      if (editingItem.credentials.webhook_api_key === undefined) editingItem.credentials.webhook_api_key = "";
+      if (editingItem.credentials.consumer_key === undefined)
+        editingItem.credentials.consumer_key = "";
+      if (editingItem.credentials.consumer_secret === undefined)
+        editingItem.credentials.consumer_secret = "";
+      if (editingItem.credentials.hash === undefined)
+        editingItem.credentials.hash = "";
+      if (editingItem.credentials.x_api_key === undefined)
+        editingItem.credentials.x_api_key = "";
+      if (editingItem.credentials.webhook_api_key === undefined)
+        editingItem.credentials.webhook_api_key = "";
 
       if (!editingItem.options) editingItem.options = {};
       if (!editingItem.options.token_url) {
         editingItem.options.token_url = `${(editingItem.base_url || "https://bcapidesa-bancaribe365.msappproxy.net").replace(/\/+$/, "")}/token`;
       }
-      if (editingItem.options.rif === undefined) editingItem.options.rif = "J401750354";
-      if (editingItem.options.nombre_comercio === undefined) editingItem.options.nombre_comercio = "INVERSIONES GALPE, C.A";
-      if (editingItem.options.numero_cuenta === undefined) editingItem.options.numero_cuenta = "";
-      if (editingItem.options.telefono_comercio === undefined) editingItem.options.telefono_comercio = "";
-      if (editingItem.options.ip_origen === undefined) editingItem.options.ip_origen = "10.10.0.1";
-      if (editingItem.options.terminal === undefined) editingItem.options.terminal = "WEB01";
-      if (editingItem.options.tipo_terminal === undefined) editingItem.options.tipo_terminal = "WEB";
-      if (editingItem.options.caja_terminal === undefined) editingItem.options.caja_terminal = 1;
-      if (editingItem.options.canal_virtual === undefined) editingItem.options.canal_virtual = 1;
-      if (editingItem.options.sucursal === undefined) editingItem.options.sucursal = 1;
-      if (editingItem.options.oficina === undefined) editingItem.options.oficina = 800;
-      if (editingItem.options.vendedor === undefined) editingItem.options.vendedor = 1;
-      if (editingItem.options.codigo_moneda === undefined) editingItem.options.codigo_moneda = 928;
-      if (editingItem.options.contrato_cobranza === undefined) editingItem.options.contrato_cobranza = "1";
-      if (editingItem.options.allow_self_signed === undefined) editingItem.options.allow_self_signed = true;
+      if (editingItem.options.rif === undefined)
+        editingItem.options.rif = "J401750354";
+      if (editingItem.options.nombre_comercio === undefined)
+        editingItem.options.nombre_comercio = "INVERSIONES GALPE, C.A";
+      if (editingItem.options.numero_cuenta === undefined)
+        editingItem.options.numero_cuenta = "";
+      if (editingItem.options.telefono_comercio === undefined)
+        editingItem.options.telefono_comercio = "";
+      if (editingItem.options.ip_origen === undefined)
+        editingItem.options.ip_origen = "10.10.0.1";
+      if (editingItem.options.terminal === undefined)
+        editingItem.options.terminal = "WEB01";
+      if (editingItem.options.tipo_terminal === undefined)
+        editingItem.options.tipo_terminal = "WEB";
+      if (editingItem.options.caja_terminal === undefined)
+        editingItem.options.caja_terminal = 1;
+      if (editingItem.options.canal_virtual === undefined)
+        editingItem.options.canal_virtual = 1;
+      if (editingItem.options.sucursal === undefined)
+        editingItem.options.sucursal = 1;
+      if (editingItem.options.oficina === undefined)
+        editingItem.options.oficina = 800;
+      if (editingItem.options.vendedor === undefined)
+        editingItem.options.vendedor = 1;
+      if (editingItem.options.codigo_moneda === undefined)
+        editingItem.options.codigo_moneda = 928;
+      if (editingItem.options.contrato_cobranza === undefined)
+        editingItem.options.contrato_cobranza = "1";
+      if (editingItem.options.allow_self_signed === undefined)
+        editingItem.options.allow_self_signed = true;
     }
     liveTestResult = null;
     showPassword = {};
@@ -421,7 +455,8 @@
     if (!bcVerifyAccount && defaultAccount) bcVerifyAccount = defaultAccount;
     if (!bcMovCuenta && defaultAccount) bcMovCuenta = defaultAccount;
     if (!bcExtCuenta && defaultAccount) bcExtCuenta = defaultAccount;
-    if (!bcTrfConsCuentaOrigen && defaultAccount) bcTrfConsCuentaOrigen = defaultAccount;
+    if (!bcTrfConsCuentaOrigen && defaultAccount)
+      bcTrfConsCuentaOrigen = defaultAccount;
     bcDbinContrato = defaultContract;
     if (tab) bcActiveTab = tab;
     bcLastResponse = null;
@@ -438,7 +473,7 @@
   async function callBancaribeApi(
     operation: string,
     payload: Record<string, any> = {},
-    opts?: { silent?: boolean }
+    opts?: { silent?: boolean },
   ) {
     if (!opts?.silent) {
       bcLoading = operation;
@@ -448,7 +483,7 @@
       const res = await fetch("/api/integrations/bancaribe/execute", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ operation, payload })
+        body: JSON.stringify({ operation, payload }),
       });
       const jsonRes = await res.json();
 
@@ -479,7 +514,7 @@
           operation,
           success: false,
           statusCode: 500,
-          message: `Error de red: ${err.message}`
+          message: `Error de red: ${err.message}`,
         };
         toast.error(`Error de comunicación: ${err.message}`);
       }
@@ -518,7 +553,9 @@
       return;
     }
     if (!syncCustomers && !syncPlans) {
-      toast.error("Seleccione al menos una entidad para sincronizar (Clientes o Planes).");
+      toast.error(
+        "Seleccione al menos una entidad para sincronizar (Clientes o Planes).",
+      );
       return;
     }
 
@@ -550,14 +587,16 @@
                 co_cli_source: coCliSource,
                 campo1_source: campo1Source,
                 campo2_source: campo2Source,
-                campo3_source: campo3Source
-              }
-            }
-          })
+                campo3_source: campo3Source,
+              },
+            },
+          }),
         });
         customersResult = await res.json();
         if (!res.ok) {
-          throw new Error(customersResult.message || "Error al sincronizar clientes");
+          throw new Error(
+            customersResult.message || "Error al sincronizar clientes",
+          );
         }
       }
 
@@ -567,8 +606,8 @@
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            branch_id: syncTargetBranch
-          })
+            branch_id: syncTargetBranch,
+          }),
         });
         plansResult = await res.json();
         if (!res.ok) {
@@ -579,15 +618,17 @@
       syncSummary = {
         customers: customersResult?.summary || null,
         plans: plansResult || null,
-        branch: customersResult?.branch || plansResult?.branch || null
+        branch: customersResult?.branch || plansResult?.branch || null,
       };
 
       if (syncSummary.customers?.failed > 0) {
         toast.warning(
-          `Sincronización completada con observaciones: ${syncSummary.customers.failed} registros fallaron.`
+          `Sincronización completada con observaciones: ${syncSummary.customers.failed} registros fallaron.`,
         );
       } else {
-        toast.success("Sincronización con Profit Plus finalizada exitosamente.");
+        toast.success(
+          "Sincronización con Profit Plus finalizada exitosamente.",
+        );
       }
     } catch (err: any) {
       toast.error(`Error de sincronización: ${err.message}`);
@@ -607,7 +648,13 @@
   }
 
   function closeHkaModal() {
-    if (isExtractingHka || isReplicatingHka || isCheckingMissingPrices || isApplyingMissingPrices) return;
+    if (
+      isExtractingHka ||
+      isReplicatingHka ||
+      isCheckingMissingPrices ||
+      isApplyingMissingPrices
+    )
+      return;
     isHkaModalOpen = false;
     hkaConfirmReplicate = false;
   }
@@ -633,7 +680,7 @@
       saldo_mode: hkaSaldoMode,
       skip_zero_amount: hkaSkipZero,
       include_annulled: hkaIncludeAnnulled,
-      ...extra
+      ...extra,
     };
   }
 
@@ -647,12 +694,15 @@
           mode: "backfill_prices",
           branch_id: hkaTargetBranch,
           moneda_precio_articulo: hkaMonedaPrecioArt,
-          dry_run: true
-        })
+          dry_run: true,
+        }),
       });
       const jsonRes = await res.json();
       if (!res.ok || !jsonRes.success) {
-        throw new Error(jsonRes.message || "Error al consultar artículos sin precio en Profit Plus");
+        throw new Error(
+          jsonRes.message ||
+            "Error al consultar artículos sin precio en Profit Plus",
+        );
       }
       hkaMissingPricesResult = jsonRes;
       if (jsonRes.count > 0) {
@@ -677,8 +727,8 @@
           format: "sql",
           branch_id: hkaTargetBranch,
           moneda_precio_articulo: hkaMonedaPrecioArt,
-          dry_run: true
-        })
+          dry_run: true,
+        }),
       });
       if (!res.ok) {
         throw new Error("No se pudo generar el script SQL de precios.");
@@ -712,14 +762,18 @@
           branch_id: hkaTargetBranch,
           moneda_precio_articulo: hkaMonedaPrecioArt,
           dry_run: false,
-          confirm: true
-        })
+          confirm: true,
+        }),
       });
       const jsonRes = await res.json();
       if (!res.ok || !jsonRes.success) {
-        throw new Error(jsonRes.message || "Error al insertar precios en saArtPrecio");
+        throw new Error(
+          jsonRes.message || "Error al insertar precios en saArtPrecio",
+        );
       }
-      toast.success(jsonRes.message || "Precios registrados exitosamente en saArtPrecio.");
+      toast.success(
+        jsonRes.message || "Precios registrados exitosamente en saArtPrecio.",
+      );
       await previewMissingPricesInProfit();
     } catch (err: any) {
       toast.error(`Error al registrar precios: ${err.message}`);
@@ -732,15 +786,19 @@
     isExtractingHka = true;
     hkaConfirmReplicate = false;
     try {
-      toast.info("Consultando facturas emitidas en The Factory HKA y auditando contra Profit Plus...");
+      toast.info(
+        "Consultando facturas emitidas en The Factory HKA y auditando contra Profit Plus...",
+      );
       const res = await fetch("/api/integrations/hka/extract", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(buildHkaPayload({ format: "json" }))
+        body: JSON.stringify(buildHkaPayload({ format: "json" })),
       });
       const jsonRes = await res.json();
       if (!res.ok || !jsonRes.success) {
-        throw new Error(jsonRes.message || "No se pudo extraer la información de HKA");
+        throw new Error(
+          jsonRes.message || "No se pudo extraer la información de HKA",
+        );
       }
       hkaPlanResult = jsonRes;
       const sel: Record<string, boolean> = {};
@@ -749,7 +807,7 @@
       }
       hkaSelectedDocs = sel;
       toast.success(
-        `Extracción lista: ${jsonRes.plan.summary.totalHkaDocuments} documento(s) encontrados (${jsonRes.plan.summary.invoicesToCreate} nuevos para Profit).`
+        `Extracción lista: ${jsonRes.plan.summary.totalHkaDocuments} documento(s) encontrados (${jsonRes.plan.summary.invoicesToCreate} nuevos para Profit).`,
       );
     } catch (err: any) {
       toast.error(`Error al extraer desde HKA: ${err.message}`);
@@ -768,21 +826,25 @@
         body: JSON.stringify(
           buildHkaPayload({
             format,
-            ...(selected ? { selected_hka_docs: selected } : {})
-          })
-        )
+            ...(selected ? { selected_hka_docs: selected } : {}),
+          }),
+        ),
       });
 
       if (!res.ok) {
         const errJson = await res.json().catch(() => ({}));
-        throw new Error(errJson.message || `Error al generar archivo ${format.toUpperCase()}`);
+        throw new Error(
+          errJson.message || `Error al generar archivo ${format.toUpperCase()}`,
+        );
       }
 
       const blob = await res.blob();
       const disposition = res.headers.get("Content-Disposition") || "";
       const fnMatch = disposition.match(/filename="([^"]+)"/);
       const defaultName =
-        format === "excel" ? "Auditoria_HKA_Profit.xlsx" : "Replicacion_HKA_Profit.sql";
+        format === "excel"
+          ? "Auditoria_HKA_Profit.xlsx"
+          : "Replicacion_HKA_Profit.sql";
       const fileName = fnMatch?.[1] || defaultName;
 
       const url = URL.createObjectURL(blob);
@@ -805,7 +867,9 @@
   async function executeHkaReplication() {
     const selected = getSelectedHkaDocsArray();
     if (!selected || selected.length === 0) {
-      toast.error("Seleccione al menos una factura pendiente para replicar en Profit Plus.");
+      toast.error(
+        "Seleccione al menos una factura pendiente para replicar en Profit Plus.",
+      );
       return;
     }
 
@@ -819,15 +883,17 @@
           buildHkaPayload({
             selected_hka_docs: selected,
             dry_run: false,
-            confirm: true
-          })
-        )
+            confirm: true,
+          }),
+        ),
       });
       const jsonRes = await res.json();
       if (!res.ok || !jsonRes.success) {
         throw new Error(jsonRes.message || "Error al replicar en Profit Plus");
       }
-      toast.success(jsonRes.message || "Facturas replicadas exitosamente en Profit Plus.");
+      toast.success(
+        jsonRes.message || "Facturas replicadas exitosamente en Profit Plus.",
+      );
       hkaConfirmReplicate = false;
       await previewHkaExtraction();
     } catch (err: any) {
@@ -889,7 +955,8 @@
             Integraciones
           </h1>
           <p class="text-xs text-text-muted mt-0.5 font-medium">
-            Administra las conexiones externas activas: Facturación TFHKA, WispHub y Bancaribe Open Banking.
+            Administra las conexiones externas activas: Facturación TFHKA,
+            WispHub y Bancaribe Open Banking.
           </p>
         </div>
       </div>
@@ -920,7 +987,9 @@
     class="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3"
   >
     <!-- Píldoras de Categoría -->
-    <div class="flex items-center gap-1.5 overflow-x-auto pb-1 lg:pb-0 scrollbar-none">
+    <div
+      class="flex items-center gap-1.5 overflow-x-auto pb-1 lg:pb-0 scrollbar-none"
+    >
       {#each categories as cat}
         {@const Icon = cat.icon}
         {@const isSelected = selectedCategory === cat.id}
@@ -966,7 +1035,11 @@
     {#each filteredIntegrations as item (item.id)}
       {@const CatIcon = getCategoryIcon(item.category)}
       {@const catColorClass = getCategoryColor(item.category)}
-      {@const env = item.environment || (item.base_url?.includes('demo') || item.base_url?.includes('sandbox') ? 'demo' : 'production')}
+      {@const env =
+        item.environment ||
+        (item.base_url?.includes("demo") || item.base_url?.includes("sandbox")
+          ? "demo"
+          : "production")}
       <div
         class="bg-surface-raised p-6 rounded-3xl border border-border-subtle shadow-xl hover:border-brand-500/30 transition-all flex flex-col justify-between group relative overflow-hidden"
       >
@@ -1047,15 +1120,20 @@
               'production'
                 ? 'bg-emerald-500/15 text-emerald-800 dark:text-emerald-300 border-emerald-500/30'
                 : 'bg-amber-500/15 text-amber-900 dark:text-amber-300 border-amber-500/35 font-bold'}"
-              title={env === 'production'
-                ? 'Ambiente de PRODUCCIÓN: Emisión y sincronización en vivo real'
+              title={env === "production"
+                ? "Ambiente de PRODUCCIÓN: Emisión y sincronización en vivo real"
                 : `Ambiente de PRUEBAS (${env.toUpperCase()}): Modo de certificación y ensayos sin afectación fiscal`}
             >
-              {#if env === 'production'}
-                <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block"></span>
+              {#if env === "production"}
+                <span
+                  class="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block"
+                ></span>
                 <span>PRODUCCIÓN</span>
               {:else}
-                <FlaskConical size={11} class="text-amber-700 dark:text-amber-400 shrink-0" />
+                <FlaskConical
+                  size={11}
+                  class="text-amber-700 dark:text-amber-400 shrink-0"
+                />
                 <span>PRUEBAS ({env.toUpperCase()})</span>
               {/if}
             </span>
@@ -1330,7 +1408,9 @@
                 >
                   Ambiente
                 </label>
-                <div class="grid grid-cols-2 gap-2 p-1.5 rounded-2xl bg-surface-soft border border-border-subtle">
+                <div
+                  class="grid grid-cols-2 gap-2 p-1.5 rounded-2xl bg-surface-soft border border-border-subtle"
+                >
                   <button
                     type="button"
                     onclick={() => handleEnvironmentChange("sandbox")}
@@ -1526,6 +1606,20 @@
                     class="w-full bg-surface-soft border border-border-subtle px-4 py-3 rounded-2xl text-xs font-bold text-text-base placeholder:text-text-muted/40 focus:border-brand-500 outline-none transition-all"
                   />
                 </div>
+
+                <div class="space-y-1.5 sm:col-span-2">
+                  <label
+                    class="text-xs font-black uppercase tracking-widest text-text-muted ml-1 block"
+                  >
+                    Serie Fiscal (Opcional)
+                  </label>
+                  <input
+                    type="text"
+                    bind:value={editingItem.options.serie_default}
+                    placeholder="Vacío = Sin serie (00-...) o letra ej. A"
+                    class="w-full bg-surface-soft border border-border-subtle px-4 py-3 rounded-2xl text-xs font-mono font-bold text-text-base placeholder:text-text-muted/40 focus:border-brand-500 outline-none transition-all"
+                  />
+                </div>
               </div>
             {:else if editingItem.id === "wisphub"}
               <!-- WISPHUB -->
@@ -1602,10 +1696,14 @@
 
                 <!-- Mapeo Predeterminado a Profit Plus (saCliente) -->
                 <div class="pt-2 border-t border-border-subtle/60 space-y-3">
-                  <div class="flex flex-wrap items-center justify-between gap-2">
+                  <div
+                    class="flex flex-wrap items-center justify-between gap-2"
+                  >
                     <div class="flex items-center gap-2">
                       <Settings2 size={15} class="text-indigo-500" />
-                      <span class="text-xs font-black uppercase tracking-wider text-text-base">
+                      <span
+                        class="text-xs font-black uppercase tracking-wider text-text-base"
+                      >
                         Mapeo Predeterminado a Profit Plus (`saCliente`)
                       </span>
                     </div>
@@ -1633,12 +1731,18 @@
                   </div>
 
                   <!-- Cuenta Ingreso/Egreso FK -->
-                  <div class="space-y-1.5 p-3 rounded-2xl bg-indigo-500/10 border border-indigo-500/20">
+                  <div
+                    class="space-y-1.5 p-3 rounded-2xl bg-indigo-500/10 border border-indigo-500/20"
+                  >
                     <div class="flex items-center justify-between">
-                      <label class="text-xs font-black uppercase tracking-wider text-indigo-700 dark:text-indigo-300">
+                      <label
+                        class="text-xs font-black uppercase tracking-wider text-indigo-700 dark:text-indigo-300"
+                      >
                         Cuenta Ingreso / Egreso (`co_cta_ingr_egr`)
                       </label>
-                      <span class="text-[10px] font-mono font-bold text-indigo-600 dark:text-indigo-400">
+                      <span
+                        class="text-[10px] font-mono font-bold text-indigo-600 dark:text-indigo-400"
+                      >
                         FK ALDANET: I-001
                       </span>
                     </div>
@@ -1648,23 +1752,37 @@
                       placeholder="I-001"
                       class="w-full bg-surface-soft border border-border-subtle px-4 py-2.5 rounded-xl text-xs font-mono font-bold text-text-base focus:border-brand-500 outline-none transition-all"
                     />
-                    <span class="text-[10px] text-text-muted leading-tight block">
-                      Obligatorio por clave foránea FK_saCliente_saCuentaIngEgr en tabla saCuentaIngEgr.
+                    <span
+                      class="text-[10px] text-text-muted leading-tight block"
+                    >
+                      Obligatorio por clave foránea FK_saCliente_saCuentaIngEgr
+                      en tabla saCuentaIngEgr.
                     </span>
                   </div>
 
                   <!-- Origen del Código de Cliente -->
                   <div class="space-y-1.5">
-                    <label class="text-xs font-black uppercase tracking-widest text-text-muted ml-1 block">
+                    <label
+                      class="text-xs font-black uppercase tracking-widest text-text-muted ml-1 block"
+                    >
                       Estrategia de Código de Cliente (`co_cli`)
                     </label>
                     <select
-                      bind:value={editingItem.options.field_mappings.co_cli_source}
+                      bind:value={
+                        editingItem.options.field_mappings.co_cli_source
+                      }
                       class="w-full bg-surface-soft border border-border-subtle px-4 py-2.5 rounded-xl text-xs font-bold text-text-base focus:border-brand-500 outline-none transition-all cursor-pointer"
                     >
-                      <option value="cedula_or_id">Cédula/RIF si existe (ej. V12345678), o ID WispHub (WISP-775)</option>
-                      <option value="cedula_or_user">Cédula/RIF si existe, o Nombre de Usuario WispHub</option>
-                      <option value="id_servicio">Siempre ID de Servicio WispHub (WISP-775)</option>
+                      <option value="cedula_or_id"
+                        >Cédula/RIF si existe (ej. V12345678), o ID WispHub
+                        (WISP-775)</option
+                      >
+                      <option value="cedula_or_user"
+                        >Cédula/RIF si existe, o Nombre de Usuario WispHub</option
+                      >
+                      <option value="id_servicio"
+                        >Siempre ID de Servicio WispHub (WISP-775)</option
+                      >
                       <option value="usuario">Nombre de Usuario WispHub</option>
                     </select>
                   </div>
@@ -1672,7 +1790,9 @@
                   <!-- Grid de Defaults (Zona, Vendedor, Segmento, Tipo Cliente) -->
                   <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
                     <div class="space-y-1">
-                      <label class="text-[10px] font-black uppercase tracking-wider text-text-muted block">
+                      <label
+                        class="text-[10px] font-black uppercase tracking-wider text-text-muted block"
+                      >
                         Tipo Cliente
                       </label>
                       <input
@@ -1683,7 +1803,9 @@
                       />
                     </div>
                     <div class="space-y-1">
-                      <label class="text-[10px] font-black uppercase tracking-wider text-text-muted block">
+                      <label
+                        class="text-[10px] font-black uppercase tracking-wider text-text-muted block"
+                      >
                         Zona
                       </label>
                       <input
@@ -1694,7 +1816,9 @@
                       />
                     </div>
                     <div class="space-y-1">
-                      <label class="text-[10px] font-black uppercase tracking-wider text-text-muted block">
+                      <label
+                        class="text-[10px] font-black uppercase tracking-wider text-text-muted block"
+                      >
                         Vendedor
                       </label>
                       <input
@@ -1705,7 +1829,9 @@
                       />
                     </div>
                     <div class="space-y-1">
-                      <label class="text-[10px] font-black uppercase tracking-wider text-text-muted block">
+                      <label
+                        class="text-[10px] font-black uppercase tracking-wider text-text-muted block"
+                      >
                         Segmento
                       </label>
                       <input
@@ -1719,14 +1845,21 @@
 
                   <!-- Campos Libres -->
                   <div class="space-y-2 pt-1 border-t border-border-subtle/50">
-                    <span class="text-[11px] font-black uppercase tracking-wider text-text-muted block">
+                    <span
+                      class="text-[11px] font-black uppercase tracking-wider text-text-muted block"
+                    >
                       Mapeo a Campos Libres (`campo1`, `campo2`, `campo3`)
                     </span>
                     <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
                       <div>
-                        <span class="text-[10px] text-text-muted font-bold block mb-1">Campo 1</span>
+                        <span
+                          class="text-[10px] text-text-muted font-bold block mb-1"
+                          >Campo 1</span
+                        >
                         <select
-                          bind:value={editingItem.options.field_mappings.campo1_source}
+                          bind:value={
+                            editingItem.options.field_mappings.campo1_source
+                          }
                           class="w-full bg-surface-soft border border-border-subtle px-2.5 py-1.5 rounded-xl text-xs font-bold text-text-base"
                         >
                           <option value="id_servicio">ID Servicio</option>
@@ -1737,9 +1870,14 @@
                         </select>
                       </div>
                       <div>
-                        <span class="text-[10px] text-text-muted font-bold block mb-1">Campo 2</span>
+                        <span
+                          class="text-[10px] text-text-muted font-bold block mb-1"
+                          >Campo 2</span
+                        >
                         <select
-                          bind:value={editingItem.options.field_mappings.campo2_source}
+                          bind:value={
+                            editingItem.options.field_mappings.campo2_source
+                          }
                           class="w-full bg-surface-soft border border-border-subtle px-2.5 py-1.5 rounded-xl text-xs font-bold text-text-base"
                         >
                           <option value="usuario">Usuario</option>
@@ -1750,9 +1888,14 @@
                         </select>
                       </div>
                       <div>
-                        <span class="text-[10px] text-text-muted font-bold block mb-1">Campo 3</span>
+                        <span
+                          class="text-[10px] text-text-muted font-bold block mb-1"
+                          >Campo 3</span
+                        >
                         <select
-                          bind:value={editingItem.options.field_mappings.campo3_source}
+                          bind:value={
+                            editingItem.options.field_mappings.campo3_source
+                          }
                           class="w-full bg-surface-soft border border-border-subtle px-2.5 py-1.5 rounded-xl text-xs font-bold text-text-base"
                         >
                           <option value="ip">IP</option>
@@ -1940,12 +2083,18 @@
                 </div>
 
                 <!-- URL Webhook receptora -->
-                <div class="p-3 rounded-2xl bg-emerald-500/10 border border-emerald-500/25 flex flex-wrap items-center justify-between gap-2 text-xs">
+                <div
+                  class="p-3 rounded-2xl bg-emerald-500/10 border border-emerald-500/25 flex flex-wrap items-center justify-between gap-2 text-xs"
+                >
                   <div class="min-w-0 flex-1">
-                    <span class="text-[10px] font-black uppercase tracking-wider text-emerald-700 dark:text-emerald-300 block">
+                    <span
+                      class="text-[10px] font-black uppercase tracking-wider text-emerald-700 dark:text-emerald-300 block"
+                    >
                       URL Receptora de Notificaciones Webhook (POST)
                     </span>
-                    <code class="text-[11px] font-mono text-text-base break-all">
+                    <code
+                      class="text-[11px] font-mono text-text-base break-all"
+                    >
                       {typeof window !== "undefined"
                         ? `${window.location.origin}/api/integrations/bancaribe/notifications`
                         : "/api/integrations/bancaribe/notifications"}
@@ -1967,14 +2116,18 @@
 
                 <!-- Datos de Comercio y Cuenta Afiliada -->
                 <div class="pt-2 border-t border-border-subtle/60 space-y-3">
-                  <span class="text-xs font-black uppercase tracking-wider text-text-base flex items-center gap-2">
+                  <span
+                    class="text-xs font-black uppercase tracking-wider text-text-base flex items-center gap-2"
+                  >
                     <Landmark size={14} class="text-emerald-500" />
                     Datos de la Cuenta y Comercio Afiliado
                   </span>
 
                   <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div class="space-y-1">
-                      <label class="text-[10px] font-black uppercase tracking-wider text-text-muted ml-1 block">
+                      <label
+                        class="text-[10px] font-black uppercase tracking-wider text-text-muted ml-1 block"
+                      >
                         RIF del Comercio (sin guión, ej. J401750354)
                       </label>
                       <input
@@ -1985,7 +2138,9 @@
                       />
                     </div>
                     <div class="space-y-1">
-                      <label class="text-[10px] font-black uppercase tracking-wider text-text-muted ml-1 block">
+                      <label
+                        class="text-[10px] font-black uppercase tracking-wider text-text-muted ml-1 block"
+                      >
                         Nombre / Razón Social Comercio
                       </label>
                       <input
@@ -1996,7 +2151,9 @@
                       />
                     </div>
                     <div class="space-y-1">
-                      <label class="text-[10px] font-black uppercase tracking-wider text-text-muted ml-1 block">
+                      <label
+                        class="text-[10px] font-black uppercase tracking-wider text-text-muted ml-1 block"
+                      >
                         N° Cuenta Jurídica Bancaribe (20 dígitos)
                       </label>
                       <input
@@ -2008,7 +2165,9 @@
                       />
                     </div>
                     <div class="space-y-1">
-                      <label class="text-[10px] font-black uppercase tracking-wider text-text-muted ml-1 block">
+                      <label
+                        class="text-[10px] font-black uppercase tracking-wider text-text-muted ml-1 block"
+                      >
                         Teléfono Comercio (Pago Móvil C2P/B2P)
                       </label>
                       <input
@@ -2022,7 +2181,10 @@
 
                   <div class="grid grid-cols-2 sm:grid-cols-5 gap-2.5">
                     <div class="space-y-1">
-                      <label class="text-[10px] font-black uppercase tracking-wider text-text-muted block">IP Origen</label>
+                      <label
+                        class="text-[10px] font-black uppercase tracking-wider text-text-muted block"
+                        >IP Origen</label
+                      >
                       <input
                         type="text"
                         bind:value={editingItem.options.ip_origen}
@@ -2030,7 +2192,10 @@
                       />
                     </div>
                     <div class="space-y-1">
-                      <label class="text-[10px] font-black uppercase tracking-wider text-text-muted block">Terminal</label>
+                      <label
+                        class="text-[10px] font-black uppercase tracking-wider text-text-muted block"
+                        >Terminal</label
+                      >
                       <input
                         type="text"
                         bind:value={editingItem.options.terminal}
@@ -2038,7 +2203,10 @@
                       />
                     </div>
                     <div class="space-y-1">
-                      <label class="text-[10px] font-black uppercase tracking-wider text-text-muted block">Caja / Suc.</label>
+                      <label
+                        class="text-[10px] font-black uppercase tracking-wider text-text-muted block"
+                        >Caja / Suc.</label
+                      >
                       <input
                         type="number"
                         bind:value={editingItem.options.caja_terminal}
@@ -2046,7 +2214,10 @@
                       />
                     </div>
                     <div class="space-y-1">
-                      <label class="text-[10px] font-black uppercase tracking-wider text-text-muted block">Oficina B2P</label>
+                      <label
+                        class="text-[10px] font-black uppercase tracking-wider text-text-muted block"
+                        >Oficina B2P</label
+                      >
                       <input
                         type="number"
                         bind:value={editingItem.options.oficina}
@@ -2054,7 +2225,10 @@
                       />
                     </div>
                     <div class="space-y-1">
-                      <label class="text-[10px] font-black uppercase tracking-wider text-text-muted block">Contrato DC</label>
+                      <label
+                        class="text-[10px] font-black uppercase tracking-wider text-text-muted block"
+                        >Contrato DC</label
+                      >
                       <input
                         type="text"
                         bind:value={editingItem.options.contrato_cobranza}
@@ -2063,14 +2237,17 @@
                     </div>
                   </div>
 
-                  <label class="flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl bg-surface-soft border border-border-subtle cursor-pointer text-xs">
+                  <label
+                    class="flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl bg-surface-soft border border-border-subtle cursor-pointer text-xs"
+                  >
                     <input
                       type="checkbox"
                       bind:checked={editingItem.options.allow_self_signed}
                       class="w-4 h-4 rounded accent-emerald-500"
                     />
                     <span class="font-semibold text-text-muted">
-                      Permitir certificados TLS/SSL autofirmados en ambientes Sandbox / Desarrollo Bancaribe
+                      Permitir certificados TLS/SSL autofirmados en ambientes
+                      Sandbox / Desarrollo Bancaribe
                     </span>
                   </label>
 
@@ -2083,7 +2260,8 @@
                     class="w-full py-3 px-4 rounded-2xl bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-800 dark:text-emerald-300 text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer"
                   >
                     <Landmark size={14} />
-                    <span>Abrir Consola Interactiva Bancaribe Open Banking</span>
+                    <span>Abrir Consola Interactiva Bancaribe Open Banking</span
+                    >
                   </button>
                 </div>
               </div>
@@ -2278,7 +2456,9 @@
             </select>
 
             {#if syncTargetBranch}
-              {@const selectedB = data.branches?.find((b: any) => b.id === syncTargetBranch)}
+              {@const selectedB = data.branches?.find(
+                (b: any) => b.id === syncTargetBranch,
+              )}
               <div class="flex items-center justify-between pt-1">
                 <span class="text-[11px] text-text-muted">
                   Valores configurados en Sucursal:
@@ -2286,8 +2466,11 @@
                     {selectedB?.name}
                   </strong>
                 </span>
-                <span class="text-[10px] font-mono font-bold px-2 py-0.5 rounded-lg bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 border border-indigo-500/20">
-                  Zona: {selectedB?.default_zone || '01'} · Tipo: {selectedB?.default_client_type || '01'} · Cta: {selectedB?.default_cta_ingr_egr || 'I-001'}
+                <span
+                  class="text-[10px] font-mono font-bold px-2 py-0.5 rounded-lg bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 border border-indigo-500/20"
+                >
+                  Zona: {selectedB?.default_zone || "01"} · Tipo: {selectedB?.default_client_type ||
+                    "01"} · Cta: {selectedB?.default_cta_ingr_egr || "I-001"}
                 </span>
               </div>
             {/if}
@@ -2295,7 +2478,8 @@
             <div
               class="p-3 rounded-2xl bg-amber-500/15 border border-amber-500/30 text-amber-800 dark:text-amber-300 text-xs font-bold"
             >
-              No se detectaron sucursales con Agente Sync2K asignadas a tu usuario.
+              No se detectaron sucursales con Agente Sync2K asignadas a tu
+              usuario.
             </div>
           {/if}
         </div>
@@ -2320,10 +2504,15 @@
             <div>
               <div class="flex items-center gap-2">
                 <Users size={14} class="text-indigo-500" />
-                <span class="font-bold text-text-base text-xs">Catálogo de Clientes (`saCliente`)</span>
+                <span class="font-bold text-text-base text-xs"
+                  >Catálogo de Clientes (`saCliente`)</span
+                >
               </div>
-              <span class="text-text-muted font-medium text-[11px] block mt-0.5">
-                Crea o actualiza clientes en Profit Plus con su RIF/Cédula, nombre, teléfono y dirección.
+              <span
+                class="text-text-muted font-medium text-[11px] block mt-0.5"
+              >
+                Crea o actualiza clientes en Profit Plus con su RIF/Cédula,
+                nombre, teléfono y dirección.
               </span>
             </div>
           </label>
@@ -2340,10 +2529,15 @@
             <div>
               <div class="flex items-center gap-2">
                 <Layers size={14} class="text-indigo-500" />
-                <span class="font-bold text-text-base text-xs">Planes y Servicios (`saArticulo`)</span>
+                <span class="font-bold text-text-base text-xs"
+                  >Planes y Servicios (`saArticulo`)</span
+                >
               </div>
-              <span class="text-text-muted font-medium text-[11px] block mt-0.5">
-                Verifica y mapea los planes de internet de WispHub contra los códigos de servicio en Profit Plus.
+              <span
+                class="text-text-muted font-medium text-[11px] block mt-0.5"
+              >
+                Verifica y mapea los planes de internet de WispHub contra los
+                códigos de servicio en Profit Plus.
               </span>
             </div>
           </label>
@@ -2365,7 +2559,9 @@
 
         <!-- Ajustes de Mapeo y Defaults Profit Plus (saCliente) -->
         {#if syncCustomers}
-          <div class="border border-border-subtle rounded-2xl overflow-hidden bg-surface-soft/40">
+          <div
+            class="border border-border-subtle rounded-2xl overflow-hidden bg-surface-soft/40"
+          >
             <button
               type="button"
               onclick={() => (showAdvancedMappings = !showAdvancedMappings)}
@@ -2378,11 +2574,14 @@
                     Mapeo de Campos Profit Plus (`saCliente`)
                   </span>
                   <span class="text-[11px] text-text-muted block">
-                    Cuenta Ingreso/Egreso ({defaultCtaIngrEgr}), Zona, Vendedor y Campos Libres
+                    Cuenta Ingreso/Egreso ({defaultCtaIngrEgr}), Zona, Vendedor
+                    y Campos Libres
                   </span>
                 </div>
               </div>
-              <div class="flex items-center gap-1.5 text-xs text-text-muted font-bold">
+              <div
+                class="flex items-center gap-1.5 text-xs text-text-muted font-bold"
+              >
                 <span>{showAdvancedMappings ? "Ocultar" : "Personalizar"}</span>
                 {#if showAdvancedMappings}
                   <ChevronUp size={14} />
@@ -2393,12 +2592,19 @@
             </button>
 
             {#if showAdvancedMappings}
-              <div class="p-4 pt-2 border-t border-border-subtle space-y-4" in:slide={{ duration: 150 }}>
+              <div
+                class="p-4 pt-2 border-t border-border-subtle space-y-4"
+                in:slide={{ duration: 150 }}
+              >
                 <!-- Presets Rápidos por Empresa -->
-                <div class="p-3 rounded-2xl bg-surface-soft border border-border-subtle flex flex-wrap items-center justify-between gap-2">
+                <div
+                  class="p-3 rounded-2xl bg-surface-soft border border-border-subtle flex flex-wrap items-center justify-between gap-2"
+                >
                   <div class="flex items-center gap-1.5">
                     <Sparkles size={14} class="text-indigo-500" />
-                    <span class="text-xs font-bold text-text-base">Plantillas por Empresa:</span>
+                    <span class="text-xs font-bold text-text-base"
+                      >Plantillas por Empresa:</span
+                    >
                   </div>
                   <div class="flex items-center gap-2">
                     <button
@@ -2420,12 +2626,18 @@
                 </div>
 
                 <!-- Cuenta de Ingresos / Egresos (FK ALDANET) -->
-                <div class="space-y-1.5 p-3 rounded-2xl bg-indigo-500/10 border border-indigo-500/20">
+                <div
+                  class="space-y-1.5 p-3 rounded-2xl bg-indigo-500/10 border border-indigo-500/20"
+                >
                   <div class="flex items-center justify-between">
-                    <label class="text-[11px] font-black uppercase tracking-wider text-indigo-700 dark:text-indigo-300">
+                    <label
+                      class="text-[11px] font-black uppercase tracking-wider text-indigo-700 dark:text-indigo-300"
+                    >
                       Cuenta Ingreso / Egreso (`co_cta_ingr_egr`)
                     </label>
-                    <span class="text-[10px] font-mono font-bold text-indigo-600 dark:text-indigo-400">
+                    <span
+                      class="text-[10px] font-mono font-bold text-indigo-600 dark:text-indigo-400"
+                    >
                       FK ALDANET: I-001
                     </span>
                   </div>
@@ -2436,22 +2648,34 @@
                     class="w-full bg-surface-base border border-border-subtle px-3 py-2 rounded-xl text-xs font-mono font-bold text-text-base focus:border-indigo-500 outline-none transition-all"
                   />
                   <p class="text-[10px] text-text-muted leading-tight">
-                    Código de cuenta contable requerido por la clave foránea <code class="font-mono text-indigo-600 dark:text-indigo-400">FK_saCliente_saCuentaIngEgr</code>. En Aldanet debe ser <strong>I-001</strong>.
+                    Código de cuenta contable requerido por la clave foránea <code
+                      class="font-mono text-indigo-600 dark:text-indigo-400"
+                      >FK_saCliente_saCuentaIngEgr</code
+                    >. En Aldanet debe ser <strong>I-001</strong>.
                   </p>
                 </div>
 
                 <!-- Origen de Código de Cliente (co_cli) -->
                 <div class="space-y-1.5">
-                  <label class="text-[11px] font-black uppercase tracking-wider text-text-muted block">
+                  <label
+                    class="text-[11px] font-black uppercase tracking-wider text-text-muted block"
+                  >
                     Origen del Código de Cliente (`co_cli`)
                   </label>
                   <select
                     bind:value={coCliSource}
                     class="w-full bg-surface-base border border-border-subtle px-3 py-2 rounded-xl text-xs font-bold text-text-base focus:border-indigo-500 outline-none transition-all cursor-pointer"
                   >
-                    <option value="cedula_or_id">Cédula/RIF si existe (ej. V12345678), o ID WispHub (WISP-775)</option>
-                    <option value="cedula_or_user">Cédula/RIF si existe, o Nombre de Usuario WispHub</option>
-                    <option value="id_servicio">Siempre ID de Servicio WispHub (WISP-775)</option>
+                    <option value="cedula_or_id"
+                      >Cédula/RIF si existe (ej. V12345678), o ID WispHub
+                      (WISP-775)</option
+                    >
+                    <option value="cedula_or_user"
+                      >Cédula/RIF si existe, o Nombre de Usuario WispHub</option
+                    >
+                    <option value="id_servicio"
+                      >Siempre ID de Servicio WispHub (WISP-775)</option
+                    >
                     <option value="usuario">Nombre de Usuario WispHub</option>
                   </select>
                 </div>
@@ -2459,7 +2683,9 @@
                 <!-- Grid de Valores Por Defecto -->
                 <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
                   <div class="space-y-1">
-                    <label class="text-[10px] font-black uppercase tracking-wider text-text-muted block">
+                    <label
+                      class="text-[10px] font-black uppercase tracking-wider text-text-muted block"
+                    >
                       Tipo Cliente
                     </label>
                     <input
@@ -2470,7 +2696,9 @@
                     />
                   </div>
                   <div class="space-y-1">
-                    <label class="text-[10px] font-black uppercase tracking-wider text-text-muted block">
+                    <label
+                      class="text-[10px] font-black uppercase tracking-wider text-text-muted block"
+                    >
                       Zona
                     </label>
                     <input
@@ -2481,7 +2709,9 @@
                     />
                   </div>
                   <div class="space-y-1">
-                    <label class="text-[10px] font-black uppercase tracking-wider text-text-muted block">
+                    <label
+                      class="text-[10px] font-black uppercase tracking-wider text-text-muted block"
+                    >
                       Vendedor
                     </label>
                     <input
@@ -2492,7 +2722,9 @@
                     />
                   </div>
                   <div class="space-y-1">
-                    <label class="text-[10px] font-black uppercase tracking-wider text-text-muted block">
+                    <label
+                      class="text-[10px] font-black uppercase tracking-wider text-text-muted block"
+                    >
                       Segmento
                     </label>
                     <input
@@ -2506,17 +2738,24 @@
 
                 <!-- Mapeo de Campos Libres (campo1, campo2, campo3) -->
                 <div class="space-y-2 pt-1 border-t border-border-subtle/50">
-                  <span class="text-[11px] font-black uppercase tracking-wider text-text-muted block">
+                  <span
+                    class="text-[11px] font-black uppercase tracking-wider text-text-muted block"
+                  >
                     Campos Libres en saCliente (Profit Plus)
                   </span>
                   <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
                     <div>
-                      <span class="text-[10px] text-text-muted font-bold block mb-1">Campo 1 (Libre)</span>
+                      <span
+                        class="text-[10px] text-text-muted font-bold block mb-1"
+                        >Campo 1 (Libre)</span
+                      >
                       <select
                         bind:value={campo1Source}
                         class="w-full bg-surface-base border border-border-subtle px-2.5 py-1.5 rounded-xl text-xs font-bold text-text-base"
                       >
-                        <option value="id_servicio">ID Servicio (WispHub)</option>
+                        <option value="id_servicio"
+                          >ID Servicio (WispHub)</option
+                        >
                         <option value="usuario">Usuario WispHub</option>
                         <option value="ip">Dirección IP</option>
                         <option value="plan">Plan de Internet</option>
@@ -2524,7 +2763,10 @@
                       </select>
                     </div>
                     <div>
-                      <span class="text-[10px] text-text-muted font-bold block mb-1">Campo 2 (Libre)</span>
+                      <span
+                        class="text-[10px] text-text-muted font-bold block mb-1"
+                        >Campo 2 (Libre)</span
+                      >
                       <select
                         bind:value={campo2Source}
                         class="w-full bg-surface-base border border-border-subtle px-2.5 py-1.5 rounded-xl text-xs font-bold text-text-base"
@@ -2537,7 +2779,10 @@
                       </select>
                     </div>
                     <div>
-                      <span class="text-[10px] text-text-muted font-bold block mb-1">Campo 3 (Libre)</span>
+                      <span
+                        class="text-[10px] text-text-muted font-bold block mb-1"
+                        >Campo 3 (Libre)</span
+                      >
                       <select
                         bind:value={campo3Source}
                         class="w-full bg-surface-base border border-border-subtle px-2.5 py-1.5 rounded-xl text-xs font-bold text-text-base"
@@ -2553,7 +2798,9 @@
                 </div>
 
                 <!-- Guardar mapeos por defecto -->
-                <label class="flex items-center gap-2 pt-1 text-xs cursor-pointer">
+                <label
+                  class="flex items-center gap-2 pt-1 text-xs cursor-pointer"
+                >
                   <input
                     type="checkbox"
                     bind:checked={saveDefaults}
@@ -2575,32 +2822,64 @@
             in:slide={{ duration: 180 }}
           >
             <div class="flex items-center justify-between">
-              <span class="text-xs font-black uppercase tracking-wider text-emerald-600 dark:text-emerald-400 flex items-center gap-1.5">
+              <span
+                class="text-xs font-black uppercase tracking-wider text-emerald-600 dark:text-emerald-400 flex items-center gap-1.5"
+              >
                 <CheckCircle2 size={15} />
                 Resumen de Sincronización
               </span>
               <span class="text-[10px] font-mono font-bold text-text-muted">
-                {syncSummary.branch?.name || ''}
+                {syncSummary.branch?.name || ""}
               </span>
             </div>
 
             {#if syncSummary.customers}
               <div class="grid grid-cols-4 gap-2 text-center pt-1 font-mono">
-                <div class="p-2 rounded-xl bg-surface-base border border-border-subtle">
-                  <span class="text-[10px] text-text-muted uppercase block">Total</span>
-                  <span class="text-sm font-black text-text-base">{syncSummary.customers.total}</span>
+                <div
+                  class="p-2 rounded-xl bg-surface-base border border-border-subtle"
+                >
+                  <span class="text-[10px] text-text-muted uppercase block"
+                    >Total</span
+                  >
+                  <span class="text-sm font-black text-text-base"
+                    >{syncSummary.customers.total}</span
+                  >
                 </div>
-                <div class="p-2 rounded-xl bg-emerald-500/10 border border-emerald-500/20">
-                  <span class="text-[10px] text-emerald-600 dark:text-emerald-400 uppercase block">Creados</span>
-                  <span class="text-sm font-black text-emerald-600 dark:text-emerald-400">{syncSummary.customers.created}</span>
+                <div
+                  class="p-2 rounded-xl bg-emerald-500/10 border border-emerald-500/20"
+                >
+                  <span
+                    class="text-[10px] text-emerald-600 dark:text-emerald-400 uppercase block"
+                    >Creados</span
+                  >
+                  <span
+                    class="text-sm font-black text-emerald-600 dark:text-emerald-400"
+                    >{syncSummary.customers.created}</span
+                  >
                 </div>
-                <div class="p-2 rounded-xl bg-cyan-500/10 border border-cyan-500/20">
-                  <span class="text-[10px] text-cyan-600 dark:text-cyan-400 uppercase block">Actualizados</span>
-                  <span class="text-sm font-black text-cyan-600 dark:text-cyan-400">{syncSummary.customers.updated}</span>
+                <div
+                  class="p-2 rounded-xl bg-cyan-500/10 border border-cyan-500/20"
+                >
+                  <span
+                    class="text-[10px] text-cyan-600 dark:text-cyan-400 uppercase block"
+                    >Actualizados</span
+                  >
+                  <span
+                    class="text-sm font-black text-cyan-600 dark:text-cyan-400"
+                    >{syncSummary.customers.updated}</span
+                  >
                 </div>
-                <div class="p-2 rounded-xl bg-red-500/10 border border-red-500/20">
-                  <span class="text-[10px] text-red-600 dark:text-red-400 uppercase block">Fallidos</span>
-                  <span class="text-sm font-black text-red-600 dark:text-red-400">{syncSummary.customers.failed}</span>
+                <div
+                  class="p-2 rounded-xl bg-red-500/10 border border-red-500/20"
+                >
+                  <span
+                    class="text-[10px] text-red-600 dark:text-red-400 uppercase block"
+                    >Fallidos</span
+                  >
+                  <span
+                    class="text-sm font-black text-red-600 dark:text-red-400"
+                    >{syncSummary.customers.failed}</span
+                  >
                 </div>
               </div>
 
@@ -2611,7 +2890,10 @@
                     onclick={() => (showFailuresList = !showFailuresList)}
                     class="text-[11px] font-bold text-red-600 dark:text-red-400 hover:underline flex items-center gap-1 cursor-pointer"
                   >
-                    <span>Ver detalle de los {syncSummary.customers.failed} registros fallidos</span>
+                    <span
+                      >Ver detalle de los {syncSummary.customers.failed} registros
+                      fallidos</span
+                    >
                     {#if showFailuresList}
                       <ChevronUp size={12} />
                     {:else}
@@ -2619,14 +2901,27 @@
                     {/if}
                   </button>
                   {#if showFailuresList}
-                    <div class="mt-2 max-h-48 overflow-y-auto space-y-1.5 pr-1 font-mono text-[11px]" in:slide={{ duration: 150 }}>
+                    <div
+                      class="mt-2 max-h-48 overflow-y-auto space-y-1.5 pr-1 font-mono text-[11px]"
+                      in:slide={{ duration: 150 }}
+                    >
                       {#each syncSummary.customers.results.filter((r: any) => !r.success) as fail}
-                        <div class="p-2.5 rounded-xl bg-red-500/10 border border-red-500/20 text-text-base">
-                          <div class="flex items-center justify-between font-bold">
-                            <span>{fail.nombre || 'Sin nombre'} ({fail.co_cli})</span>
-                            <span class="text-red-600 dark:text-red-400">ID #{fail.id_servicio}</span>
+                        <div
+                          class="p-2.5 rounded-xl bg-red-500/10 border border-red-500/20 text-text-base"
+                        >
+                          <div
+                            class="flex items-center justify-between font-bold"
+                          >
+                            <span
+                              >{fail.nombre || "Sin nombre"} ({fail.co_cli})</span
+                            >
+                            <span class="text-red-600 dark:text-red-400"
+                              >ID #{fail.id_servicio}</span
+                            >
                           </div>
-                          <p class="text-[10px] text-red-700 dark:text-red-300 mt-1 break-all">
+                          <p
+                            class="text-[10px] text-red-700 dark:text-red-300 mt-1 break-all"
+                          >
                             {fail.error}
                           </p>
                         </div>
@@ -2638,10 +2933,15 @@
             {/if}
 
             {#if syncSummary.plans}
-              <div class="p-3 rounded-xl bg-surface-base border border-border-subtle flex items-center justify-between text-xs">
-                <span class="text-text-muted font-medium">Planes de Internet verificados:</span>
+              <div
+                class="p-3 rounded-xl bg-surface-base border border-border-subtle flex items-center justify-between text-xs"
+              >
+                <span class="text-text-muted font-medium"
+                  >Planes de Internet verificados:</span
+                >
                 <span class="font-mono font-black text-text-base">
-                  {syncSummary.plans.mappings?.length || 0} ({syncSummary.plans.unlinkedCount || 0} pendientes de asociar)
+                  {syncSummary.plans.mappings?.length || 0} ({syncSummary.plans
+                    .unlinkedCount || 0} pendientes de asociar)
                 </span>
               </div>
             {/if}
@@ -2700,9 +3000,13 @@
       in:scale={{ duration: 200, start: 0.96 }}
     >
       <!-- Cabecera -->
-      <div class="p-5 md:p-6 border-b border-border-subtle flex items-center justify-between bg-surface-raised">
+      <div
+        class="p-5 md:p-6 border-b border-border-subtle flex items-center justify-between bg-surface-raised"
+      >
         <div class="flex items-center gap-3.5">
-          <div class="w-11 h-11 rounded-2xl bg-cyan-500/15 border border-cyan-500/30 flex items-center justify-center text-cyan-500">
+          <div
+            class="w-11 h-11 rounded-2xl bg-cyan-500/15 border border-cyan-500/30 flex items-center justify-center text-cyan-500"
+          >
             <Receipt size={22} />
           </div>
           <div>
@@ -2710,7 +3014,9 @@
               Extracción y Replicación Fiscal: The Factory HKA → Profit Plus
             </h3>
             <p class="text-xs text-text-muted font-medium">
-              Extrae las facturas ya emitidas en HKA, audita clientes/artículos/tasas y exporta en Excel o SQL antes de recrear en Profit Plus.
+              Extrae las facturas ya emitidas en HKA, audita
+              clientes/artículos/tasas y exporta en Excel o SQL antes de recrear
+              en Profit Plus.
             </p>
           </div>
         </div>
@@ -2726,9 +3032,13 @@
       <!-- Contenido Scrollable -->
       <div class="p-5 md:p-6 overflow-y-auto space-y-5 flex-1">
         <!-- Filtros y Parámetros -->
-        <div class="grid grid-cols-1 md:grid-cols-4 gap-3 bg-surface-raised p-4 rounded-2xl border border-border-subtle">
+        <div
+          class="grid grid-cols-1 md:grid-cols-4 gap-3 bg-surface-raised p-4 rounded-2xl border border-border-subtle"
+        >
           <div>
-            <label class="block text-[11px] font-bold text-text-muted uppercase mb-1">
+            <label
+              class="block text-[11px] font-bold text-text-muted uppercase mb-1"
+            >
               Sucursal Profit Destino
             </label>
             <select
@@ -2742,7 +3052,9 @@
           </div>
 
           <div>
-            <label class="block text-[11px] font-bold text-text-muted uppercase mb-1">
+            <label
+              class="block text-[11px] font-bold text-text-muted uppercase mb-1"
+            >
               Tipo Documento / Serie
             </label>
             <div class="flex gap-1.5">
@@ -2752,8 +3064,8 @@
               >
                 <option value="ALL">Todos (01/02/03)</option>
                 <option value="01">01 - Factura</option>
-                <option value="03">03 - Nota Crédito</option>
-                <option value="02">02 - Nota Débito</option>
+                <option value="02">02 - Nota Crédito</option>
+                <option value="03">03 - Nota Débito</option>
               </select>
               <input
                 type="text"
@@ -2766,7 +3078,9 @@
           </div>
 
           <div>
-            <label class="block text-[11px] font-bold text-text-muted uppercase mb-1">
+            <label
+              class="block text-[11px] font-bold text-text-muted uppercase mb-1"
+            >
               Rango N° Documento (Opc.)
             </label>
             <div class="flex items-center gap-1.5">
@@ -2786,7 +3100,9 @@
           </div>
 
           <div>
-            <label class="block text-[11px] font-bold text-text-muted uppercase mb-1">
+            <label
+              class="block text-[11px] font-bold text-text-muted uppercase mb-1"
+            >
               Rango Fechas Emisión (Opc.)
             </label>
             <div class="flex items-center gap-1.5">
@@ -2805,7 +3121,9 @@
 
           <!-- Fila 2: Opciones Profit Plus -->
           <div>
-            <label class="block text-[11px] font-bold text-text-muted uppercase mb-1">
+            <label
+              class="block text-[11px] font-bold text-text-muted uppercase mb-1"
+            >
               Moneda Cabecera Profit
             </label>
             <select
@@ -2818,7 +3136,9 @@
           </div>
 
           <div>
-            <label class="block text-[11px] font-bold text-text-muted uppercase mb-1">
+            <label
+              class="block text-[11px] font-bold text-text-muted uppercase mb-1"
+            >
               Moneda Precio 01 (saArtPrecio)
             </label>
             <select
@@ -2831,30 +3151,56 @@
           </div>
 
           <div>
-            <label class="block text-[11px] font-bold text-text-muted uppercase mb-1">
+            <label
+              class="block text-[11px] font-bold text-text-muted uppercase mb-1"
+            >
               Saldo CxC Inicial
             </label>
             <select
               bind:value={hkaSaldoMode}
               class="w-full bg-surface-base border border-border-subtle rounded-xl px-3 py-2 text-xs font-semibold text-text-base outline-none focus:border-brand-500"
             >
-              <option value="pendiente">Pendiente (= Total Neto, cruzar cobro)</option>
+              <option value="pendiente"
+                >Pendiente (= Total Neto, cruzar cobro)</option
+              >
               <option value="cero">Saldo 0.00 (Sin saldo pendiente)</option>
             </select>
           </div>
 
           <div class="flex flex-col justify-center gap-1.5 pt-2">
-            <label class="flex items-center gap-2 text-[11px] font-semibold text-text-base cursor-pointer">
-              <input type="checkbox" bind:checked={hkaPadDocNum} class="rounded accent-cyan-500" />
-              <span>Correlativo 10 dígitos (<code class="font-mono">0000000512</code>)</span>
+            <label
+              class="flex items-center gap-2 text-[11px] font-semibold text-text-base cursor-pointer"
+            >
+              <input
+                type="checkbox"
+                bind:checked={hkaPadDocNum}
+                class="rounded accent-cyan-500"
+              />
+              <span
+                >Correlativo 10 dígitos (<code class="font-mono"
+                  >0000000512</code
+                >)</span
+              >
             </label>
             <div class="flex items-center gap-3">
-              <label class="flex items-center gap-1.5 text-[11px] font-semibold text-text-base cursor-pointer">
-                <input type="checkbox" bind:checked={hkaSkipZero} class="rounded accent-cyan-500" />
+              <label
+                class="flex items-center gap-1.5 text-[11px] font-semibold text-text-base cursor-pointer"
+              >
+                <input
+                  type="checkbox"
+                  bind:checked={hkaSkipZero}
+                  class="rounded accent-cyan-500"
+                />
                 <span>Omitir 0.00</span>
               </label>
-              <label class="flex items-center gap-1.5 text-[11px] font-semibold text-text-base cursor-pointer">
-                <input type="checkbox" bind:checked={hkaIncludeAnnulled} class="rounded accent-cyan-500" />
+              <label
+                class="flex items-center gap-1.5 text-[11px] font-semibold text-text-base cursor-pointer"
+              >
+                <input
+                  type="checkbox"
+                  bind:checked={hkaIncludeAnnulled}
+                  class="rounded accent-cyan-500"
+                />
                 <span>Incluir anuladas</span>
               </label>
             </div>
@@ -2931,12 +3277,16 @@
 
         <!-- Panel Rápido: Artículos en Profit Plus sin Precio en saArtPrecio -->
         {#if hkaMissingPricesResult}
-          <div class="rounded-2xl border border-purple-500/30 bg-purple-500/5 overflow-hidden space-y-3 p-4" in:slide={{ duration: 160 }}>
+          <div
+            class="rounded-2xl border border-purple-500/30 bg-purple-500/5 overflow-hidden space-y-3 p-4"
+            in:slide={{ duration: 160 }}
+          >
             <div class="flex flex-wrap items-center justify-between gap-2">
               <div class="flex items-center gap-2">
                 <Sparkles size={16} class="text-purple-500" />
                 <span class="text-xs font-black text-text-base">
-                  Auditoría Directa de Precios en {hkaMissingPricesResult.databaseName} (dbo.saArtPrecio — Precio 01 en {hkaMissingPricesResult.monedaPrecio})
+                  Auditoría Directa de Precios en {hkaMissingPricesResult.databaseName}
+                  (dbo.saArtPrecio — Precio 01 en {hkaMissingPricesResult.monedaPrecio})
                 </span>
               </div>
               <button
@@ -2953,9 +3303,13 @@
             </p>
 
             {#if hkaMissingPricesResult.count > 0}
-              <div class="max-h-56 overflow-auto rounded-xl border border-border-subtle bg-surface-base">
+              <div
+                class="max-h-56 overflow-auto rounded-xl border border-border-subtle bg-surface-base"
+              >
                 <table class="w-full text-left text-xs">
-                  <thead class="bg-surface-soft/80 text-[10px] uppercase text-text-muted sticky top-0">
+                  <thead
+                    class="bg-surface-soft/80 text-[10px] uppercase text-text-muted sticky top-0"
+                  >
                     <tr>
                       <th class="p-2">Co_Art</th>
                       <th class="p-2">Descripción</th>
@@ -2964,27 +3318,50 @@
                       <th class="p-2 text-right">Base Bs</th>
                       <th class="p-2 text-right">Base USD</th>
                       <th class="p-2 text-right">Ref c/IVA USD</th>
-                      <th class="p-2 text-right">Precio 01 ({hkaMissingPricesResult.monedaPrecio})</th>
+                      <th class="p-2 text-right"
+                        >Precio 01 ({hkaMissingPricesResult.monedaPrecio})</th
+                      >
                     </tr>
                   </thead>
-                  <tbody class="divide-y divide-border-subtle font-mono text-[11px]">
+                  <tbody
+                    class="divide-y divide-border-subtle font-mono text-[11px]"
+                  >
                     {#each hkaMissingPricesResult.articles as art}
                       <tr class="hover:bg-surface-soft/50">
-                        <td class="p-2 font-bold text-text-base">{art.co_art}</td>
-                        <td class="p-2 font-sans text-text-base truncate max-w-[220px]" title={art.art_des}>{art.art_des}</td>
-                        <td class="p-2 text-text-muted">{art.latest_doc_num} ({art.latest_fec_emis})</td>
-                        <td class="p-2 text-right text-text-muted">{Number(art.tasa_bcv_fecha).toFixed(2)}</td>
+                        <td class="p-2 font-bold text-text-base"
+                          >{art.co_art}</td
+                        >
+                        <td
+                          class="p-2 font-sans text-text-base truncate max-w-[220px]"
+                          title={art.art_des}>{art.art_des}</td
+                        >
+                        <td class="p-2 text-text-muted"
+                          >{art.latest_doc_num} ({art.latest_fec_emis})</td
+                        >
+                        <td class="p-2 text-right text-text-muted"
+                          >{Number(art.tasa_bcv_fecha).toFixed(2)}</td
+                        >
                         <td class="p-2 text-right text-text-muted">
-                          {Number(art.latest_price_bs).toLocaleString("es-VE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          {Number(art.latest_price_bs).toLocaleString("es-VE", {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2,
+                          })}
                         </td>
-                        <td class="p-2 text-right text-cyan-700 dark:text-cyan-300 font-semibold">
+                        <td
+                          class="p-2 text-right text-cyan-700 dark:text-cyan-300 font-semibold"
+                        >
                           ${Number(art.latest_price_usd).toFixed(4)}
                         </td>
-                        <td class="p-2 text-right text-emerald-700 dark:text-emerald-300 font-bold">
+                        <td
+                          class="p-2 text-right text-emerald-700 dark:text-emerald-300 font-bold"
+                        >
                           ${Number(art.ref_con_iva_usd).toFixed(2)}
                         </td>
-                        <td class="p-2 text-right font-black text-purple-700 dark:text-purple-300">
-                          {Number(art.monto_asignar).toFixed(4)} {art.co_mone_precio}
+                        <td
+                          class="p-2 text-right font-black text-purple-700 dark:text-purple-300"
+                        >
+                          {Number(art.monto_asignar).toFixed(4)}
+                          {art.co_mone_precio}
                         </td>
                       </tr>
                     {/each}
@@ -3012,7 +3389,10 @@
                     <span>Registrando en saArtPrecio...</span>
                   {:else}
                     <CheckCircle2 size={14} />
-                    <span>Registrar Precio 01 en saArtPrecio ({hkaMissingPricesResult.count} artículos)</span>
+                    <span
+                      >Registrar Precio 01 en saArtPrecio ({hkaMissingPricesResult.count}
+                      artículos)</span
+                    >
                   {/if}
                 </button>
               </div>
@@ -3025,51 +3405,111 @@
           {@const p = hkaPlanResult.plan}
           <div class="space-y-4" in:fade={{ duration: 150 }}>
             <!-- Métricas Resumen -->
-            <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2.5 font-mono">
-              <div class="p-3 rounded-2xl bg-surface-raised border border-border-subtle">
-                <span class="text-[10px] text-text-muted uppercase block">Extraídas HKA</span>
-                <span class="text-base font-black text-text-base">{p.summary.totalHkaDocuments}</span>
+            <div
+              class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2.5 font-mono"
+            >
+              <div
+                class="p-3 rounded-2xl bg-surface-raised border border-border-subtle"
+              >
+                <span class="text-[10px] text-text-muted uppercase block"
+                  >Extraídas HKA</span
+                >
+                <span class="text-base font-black text-text-base"
+                  >{p.summary.totalHkaDocuments}</span
+                >
               </div>
-              <div class="p-3 rounded-2xl bg-cyan-500/10 border border-cyan-500/25">
-                <span class="text-[10px] text-cyan-700 dark:text-cyan-300 uppercase block">Por Crear Profit</span>
-                <span class="text-base font-black text-cyan-700 dark:text-cyan-300">{p.summary.invoicesToCreate}</span>
+              <div
+                class="p-3 rounded-2xl bg-cyan-500/10 border border-cyan-500/25"
+              >
+                <span
+                  class="text-[10px] text-cyan-700 dark:text-cyan-300 uppercase block"
+                  >Por Crear Profit</span
+                >
+                <span
+                  class="text-base font-black text-cyan-700 dark:text-cyan-300"
+                  >{p.summary.invoicesToCreate}</span
+                >
               </div>
-              <div class="p-3 rounded-2xl bg-emerald-500/10 border border-emerald-500/25">
-                <span class="text-[10px] text-emerald-700 dark:text-emerald-300 uppercase block">Ya en Profit</span>
-                <span class="text-base font-black text-emerald-700 dark:text-emerald-300">{p.summary.invoicesAlreadyInProfit}</span>
+              <div
+                class="p-3 rounded-2xl bg-emerald-500/10 border border-emerald-500/25"
+              >
+                <span
+                  class="text-[10px] text-emerald-700 dark:text-emerald-300 uppercase block"
+                  >Ya en Profit</span
+                >
+                <span
+                  class="text-base font-black text-emerald-700 dark:text-emerald-300"
+                  >{p.summary.invoicesAlreadyInProfit}</span
+                >
               </div>
-              <div class="p-3 rounded-2xl bg-indigo-500/10 border border-indigo-500/25">
-                <span class="text-[10px] text-indigo-700 dark:text-indigo-300 uppercase block">Clientes Nuevos</span>
-                <span class="text-base font-black text-indigo-700 dark:text-indigo-300">{p.summary.clientsToCreate} / {p.summary.totalClientsReferenced}</span>
+              <div
+                class="p-3 rounded-2xl bg-indigo-500/10 border border-indigo-500/25"
+              >
+                <span
+                  class="text-[10px] text-indigo-700 dark:text-indigo-300 uppercase block"
+                  >Clientes Nuevos</span
+                >
+                <span
+                  class="text-base font-black text-indigo-700 dark:text-indigo-300"
+                  >{p.summary.clientsToCreate} / {p.summary
+                    .totalClientsReferenced}</span
+                >
               </div>
-              <div class="p-3 rounded-2xl bg-purple-500/10 border border-purple-500/25">
-                <span class="text-[10px] text-purple-700 dark:text-purple-300 uppercase block">Artículos / Precios</span>
-                <span class="text-base font-black text-purple-700 dark:text-purple-300">{p.summary.articlesToCreate} / {p.summary.totalArticlesReferenced}</span>
+              <div
+                class="p-3 rounded-2xl bg-purple-500/10 border border-purple-500/25"
+              >
+                <span
+                  class="text-[10px] text-purple-700 dark:text-purple-300 uppercase block"
+                  >Artículos / Precios</span
+                >
+                <span
+                  class="text-base font-black text-purple-700 dark:text-purple-300"
+                  >{p.summary.articlesToCreate} / {p.summary
+                    .totalArticlesReferenced}</span
+                >
                 {#if p.summary.articlesMissingPrice > 0}
-                  <span class="text-[9px] text-purple-600 dark:text-purple-400 block">+{p.summary.articlesMissingPrice} Precio 01</span>
+                  <span
+                    class="text-[9px] text-purple-600 dark:text-purple-400 block"
+                    >+{p.summary.articlesMissingPrice} Precio 01</span
+                  >
                 {/if}
               </div>
-              <div class="p-3 rounded-2xl bg-surface-raised border border-border-subtle">
-                <span class="text-[10px] text-text-muted uppercase block">Total Neto (Bs)</span>
+              <div
+                class="p-3 rounded-2xl bg-surface-raised border border-border-subtle"
+              >
+                <span class="text-[10px] text-text-muted uppercase block"
+                  >Total Neto (Bs)</span
+                >
                 <span class="text-sm font-black text-text-base">
-                  {Number(p.summary.totalNetoBsToReplicate || 0).toLocaleString("es-VE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  {Number(p.summary.totalNetoBsToReplicate || 0).toLocaleString(
+                    "es-VE",
+                    { minimumFractionDigits: 2, maximumFractionDigits: 2 },
+                  )}
                 </span>
               </div>
             </div>
 
             <!-- Tabla de Facturas Auditadas -->
-            <div class="rounded-2xl border border-border-subtle overflow-hidden bg-surface-raised">
-              <div class="px-4 py-2.5 bg-surface-soft border-b border-border-subtle flex items-center justify-between text-xs">
+            <div
+              class="rounded-2xl border border-border-subtle overflow-hidden bg-surface-raised"
+            >
+              <div
+                class="px-4 py-2.5 bg-surface-soft border-b border-border-subtle flex items-center justify-between text-xs"
+              >
                 <span class="font-bold text-text-base">
-                  Detalle de Documentos Extraídos ({p.databaseName} • Entorno HKA: {p.hkaEnvironment.toUpperCase()})
+                  Detalle de Documentos Extraídos ({p.databaseName} • Entorno HKA:
+                  {p.hkaEnvironment.toUpperCase()})
                 </span>
                 <span class="text-[11px] text-text-muted font-mono">
-                  Control: {p.summary.minControlNumber || "-"} → {p.summary.maxControlNumber || "-"}
+                  Control: {p.summary.minControlNumber || "-"} → {p.summary
+                    .maxControlNumber || "-"}
                 </span>
               </div>
               <div class="max-h-72 overflow-auto">
                 <table class="w-full text-left text-xs">
-                  <thead class="bg-surface-soft/70 text-[10px] uppercase text-text-muted sticky top-0">
+                  <thead
+                    class="bg-surface-soft/70 text-[10px] uppercase text-text-muted sticky top-0"
+                  >
                     <tr>
                       <th class="p-2.5 w-8 text-center">Sel</th>
                       <th class="p-2.5">Doc Profit</th>
@@ -3082,56 +3522,89 @@
                       <th class="p-2.5">Estado</th>
                     </tr>
                   </thead>
-                  <tbody class="divide-y divide-border-subtle font-mono text-[11px]">
+                  <tbody
+                    class="divide-y divide-border-subtle font-mono text-[11px]"
+                  >
                     {#each p.invoices as inv}
                       <tr class="hover:bg-surface-soft/50">
                         <td class="p-2.5 text-center">
                           <input
                             type="checkbox"
                             disabled={inv.action !== "CREATE"}
-                            bind:checked={hkaSelectedDocs[inv.hka_numero_documento]}
+                            bind:checked={
+                              hkaSelectedDocs[inv.hka_numero_documento]
+                            }
                             class="rounded accent-cyan-500"
                           />
                         </td>
                         <td class="p-2.5 font-bold text-text-base">
                           {inv.doc_num_profit}
                           {#if inv.anulado}
-                            <span class="ml-1 px-1.5 py-0.5 rounded bg-red-500/15 text-red-600 dark:text-red-400 text-[9px]">ANULADA</span>
+                            <span
+                              class="ml-1 px-1.5 py-0.5 rounded bg-red-500/15 text-red-600 dark:text-red-400 text-[9px]"
+                              >ANULADA</span
+                            >
                           {/if}
                         </td>
                         <td class="p-2.5 text-text-muted">{inv.n_control}</td>
-                        <td class="p-2.5 text-text-muted">{inv.fec_emis_iso}</td>
+                        <td class="p-2.5 text-text-muted">{inv.fec_emis_iso}</td
+                        >
                         <td class="p-2.5 font-sans">
-                          <div class="font-bold text-text-base truncate max-w-[200px]" title={inv.cli_des}>{inv.cli_des}</div>
-                          <div class="text-[10px] text-text-muted font-mono">{inv.co_cli} ({inv.rif})</div>
+                          <div
+                            class="font-bold text-text-base truncate max-w-[200px]"
+                            title={inv.cli_des}
+                          >
+                            {inv.cli_des}
+                          </div>
+                          <div class="text-[10px] text-text-muted font-mono">
+                            {inv.co_cli} ({inv.rif})
+                          </div>
                         </td>
                         <td class="p-2.5 font-sans">
-                          <div class="font-mono font-bold text-text-base" title={inv.renglones.map((r: any) => `${r.co_art}: ${r.des_art}`).join(" | ")}>
+                          <div
+                            class="font-mono font-bold text-text-base"
+                            title={inv.renglones
+                              .map((r: any) => `${r.co_art}: ${r.des_art}`)
+                              .join(" | ")}
+                          >
                             {inv.renglones.map((r: any) => r.co_art).join(", ")}
                           </div>
                           {#if inv.comentario_factura}
-                            <div class="text-[10px] text-cyan-700 dark:text-cyan-300 font-semibold truncate max-w-[230px]" title={inv.comentario_factura}>
+                            <div
+                              class="text-[10px] text-cyan-700 dark:text-cyan-300 font-semibold truncate max-w-[230px]"
+                              title={inv.comentario_factura}
+                            >
                               {inv.comentario_factura}
                             </div>
                           {/if}
                         </td>
                         <td class="p-2.5 text-right font-bold text-text-base">
-                          {Number(inv.total_neto_bs).toLocaleString("es-VE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          {Number(inv.total_neto_bs).toLocaleString("es-VE", {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2,
+                          })}
                         </td>
                         <td class="p-2.5 text-right text-text-muted">
                           {Number(inv.tasa_bcv_referencia).toFixed(2)}
                         </td>
                         <td class="p-2.5 font-sans">
                           {#if inv.action === "CREATE"}
-                            <span class="px-2 py-0.5 rounded-lg bg-cyan-500/15 text-cyan-800 dark:text-cyan-300 font-bold text-[10px]">
+                            <span
+                              class="px-2 py-0.5 rounded-lg bg-cyan-500/15 text-cyan-800 dark:text-cyan-300 font-bold text-[10px]"
+                            >
                               LISTA PARA CREAR
                             </span>
                           {:else if inv.action === "SKIP_EXISTING"}
-                            <span class="px-2 py-0.5 rounded-lg bg-emerald-500/15 text-emerald-800 dark:text-emerald-300 font-bold text-[10px]">
+                            <span
+                              class="px-2 py-0.5 rounded-lg bg-emerald-500/15 text-emerald-800 dark:text-emerald-300 font-bold text-[10px]"
+                            >
                               YA EN PROFIT
                             </span>
                           {:else}
-                            <span class="px-2 py-0.5 rounded-lg bg-amber-500/15 text-amber-900 dark:text-amber-300 font-bold text-[10px]" title={inv.warnings?.join(" • ")}>
+                            <span
+                              class="px-2 py-0.5 rounded-lg bg-amber-500/15 text-amber-900 dark:text-amber-300 font-bold text-[10px]"
+                              title={inv.warnings?.join(" • ")}
+                            >
                               OMITIDA ({inv.action.replace("SKIP_", "")})
                             </span>
                           {/if}
@@ -3144,14 +3617,26 @@
             </div>
 
             {#if p.warnings && p.warnings.length > 0}
-              <div class="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-xs space-y-1">
-                <div class="font-bold text-amber-900 dark:text-amber-300 flex items-center gap-1.5">
+              <div
+                class="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-xs space-y-1"
+              >
+                <div
+                  class="font-bold text-amber-900 dark:text-amber-300 flex items-center gap-1.5"
+                >
                   <AlertCircle size={14} />
-                  <span>Observaciones de validación detectadas ({p.warnings.length}):</span>
+                  <span
+                    >Observaciones de validación detectadas ({p.warnings
+                      .length}):</span
+                  >
                 </div>
-                <ul class="list-disc list-inside text-[11px] text-amber-900/90 dark:text-amber-200/90 space-y-0.5 max-h-24 overflow-y-auto">
+                <ul
+                  class="list-disc list-inside text-[11px] text-amber-900/90 dark:text-amber-200/90 space-y-0.5 max-h-24 overflow-y-auto"
+                >
                   {#each p.warnings as w}
-                    <li><strong>Doc {w.doc_num} ({w.n_control}):</strong> {w.message}</li>
+                    <li>
+                      <strong>Doc {w.doc_num} ({w.n_control}):</strong>
+                      {w.message}
+                    </li>
                   {/each}
                 </ul>
               </div>
@@ -3161,7 +3646,9 @@
       </div>
 
       <!-- Footer -->
-      <div class="p-5 border-t border-border-subtle bg-surface-soft/60 flex flex-wrap items-center justify-between gap-3">
+      <div
+        class="p-5 border-t border-border-subtle bg-surface-soft/60 flex flex-wrap items-center justify-between gap-3"
+      >
         <button
           type="button"
           onclick={closeHkaModal}
@@ -3172,9 +3659,18 @@
 
         {#if hkaPlanResult?.plan?.summary?.invoicesToCreate > 0}
           <div class="flex items-center gap-3">
-            <label class="flex items-center gap-2 text-xs font-bold text-amber-800 dark:text-amber-300 cursor-pointer">
-              <input type="checkbox" bind:checked={hkaConfirmReplicate} class="rounded accent-emerald-500" />
-              <span>Ya revisé el Excel/SQL y confirmo escribir en Profit Plus ({hkaPlanResult.plan.databaseName})</span>
+            <label
+              class="flex items-center gap-2 text-xs font-bold text-amber-800 dark:text-amber-300 cursor-pointer"
+            >
+              <input
+                type="checkbox"
+                bind:checked={hkaConfirmReplicate}
+                class="rounded accent-emerald-500"
+              />
+              <span
+                >Ya revisé el Excel/SQL y confirmo escribir en Profit Plus ({hkaPlanResult
+                  .plan.databaseName})</span
+              >
             </label>
             <button
               type="button"
@@ -3216,9 +3712,13 @@
       in:scale={{ duration: 200, start: 0.96 }}
     >
       <!-- Cabecera -->
-      <div class="p-5 md:p-6 border-b border-border-subtle flex items-center justify-between bg-surface-raised">
+      <div
+        class="p-5 md:p-6 border-b border-border-subtle flex items-center justify-between bg-surface-raised"
+      >
         <div class="flex items-center gap-3.5">
-          <div class="w-11 h-11 rounded-2xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-emerald-500">
+          <div
+            class="w-11 h-11 rounded-2xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-emerald-500"
+          >
             <Landmark size={22} />
           </div>
           <div>
@@ -3226,7 +3726,9 @@
               Consola Bancaribe Open Banking (Suite WSO2 Completa)
             </h3>
             <p class="text-xs text-text-muted font-medium">
-              Operaciones Plus, Últimos Movimientos, Extracto Bancario, Pago Móvil C2P/B2P, Transferencia Inmediata CRIN, Cobranza Digital DBIN, Tasas BCV y Webhook.
+              Operaciones Plus, Últimos Movimientos, Extracto Bancario, Pago
+              Móvil C2P/B2P, Transferencia Inmediata CRIN, Cobranza Digital
+              DBIN, Tasas BCV y Webhook.
             </p>
           </div>
         </div>
@@ -3241,11 +3743,14 @@
       </div>
 
       <!-- Barra de Pestañas -->
-      <div class="px-5 pt-3 border-b border-border-subtle bg-surface-soft/40 flex items-center gap-1.5 overflow-x-auto scrollbar-none">
+      <div
+        class="px-5 pt-3 border-b border-border-subtle bg-surface-soft/40 flex items-center gap-1.5 overflow-x-auto scrollbar-none"
+      >
         <button
           type="button"
           onclick={() => (bcActiveTab = "validar_pago")}
-          class="px-3.5 py-2.5 rounded-t-2xl text-xs font-bold flex items-center gap-1.5 shrink-0 cursor-pointer border-b-2 transition-all {bcActiveTab === 'validar_pago'
+          class="px-3.5 py-2.5 rounded-t-2xl text-xs font-bold flex items-center gap-1.5 shrink-0 cursor-pointer border-b-2 transition-all {bcActiveTab ===
+          'validar_pago'
             ? 'border-emerald-500 text-emerald-700 dark:text-emerald-300 bg-surface-base'
             : 'border-transparent text-text-muted hover:text-text-base'}"
         >
@@ -3255,7 +3760,8 @@
         <button
           type="button"
           onclick={() => (bcActiveTab = "movimientos_extracto")}
-          class="px-3.5 py-2.5 rounded-t-2xl text-xs font-bold flex items-center gap-1.5 shrink-0 cursor-pointer border-b-2 transition-all {bcActiveTab === 'movimientos_extracto'
+          class="px-3.5 py-2.5 rounded-t-2xl text-xs font-bold flex items-center gap-1.5 shrink-0 cursor-pointer border-b-2 transition-all {bcActiveTab ===
+          'movimientos_extracto'
             ? 'border-emerald-500 text-emerald-700 dark:text-emerald-300 bg-surface-base'
             : 'border-transparent text-text-muted hover:text-text-base'}"
         >
@@ -3265,7 +3771,8 @@
         <button
           type="button"
           onclick={() => (bcActiveTab = "pago_movil")}
-          class="px-3.5 py-2.5 rounded-t-2xl text-xs font-bold flex items-center gap-1.5 shrink-0 cursor-pointer border-b-2 transition-all {bcActiveTab === 'pago_movil'
+          class="px-3.5 py-2.5 rounded-t-2xl text-xs font-bold flex items-center gap-1.5 shrink-0 cursor-pointer border-b-2 transition-all {bcActiveTab ===
+          'pago_movil'
             ? 'border-emerald-500 text-emerald-700 dark:text-emerald-300 bg-surface-base'
             : 'border-transparent text-text-muted hover:text-text-base'}"
         >
@@ -3275,7 +3782,8 @@
         <button
           type="button"
           onclick={() => (bcActiveTab = "transferencias")}
-          class="px-3.5 py-2.5 rounded-t-2xl text-xs font-bold flex items-center gap-1.5 shrink-0 cursor-pointer border-b-2 transition-all {bcActiveTab === 'transferencias'
+          class="px-3.5 py-2.5 rounded-t-2xl text-xs font-bold flex items-center gap-1.5 shrink-0 cursor-pointer border-b-2 transition-all {bcActiveTab ===
+          'transferencias'
             ? 'border-emerald-500 text-emerald-700 dark:text-emerald-300 bg-surface-base'
             : 'border-transparent text-text-muted hover:text-text-base'}"
         >
@@ -3285,7 +3793,8 @@
         <button
           type="button"
           onclick={() => (bcActiveTab = "cobranza_digital")}
-          class="px-3.5 py-2.5 rounded-t-2xl text-xs font-bold flex items-center gap-1.5 shrink-0 cursor-pointer border-b-2 transition-all {bcActiveTab === 'cobranza_digital'
+          class="px-3.5 py-2.5 rounded-t-2xl text-xs font-bold flex items-center gap-1.5 shrink-0 cursor-pointer border-b-2 transition-all {bcActiveTab ===
+          'cobranza_digital'
             ? 'border-emerald-500 text-emerald-700 dark:text-emerald-300 bg-surface-base'
             : 'border-transparent text-text-muted hover:text-text-base'}"
         >
@@ -3298,7 +3807,8 @@
             bcActiveTab = "tasas_webhook";
             callBancaribeApi("notificaciones_list", {}, { silent: true });
           }}
-          class="px-3.5 py-2.5 rounded-t-2xl text-xs font-bold flex items-center gap-1.5 shrink-0 cursor-pointer border-b-2 transition-all {bcActiveTab === 'tasas_webhook'
+          class="px-3.5 py-2.5 rounded-t-2xl text-xs font-bold flex items-center gap-1.5 shrink-0 cursor-pointer border-b-2 transition-all {bcActiveTab ===
+          'tasas_webhook'
             ? 'border-emerald-500 text-emerald-700 dark:text-emerald-300 bg-surface-base'
             : 'border-transparent text-text-muted hover:text-text-base'}"
         >
@@ -3312,13 +3822,22 @@
         {#if bcActiveTab === "validar_pago"}
           <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
             <!-- Submódulo A: Consulta Operaciones Plus -->
-            <div class="p-5 rounded-2xl bg-surface-raised border border-border-subtle space-y-4">
+            <div
+              class="p-5 rounded-2xl bg-surface-raised border border-border-subtle space-y-4"
+            >
               <div class="flex items-center justify-between">
                 <div>
-                  <h4 class="text-sm font-black text-text-base">Consulta Operaciones Plus</h4>
-                  <p class="text-[11px] text-text-muted">Valida Pago Móvil (PM), Transferencia (TRF) o Depósito (DEPO) hasta 6 meses.</p>
+                  <h4 class="text-sm font-black text-text-base">
+                    Consulta Operaciones Plus
+                  </h4>
+                  <p class="text-[11px] text-text-muted">
+                    Valida Pago Móvil (PM), Transferencia (TRF) o Depósito
+                    (DEPO) hasta 6 meses.
+                  </p>
                 </div>
-                <span class="px-2 py-0.5 rounded-lg bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 font-mono text-[10px] font-bold">
+                <span
+                  class="px-2 py-0.5 rounded-lg bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 font-mono text-[10px] font-bold"
+                >
                   /B2P/1.0.0
                 </span>
               </div>
@@ -3328,61 +3847,135 @@
                   <button
                     type="button"
                     onclick={() => (bcOpTipo = trxType as any)}
-                    class="py-2 rounded-xl text-xs font-black border cursor-pointer transition-all {bcOpTipo === trxType
+                    class="py-2 rounded-xl text-xs font-black border cursor-pointer transition-all {bcOpTipo ===
+                    trxType
                       ? 'bg-emerald-500 text-white border-emerald-500'
                       : 'bg-surface-soft text-text-muted border-border-subtle hover:text-text-base'}"
                   >
-                    {trxType === "PM" ? "PM (Pago Móvil)" : trxType === "TRF" ? "TRF (Transf.)" : "DEPO (Depósito)"}
+                    {trxType === "PM"
+                      ? "PM (Pago Móvil)"
+                      : trxType === "TRF"
+                        ? "TRF (Transf.)"
+                        : "DEPO (Depósito)"}
                   </button>
                 {/each}
               </div>
 
               <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div class="space-y-1">
-                  <label class="text-[10px] font-black uppercase text-text-muted">Referencia *</label>
-                  <input type="text" bind:value={bcOpReferencia} placeholder="Ej. 000123456789" class="w-full bg-surface-base border border-border-subtle px-3 py-2 rounded-xl text-xs font-mono font-bold text-text-base" />
+                  <label
+                    class="text-[10px] font-black uppercase text-text-muted"
+                    >Referencia *</label
+                  >
+                  <input
+                    type="text"
+                    bind:value={bcOpReferencia}
+                    placeholder="Ej. 000123456789"
+                    class="w-full bg-surface-base border border-border-subtle px-3 py-2 rounded-xl text-xs font-mono font-bold text-text-base"
+                  />
                 </div>
                 <div class="space-y-1">
-                  <label class="text-[10px] font-black uppercase text-text-muted">Monto (Bs)</label>
-                  <input type="number" step="0.01" bind:value={bcOpMonto} placeholder="1500.00" class="w-full bg-surface-base border border-border-subtle px-3 py-2 rounded-xl text-xs font-mono font-bold text-text-base" />
+                  <label
+                    class="text-[10px] font-black uppercase text-text-muted"
+                    >Monto (Bs)</label
+                  >
+                  <input
+                    type="number"
+                    step="0.01"
+                    bind:value={bcOpMonto}
+                    placeholder="1500.00"
+                    class="w-full bg-surface-base border border-border-subtle px-3 py-2 rounded-xl text-xs font-mono font-bold text-text-base"
+                  />
                 </div>
                 <div class="space-y-1">
-                  <label class="text-[10px] font-black uppercase text-text-muted">Cédula / RIF Pagador</label>
-                  <input type="text" bind:value={bcOpIdentificacion} placeholder="V12345678" class="w-full bg-surface-base border border-border-subtle px-3 py-2 rounded-xl text-xs font-mono font-bold text-text-base" />
+                  <label
+                    class="text-[10px] font-black uppercase text-text-muted"
+                    >Cédula / RIF Pagador</label
+                  >
+                  <input
+                    type="text"
+                    bind:value={bcOpIdentificacion}
+                    placeholder="V12345678"
+                    class="w-full bg-surface-base border border-border-subtle px-3 py-2 rounded-xl text-xs font-mono font-bold text-text-base"
+                  />
                 </div>
                 <div class="space-y-1">
-                  <label class="text-[10px] font-black uppercase text-text-muted">Fecha (vacío = hoy)</label>
-                  <input type="date" bind:value={bcOpFecha} class="w-full bg-surface-base border border-border-subtle px-3 py-2 rounded-xl text-xs font-bold text-text-base" />
+                  <label
+                    class="text-[10px] font-black uppercase text-text-muted"
+                    >Fecha (vacío = hoy)</label
+                  >
+                  <input
+                    type="date"
+                    bind:value={bcOpFecha}
+                    class="w-full bg-surface-base border border-border-subtle px-3 py-2 rounded-xl text-xs font-bold text-text-base"
+                  />
                 </div>
                 {#if bcOpTipo === "PM" || bcOpTipo === "DEPO"}
                   <div class="space-y-1">
-                    <label class="text-[10px] font-black uppercase text-text-muted">Teléfono Débito (PM)</label>
-                    <input type="text" bind:value={bcOpTelefono} placeholder="04141234567" class="w-full bg-surface-base border border-border-subtle px-3 py-2 rounded-xl text-xs font-mono font-bold text-text-base" />
+                    <label
+                      class="text-[10px] font-black uppercase text-text-muted"
+                      >Teléfono Débito (PM)</label
+                    >
+                    <input
+                      type="text"
+                      bind:value={bcOpTelefono}
+                      placeholder="04141234567"
+                      class="w-full bg-surface-base border border-border-subtle px-3 py-2 rounded-xl text-xs font-mono font-bold text-text-base"
+                    />
                   </div>
                 {/if}
                 <div class="space-y-1">
-                  <label class="text-[10px] font-black uppercase text-text-muted">Factura (Opcional)</label>
-                  <input type="text" bind:value={bcOpFactura} placeholder="FAC-001" class="w-full bg-surface-base border border-border-subtle px-3 py-2 rounded-xl text-xs font-mono font-bold text-text-base" />
+                  <label
+                    class="text-[10px] font-black uppercase text-text-muted"
+                    >Factura (Opcional)</label
+                  >
+                  <input
+                    type="text"
+                    bind:value={bcOpFactura}
+                    placeholder="FAC-001"
+                    class="w-full bg-surface-base border border-border-subtle px-3 py-2 rounded-xl text-xs font-mono font-bold text-text-base"
+                  />
                 </div>
               </div>
 
               {#if bcOpTipo !== "PM"}
                 <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-1">
                   <div class="space-y-1 sm:col-span-1">
-                    <label class="text-[10px] font-black uppercase text-text-muted">N° Cuenta *</label>
-                    <input type="text" maxlength="20" bind:value={bcOpCuenta} placeholder="0114..." class="w-full bg-surface-base border border-border-subtle px-3 py-2 rounded-xl text-xs font-mono font-bold text-text-base" />
+                    <label
+                      class="text-[10px] font-black uppercase text-text-muted"
+                      >N° Cuenta *</label
+                    >
+                    <input
+                      type="text"
+                      maxlength="20"
+                      bind:value={bcOpCuenta}
+                      placeholder="0114..."
+                      class="w-full bg-surface-base border border-border-subtle px-3 py-2 rounded-xl text-xs font-mono font-bold text-text-base"
+                    />
                   </div>
                   {#if bcOpTipo === "TRF"}
                     <div class="space-y-1">
-                      <label class="text-[10px] font-black uppercase text-text-muted">Sentido (IO)</label>
-                      <select bind:value={bcOpIO} class="w-full bg-surface-base border border-border-subtle px-2.5 py-2 rounded-xl text-xs font-bold text-text-base">
+                      <label
+                        class="text-[10px] font-black uppercase text-text-muted"
+                        >Sentido (IO)</label
+                      >
+                      <select
+                        bind:value={bcOpIO}
+                        class="w-full bg-surface-base border border-border-subtle px-2.5 py-2 rounded-xl text-xs font-bold text-text-base"
+                      >
                         <option value="I">I - Entrante (Crédito)</option>
                         <option value="O">O - Saliente (Débito)</option>
                       </select>
                     </div>
                     <div class="space-y-1">
-                      <label class="text-[10px] font-black uppercase text-text-muted">Interbancario (BCV)</label>
-                      <select bind:value={bcOpBCV} class="w-full bg-surface-base border border-border-subtle px-2.5 py-2 rounded-xl text-xs font-bold text-text-base">
+                      <label
+                        class="text-[10px] font-black uppercase text-text-muted"
+                        >Interbancario (BCV)</label
+                      >
+                      <select
+                        bind:value={bcOpBCV}
+                        class="w-full bg-surface-base border border-border-subtle px-2.5 py-2 rounded-xl text-xs font-bold text-text-base"
+                      >
                         <option value="S">S - Otro Banco</option>
                         <option value="N">N - Mismo Banco (0114)</option>
                       </select>
@@ -3405,7 +3998,7 @@
                     fecha: bcOpFecha,
                     numCuenta: bcOpCuenta,
                     IO: bcOpIO,
-                    BCV: bcOpBCV
+                    BCV: bcOpBCV,
                   })}
                 class="w-full py-2.5 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
               >
@@ -3420,33 +4013,75 @@
             </div>
 
             <!-- Submódulo B: Verificar Transacción en Extracto -->
-            <div class="p-5 rounded-2xl bg-surface-raised border border-border-subtle space-y-4">
+            <div
+              class="p-5 rounded-2xl bg-surface-raised border border-border-subtle space-y-4"
+            >
               <div class="flex items-center justify-between">
                 <div>
-                  <h4 class="text-sm font-black text-text-base">Verificar Transacción en Extracto</h4>
-                  <p class="text-[11px] text-text-muted">Verificación exacta contra histórico de Extracto Bancario (`X-API-Key`).</p>
+                  <h4 class="text-sm font-black text-text-base">
+                    Verificar Transacción en Extracto
+                  </h4>
+                  <p class="text-[11px] text-text-muted">
+                    Verificación exacta contra histórico de Extracto Bancario
+                    (`X-API-Key`).
+                  </p>
                 </div>
-                <span class="px-2 py-0.5 rounded-lg bg-cyan-500/15 text-cyan-700 dark:text-cyan-300 font-mono text-[10px] font-bold">
+                <span
+                  class="px-2 py-0.5 rounded-lg bg-cyan-500/15 text-cyan-700 dark:text-cyan-300 font-mono text-[10px] font-bold"
+                >
                   /transactions/verify
                 </span>
               </div>
 
               <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div class="space-y-1 sm:col-span-2">
-                  <label class="text-[10px] font-black uppercase text-text-muted">Cuenta Bancaribe (20 dígitos)</label>
-                  <input type="text" maxlength="20" bind:value={bcVerifyAccount} placeholder="0114..." class="w-full bg-surface-base border border-border-subtle px-3 py-2 rounded-xl text-xs font-mono font-bold text-text-base" />
+                  <label
+                    class="text-[10px] font-black uppercase text-text-muted"
+                    >Cuenta Bancaribe (20 dígitos)</label
+                  >
+                  <input
+                    type="text"
+                    maxlength="20"
+                    bind:value={bcVerifyAccount}
+                    placeholder="0114..."
+                    class="w-full bg-surface-base border border-border-subtle px-3 py-2 rounded-xl text-xs font-mono font-bold text-text-base"
+                  />
                 </div>
                 <div class="space-y-1">
-                  <label class="text-[10px] font-black uppercase text-text-muted">Referencia *</label>
-                  <input type="text" bind:value={bcVerifyRef} placeholder="123456" class="w-full bg-surface-base border border-border-subtle px-3 py-2 rounded-xl text-xs font-mono font-bold text-text-base" />
+                  <label
+                    class="text-[10px] font-black uppercase text-text-muted"
+                    >Referencia *</label
+                  >
+                  <input
+                    type="text"
+                    bind:value={bcVerifyRef}
+                    placeholder="123456"
+                    class="w-full bg-surface-base border border-border-subtle px-3 py-2 rounded-xl text-xs font-mono font-bold text-text-base"
+                  />
                 </div>
                 <div class="space-y-1">
-                  <label class="text-[10px] font-black uppercase text-text-muted">Monto Exacto (Bs) *</label>
-                  <input type="number" step="0.01" bind:value={bcVerifyAmount} placeholder="1000.00" class="w-full bg-surface-base border border-border-subtle px-3 py-2 rounded-xl text-xs font-mono font-bold text-text-base" />
+                  <label
+                    class="text-[10px] font-black uppercase text-text-muted"
+                    >Monto Exacto (Bs) *</label
+                  >
+                  <input
+                    type="number"
+                    step="0.01"
+                    bind:value={bcVerifyAmount}
+                    placeholder="1000.00"
+                    class="w-full bg-surface-base border border-border-subtle px-3 py-2 rounded-xl text-xs font-mono font-bold text-text-base"
+                  />
                 </div>
                 <div class="space-y-1 sm:col-span-2">
-                  <label class="text-[10px] font-black uppercase text-text-muted">Fecha de Operación *</label>
-                  <input type="date" bind:value={bcVerifyDate} class="w-full bg-surface-base border border-border-subtle px-3 py-2 rounded-xl text-xs font-bold text-text-base" />
+                  <label
+                    class="text-[10px] font-black uppercase text-text-muted"
+                    >Fecha de Operación *</label
+                  >
+                  <input
+                    type="date"
+                    bind:value={bcVerifyDate}
+                    class="w-full bg-surface-base border border-border-subtle px-3 py-2 rounded-xl text-xs font-bold text-text-base"
+                  />
                 </div>
               </div>
 
@@ -3458,7 +4093,7 @@
                     account: bcVerifyAccount,
                     amount: bcVerifyAmount,
                     date: bcVerifyDate,
-                    referenceNumber: bcVerifyRef
+                    referenceNumber: bcVerifyRef,
                   })}
                 class="w-full py-2.5 rounded-2xl bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
               >
@@ -3472,41 +4107,89 @@
               </button>
             </div>
           </div>
-
         {:else if bcActiveTab === "movimientos_extracto"}
           <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
             <!-- Últimos Movimientos -->
-            <div class="p-5 rounded-2xl bg-surface-raised border border-border-subtle space-y-4">
+            <div
+              class="p-5 rounded-2xl bg-surface-raised border border-border-subtle space-y-4"
+            >
               <div class="flex items-center justify-between">
                 <div>
-                  <h4 class="text-sm font-black text-text-base">Consulta Últimos Movimientos</h4>
-                  <p class="text-[11px] text-text-muted">Movimientos paginados y saldo en tiempo real (Disponible / Contable / Bloqueado).</p>
+                  <h4 class="text-sm font-black text-text-base">
+                    Consulta Últimos Movimientos
+                  </h4>
+                  <p class="text-[11px] text-text-muted">
+                    Movimientos paginados y saldo en tiempo real (Disponible /
+                    Contable / Bloqueado).
+                  </p>
                 </div>
-                <span class="px-2 py-0.5 rounded-lg bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 font-mono text-[10px] font-bold">
+                <span
+                  class="px-2 py-0.5 rounded-lg bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 font-mono text-[10px] font-bold"
+                >
                   /ctasMovimientos
                 </span>
               </div>
 
               <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div class="space-y-1 sm:col-span-2">
-                  <label class="text-[10px] font-black uppercase text-text-muted">Número de Cuenta (20 dígitos)</label>
-                  <input type="text" maxlength="20" bind:value={bcMovCuenta} placeholder="0114..." class="w-full bg-surface-base border border-border-subtle px-3 py-2 rounded-xl text-xs font-mono font-bold text-text-base" />
+                  <label
+                    class="text-[10px] font-black uppercase text-text-muted"
+                    >Número de Cuenta (20 dígitos)</label
+                  >
+                  <input
+                    type="text"
+                    maxlength="20"
+                    bind:value={bcMovCuenta}
+                    placeholder="0114..."
+                    class="w-full bg-surface-base border border-border-subtle px-3 py-2 rounded-xl text-xs font-mono font-bold text-text-base"
+                  />
                 </div>
                 <div class="space-y-1">
-                  <label class="text-[10px] font-black uppercase text-text-muted">Fecha Desde</label>
-                  <input type="date" bind:value={bcMovDesde} class="w-full bg-surface-base border border-border-subtle px-3 py-2 rounded-xl text-xs font-bold text-text-base" />
+                  <label
+                    class="text-[10px] font-black uppercase text-text-muted"
+                    >Fecha Desde</label
+                  >
+                  <input
+                    type="date"
+                    bind:value={bcMovDesde}
+                    class="w-full bg-surface-base border border-border-subtle px-3 py-2 rounded-xl text-xs font-bold text-text-base"
+                  />
                 </div>
                 <div class="space-y-1">
-                  <label class="text-[10px] font-black uppercase text-text-muted">Fecha Hasta</label>
-                  <input type="date" bind:value={bcMovHasta} class="w-full bg-surface-base border border-border-subtle px-3 py-2 rounded-xl text-xs font-bold text-text-base" />
+                  <label
+                    class="text-[10px] font-black uppercase text-text-muted"
+                    >Fecha Hasta</label
+                  >
+                  <input
+                    type="date"
+                    bind:value={bcMovHasta}
+                    class="w-full bg-surface-base border border-border-subtle px-3 py-2 rounded-xl text-xs font-bold text-text-base"
+                  />
                 </div>
                 <div class="space-y-1">
-                  <label class="text-[10px] font-black uppercase text-text-muted">Página</label>
-                  <input type="number" min="1" bind:value={bcMovPage} class="w-full bg-surface-base border border-border-subtle px-3 py-2 rounded-xl text-xs font-mono font-bold text-text-base" />
+                  <label
+                    class="text-[10px] font-black uppercase text-text-muted"
+                    >Página</label
+                  >
+                  <input
+                    type="number"
+                    min="1"
+                    bind:value={bcMovPage}
+                    class="w-full bg-surface-base border border-border-subtle px-3 py-2 rounded-xl text-xs font-mono font-bold text-text-base"
+                  />
                 </div>
                 <div class="space-y-1">
-                  <label class="text-[10px] font-black uppercase text-text-muted">Tamaño Página</label>
-                  <input type="number" min="1" max="100" bind:value={bcMovSize} class="w-full bg-surface-base border border-border-subtle px-3 py-2 rounded-xl text-xs font-mono font-bold text-text-base" />
+                  <label
+                    class="text-[10px] font-black uppercase text-text-muted"
+                    >Tamaño Página</label
+                  >
+                  <input
+                    type="number"
+                    min="1"
+                    max="100"
+                    bind:value={bcMovSize}
+                    class="w-full bg-surface-base border border-border-subtle px-3 py-2 rounded-xl text-xs font-mono font-bold text-text-base"
+                  />
                 </div>
               </div>
 
@@ -3519,7 +4202,7 @@
                     fechaDesde: bcMovDesde,
                     fechaHasta: bcMovHasta,
                     page: bcMovPage,
-                    size: bcMovSize
+                    size: bcMovSize,
                   })}
                 class="w-full py-2.5 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
               >
@@ -3534,37 +4217,86 @@
             </div>
 
             <!-- Extracto Bancario -->
-            <div class="p-5 rounded-2xl bg-surface-raised border border-border-subtle space-y-4">
+            <div
+              class="p-5 rounded-2xl bg-surface-raised border border-border-subtle space-y-4"
+            >
               <div class="flex items-center justify-between">
                 <div>
-                  <h4 class="text-sm font-black text-text-base">Extracto Bancario (Histórico & Resumen)</h4>
-                  <p class="text-[11px] text-text-muted">Consulta detallada hasta 3 meses atrás (`transactions/fetch` & `summary`).</p>
+                  <h4 class="text-sm font-black text-text-base">
+                    Extracto Bancario (Histórico & Resumen)
+                  </h4>
+                  <p class="text-[11px] text-text-muted">
+                    Consulta detallada hasta 3 meses atrás (`transactions/fetch`
+                    & `summary`).
+                  </p>
                 </div>
-                <span class="px-2 py-0.5 rounded-lg bg-cyan-500/15 text-cyan-700 dark:text-cyan-300 font-mono text-[10px] font-bold">
+                <span
+                  class="px-2 py-0.5 rounded-lg bg-cyan-500/15 text-cyan-700 dark:text-cyan-300 font-mono text-[10px] font-bold"
+                >
                   Extracto v1.0
                 </span>
               </div>
 
               <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div class="space-y-1 sm:col-span-2">
-                  <label class="text-[10px] font-black uppercase text-text-muted">Cuenta Bancaribe (20 dígitos)</label>
-                  <input type="text" maxlength="20" bind:value={bcExtCuenta} placeholder="0114..." class="w-full bg-surface-base border border-border-subtle px-3 py-2 rounded-xl text-xs font-mono font-bold text-text-base" />
+                  <label
+                    class="text-[10px] font-black uppercase text-text-muted"
+                    >Cuenta Bancaribe (20 dígitos)</label
+                  >
+                  <input
+                    type="text"
+                    maxlength="20"
+                    bind:value={bcExtCuenta}
+                    placeholder="0114..."
+                    class="w-full bg-surface-base border border-border-subtle px-3 py-2 rounded-xl text-xs font-mono font-bold text-text-base"
+                  />
                 </div>
                 <div class="space-y-1">
-                  <label class="text-[10px] font-black uppercase text-text-muted">Desde</label>
-                  <input type="date" bind:value={bcExtDesde} class="w-full bg-surface-base border border-border-subtle px-3 py-2 rounded-xl text-xs font-bold text-text-base" />
+                  <label
+                    class="text-[10px] font-black uppercase text-text-muted"
+                    >Desde</label
+                  >
+                  <input
+                    type="date"
+                    bind:value={bcExtDesde}
+                    class="w-full bg-surface-base border border-border-subtle px-3 py-2 rounded-xl text-xs font-bold text-text-base"
+                  />
                 </div>
                 <div class="space-y-1">
-                  <label class="text-[10px] font-black uppercase text-text-muted">Hasta</label>
-                  <input type="date" bind:value={bcExtHasta} class="w-full bg-surface-base border border-border-subtle px-3 py-2 rounded-xl text-xs font-bold text-text-base" />
+                  <label
+                    class="text-[10px] font-black uppercase text-text-muted"
+                    >Hasta</label
+                  >
+                  <input
+                    type="date"
+                    bind:value={bcExtHasta}
+                    class="w-full bg-surface-base border border-border-subtle px-3 py-2 rounded-xl text-xs font-bold text-text-base"
+                  />
                 </div>
                 <div class="space-y-1">
-                  <label class="text-[10px] font-black uppercase text-text-muted">Límite</label>
-                  <input type="number" min="1" max="200" bind:value={bcExtLimit} class="w-full bg-surface-base border border-border-subtle px-3 py-2 rounded-xl text-xs font-mono font-bold text-text-base" />
+                  <label
+                    class="text-[10px] font-black uppercase text-text-muted"
+                    >Límite</label
+                  >
+                  <input
+                    type="number"
+                    min="1"
+                    max="200"
+                    bind:value={bcExtLimit}
+                    class="w-full bg-surface-base border border-border-subtle px-3 py-2 rounded-xl text-xs font-mono font-bold text-text-base"
+                  />
                 </div>
                 <div class="space-y-1">
-                  <label class="text-[10px] font-black uppercase text-text-muted">Página</label>
-                  <input type="number" min="1" bind:value={bcExtPage} class="w-full bg-surface-base border border-border-subtle px-3 py-2 rounded-xl text-xs font-mono font-bold text-text-base" />
+                  <label
+                    class="text-[10px] font-black uppercase text-text-muted"
+                    >Página</label
+                  >
+                  <input
+                    type="number"
+                    min="1"
+                    bind:value={bcExtPage}
+                    class="w-full bg-surface-base border border-border-subtle px-3 py-2 rounded-xl text-xs font-mono font-bold text-text-base"
+                  />
                 </div>
               </div>
 
@@ -3576,7 +4308,7 @@
                     callBancaribeApi("extracto_resumen", {
                       account: bcExtCuenta,
                       from: bcExtDesde,
-                      to: bcExtHasta
+                      to: bcExtHasta,
                     })}
                   class="py-2.5 rounded-2xl bg-surface-soft hover:bg-surface-strong border border-border-subtle text-text-base text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
                 >
@@ -3591,7 +4323,7 @@
                       from: bcExtDesde,
                       to: bcExtHasta,
                       limit: bcExtLimit,
-                      page: bcExtPage
+                      page: bcExtPage,
                     })}
                   class="py-2.5 rounded-2xl bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
                 >
@@ -3603,19 +4335,35 @@
 
           <!-- Tabla Visual de Resultados de Movimientos o Extracto -->
           {#if bcLastResponse?.operation === "ultimos_movimientos" && bcLastResponse?.data?.movimientos?.length > 0}
-            <div class="rounded-2xl border border-border-subtle overflow-hidden bg-surface-raised">
-              <div class="px-4 py-2.5 bg-surface-soft border-b border-border-subtle flex items-center justify-between text-xs">
-                <span class="font-bold text-text-base">Movimientos Bancarios ({bcLastResponse.data.movimientos.length})</span>
+            <div
+              class="rounded-2xl border border-border-subtle overflow-hidden bg-surface-raised"
+            >
+              <div
+                class="px-4 py-2.5 bg-surface-soft border-b border-border-subtle flex items-center justify-between text-xs"
+              >
+                <span class="font-bold text-text-base"
+                  >Movimientos Bancarios ({bcLastResponse.data.movimientos
+                    .length})</span
+                >
                 {#if bcLastResponse.data.movimientos[0]?.saldo}
                   {@const sal = bcLastResponse.data.movimientos[0].saldo}
-                  <span class="font-mono text-[11px] font-bold text-emerald-600 dark:text-emerald-400">
-                    Disponible: Bs. {Number(sal.disponible || 0).toLocaleString("es-VE", { minimumFractionDigits: 2 })} | Contable: Bs. {Number(sal.contable || 0).toLocaleString("es-VE", { minimumFractionDigits: 2 })}
+                  <span
+                    class="font-mono text-[11px] font-bold text-emerald-600 dark:text-emerald-400"
+                  >
+                    Disponible: Bs. {Number(sal.disponible || 0).toLocaleString(
+                      "es-VE",
+                      { minimumFractionDigits: 2 },
+                    )} | Contable: Bs. {Number(
+                      sal.contable || 0,
+                    ).toLocaleString("es-VE", { minimumFractionDigits: 2 })}
                   </span>
                 {/if}
               </div>
               <div class="max-h-60 overflow-auto">
                 <table class="w-full text-left text-xs">
-                  <thead class="bg-surface-soft/70 text-[10px] uppercase text-text-muted sticky top-0">
+                  <thead
+                    class="bg-surface-soft/70 text-[10px] uppercase text-text-muted sticky top-0"
+                  >
                     <tr>
                       <th class="p-2.5">Fecha / Hora</th>
                       <th class="p-2.5">Referencia</th>
@@ -3624,15 +4372,33 @@
                       <th class="p-2.5 text-right">Monto</th>
                     </tr>
                   </thead>
-                  <tbody class="divide-y divide-border-subtle font-mono text-[11px]">
+                  <tbody
+                    class="divide-y divide-border-subtle font-mono text-[11px]"
+                  >
                     {#each bcLastResponse.data.movimientos as mov}
                       <tr>
-                        <td class="p-2.5 text-text-muted">{mov.hora || mov.fecha}</td>
-                        <td class="p-2.5 font-bold text-text-base">{mov.referencia}</td>
-                        <td class="p-2.5 font-sans text-text-base">{mov.descripcion}</td>
-                        <td class="p-2.5">{mov.operacion?.descripcion || mov.operacion?.codigo}</td>
-                        <td class="p-2.5 text-right font-bold {mov.operacion?.codigo === 'C' ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-500'}">
-                          {Number(mov.monto || 0).toLocaleString("es-VE", { minimumFractionDigits: 2 })}
+                        <td class="p-2.5 text-text-muted"
+                          >{mov.hora || mov.fecha}</td
+                        >
+                        <td class="p-2.5 font-bold text-text-base"
+                          >{mov.referencia}</td
+                        >
+                        <td class="p-2.5 font-sans text-text-base"
+                          >{mov.descripcion}</td
+                        >
+                        <td class="p-2.5"
+                          >{mov.operacion?.descripcion ||
+                            mov.operacion?.codigo}</td
+                        >
+                        <td
+                          class="p-2.5 text-right font-bold {mov.operacion
+                            ?.codigo === 'C'
+                            ? 'text-emerald-600 dark:text-emerald-400'
+                            : 'text-red-500'}"
+                        >
+                          {Number(mov.monto || 0).toLocaleString("es-VE", {
+                            minimumFractionDigits: 2,
+                          })}
                         </td>
                       </tr>
                     {/each}
@@ -3641,13 +4407,22 @@
               </div>
             </div>
           {:else if bcLastResponse?.operation === "extracto_historico" && bcLastResponse?.data?.transactions?.length > 0}
-            <div class="rounded-2xl border border-border-subtle overflow-hidden bg-surface-raised">
-              <div class="px-4 py-2.5 bg-surface-soft border-b border-border-subtle flex items-center justify-between text-xs font-bold text-text-base">
-                <span>Transacciones del Extracto ({bcLastResponse.data.transactions.length})</span>
+            <div
+              class="rounded-2xl border border-border-subtle overflow-hidden bg-surface-raised"
+            >
+              <div
+                class="px-4 py-2.5 bg-surface-soft border-b border-border-subtle flex items-center justify-between text-xs font-bold text-text-base"
+              >
+                <span
+                  >Transacciones del Extracto ({bcLastResponse.data.transactions
+                    .length})</span
+                >
               </div>
               <div class="max-h-60 overflow-auto">
                 <table class="w-full text-left text-xs">
-                  <thead class="bg-surface-soft/70 text-[10px] uppercase text-text-muted sticky top-0">
+                  <thead
+                    class="bg-surface-soft/70 text-[10px] uppercase text-text-muted sticky top-0"
+                  >
                     <tr>
                       <th class="p-2.5">Fecha</th>
                       <th class="p-2.5">Tipo</th>
@@ -3657,18 +4432,28 @@
                       <th class="p-2.5 text-right">Monto</th>
                     </tr>
                   </thead>
-                  <tbody class="divide-y divide-border-subtle font-mono text-[11px]">
+                  <tbody
+                    class="divide-y divide-border-subtle font-mono text-[11px]"
+                  >
                     {#each bcLastResponse.data.transactions as txn}
                       <tr>
                         <td class="p-2.5 text-text-muted">{txn.txnDate}</td>
                         <td class="p-2.5 font-bold">{txn.txnType}</td>
                         <td class="p-2.5">{txn.txnRefPrimary || txn.txnId}</td>
                         <td class="p-2.5 font-sans">
-                          <div class="text-text-base font-medium">{txn.txnConcept}</div>
-                          <div class="text-[10px] text-text-muted">{txn.txnOriginBankName} ({txn.txnOriginAccount})</div>
+                          <div class="text-text-base font-medium">
+                            {txn.txnConcept}
+                          </div>
+                          <div class="text-[10px] text-text-muted">
+                            {txn.txnOriginBankName} ({txn.txnOriginAccount})
+                          </div>
                         </td>
                         <td class="p-2.5">{txn.txnFlow}</td>
-                        <td class="p-2.5 text-right font-bold">{Number(txn.txnAmount || 0).toLocaleString("es-VE", { minimumFractionDigits: 2 })}</td>
+                        <td class="p-2.5 text-right font-bold"
+                          >{Number(txn.txnAmount || 0).toLocaleString("es-VE", {
+                            minimumFractionDigits: 2,
+                          })}</td
+                        >
                       </tr>
                     {/each}
                   </tbody>
@@ -3676,9 +4461,10 @@
               </div>
             </div>
           {/if}
-
         {:else if bcActiveTab === "pago_movil"}
-          <div class="flex flex-wrap items-center justify-between gap-2 p-3 rounded-2xl bg-surface-soft border border-border-subtle">
+          <div
+            class="flex flex-wrap items-center justify-between gap-2 p-3 rounded-2xl bg-surface-soft border border-border-subtle"
+          >
             <span class="text-xs font-bold text-text-muted">
               Catálogo de Bancos Activos ({bcBanksList.length} cargados)
             </span>
@@ -3686,19 +4472,33 @@
               <button
                 type="button"
                 disabled={Boolean(bcLoading)}
-                onclick={() => callBancaribeApi("listar_bancos", { tipoLista: "C2P", forceRefresh: true })}
+                onclick={() =>
+                  callBancaribeApi("listar_bancos", {
+                    tipoLista: "C2P",
+                    forceRefresh: true,
+                  })}
                 class="px-3 py-1.5 rounded-xl bg-surface-base border border-border-subtle text-xs font-bold text-text-base hover:text-emerald-500 flex items-center gap-1.5 cursor-pointer"
               >
-                <RefreshCw size={12} class={bcLoading === "listar_bancos" ? "animate-spin" : ""} />
+                <RefreshCw
+                  size={12}
+                  class={bcLoading === "listar_bancos" ? "animate-spin" : ""}
+                />
                 <span>Sincronizar Bancos C2P</span>
               </button>
               <button
                 type="button"
                 disabled={Boolean(bcLoading)}
-                onclick={() => callBancaribeApi("listar_bancos", { tipoLista: "P2P", forceRefresh: true })}
+                onclick={() =>
+                  callBancaribeApi("listar_bancos", {
+                    tipoLista: "P2P",
+                    forceRefresh: true,
+                  })}
                 class="px-3 py-1.5 rounded-xl bg-surface-base border border-border-subtle text-xs font-bold text-text-base hover:text-emerald-500 flex items-center gap-1.5 cursor-pointer"
               >
-                <RefreshCw size={12} class={bcLoading === "listar_bancos" ? "animate-spin" : ""} />
+                <RefreshCw
+                  size={12}
+                  class={bcLoading === "listar_bancos" ? "animate-spin" : ""}
+                />
                 <span>Sincronizar Bancos P2P</span>
               </button>
             </div>
@@ -3706,13 +4506,22 @@
 
           <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
             <!-- Cobro C2P -->
-            <div class="p-5 rounded-2xl bg-surface-raised border border-border-subtle space-y-4">
+            <div
+              class="p-5 rounded-2xl bg-surface-raised border border-border-subtle space-y-4"
+            >
               <div class="flex items-center justify-between">
                 <div>
-                  <h4 class="text-sm font-black text-text-base">Cobro Pago Móvil Comercio (C2P)</h4>
-                  <p class="text-[11px] text-text-muted">Débito al cliente usando su clave dinámica OTP.</p>
+                  <h4 class="text-sm font-black text-text-base">
+                    Cobro Pago Móvil Comercio (C2P)
+                  </h4>
+                  <p class="text-[11px] text-text-muted">
+                    Débito al cliente usando su clave dinámica OTP.
+                  </p>
                 </div>
-                <select bind:value={bcC2pEndpointMode} class="bg-surface-soft border border-border-subtle px-2.5 py-1 rounded-xl text-[11px] font-bold text-text-base">
+                <select
+                  bind:value={bcC2pEndpointMode}
+                  class="bg-surface-soft border border-border-subtle px-2.5 py-1 rounded-xl text-[11px] font-bold text-text-base"
+                >
                   <option value="c2p">C2P Estándar</option>
                   <option value="s7b">Suiche 7B (S7b)</option>
                 </select>
@@ -3720,43 +4529,104 @@
 
               <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div class="space-y-1 sm:col-span-2">
-                  <label class="text-[10px] font-black uppercase text-text-muted">Banco Pagador *</label>
-                  <select bind:value={bcC2pBancoPagador} class="w-full bg-surface-base border border-border-subtle px-3 py-2 rounded-xl text-xs font-bold text-text-base">
+                  <label
+                    class="text-[10px] font-black uppercase text-text-muted"
+                    >Banco Pagador *</label
+                  >
+                  <select
+                    bind:value={bcC2pBancoPagador}
+                    class="w-full bg-surface-base border border-border-subtle px-3 py-2 rounded-xl text-xs font-bold text-text-base"
+                  >
                     {#each bcBanksList as bank}
-                      <option value={bank.codigo}>{bank.codigo} - {bank.descripcion}</option>
+                      <option value={bank.codigo}
+                        >{bank.codigo} - {bank.descripcion}</option
+                      >
                     {/each}
                   </select>
                 </div>
                 <div class="space-y-1">
-                  <label class="text-[10px] font-black uppercase text-text-muted">Cédula / RIF Pagador *</label>
-                  <input type="text" bind:value={bcC2pCedula} placeholder="V12345678" class="w-full bg-surface-base border border-border-subtle px-3 py-2 rounded-xl text-xs font-mono font-bold text-text-base" />
+                  <label
+                    class="text-[10px] font-black uppercase text-text-muted"
+                    >Cédula / RIF Pagador *</label
+                  >
+                  <input
+                    type="text"
+                    bind:value={bcC2pCedula}
+                    placeholder="V12345678"
+                    class="w-full bg-surface-base border border-border-subtle px-3 py-2 rounded-xl text-xs font-mono font-bold text-text-base"
+                  />
                 </div>
                 <div class="space-y-1">
-                  <label class="text-[10px] font-black uppercase text-text-muted">Teléfono Pagador *</label>
-                  <input type="text" bind:value={bcC2pTelefono} placeholder="04141234567" class="w-full bg-surface-base border border-border-subtle px-3 py-2 rounded-xl text-xs font-mono font-bold text-text-base" />
+                  <label
+                    class="text-[10px] font-black uppercase text-text-muted"
+                    >Teléfono Pagador *</label
+                  >
+                  <input
+                    type="text"
+                    bind:value={bcC2pTelefono}
+                    placeholder="04141234567"
+                    class="w-full bg-surface-base border border-border-subtle px-3 py-2 rounded-xl text-xs font-mono font-bold text-text-base"
+                  />
                 </div>
                 <div class="space-y-1">
-                  <label class="text-[10px] font-black uppercase text-text-muted">Monto (Bs) *</label>
-                  <input type="number" step="0.01" bind:value={bcC2pMonto} placeholder="100.00" class="w-full bg-surface-base border border-border-subtle px-3 py-2 rounded-xl text-xs font-mono font-bold text-text-base" />
+                  <label
+                    class="text-[10px] font-black uppercase text-text-muted"
+                    >Monto (Bs) *</label
+                  >
+                  <input
+                    type="number"
+                    step="0.01"
+                    bind:value={bcC2pMonto}
+                    placeholder="100.00"
+                    class="w-full bg-surface-base border border-border-subtle px-3 py-2 rounded-xl text-xs font-mono font-bold text-text-base"
+                  />
                 </div>
                 <div class="space-y-1">
-                  <label class="text-[10px] font-black uppercase text-text-muted">Clave Dinámica OTP *</label>
-                  <input type="text" bind:value={bcC2pOtp} placeholder="20190105" class="w-full bg-surface-base border border-border-subtle px-3 py-2 rounded-xl text-xs font-mono font-bold text-text-base" />
+                  <label
+                    class="text-[10px] font-black uppercase text-text-muted"
+                    >Clave Dinámica OTP *</label
+                  >
+                  <input
+                    type="text"
+                    bind:value={bcC2pOtp}
+                    placeholder="20190105"
+                    class="w-full bg-surface-base border border-border-subtle px-3 py-2 rounded-xl text-xs font-mono font-bold text-text-base"
+                  />
                 </div>
                 <div class="space-y-1">
-                  <label class="text-[10px] font-black uppercase text-text-muted">Tipo Operación</label>
-                  <select bind:value={bcC2pAnulacion} class="w-full bg-surface-base border border-border-subtle px-3 py-2 rounded-xl text-xs font-bold text-text-base">
+                  <label
+                    class="text-[10px] font-black uppercase text-text-muted"
+                    >Tipo Operación</label
+                  >
+                  <select
+                    bind:value={bcC2pAnulacion}
+                    class="w-full bg-surface-base border border-border-subtle px-3 py-2 rounded-xl text-xs font-bold text-text-base"
+                  >
                     <option value="N">Cobro Normal (N)</option>
                     <option value="S">Anulación (S)</option>
                   </select>
                 </div>
                 <div class="space-y-1">
-                  <label class="text-[10px] font-black uppercase text-text-muted">Ref. Anulación (`null` si es cobro)</label>
-                  <input type="text" bind:value={bcC2pReferencia} class="w-full bg-surface-base border border-border-subtle px-3 py-2 rounded-xl text-xs font-mono font-bold text-text-base" />
+                  <label
+                    class="text-[10px] font-black uppercase text-text-muted"
+                    >Ref. Anulación (`null` si es cobro)</label
+                  >
+                  <input
+                    type="text"
+                    bind:value={bcC2pReferencia}
+                    class="w-full bg-surface-base border border-border-subtle px-3 py-2 rounded-xl text-xs font-mono font-bold text-text-base"
+                  />
                 </div>
                 <div class="space-y-1 sm:col-span-2">
-                  <label class="text-[10px] font-black uppercase text-text-muted">Concepto</label>
-                  <input type="text" bind:value={bcC2pConcepto} class="w-full bg-surface-base border border-border-subtle px-3 py-2 rounded-xl text-xs font-bold text-text-base" />
+                  <label
+                    class="text-[10px] font-black uppercase text-text-muted"
+                    >Concepto</label
+                  >
+                  <input
+                    type="text"
+                    bind:value={bcC2pConcepto}
+                    class="w-full bg-surface-base border border-border-subtle px-3 py-2 rounded-xl text-xs font-bold text-text-base"
+                  />
                 </div>
               </div>
 
@@ -3773,7 +4643,7 @@
                     montoTransaccion: bcC2pMonto,
                     otp: bcC2pOtp,
                     concepto: bcC2pConcepto,
-                    numeroReferencia: bcC2pReferencia
+                    numeroReferencia: bcC2pReferencia,
                   })}
                 class="w-full py-2.5 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
               >
@@ -3788,40 +4658,95 @@
             </div>
 
             <!-- Pago a Personas B2P / Vuelto -->
-            <div class="p-5 rounded-2xl bg-surface-raised border border-border-subtle space-y-4">
+            <div
+              class="p-5 rounded-2xl bg-surface-raised border border-border-subtle space-y-4"
+            >
               <div>
-                <h4 class="text-sm font-black text-text-base">Pago a Personas / Vuelto (B2P)</h4>
-                <p class="text-[11px] text-text-muted">Envía Pago Móvil desde el comercio hacia la persona natural (`/PaP/1.0.0/sendPaymentB2P`).</p>
+                <h4 class="text-sm font-black text-text-base">
+                  Pago a Personas / Vuelto (B2P)
+                </h4>
+                <p class="text-[11px] text-text-muted">
+                  Envía Pago Móvil desde el comercio hacia la persona natural
+                  (`/PaP/1.0.0/sendPaymentB2P`).
+                </p>
               </div>
 
               <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div class="space-y-1 sm:col-span-2">
-                  <label class="text-[10px] font-black uppercase text-text-muted">Banco Destino Persona *</label>
-                  <select bind:value={bcB2pBancoDestino} class="w-full bg-surface-base border border-border-subtle px-3 py-2 rounded-xl text-xs font-bold text-text-base">
+                  <label
+                    class="text-[10px] font-black uppercase text-text-muted"
+                    >Banco Destino Persona *</label
+                  >
+                  <select
+                    bind:value={bcB2pBancoDestino}
+                    class="w-full bg-surface-base border border-border-subtle px-3 py-2 rounded-xl text-xs font-bold text-text-base"
+                  >
                     {#each bcBanksList as bank}
-                      <option value={bank.codigo}>{bank.codigo} - {bank.descripcion}</option>
+                      <option value={bank.codigo}
+                        >{bank.codigo} - {bank.descripcion}</option
+                      >
                     {/each}
                   </select>
                 </div>
                 <div class="space-y-1">
-                  <label class="text-[10px] font-black uppercase text-text-muted">Cédula Beneficiario *</label>
-                  <input type="text" bind:value={bcB2pCedula} placeholder="V12345678" class="w-full bg-surface-base border border-border-subtle px-3 py-2 rounded-xl text-xs font-mono font-bold text-text-base" />
+                  <label
+                    class="text-[10px] font-black uppercase text-text-muted"
+                    >Cédula Beneficiario *</label
+                  >
+                  <input
+                    type="text"
+                    bind:value={bcB2pCedula}
+                    placeholder="V12345678"
+                    class="w-full bg-surface-base border border-border-subtle px-3 py-2 rounded-xl text-xs font-mono font-bold text-text-base"
+                  />
                 </div>
                 <div class="space-y-1">
-                  <label class="text-[10px] font-black uppercase text-text-muted">Teléfono Beneficiario *</label>
-                  <input type="text" bind:value={bcB2pTelefono} placeholder="04141234567" class="w-full bg-surface-base border border-border-subtle px-3 py-2 rounded-xl text-xs font-mono font-bold text-text-base" />
+                  <label
+                    class="text-[10px] font-black uppercase text-text-muted"
+                    >Teléfono Beneficiario *</label
+                  >
+                  <input
+                    type="text"
+                    bind:value={bcB2pTelefono}
+                    placeholder="04141234567"
+                    class="w-full bg-surface-base border border-border-subtle px-3 py-2 rounded-xl text-xs font-mono font-bold text-text-base"
+                  />
                 </div>
                 <div class="space-y-1">
-                  <label class="text-[10px] font-black uppercase text-text-muted">Monto (Bs) *</label>
-                  <input type="number" step="0.01" bind:value={bcB2pMonto} placeholder="50.00" class="w-full bg-surface-base border border-border-subtle px-3 py-2 rounded-xl text-xs font-mono font-bold text-text-base" />
+                  <label
+                    class="text-[10px] font-black uppercase text-text-muted"
+                    >Monto (Bs) *</label
+                  >
+                  <input
+                    type="number"
+                    step="0.01"
+                    bind:value={bcB2pMonto}
+                    placeholder="50.00"
+                    class="w-full bg-surface-base border border-border-subtle px-3 py-2 rounded-xl text-xs font-mono font-bold text-text-base"
+                  />
                 </div>
                 <div class="space-y-1">
-                  <label class="text-[10px] font-black uppercase text-text-muted">N° Factura</label>
-                  <input type="text" bind:value={bcB2pFactura} placeholder="0" class="w-full bg-surface-base border border-border-subtle px-3 py-2 rounded-xl text-xs font-mono font-bold text-text-base" />
+                  <label
+                    class="text-[10px] font-black uppercase text-text-muted"
+                    >N° Factura</label
+                  >
+                  <input
+                    type="text"
+                    bind:value={bcB2pFactura}
+                    placeholder="0"
+                    class="w-full bg-surface-base border border-border-subtle px-3 py-2 rounded-xl text-xs font-mono font-bold text-text-base"
+                  />
                 </div>
                 <div class="space-y-1 sm:col-span-2">
-                  <label class="text-[10px] font-black uppercase text-text-muted">Concepto</label>
-                  <input type="text" bind:value={bcB2pConcepto} class="w-full bg-surface-base border border-border-subtle px-3 py-2 rounded-xl text-xs font-bold text-text-base" />
+                  <label
+                    class="text-[10px] font-black uppercase text-text-muted"
+                    >Concepto</label
+                  >
+                  <input
+                    type="text"
+                    bind:value={bcB2pConcepto}
+                    class="w-full bg-surface-base border border-border-subtle px-3 py-2 rounded-xl text-xs font-bold text-text-base"
+                  />
                 </div>
               </div>
 
@@ -3835,7 +4760,7 @@
                     telefonoCredito: bcB2pTelefono,
                     montoTransaccion: bcB2pMonto,
                     concepto: bcB2pConcepto,
-                    factura: bcB2pFactura
+                    factura: bcB2pFactura,
                   })}
                 class="w-full py-2.5 rounded-2xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
               >
@@ -3849,51 +4774,111 @@
               </button>
             </div>
           </div>
-
         {:else if bcActiveTab === "transferencias"}
           <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
             <!-- Iniciar Crédito Inmediato -->
-            <div class="p-5 rounded-2xl bg-surface-raised border border-border-subtle space-y-4">
+            <div
+              class="p-5 rounded-2xl bg-surface-raised border border-border-subtle space-y-4"
+            >
               <div>
-                <h4 class="text-sm font-black text-text-base">Iniciar Transferencia Inmediata (CRIN)</h4>
-                <p class="text-[11px] text-text-muted">Acredita fondos de inmediato por cuenta bancaria (`CNTA`) o teléfono (`CELE`).</p>
+                <h4 class="text-sm font-black text-text-base">
+                  Iniciar Transferencia Inmediata (CRIN)
+                </h4>
+                <p class="text-[11px] text-text-muted">
+                  Acredita fondos de inmediato por cuenta bancaria (`CNTA`) o
+                  teléfono (`CELE`).
+                </p>
               </div>
 
               <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div class="space-y-1">
-                  <label class="text-[10px] font-black uppercase text-text-muted">Banco Destino *</label>
-                  <select bind:value={bcTrfBancoDestino} class="w-full bg-surface-base border border-border-subtle px-3 py-2 rounded-xl text-xs font-bold text-text-base">
+                  <label
+                    class="text-[10px] font-black uppercase text-text-muted"
+                    >Banco Destino *</label
+                  >
+                  <select
+                    bind:value={bcTrfBancoDestino}
+                    class="w-full bg-surface-base border border-border-subtle px-3 py-2 rounded-xl text-xs font-bold text-text-base"
+                  >
                     {#each bcBanksList as bank}
-                      <option value={bank.codigo}>{bank.codigo} - {bank.descripcion}</option>
+                      <option value={bank.codigo}
+                        >{bank.codigo} - {bank.descripcion}</option
+                      >
                     {/each}
                   </select>
                 </div>
                 <div class="space-y-1">
-                  <label class="text-[10px] font-black uppercase text-text-muted">Modalidad Destino</label>
-                  <select bind:value={bcTrfTipoCtaCele} class="w-full bg-surface-base border border-border-subtle px-3 py-2 rounded-xl text-xs font-bold text-text-base">
+                  <label
+                    class="text-[10px] font-black uppercase text-text-muted"
+                    >Modalidad Destino</label
+                  >
+                  <select
+                    bind:value={bcTrfTipoCtaCele}
+                    class="w-full bg-surface-base border border-border-subtle px-3 py-2 rounded-xl text-xs font-bold text-text-base"
+                  >
                     <option value="CNTA">CNTA - Cuenta (20 dígitos)</option>
                     <option value="CELE">CELE - Celular (Pago Móvil)</option>
                   </select>
                 </div>
                 <div class="space-y-1 sm:col-span-2">
-                  <label class="text-[10px] font-black uppercase text-text-muted">Cuenta o Teléfono Destino *</label>
-                  <input type="text" bind:value={bcTrfCuentaDestino} placeholder="0105... o 0414..." class="w-full bg-surface-base border border-border-subtle px-3 py-2 rounded-xl text-xs font-mono font-bold text-text-base" />
+                  <label
+                    class="text-[10px] font-black uppercase text-text-muted"
+                    >Cuenta o Teléfono Destino *</label
+                  >
+                  <input
+                    type="text"
+                    bind:value={bcTrfCuentaDestino}
+                    placeholder="0105... o 0414..."
+                    class="w-full bg-surface-base border border-border-subtle px-3 py-2 rounded-xl text-xs font-mono font-bold text-text-base"
+                  />
                 </div>
                 <div class="space-y-1">
-                  <label class="text-[10px] font-black uppercase text-text-muted">Cédula / RIF Beneficiario *</label>
-                  <input type="text" bind:value={bcTrfCedulaBeneficiario} placeholder="V12345678" class="w-full bg-surface-base border border-border-subtle px-3 py-2 rounded-xl text-xs font-mono font-bold text-text-base" />
+                  <label
+                    class="text-[10px] font-black uppercase text-text-muted"
+                    >Cédula / RIF Beneficiario *</label
+                  >
+                  <input
+                    type="text"
+                    bind:value={bcTrfCedulaBeneficiario}
+                    placeholder="V12345678"
+                    class="w-full bg-surface-base border border-border-subtle px-3 py-2 rounded-xl text-xs font-mono font-bold text-text-base"
+                  />
                 </div>
                 <div class="space-y-1">
-                  <label class="text-[10px] font-black uppercase text-text-muted">Nombre Beneficiario *</label>
-                  <input type="text" bind:value={bcTrfNombreBeneficiario} placeholder="Pedro Perez" class="w-full bg-surface-base border border-border-subtle px-3 py-2 rounded-xl text-xs font-bold text-text-base" />
+                  <label
+                    class="text-[10px] font-black uppercase text-text-muted"
+                    >Nombre Beneficiario *</label
+                  >
+                  <input
+                    type="text"
+                    bind:value={bcTrfNombreBeneficiario}
+                    placeholder="Pedro Perez"
+                    class="w-full bg-surface-base border border-border-subtle px-3 py-2 rounded-xl text-xs font-bold text-text-base"
+                  />
                 </div>
                 <div class="space-y-1">
-                  <label class="text-[10px] font-black uppercase text-text-muted">Monto (Bs) *</label>
-                  <input type="number" step="0.01" bind:value={bcTrfMonto} placeholder="500.00" class="w-full bg-surface-base border border-border-subtle px-3 py-2 rounded-xl text-xs font-mono font-bold text-text-base" />
+                  <label
+                    class="text-[10px] font-black uppercase text-text-muted"
+                    >Monto (Bs) *</label
+                  >
+                  <input
+                    type="number"
+                    step="0.01"
+                    bind:value={bcTrfMonto}
+                    placeholder="500.00"
+                    class="w-full bg-surface-base border border-border-subtle px-3 py-2 rounded-xl text-xs font-mono font-bold text-text-base"
+                  />
                 </div>
                 <div class="space-y-1">
-                  <label class="text-[10px] font-black uppercase text-text-muted">Concepto *</label>
-                  <input type="text" bind:value={bcTrfConcepto} class="w-full bg-surface-base border border-border-subtle px-3 py-2 rounded-xl text-xs font-bold text-text-base" />
+                  <label
+                    class="text-[10px] font-black uppercase text-text-muted"
+                    >Concepto *</label
+                  >
+                  <input
+                    type="text"
+                    bind:value={bcTrfConcepto}
+                    class="w-full bg-surface-base border border-border-subtle px-3 py-2 rounded-xl text-xs font-bold text-text-base"
+                  />
                 </div>
               </div>
 
@@ -3908,7 +4893,7 @@
                     cedulaRifBeneficiario: bcTrfCedulaBeneficiario,
                     nombreBeneficiario: bcTrfNombreBeneficiario,
                     monto: bcTrfMonto,
-                    concepto: bcTrfConcepto
+                    concepto: bcTrfConcepto,
                   })}
                 class="w-full py-2.5 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
               >
@@ -3923,31 +4908,68 @@
             </div>
 
             <!-- Consultar Transferencia CRIN / TER -->
-            <div class="p-5 rounded-2xl bg-surface-raised border border-border-subtle space-y-4">
+            <div
+              class="p-5 rounded-2xl bg-surface-raised border border-border-subtle space-y-4"
+            >
               <div>
-                <h4 class="text-sm font-black text-text-base">Consultar Estatus de Transferencia (CRIN / TER)</h4>
-                <p class="text-[11px] text-text-muted">Verifica el código de acreditación BCV (`ACCP` / `RJCT`) por número secuencial.</p>
+                <h4 class="text-sm font-black text-text-base">
+                  Consultar Estatus de Transferencia (CRIN / TER)
+                </h4>
+                <p class="text-[11px] text-text-muted">
+                  Verifica el código de acreditación BCV (`ACCP` / `RJCT`) por
+                  número secuencial.
+                </p>
               </div>
 
               <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div class="space-y-1">
-                  <label class="text-[10px] font-black uppercase text-text-muted">N° Secuencial *</label>
-                  <input type="text" bind:value={bcTrfConsSecuencial} placeholder="235176390" class="w-full bg-surface-base border border-border-subtle px-3 py-2 rounded-xl text-xs font-mono font-bold text-text-base" />
+                  <label
+                    class="text-[10px] font-black uppercase text-text-muted"
+                    >N° Secuencial *</label
+                  >
+                  <input
+                    type="text"
+                    bind:value={bcTrfConsSecuencial}
+                    placeholder="235176390"
+                    class="w-full bg-surface-base border border-border-subtle px-3 py-2 rounded-xl text-xs font-mono font-bold text-text-base"
+                  />
                 </div>
                 <div class="space-y-1">
-                  <label class="text-[10px] font-black uppercase text-text-muted">Tipo Servicio</label>
-                  <select bind:value={bcTrfConsTipo} class="w-full bg-surface-base border border-border-subtle px-3 py-2 rounded-xl text-xs font-bold text-text-base">
+                  <label
+                    class="text-[10px] font-black uppercase text-text-muted"
+                    >Tipo Servicio</label
+                  >
+                  <select
+                    bind:value={bcTrfConsTipo}
+                    class="w-full bg-surface-base border border-border-subtle px-3 py-2 rounded-xl text-xs font-bold text-text-base"
+                  >
                     <option value="CRIN">CRIN (Otros Bancos)</option>
                     <option value="TER">TER (Terceros Bancaribe)</option>
                   </select>
                 </div>
                 <div class="space-y-1">
-                  <label class="text-[10px] font-black uppercase text-text-muted">Fecha Proceso</label>
-                  <input type="date" bind:value={bcTrfConsFecha} class="w-full bg-surface-base border border-border-subtle px-3 py-2 rounded-xl text-xs font-bold text-text-base" />
+                  <label
+                    class="text-[10px] font-black uppercase text-text-muted"
+                    >Fecha Proceso</label
+                  >
+                  <input
+                    type="date"
+                    bind:value={bcTrfConsFecha}
+                    class="w-full bg-surface-base border border-border-subtle px-3 py-2 rounded-xl text-xs font-bold text-text-base"
+                  />
                 </div>
                 <div class="space-y-1">
-                  <label class="text-[10px] font-black uppercase text-text-muted">Cuenta Origen</label>
-                  <input type="text" maxlength="20" bind:value={bcTrfConsCuentaOrigen} placeholder="0114..." class="w-full bg-surface-base border border-border-subtle px-3 py-2 rounded-xl text-xs font-mono font-bold text-text-base" />
+                  <label
+                    class="text-[10px] font-black uppercase text-text-muted"
+                    >Cuenta Origen</label
+                  >
+                  <input
+                    type="text"
+                    maxlength="20"
+                    bind:value={bcTrfConsCuentaOrigen}
+                    placeholder="0114..."
+                    class="w-full bg-surface-base border border-border-subtle px-3 py-2 rounded-xl text-xs font-mono font-bold text-text-base"
+                  />
                 </div>
               </div>
 
@@ -3959,7 +4981,7 @@
                     secuencial: bcTrfConsSecuencial,
                     tipoServicio: bcTrfConsTipo,
                     fechaProcesoTransaccion: bcTrfConsFecha,
-                    cuentaOrigen: bcTrfConsCuentaOrigen
+                    cuentaOrigen: bcTrfConsCuentaOrigen,
                   })}
                 class="w-full py-2.5 rounded-2xl bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
               >
@@ -3973,64 +4995,138 @@
               </button>
             </div>
           </div>
-
         {:else if bcActiveTab === "cobranza_digital"}
-          <div class="p-5 rounded-2xl bg-surface-raised border border-border-subtle space-y-4">
+          <div
+            class="p-5 rounded-2xl bg-surface-raised border border-border-subtle space-y-4"
+          >
             <div class="flex flex-wrap items-center justify-between gap-2">
               <div>
-                <h4 class="text-sm font-black text-text-base">Cobranza Digital / Débito Inmediato (SIMF / DBIN)</h4>
-                <p class="text-[11px] text-text-muted">Flujo completo: 1) Generar Token OTP o 2) Solicitar Clave al Banco → 3) Ejecutar Cargo DBIN → 4) Consultar Operación.</p>
+                <h4 class="text-sm font-black text-text-base">
+                  Cobranza Digital / Débito Inmediato (SIMF / DBIN)
+                </h4>
+                <p class="text-[11px] text-text-muted">
+                  Flujo completo: 1) Generar Token OTP o 2) Solicitar Clave al
+                  Banco → 3) Ejecutar Cargo DBIN → 4) Consultar Operación.
+                </p>
               </div>
-              <span class="px-2 py-0.5 rounded-lg bg-purple-500/15 text-purple-700 dark:text-purple-300 font-mono text-[10px] font-bold">
+              <span
+                class="px-2 py-0.5 rounded-lg bg-purple-500/15 text-purple-700 dark:text-purple-300 font-mono text-[10px] font-bold"
+              >
                 /DC/1.0.0/*
               </span>
             </div>
 
             <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div class="space-y-1">
-                <label class="text-[10px] font-black uppercase text-text-muted">Banco Deudor *</label>
-                <select bind:value={bcDbinBanco} class="w-full bg-surface-base border border-border-subtle px-3 py-2 rounded-xl text-xs font-bold text-text-base">
+                <label class="text-[10px] font-black uppercase text-text-muted"
+                  >Banco Deudor *</label
+                >
+                <select
+                  bind:value={bcDbinBanco}
+                  class="w-full bg-surface-base border border-border-subtle px-3 py-2 rounded-xl text-xs font-bold text-text-base"
+                >
                   {#each bcBanksList as bank}
-                    <option value={String(Number(bank.codigo))}>{bank.codigo} - {bank.descripcion}</option>
+                    <option value={String(Number(bank.codigo))}
+                      >{bank.codigo} - {bank.descripcion}</option
+                    >
                   {/each}
                 </select>
               </div>
               <div class="space-y-1">
-                <label class="text-[10px] font-black uppercase text-text-muted">Tipo Producto Deudor</label>
-                <select bind:value={bcDbinTipoProducto} class="w-full bg-surface-base border border-border-subtle px-3 py-2 rounded-xl text-xs font-bold text-text-base">
+                <label class="text-[10px] font-black uppercase text-text-muted"
+                  >Tipo Producto Deudor</label
+                >
+                <select
+                  bind:value={bcDbinTipoProducto}
+                  class="w-full bg-surface-base border border-border-subtle px-3 py-2 rounded-xl text-xs font-bold text-text-base"
+                >
                   <option value="CNTA">CNTA (Cuenta Bancaria)</option>
                   <option value="CELE">CELE (Teléfono Celular)</option>
                 </select>
               </div>
               <div class="space-y-1">
-                <label class="text-[10px] font-black uppercase text-text-muted">Cuenta / Celular Deudor *</label>
-                <input type="text" bind:value={bcDbinCuentaOrigen} placeholder="0114... o 0414..." class="w-full bg-surface-base border border-border-subtle px-3 py-2 rounded-xl text-xs font-mono font-bold text-text-base" />
+                <label class="text-[10px] font-black uppercase text-text-muted"
+                  >Cuenta / Celular Deudor *</label
+                >
+                <input
+                  type="text"
+                  bind:value={bcDbinCuentaOrigen}
+                  placeholder="0114... o 0414..."
+                  class="w-full bg-surface-base border border-border-subtle px-3 py-2 rounded-xl text-xs font-mono font-bold text-text-base"
+                />
               </div>
               <div class="space-y-1">
-                <label class="text-[10px] font-black uppercase text-text-muted">Cédula / RIF Deudor *</label>
-                <input type="text" bind:value={bcDbinCedulaOrigen} placeholder="V23645978" class="w-full bg-surface-base border border-border-subtle px-3 py-2 rounded-xl text-xs font-mono font-bold text-text-base" />
+                <label class="text-[10px] font-black uppercase text-text-muted"
+                  >Cédula / RIF Deudor *</label
+                >
+                <input
+                  type="text"
+                  bind:value={bcDbinCedulaOrigen}
+                  placeholder="V23645978"
+                  class="w-full bg-surface-base border border-border-subtle px-3 py-2 rounded-xl text-xs font-mono font-bold text-text-base"
+                />
               </div>
               <div class="space-y-1">
-                <label class="text-[10px] font-black uppercase text-text-muted">Nombre Deudor *</label>
-                <input type="text" bind:value={bcDbinNombreOrigen} placeholder="Nombre Cliente" class="w-full bg-surface-base border border-border-subtle px-3 py-2 rounded-xl text-xs font-bold text-text-base" />
+                <label class="text-[10px] font-black uppercase text-text-muted"
+                  >Nombre Deudor *</label
+                >
+                <input
+                  type="text"
+                  bind:value={bcDbinNombreOrigen}
+                  placeholder="Nombre Cliente"
+                  class="w-full bg-surface-base border border-border-subtle px-3 py-2 rounded-xl text-xs font-bold text-text-base"
+                />
               </div>
               <div class="space-y-1">
-                <label class="text-[10px] font-black uppercase text-text-muted">Teléfono Deudor (para clave)</label>
-                <input type="text" bind:value={bcDbinTelefonoOrigen} placeholder="04141234567" class="w-full bg-surface-base border border-border-subtle px-3 py-2 rounded-xl text-xs font-mono font-bold text-text-base" />
+                <label class="text-[10px] font-black uppercase text-text-muted"
+                  >Teléfono Deudor (para clave)</label
+                >
+                <input
+                  type="text"
+                  bind:value={bcDbinTelefonoOrigen}
+                  placeholder="04141234567"
+                  class="w-full bg-surface-base border border-border-subtle px-3 py-2 rounded-xl text-xs font-mono font-bold text-text-base"
+                />
               </div>
               <div class="space-y-1">
-                <label class="text-[10px] font-black uppercase text-text-muted">Monto (Bs) *</label>
-                <input type="number" step="0.01" bind:value={bcDbinMonto} placeholder="50.00" class="w-full bg-surface-base border border-border-subtle px-3 py-2 rounded-xl text-xs font-mono font-bold text-text-base" />
+                <label class="text-[10px] font-black uppercase text-text-muted"
+                  >Monto (Bs) *</label
+                >
+                <input
+                  type="number"
+                  step="0.01"
+                  bind:value={bcDbinMonto}
+                  placeholder="50.00"
+                  class="w-full bg-surface-base border border-border-subtle px-3 py-2 rounded-xl text-xs font-mono font-bold text-text-base"
+                />
               </div>
               <div class="space-y-1">
-                <label class="text-[10px] font-black uppercase text-text-muted">OTP (Clave recibida)</label>
-                <input type="text" bind:value={bcDbinOtp} placeholder="07451081" class="w-full bg-surface-base border border-border-subtle px-3 py-2 rounded-xl text-xs font-mono font-bold text-text-base" />
+                <label class="text-[10px] font-black uppercase text-text-muted"
+                  >OTP (Clave recibida)</label
+                >
+                <input
+                  type="text"
+                  bind:value={bcDbinOtp}
+                  placeholder="07451081"
+                  class="w-full bg-surface-base border border-border-subtle px-3 py-2 rounded-xl text-xs font-mono font-bold text-text-base"
+                />
               </div>
               <div class="space-y-1">
-                <label class="text-[10px] font-black uppercase text-text-muted">Concepto / Contrato</label>
+                <label class="text-[10px] font-black uppercase text-text-muted"
+                  >Concepto / Contrato</label
+                >
                 <div class="flex gap-1.5">
-                  <input type="text" bind:value={bcDbinConcepto} class="flex-1 bg-surface-base border border-border-subtle px-3 py-2 rounded-xl text-xs font-bold text-text-base" />
-                  <input type="text" bind:value={bcDbinContrato} placeholder="Ctr" class="w-16 bg-surface-base border border-border-subtle px-2 py-2 rounded-xl text-xs font-mono font-bold text-text-base text-center" />
+                  <input
+                    type="text"
+                    bind:value={bcDbinConcepto}
+                    class="flex-1 bg-surface-base border border-border-subtle px-3 py-2 rounded-xl text-xs font-bold text-text-base"
+                  />
+                  <input
+                    type="text"
+                    bind:value={bcDbinContrato}
+                    placeholder="Ctr"
+                    class="w-16 bg-surface-base border border-border-subtle px-2 py-2 rounded-xl text-xs font-mono font-bold text-text-base text-center"
+                  />
                 </div>
               </div>
             </div>
@@ -4042,7 +5138,7 @@
                 onclick={() =>
                   callBancaribeApi("cobranza_token", {
                     identificacion: bcDbinCedulaOrigen,
-                    cuenta: bcDbinCuentaOrigen
+                    cuenta: bcDbinCuentaOrigen,
                   })}
                 class="py-2.5 rounded-2xl bg-surface-soft hover:bg-surface-strong border border-border-subtle text-text-base text-xs font-bold cursor-pointer disabled:opacity-50"
               >
@@ -4057,7 +5153,7 @@
                     cuentaOrigen: bcDbinCuentaOrigen,
                     identificacionClienteOrigen: bcDbinCedulaOrigen,
                     monto: bcDbinMonto,
-                    telefono: bcDbinTelefonoOrigen
+                    telefono: bcDbinTelefonoOrigen,
                   })}
                 class="py-2.5 rounded-2xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold cursor-pointer disabled:opacity-50"
               >
@@ -4078,7 +5174,7 @@
                     monto: bcDbinMonto,
                     telefono: bcDbinTelefonoOrigen,
                     tipoProducto: bcDbinTipoProducto,
-                    otp: bcDbinOtp
+                    otp: bcDbinOtp,
                   })}
                 class="py-2.5 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold cursor-pointer disabled:opacity-50"
               >
@@ -4087,18 +5183,41 @@
             </div>
 
             <!-- Consulta de Operación DBIN -->
-            <div class="pt-3 border-t border-border-subtle grid grid-cols-1 sm:grid-cols-4 gap-2.5 items-end">
+            <div
+              class="pt-3 border-t border-border-subtle grid grid-cols-1 sm:grid-cols-4 gap-2.5 items-end"
+            >
               <div class="space-y-1">
-                <label class="text-[10px] font-black uppercase text-text-muted">Secuencial</label>
-                <input type="text" bind:value={bcDbinSecuencial} placeholder="95792583" class="w-full bg-surface-base border border-border-subtle px-3 py-2 rounded-xl text-xs font-mono font-bold text-text-base" />
+                <label class="text-[10px] font-black uppercase text-text-muted"
+                  >Secuencial</label
+                >
+                <input
+                  type="text"
+                  bind:value={bcDbinSecuencial}
+                  placeholder="95792583"
+                  class="w-full bg-surface-base border border-border-subtle px-3 py-2 rounded-xl text-xs font-mono font-bold text-text-base"
+                />
               </div>
               <div class="space-y-1">
-                <label class="text-[10px] font-black uppercase text-text-muted">EndToEnd ID</label>
-                <input type="text" bind:value={bcDbinEndId} placeholder="01142026..." class="w-full bg-surface-base border border-border-subtle px-3 py-2 rounded-xl text-xs font-mono font-bold text-text-base" />
+                <label class="text-[10px] font-black uppercase text-text-muted"
+                  >EndToEnd ID</label
+                >
+                <input
+                  type="text"
+                  bind:value={bcDbinEndId}
+                  placeholder="01142026..."
+                  class="w-full bg-surface-base border border-border-subtle px-3 py-2 rounded-xl text-xs font-mono font-bold text-text-base"
+                />
               </div>
               <div class="space-y-1">
-                <label class="text-[10px] font-black uppercase text-text-muted">Estado</label>
-                <input type="text" bind:value={bcDbinEstado} placeholder="A" class="w-full bg-surface-base border border-border-subtle px-3 py-2 rounded-xl text-xs font-mono font-bold text-text-base" />
+                <label class="text-[10px] font-black uppercase text-text-muted"
+                  >Estado</label
+                >
+                <input
+                  type="text"
+                  bind:value={bcDbinEstado}
+                  placeholder="A"
+                  class="w-full bg-surface-base border border-border-subtle px-3 py-2 rounded-xl text-xs font-mono font-bold text-text-base"
+                />
               </div>
               <button
                 type="button"
@@ -4108,7 +5227,7 @@
                     secuencial: bcDbinSecuencial,
                     endID: bcDbinEndId,
                     monto: bcDbinMonto,
-                    estado: bcDbinEstado
+                    estado: bcDbinEstado,
                   })}
                 class="py-2 px-4 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold cursor-pointer disabled:opacity-50"
               >
@@ -4116,35 +5235,65 @@
               </button>
             </div>
           </div>
-
         {:else if bcActiveTab === "tasas_webhook"}
           <div class="grid grid-cols-1 lg:grid-cols-12 gap-5">
             <!-- Tasas BCV -->
-            <div class="lg:col-span-5 p-5 rounded-2xl bg-surface-raised border border-border-subtle space-y-4">
+            <div
+              class="lg:col-span-5 p-5 rounded-2xl bg-surface-raised border border-border-subtle space-y-4"
+            >
               <div>
-                <h4 class="text-sm font-black text-text-base">Consulta Oficial Tasas BCV</h4>
-                <p class="text-[11px] text-text-muted">Vaciar fechas consulta la tasa vigente del día; con rango consulta histórico hasta 6 meses.</p>
+                <h4 class="text-sm font-black text-text-base">
+                  Consulta Oficial Tasas BCV
+                </h4>
+                <p class="text-[11px] text-text-muted">
+                  Vaciar fechas consulta la tasa vigente del día; con rango
+                  consulta histórico hasta 6 meses.
+                </p>
               </div>
 
               <div class="space-y-3">
                 <div class="space-y-1">
-                  <label class="text-[10px] font-black uppercase text-text-muted">Tipo de Tasa</label>
-                  <select bind:value={bcTasaId} class="w-full bg-surface-base border border-border-subtle px-3 py-2 rounded-xl text-xs font-bold text-text-base">
+                  <label
+                    class="text-[10px] font-black uppercase text-text-muted"
+                    >Tipo de Tasa</label
+                  >
+                  <select
+                    bind:value={bcTasaId}
+                    class="w-full bg-surface-base border border-border-subtle px-3 py-2 rounded-xl text-xs font-bold text-text-base"
+                  >
                     <option value="">Todas las tasas</option>
-                    <option value="TAVENTDOLAR">TAVENTDOLAR (Venta Dólar)</option>
-                    <option value="TACOMPDOLAR">TACOMPDOLAR (Compra Dólar)</option>
+                    <option value="TAVENTDOLAR"
+                      >TAVENTDOLAR (Venta Dólar)</option
+                    >
+                    <option value="TACOMPDOLAR"
+                      >TACOMPDOLAR (Compra Dólar)</option
+                    >
                     <option value="TAVENTEURO">TAVENTEURO (Venta Euro)</option>
                     <option value="TACOMPEURO">TACOMPEURO (Compra Euro)</option>
                   </select>
                 </div>
                 <div class="grid grid-cols-2 gap-2.5">
                   <div class="space-y-1">
-                    <label class="text-[10px] font-black uppercase text-text-muted">Desde (Opc.)</label>
-                    <input type="date" bind:value={bcTasaInicio} class="w-full bg-surface-base border border-border-subtle px-2.5 py-2 rounded-xl text-xs font-bold text-text-base" />
+                    <label
+                      class="text-[10px] font-black uppercase text-text-muted"
+                      >Desde (Opc.)</label
+                    >
+                    <input
+                      type="date"
+                      bind:value={bcTasaInicio}
+                      class="w-full bg-surface-base border border-border-subtle px-2.5 py-2 rounded-xl text-xs font-bold text-text-base"
+                    />
                   </div>
                   <div class="space-y-1">
-                    <label class="text-[10px] font-black uppercase text-text-muted">Hasta (Opc.)</label>
-                    <input type="date" bind:value={bcTasaFin} class="w-full bg-surface-base border border-border-subtle px-2.5 py-2 rounded-xl text-xs font-bold text-text-base" />
+                    <label
+                      class="text-[10px] font-black uppercase text-text-muted"
+                      >Hasta (Opc.)</label
+                    >
+                    <input
+                      type="date"
+                      bind:value={bcTasaFin}
+                      class="w-full bg-surface-base border border-border-subtle px-2.5 py-2 rounded-xl text-xs font-bold text-text-base"
+                    />
                   </div>
                 </div>
               </div>
@@ -4156,7 +5305,7 @@
                   callBancaribeApi("tasas_bcv", {
                     idTasa: bcTasaId,
                     fechaInicio: bcTasaInicio,
-                    fechaFin: bcTasaFin
+                    fechaFin: bcTasaFin,
                   })}
                 class="w-full py-2.5 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
               >
@@ -4165,16 +5314,27 @@
               </button>
 
               {#if bcLastResponse?.operation === "tasas_bcv" && bcLastResponse?.data}
-                {@const list = [...(bcLastResponse.data.tasasActuales || []), ...(bcLastResponse.data.tasasHistorico || [])]}
+                {@const list = [
+                  ...(bcLastResponse.data.tasasActuales || []),
+                  ...(bcLastResponse.data.tasasHistorico || []),
+                ]}
                 {#if list.length > 0}
                   <div class="space-y-2 max-h-48 overflow-y-auto pt-1">
                     {#each list as tasa}
-                      <div class="p-2.5 rounded-xl bg-surface-soft border border-border-subtle flex items-center justify-between text-xs">
+                      <div
+                        class="p-2.5 rounded-xl bg-surface-soft border border-border-subtle flex items-center justify-between text-xs"
+                      >
                         <div>
-                          <div class="font-bold text-text-base">{tasa.descripcion}</div>
-                          <div class="text-[10px] text-text-muted font-mono">{String(tasa.fechaArch || "").slice(0, 10)}</div>
+                          <div class="font-bold text-text-base">
+                            {tasa.descripcion}
+                          </div>
+                          <div class="text-[10px] text-text-muted font-mono">
+                            {String(tasa.fechaArch || "").slice(0, 10)}
+                          </div>
                         </div>
-                        <span class="font-mono font-black text-emerald-600 dark:text-emerald-400 text-sm">
+                        <span
+                          class="font-mono font-black text-emerald-600 dark:text-emerald-400 text-sm"
+                        >
                           Bs. {tasa.valor}
                         </span>
                       </div>
@@ -4185,21 +5345,34 @@
             </div>
 
             <!-- Notificaciones Webhook Recibidas -->
-            <div class="lg:col-span-7 p-5 rounded-2xl bg-surface-raised border border-border-subtle space-y-3">
+            <div
+              class="lg:col-span-7 p-5 rounded-2xl bg-surface-raised border border-border-subtle space-y-3"
+            >
               <div class="flex flex-wrap items-center justify-between gap-2">
                 <div>
-                  <h4 class="text-sm font-black text-text-base flex items-center gap-1.5">
+                  <h4
+                    class="text-sm font-black text-text-base flex items-center gap-1.5"
+                  >
                     <Bell size={15} class="text-emerald-500" />
-                    <span>Notificaciones Webhook Bancaribe ({bcNotifications.length})</span>
+                    <span
+                      >Notificaciones Webhook Bancaribe ({bcNotifications.length})</span
+                    >
                   </h4>
                   <p class="text-[11px] text-text-muted">
-                    Endpoint activo en <code class="font-mono">/api/integrations/bancaribe/notifications</code>
+                    Endpoint activo en <code class="font-mono"
+                      >/api/integrations/bancaribe/notifications</code
+                    >
                   </p>
                 </div>
                 <div class="flex items-center gap-1.5">
                   <button
                     type="button"
-                    onclick={() => callBancaribeApi("notificaciones_list", {}, { silent: false })}
+                    onclick={() =>
+                      callBancaribeApi(
+                        "notificaciones_list",
+                        {},
+                        { silent: false },
+                      )}
                     class="px-2.5 py-1.5 rounded-xl bg-surface-soft border border-border-subtle text-xs font-bold text-text-base hover:text-emerald-500 cursor-pointer flex items-center gap-1"
                   >
                     <RefreshCw size={12} />
@@ -4207,7 +5380,8 @@
                   </button>
                   <button
                     type="button"
-                    onclick={() => callBancaribeApi("notificaciones_simulate", {})}
+                    onclick={() =>
+                      callBancaribeApi("notificaciones_simulate", {})}
                     class="px-2.5 py-1.5 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-700 dark:text-emerald-300 text-xs font-bold cursor-pointer"
                   >
                     Simular Prueba
@@ -4215,7 +5389,8 @@
                   {#if bcNotifications.length > 0}
                     <button
                       type="button"
-                      onclick={() => callBancaribeApi("notificaciones_clear", {})}
+                      onclick={() =>
+                        callBancaribeApi("notificaciones_clear", {})}
                       class="p-1.5 rounded-xl bg-red-500/10 border border-red-500/20 text-red-500 hover:bg-red-500/20 cursor-pointer"
                       title="Limpiar historial"
                     >
@@ -4225,14 +5400,18 @@
                 </div>
               </div>
 
-              <div class="max-h-72 overflow-auto rounded-xl border border-border-subtle bg-surface-base">
+              <div
+                class="max-h-72 overflow-auto rounded-xl border border-border-subtle bg-surface-base"
+              >
                 {#if bcNotifications.length === 0}
                   <div class="p-6 text-center text-xs text-text-muted">
                     Aún no se han recibido notificaciones push desde Bancaribe.
                   </div>
                 {:else}
                   <table class="w-full text-left text-xs">
-                    <thead class="bg-surface-soft/70 text-[10px] uppercase text-text-muted sticky top-0">
+                    <thead
+                      class="bg-surface-soft/70 text-[10px] uppercase text-text-muted sticky top-0"
+                    >
                       <tr>
                         <th class="p-2">Fecha/Hora</th>
                         <th class="p-2">Tipo</th>
@@ -4241,15 +5420,26 @@
                         <th class="p-2 text-right">Monto</th>
                       </tr>
                     </thead>
-                    <tbody class="divide-y divide-border-subtle font-mono text-[11px]">
+                    <tbody
+                      class="divide-y divide-border-subtle font-mono text-[11px]"
+                    >
                       {#each bcNotifications as n}
                         <tr>
                           <td class="p-2 text-text-muted">{n.date} {n.time}</td>
-                          <td class="p-2 font-bold">{n.paymentType} ({n.originBankCode})</td>
+                          <td class="p-2 font-bold"
+                            >{n.paymentType} ({n.originBankCode})</td
+                          >
                           <td class="p-2">{n.debtorID} · {n.clientPhone}</td>
-                          <td class="p-2">{n.originBankReference} / {n.destinyBankReference}</td>
-                          <td class="p-2 text-right font-black text-emerald-600 dark:text-emerald-400">
-                            {n.currencyCode} {Number(n.amount || 0).toLocaleString("es-VE", { minimumFractionDigits: 2 })}
+                          <td class="p-2"
+                            >{n.originBankReference} / {n.destinyBankReference}</td
+                          >
+                          <td
+                            class="p-2 text-right font-black text-emerald-600 dark:text-emerald-400"
+                          >
+                            {n.currencyCode}
+                            {Number(n.amount || 0).toLocaleString("es-VE", {
+                              minimumFractionDigits: 2,
+                            })}
                           </td>
                         </tr>
                       {/each}
@@ -4270,7 +5460,11 @@
             in:slide={{ duration: 150 }}
           >
             <div class="flex flex-wrap items-center justify-between gap-2">
-              <div class="flex items-center gap-2 font-black {bcLastResponse.success ? 'text-emerald-800 dark:text-emerald-300' : 'text-red-800 dark:text-red-300'}">
+              <div
+                class="flex items-center gap-2 font-black {bcLastResponse.success
+                  ? 'text-emerald-800 dark:text-emerald-300'
+                  : 'text-red-800 dark:text-red-300'}"
+              >
                 {#if bcLastResponse.success}
                   <CheckCircle2 size={16} />
                 {:else}
@@ -4278,7 +5472,9 @@
                 {/if}
                 <span>{bcLastResponse.message}</span>
               </div>
-              <div class="flex items-center gap-3 font-mono text-[10px] text-text-muted">
+              <div
+                class="flex items-center gap-3 font-mono text-[10px] text-text-muted"
+              >
                 {#if bcLastResponse.errorCode !== undefined}
                   <span>Cod: {bcLastResponse.errorCode}</span>
                 {/if}
@@ -4301,16 +5497,24 @@
             {/if}
 
             {#if bcShowRawJson}
-              <pre class="p-3 rounded-xl bg-surface-base border border-border-subtle text-[11px] font-mono text-text-base max-h-56 overflow-auto">{JSON.stringify(bcLastResponse.raw || bcLastResponse.data || bcLastResponse, null, 2)}</pre>
+              <pre
+                class="p-3 rounded-xl bg-surface-base border border-border-subtle text-[11px] font-mono text-text-base max-h-56 overflow-auto">{JSON.stringify(
+                  bcLastResponse.raw || bcLastResponse.data || bcLastResponse,
+                  null,
+                  2,
+                )}</pre>
             {/if}
           </div>
         {/if}
       </div>
 
       <!-- Footer -->
-      <div class="p-5 border-t border-border-subtle bg-surface-soft/60 flex items-center justify-between">
+      <div
+        class="p-5 border-t border-border-subtle bg-surface-soft/60 flex items-center justify-between"
+      >
         <span class="text-[11px] text-text-muted font-medium">
-          Autenticación automática WSO2 OAuth2 con renovación de token integrada.
+          Autenticación automática WSO2 OAuth2 con renovación de token
+          integrada.
         </span>
         <button
           type="button"

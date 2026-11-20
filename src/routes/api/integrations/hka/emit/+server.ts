@@ -145,7 +145,7 @@ export const POST: RequestHandler = async ({ request, locals, fetch }) => {
       }
     }
 
-    // Si es Nota de Crédito y viene profit_factura_origen, buscar su correlativo HKA emitido previamente
+    // Si es Nota de Crédito y viene profit_factura_origen, buscar su correlativo HKA emitido previamente o en Profit SQL
     if ((tipoDoc === '02' || tipoDoc === '03') && profitFacturaOrigen) {
       const history = await loadHistoryOnce();
       const origHka = history.find(
@@ -155,12 +155,65 @@ export const POST: RequestHandler = async ({ request, locals, fetch }) => {
       );
       if (origHka) {
         input.numeroFacturaAfectada = origHka.numero_documento;
-        if (origHka.serie !== undefined) {
-          input.serieFacturaAfectada = origHka.serie;
+        input.serieFacturaAfectada = origHka.serie ?? '';
+        if (!input.fechaFacturaAfectada && origHka.hka_fecha_asignacion) {
+          input.fechaFacturaAfectada = origHka.hka_fecha_asignacion;
         }
-      } else if (!input.numeroFacturaAfectada) {
+        if (input.montoFacturaAfectada === undefined && Number(origHka.monto_ves || 0) > 0) {
+          input.montoFacturaAfectada = Number(origHka.monto_ves);
+        }
+      } else {
         const cleanOrig = String(profitFacturaOrigen).trim();
-        input.numeroFacturaAfectada = cleanOrig.replace(/\D/g, '') || cleanOrig;
+        let resolvedDocNum = cleanOrig.replace(/\D/g, '').replace(/^0+(?=\d)/, '') || cleanOrig;
+
+        if (branchId) {
+          try {
+            const branch = await getBranchById(branchId, profile.allowed_branches, fetch);
+            if (branch && branch.agent_url) {
+              const agent = new AgentClient(
+                {
+                  slug: branch.id,
+                  agent_url: branch.agent_url,
+                  agent_api_key: branch.agent_token
+                },
+                profile,
+                fetch
+              );
+              const qOrig = `
+                SELECT TOP 1
+                  LTRIM(RTRIM(doc_num)) AS doc_num,
+                  CONVERT(varchar(10), fec_emis, 103) AS fec_emis_dmy,
+                  total_neto,
+                  LTRIM(RTRIM(ISNULL(campo3, ''))) AS hka_doc_num
+                FROM saFacturaVenta
+                WHERE LTRIM(RTRIM(doc_num)) = '${escapeSql(cleanOrig)}'
+              `;
+              const origRes = await agent.request<any[]>(`/query?sede=${encodeURIComponent(branch.id)}`, {
+                method: 'POST',
+                body: JSON.stringify({ query: qOrig })
+              });
+              const row = origRes.success && Array.isArray(origRes.data) ? origRes.data[0] : null;
+              if (row) {
+                const hkaDocField = String(row.hka_doc_num || '').trim();
+                if (/^\d+$/.test(hkaDocField)) {
+                  resolvedDocNum = hkaDocField;
+                }
+                if (!input.fechaFacturaAfectada && row.fec_emis_dmy) {
+                  input.fechaFacturaAfectada = String(row.fec_emis_dmy).trim();
+                }
+                if (input.montoFacturaAfectada === undefined && Number(row.total_neto || 0) > 0) {
+                  input.montoFacturaAfectada = Number(row.total_neto);
+                }
+              }
+            }
+          } catch (origErr: any) {
+            console.warn('[HKA EMIT] Error consultando factura origen en Profit SQL:', origErr?.message || origErr);
+          }
+        }
+
+        if (!input.numeroFacturaAfectada) {
+          input.numeroFacturaAfectada = resolvedDocNum;
+        }
       }
     }
 
@@ -259,7 +312,7 @@ export const POST: RequestHandler = async ({ request, locals, fetch }) => {
                     campo3 = '${safeDocHka}'${urlCamposSql}
                 WHERE LTRIM(RTRIM(co_tipo_doc)) = 'FACT' AND LTRIM(RTRIM(nro_doc)) = '${safeDocNum}';
               `;
-            } else if (tipoDoc === '03') {
+            } else if (tipoDoc === '02') {
               sqlUpdate = `
                 UPDATE saDevolucionCliente
                 SET n_control = ${safeControl ? `'${safeControl}'` : 'n_control'},
@@ -275,6 +328,16 @@ export const POST: RequestHandler = async ({ request, locals, fetch }) => {
                     campo3 = '${safeDocHka}'${urlCamposSql}
                 WHERE LTRIM(RTRIM(co_tipo_doc)) IN ('N/CR', 'NCR', 'DEVO')
                   AND (LTRIM(RTRIM(nro_doc)) = '${safeNcrNum}' OR (LTRIM(RTRIM(doc_orig)) = 'DEVO' AND LTRIM(RTRIM(nro_orig)) = '${safeDocNum}'));
+              `;
+            } else if (tipoDoc === '03') {
+              sqlUpdate = `
+                UPDATE saDocumentoVenta
+                SET n_control = ${safeControl ? `'${safeControl}'` : 'n_control'},
+                    campo1 = 'HKA-EMIT',
+                    campo2 = '${safeControl}',
+                    campo3 = '${safeDocHka}'${urlCamposSql}
+                WHERE LTRIM(RTRIM(co_tipo_doc)) IN ('N/DB', 'NDB')
+                  AND LTRIM(RTRIM(nro_doc)) = '${safeDocNum}';
               `;
             }
 

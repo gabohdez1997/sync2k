@@ -36,7 +36,7 @@ export interface HkaExtractedItem {
 }
 
 export interface HkaExtractedDocument {
-  tipoDocumento: string; // '01'=FACT, '02'=N/DB, '03'=N/CR
+  tipoDocumento: string; // '01'=FACT, '02'=N/CR, '03'=N/DB
   tipoProfitDoc: 'FACT' | 'N/DB' | 'N/CR';
   serie: string;
   numeroDocumento: string;
@@ -544,7 +544,7 @@ async function fetchSingleHkaDocumentDetail(
 
   const tipoDoc = String(idDoc.TipoDocumento || idDoc.tipoDocumento || asig.tipoDocumento || '01').trim();
   const tipoProfitDoc: 'FACT' | 'N/DB' | 'N/CR' =
-    tipoDoc === '03' ? 'N/CR' : tipoDoc === '02' ? 'N/DB' : 'FACT';
+    tipoDoc === '02' ? 'N/CR' : tipoDoc === '03' ? 'N/DB' : 'FACT';
 
   const fechaEmisionRaw = String(idDoc.FechaEmision || idDoc.fechaEmision || asig.fechaAsignacion || '').trim();
   const fechaEmisionIso = parseDmyToIso(fechaEmisionRaw);
@@ -1018,13 +1018,13 @@ export function buildHkaReplicationPlan(
 
     const nroDocAfectado = doc.numeroFacturaAfectada
       ? formatProfitDocNum(
-          doc.numeroFacturaAfectada,
-          doc.serieFacturaAfectada || doc.serie,
-          opts.pad_doc_num,
-          opts.doc_num_length,
-          ctx.serieFactura.prefijo,
-          opts.include_serie_prefix
-        )
+        doc.numeroFacturaAfectada,
+        doc.serieFacturaAfectada || doc.serie,
+        opts.pad_doc_num,
+        opts.doc_num_length,
+        ctx.serieFactura.prefijo,
+        opts.include_serie_prefix
+      )
       : null;
 
     if (doc.extractionError) {
@@ -1982,8 +1982,8 @@ export function generateHkaAuditExcelBuffer(plan: HkaReplicationPlan): Buffer {
     Accion_Precio_01: a.needs_price_sync
       ? `ASIGNAR PRECIO 01 (${a.co_mone_precio})`
       : a.has_price_in_profit
-      ? 'CONSERVAR PRECIO ACTUAL'
-      : 'SIN MUESTRA > 0',
+        ? 'CONSERVAR PRECIO ACTUAL'
+        : 'SIN MUESTRA > 0',
     Co_Art: a.co_art,
     Descripcion: a.art_des,
     Tipo: a.tipo === 'S' ? 'S - Servicio' : 'V - Bien',
@@ -2019,11 +2019,11 @@ export function generateHkaAuditExcelBuffer(plan: HkaReplicationPlan): Buffer {
   const warnRows =
     plan.warnings.length > 0
       ? plan.warnings.map((w) => ({
-          Severidad: w.severity.toUpperCase(),
-          Doc_Num_Profit: w.doc_num,
-          N_Control_SENIAT: w.n_control,
-          Mensaje: w.message
-        }))
+        Severidad: w.severity.toUpperCase(),
+        Doc_Num_Profit: w.doc_num,
+        N_Control_SENIAT: w.n_control,
+        Mensaje: w.message
+      }))
       : [{ Severidad: 'OK', Doc_Num_Profit: '-', N_Control_SENIAT: '-', Mensaje: 'Sin advertencias de validación.' }];
   const wsWarns = XLSX.utils.json_to_sheet(warnRows);
   wsWarns['!cols'] = [{ wch: 12 }, { wch: 18 }, { wch: 18 }, { wch: 85 }];

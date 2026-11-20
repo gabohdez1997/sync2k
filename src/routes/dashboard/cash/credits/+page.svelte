@@ -33,6 +33,7 @@
     ShoppingBag,
     Printer,
     ExternalLink,
+    Send,
   } from "lucide-svelte";
   import { toast } from "svelte-sonner";
   import { goto } from "$app/navigation";
@@ -632,7 +633,7 @@
                 branch_id: filterSede,
                 monto_usd: Number(totals.totalUSD || 0),
                 input: {
-                  tipoDocumento: "03",
+                  tipoDocumento: "02",
                   comprador: {
                     tipoIdentificacion: buyerId.tipoIdentificacion,
                     numeroIdentificacion: buyerId.numeroIdentificacion,
@@ -648,7 +649,11 @@
                   tipoDePago: "01",
                   formaDePagoDescripcion: "NOTA DE CREDITO",
                   observacion: motDevolucion,
-                  numeroFacturaAfectada: selectedInvoice.doc_num.trim(),
+                  numeroFacturaAfectada:
+                    selectedInvoice.hka_doc_num &&
+                    /^\d+$/.test(String(selectedInvoice.hka_doc_num).trim())
+                      ? String(selectedInvoice.hka_doc_num).trim()
+                      : selectedInvoice.doc_num.trim(),
                   fechaFacturaAfectada: fechaAfectada,
                   montoFacturaAfectada: montoAfectado,
                   comentarioFacturaAfectada: motDevolucion,
@@ -725,6 +730,160 @@
       );
     } finally {
       printingCreditDoc = null;
+    }
+  }
+
+  let emittingHkaDev = $state<string | null>(null);
+
+  async function emitCreditToHkaFromHistory(dev: any) {
+    if (emittingHkaDev) return;
+    const docNum = String(dev?.doc_num || "").trim();
+    if (!docNum) return;
+
+    const branchId =
+      dev.sede_id || dev._branch_id || filterSede || data.selectedBranchId;
+    if (!branchId) {
+      toast.error("No se pudo determinar la sucursal de la devolución.");
+      return;
+    }
+
+    emittingHkaDev = docNum;
+    toast.info(
+      `Emitiendo Nota de Crédito de Devolución ${docNum} en The Factory HKA...`,
+    );
+
+    try {
+      const detRes = await fetch(
+        `/api/agent/credits/${encodeURIComponent(docNum)}?branch_id=${encodeURIComponent(branchId)}`,
+      );
+      const detJson = await detRes.json();
+      const fullDev =
+        detJson.success && Array.isArray(detJson.data) ? detJson.data[0] : null;
+
+      if (
+        !fullDev ||
+        !Array.isArray(fullDev.renglones) ||
+        fullDev.renglones.length === 0
+      ) {
+        throw new Error(
+          detJson.message ||
+            "No se pudo obtener el detalle o los renglones de la devolución.",
+        );
+      }
+
+      const origInfo = getOriginDoc(fullDev) || getOriginDoc(dev);
+      const profitFacturaOrigen = String(
+        origInfo?.num ||
+          fullDev.num_doc_orig ||
+          fullDev.renglones.find((r: any) => r.num_doc)?.num_doc ||
+          "",
+      ).trim();
+
+      const buyerId = parseBuyerIdentification(
+        fullDev.rif || dev.rif,
+        fullDev.co_cli || dev.co_cli,
+      );
+      const effTasa = Number(fullDev.tasa || 0) > 1 ? Number(fullDev.tasa) : 1;
+      const montoUsd =
+        effTasa > 1
+          ? Number((Number(fullDev.total_neto || 0) / effTasa).toFixed(2))
+          : undefined;
+
+      const hkaItems = fullDev.renglones.map((r: any) => {
+        const pImp = Number(r.porc_imp ?? 0);
+        const tipoImp = String(r.tipo_imp || "").trim();
+        const isExento =
+          pImp === 0 || tipoImp === "0" || tipoImp === "5" || tipoImp === "6";
+        return {
+          codigo: String(r.co_art || "ART").trim(),
+          descripcion: String(r.art_des || "ARTICULO").trim(),
+          cantidad: Number(r.cantidad || 1),
+          precioUnitario: Number(Number(r.precio || 0).toFixed(2)),
+          tasaIVA: isExento ? 0 : pImp,
+          codigoImpuesto: (isExento ? "E" : "G") as "E" | "G",
+          unidadMedida: String(r.co_uni || r.unidad || "UNI").trim(),
+        };
+      });
+
+      const motDevolucion = String(
+        fullDev.comentario || fullDev.descrip || `Devolución ${docNum}`,
+      ).trim();
+
+      const hkaRes = await fetch("/api/integrations/hka/emit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          require_active: true,
+          profit_doc_num: docNum,
+          profit_ncr_num: String(
+            fullDev.nro_doc || dev.nro_doc || docNum,
+          ).trim(),
+          profit_factura_origen: profitFacturaOrigen || undefined,
+          branch_id: branchId,
+          monto_usd: montoUsd,
+          input: {
+            tipoDocumento: "02",
+            comprador: {
+              tipoIdentificacion: buyerId.tipoIdentificacion,
+              numeroIdentificacion: buyerId.numeroIdentificacion,
+              razonSocial:
+                fullDev.cli_des || dev.cli_des || fullDev.co_cli || dev.co_cli,
+              direccion: fullDev.direc1 || "VENEZUELA",
+              telefono: fullDev.telefonos || "",
+              correo: fullDev.email || "",
+            },
+            items: hkaItems,
+            moneda: "VES",
+            tipoDePago: "01",
+            formaDePagoDescripcion: "NOTA DE CREDITO",
+            observacion: motDevolucion,
+            numeroFacturaAfectada: profitFacturaOrigen || docNum,
+            comentarioFacturaAfectada: motDevolucion,
+          },
+        }),
+      });
+
+      const hkaJson = await hkaRes.json();
+      if (hkaJson.success && hkaJson.hkaResult) {
+        const patchHka = (target: any) => {
+          if (!target) return;
+          target.campo1 = "HKA-EMIT";
+          target.hka_control = hkaJson.hkaResult.numeroControl || "";
+          target.hka_doc_num = hkaJson.hkaResult.numeroDocumento || "";
+          target.hka_url = hkaJson.hkaResult.urlConsulta || "";
+          if (hkaJson.hkaResult.numeroControl) {
+            target.n_control = hkaJson.hkaResult.numeroControl;
+          }
+        };
+
+        patchHka(dev);
+        const listMatch = historyList.find(
+          (item) => String(item.doc_num || "").trim() === docNum,
+        );
+        if (listMatch && listMatch !== dev) patchHka(listMatch);
+        if (
+          selectedDetailDev &&
+          String(selectedDetailDev.doc_num || "").trim() === docNum &&
+          selectedDetailDev !== dev
+        ) {
+          patchHka(selectedDetailDev);
+        }
+
+        toast.success(
+          `Nota de Crédito HKA #${hkaJson.hkaResult.numeroDocumento} emitida (Control: ${hkaJson.hkaResult.numeroControl}).`,
+        );
+      } else {
+        toast.error(
+          `The Factory HKA reportó: ${hkaJson.message || "Error al emitir Nota de Crédito"}`,
+        );
+      }
+    } catch (err: any) {
+      console.error("Error emitiendo N/CR a HKA desde historial:", err);
+      toast.error(
+        err?.message || "No se pudo emitir la Nota de Crédito en HKA.",
+      );
+    } finally {
+      emittingHkaDev = null;
     }
   }
 
@@ -2074,6 +2233,27 @@
                             </a>
                           {/if}
 
+                          <!-- Emitir N/CR en HKA -->
+                          {#if data.hkaActive && !dev.anulado && !actionDevHkaUrl && dev.campo1 !== "HKA-EMIT" && dev.campo1 !== "HKA-SYNC"}
+                            <button
+                              type="button"
+                              onclick={() => emitCreditToHkaFromHistory(dev)}
+                              disabled={emittingHkaDev ===
+                                String(dev.doc_num || "").trim()}
+                              class="p-2 text-emerald-500 hover:text-emerald-400 hover:bg-emerald-500/10 rounded-xl transition-all cursor-pointer disabled:opacity-50"
+                              title="Emitir Nota de Crédito Electrónica en The Factory HKA"
+                            >
+                              {#if emittingHkaDev === String(dev.doc_num || "").trim()}
+                                <Loader2
+                                  size={18}
+                                  class="animate-spin text-emerald-500"
+                                />
+                              {:else}
+                                <Send size={18} />
+                              {/if}
+                            </button>
+                          {/if}
+
                           <!-- Reimprimir Ticket Devolución Almacén -->
                           <button
                             onclick={() => handlePrintCreditTicket(dev)}
@@ -2383,6 +2563,24 @@
               <Printer size={16} />
               <span>Imprimir PDF</span>
             </a>
+          {/if}
+          {#if data.hkaActive && !selectedDetailDev.anulado && !getDevHkaUrl(selectedDetailDev) && selectedDetailDev.campo1 !== "HKA-EMIT" && selectedDetailDev.campo1 !== "HKA-SYNC"}
+            <button
+              type="button"
+              onclick={() => emitCreditToHkaFromHistory(selectedDetailDev)}
+              disabled={emittingHkaDev ===
+                String(selectedDetailDev.doc_num || "").trim()}
+              class="p-2 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-500 hover:text-emerald-400 transition-colors cursor-pointer flex items-center gap-1.5 text-xs font-bold px-3 border border-emerald-500/20 disabled:opacity-50"
+              title="Emitir Nota de Crédito Electrónica en The Factory HKA"
+            >
+              {#if emittingHkaDev === String(selectedDetailDev.doc_num || "").trim()}
+                <Loader2 size={16} class="animate-spin" />
+                <span>Emitiendo...</span>
+              {:else}
+                <Send size={16} />
+                <span>Emitir N/CR en HKA</span>
+              {/if}
+            </button>
           {/if}
           <button
             onclick={() => (showDetailModal = false)}

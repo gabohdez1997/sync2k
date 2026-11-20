@@ -19,6 +19,7 @@
     ArrowUp,
     ArrowDown,
     ExternalLink,
+    Send,
   } from "lucide-svelte";
   import { goto } from "$app/navigation";
   import { page } from "$app/stores";
@@ -151,7 +152,155 @@
   }
 
   // Lista ordenada devuelta por el servidor
-  let sortedInvoices = $derived(data.invoices || []);
+  let sortedInvoices = $state<any[]>([]);
+  $effect(() => {
+    sortedInvoices = data.invoices || [];
+  });
+
+  let emittingHkaDoc = $state<string | null>(null);
+
+  function parseBuyerIdentification(
+    rifRaw?: string,
+    fallbackCode?: string,
+  ): {
+    tipoIdentificacion: "V" | "J" | "G" | "E" | "P";
+    numeroIdentificacion: string;
+  } {
+    const clean = String(rifRaw || fallbackCode || "")
+      .trim()
+      .toUpperCase();
+    const match = clean.match(/^([VJGEP])[-_.\s]*([0-9]+)/);
+    if (match) {
+      return {
+        tipoIdentificacion: match[1] as "V" | "J" | "G" | "E" | "P",
+        numeroIdentificacion: match[2],
+      };
+    }
+    const digits = clean.replace(/[^0-9]/g, "");
+    return {
+      tipoIdentificacion: "V",
+      numeroIdentificacion: digits || "00000000",
+    };
+  }
+
+  async function emitInvoiceToHkaFromHistory(invoice: any) {
+    if (emittingHkaDoc) return;
+    const docNum = String(invoice.doc_num || "").trim();
+    if (!docNum) return;
+
+    const branchId =
+      invoice.sede_id ||
+      invoice._branch_id ||
+      filterSede ||
+      data.selectedBranchId;
+    if (!branchId) {
+      toast.error("No se pudo determinar la sucursal de la factura.");
+      return;
+    }
+
+    emittingHkaDoc = docNum;
+    toast.info(`Emitiendo Factura ${docNum} en The Factory HKA...`);
+
+    try {
+      const detRes = await fetch(
+        `/api/agent/facturas/${encodeURIComponent(docNum)}?branch_id=${encodeURIComponent(branchId)}`,
+      );
+      const detJson = await detRes.json();
+      const fac =
+        detJson.success && Array.isArray(detJson.data) ? detJson.data[0] : null;
+
+      if (!fac || !Array.isArray(fac.renglones) || fac.renglones.length === 0) {
+        throw new Error(
+          detJson.message ||
+            "No se pudo cargar el detalle o los renglones de la factura.",
+        );
+      }
+
+      const buyerId = parseBuyerIdentification(fac.rif, fac.co_cli);
+      const effTasa =
+        Number(fac.tasa || 0) > 1
+          ? Number(fac.tasa)
+          : Number(fac.tasa_fecha || 0) > 1
+            ? Number(fac.tasa_fecha)
+            : 1;
+      const montoUsd =
+        effTasa > 1
+          ? Number((Number(fac.total_neto || 0) / effTasa).toFixed(2))
+          : undefined;
+
+      const hkaItems = fac.renglones.map((r: any) => {
+        const pImp = Number(r.porc_imp ?? 0);
+        const tipoImp = String(r.tipo_imp || "").trim();
+        const isExento =
+          pImp === 0 || tipoImp === "0" || tipoImp === "5" || tipoImp === "6";
+        return {
+          codigo: String(r.co_art || "ART").trim(),
+          descripcion: String(r.art_des || "ARTICULO").trim(),
+          cantidad: Number(r.cantidad || 1),
+          precioUnitario: Number(Number(r.precio || 0).toFixed(2)),
+          tasaIVA: isExento ? 0 : pImp,
+          codigoImpuesto: (isExento ? "E" : "G") as "E" | "G",
+          unidadMedida: String(r.co_uni || "UNI").trim(),
+        };
+      });
+
+      const condUpper = String(fac.co_cond || "")
+        .trim()
+        .toUpperCase();
+      const isContado =
+        condUpper === "01" || condUpper === "CONTADO" || condUpper === "00";
+
+      const hkaRes = await fetch("/api/integrations/hka/emit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          require_active: true,
+          profit_doc_num: docNum,
+          branch_id: branchId,
+          monto_usd: montoUsd,
+          input: {
+            tipoDocumento: "01",
+            comprador: {
+              tipoIdentificacion: buyerId.tipoIdentificacion,
+              numeroIdentificacion: buyerId.numeroIdentificacion,
+              razonSocial: fac.cli_des || fac.co_cli,
+              direccion: fac.direc1 || "VENEZUELA",
+              telefono: fac.telefonos || "",
+              correo: fac.email || "",
+            },
+            items: hkaItems,
+            moneda: "VES",
+            tipoDePago: isContado ? "01" : "02",
+            formaDePagoDescripcion: isContado ? "CONTADO" : "CREDITO",
+            observacion: fac.descrip || `FACTURA PROFIT ${docNum}`,
+          },
+        }),
+      });
+
+      const hkaJson = await hkaRes.json();
+      if (hkaJson.success && hkaJson.hkaResult) {
+        invoice.campo1 = "HKA-EMIT";
+        invoice.hka_control = hkaJson.hkaResult.numeroControl || "";
+        invoice.hka_doc_num = hkaJson.hkaResult.numeroDocumento || "";
+        invoice.hka_url = hkaJson.hkaResult.urlConsulta || "";
+        if (hkaJson.hkaResult.numeroControl) {
+          invoice.n_control = hkaJson.hkaResult.numeroControl;
+        }
+        toast.success(
+          `Factura HKA #${hkaJson.hkaResult.numeroDocumento} emitida (Control: ${hkaJson.hkaResult.numeroControl}).`,
+        );
+      } else {
+        toast.error(
+          `The Factory HKA reportó: ${hkaJson.message || "Error al emitir factura"}`,
+        );
+      }
+    } catch (err: any) {
+      console.error("Error emitiendo factura a HKA desde historial:", err);
+      toast.error(err?.message || "No se pudo emitir la factura en HKA.");
+    } finally {
+      emittingHkaDoc = null;
+    }
+  }
 
   function changePage(p: number) {
     const params = new URLSearchParams($page.url.searchParams);
@@ -752,6 +901,27 @@
                       >
                         <Printer size={18} />
                       </a>
+                    {/if}
+
+                    <!-- Emitir en HKA (solo fiscales pendientes) -->
+                    {#if data.hkaActive && !invoice.anulado && isFiscalInvoice(invoice) && !hkaUrl && invoice.campo1 !== "HKA-EMIT" && invoice.campo1 !== "HKA-SYNC"}
+                      <button
+                        type="button"
+                        onclick={() => emitInvoiceToHkaFromHistory(invoice)}
+                        disabled={emittingHkaDoc ===
+                          String(invoice.doc_num || "").trim()}
+                        class="p-2 text-emerald-500 hover:text-emerald-400 hover:bg-emerald-500/10 rounded-xl transition-all cursor-pointer disabled:opacity-50"
+                        title="Emitir Factura Electrónica en The Factory HKA"
+                      >
+                        {#if emittingHkaDoc === String(invoice.doc_num || "").trim()}
+                          <Loader2
+                            size={18}
+                            class="animate-spin text-emerald-500"
+                          />
+                        {:else}
+                          <Send size={18} />
+                        {/if}
+                      </button>
                     {/if}
 
                     <!-- Notificación de Anulación en Despacho -->

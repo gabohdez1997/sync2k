@@ -17,7 +17,7 @@ export interface EmittedHkaInvoice {
   cliente_cedula: string;
   tipo_identificacion?: string;
   numero_identificacion?: string;
-  tipo_documento: string; // '01' Factura, '02' Nota Débito, '03' Nota Crédito
+  tipo_documento: string; // '01' Factura, '02' Nota Crédito, '03' Nota Débito
   serie: string;
   numero_documento: string; // Correlativo fiscal asignado por HKA
   numero_control: string; // Número de control SENIAT (ej: 00-00000007)

@@ -43,7 +43,7 @@ export const DEFAULT_INTEGRATIONS: Record<string, IntegrationConfig> = {
       emisor_telefono: '02129000000',
       emisor_correo: 'FACTURACION@ALDANET.COM.VE',
       correo_adicional: '',
-      serie_default: 'A',
+      serie_default: '',
       moneda_default: 'VES'
     },
     last_tested_at: null,

@@ -5,13 +5,16 @@ import { supabaseAdmin } from '$lib/server/supabase';
 import { fail } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
 import { sendCancellationNotificationTicket } from '$lib/server/billing-printer';
+import { getHkaConfig } from '$lib/server/services/hka';
 
 export const load: PageServerLoad = protectLoad('cash_billing', async ({ url, locals, fetch }) => {
     const profile = (locals as any).profile;
     const allowedBranches = profile.allowed_branches || [];
-    
+    const hkaConfig = await getHkaConfig(fetch).catch(() => null);
+    const hkaActive = Boolean(hkaConfig?.is_active && hkaConfig?.token_empresa && hkaConfig?.token_clave);
+
     if (allowedBranches.length === 0) {
-        return { invoices: [], branches: [], error: 'No tienes sucursales asignadas.' };
+        return { invoices: [], branches: [], hkaActive, error: 'No tienes sucursales asignadas.' };
     }
 
     const urlBranchId = url.searchParams.get('branch_id');
@@ -20,7 +23,7 @@ export const load: PageServerLoad = protectLoad('cash_billing', async ({ url, lo
         : allowedBranches[0];
 
     if (!selectedBranch || !selectedBranch.agent_url) {
-        return { invoices: [], branches: allowedBranches, error: 'Sucursal no configurada.' };
+        return { invoices: [], branches: allowedBranches, hkaActive, error: 'Sucursal no configurada.' };
     }
 
     const agentClient = new AgentClient(selectedBranch, profile, fetch);
@@ -49,6 +52,7 @@ export const load: PageServerLoad = protectLoad('cash_billing', async ({ url, lo
             return {
                 invoices: [],
                 branches: allowedBranches,
+                hkaActive,
                 error: 'Tu perfil no tiene asociado un código de Cajero/Usuario de Profit Plus. No puedes visualizar facturas propias ni ajenas.',
                 canSeeOthers,
                 canVoid,
@@ -78,6 +82,7 @@ export const load: PageServerLoad = protectLoad('cash_billing', async ({ url, lo
             return {
                 invoices: [],
                 branches: allowedBranches,
+                hkaActive,
                 error: res.message || 'Error desconocido del Agente',
                 canSeeOthers, canVoid
             };
@@ -122,6 +127,7 @@ export const load: PageServerLoad = protectLoad('cash_billing', async ({ url, lo
             },
             branches: allowedBranches,
             selectedBranchId: selectedBranch.id,
+            hkaActive,
             canSeeOthers,
             canVoid,
             canDelete,
@@ -132,6 +138,7 @@ export const load: PageServerLoad = protectLoad('cash_billing', async ({ url, lo
         return {
             invoices: [],
             branches: allowedBranches,
+            hkaActive,
             error: 'Error al conectar con el Agente: ' + e.message,
             canSeeOthers: false,
             canVoid: false,
