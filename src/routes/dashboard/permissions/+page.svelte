@@ -469,71 +469,6 @@
     return false;
   }
 
-  function isControlChecked(opt: any): boolean {
-    const p = rolePermissions[opt.id];
-    if (!p) return false;
-    if (opt.onlyRead) {
-      return p.read && (opt.hasOthers ? p.others : true);
-    }
-    if (opt.onlyReadAndEdit) {
-      return p.read && p.update && (opt.hasOthers ? p.others : true);
-    }
-    if (!p.read || !p.create) return false;
-    if (!opt.excludeUpdate && !p.update) return false;
-    if (!opt.excludeDelete && !p.delete) return false;
-    if (opt.hasOthers && !p.others) return false;
-    if (opt.hasVoid && !p.void) return false;
-    if (opt.hasAuthorize && !p.authorize) return false;
-    return true;
-  }
-
-  function toggleAll(optionId: string) {
-    const p = rolePermissions[optionId];
-    const option = navStructure
-      .flatMap((n) => n.options)
-      .find((o) => o.id === optionId);
-    if (!option || (option as any).onlyRead || option.id === "cash_exchange") return;
-
-    const supportsOthers = (option as any)?.hasOthers || false;
-    const supportsVoid = (option as any)?.hasVoid || false;
-    const supportsAuthorize = (option as any)?.hasAuthorize || false;
-    const excludesDelete = (option as any)?.excludeDelete || false;
-    const excludesUpdate = (option as any)?.excludeUpdate || false;
-    const onlyReadAndEdit = (option as any)?.onlyReadAndEdit || false;
-
-    let anyOff = false;
-    if (onlyReadAndEdit) {
-      anyOff = !p.read || !p.update || (supportsOthers && !p.others);
-      rolePermissions[optionId] = {
-        read: anyOff,
-        create: false,
-        update: anyOff,
-        delete: false,
-        void: false,
-        others: supportsOthers ? anyOff : false,
-        authorize: supportsAuthorize ? anyOff : false,
-      };
-    } else {
-      anyOff =
-        !p.read ||
-        !p.create ||
-        (!excludesUpdate && !p.update) ||
-        (!excludesDelete && !p.delete) ||
-        (supportsOthers && !p.others) ||
-        (supportsVoid && !p.void) ||
-        (supportsAuthorize && !p.authorize);
-      rolePermissions[optionId] = {
-        read: anyOff,
-        create: anyOff,
-        update: excludesUpdate ? false : anyOff,
-        delete: excludesDelete ? false : anyOff,
-        void: supportsVoid ? anyOff : false,
-        others: supportsOthers ? anyOff : false,
-        authorize: supportsAuthorize ? anyOff : false,
-      };
-    }
-  }
-
   function handleCheckboxChange(optionId: string, action: string) {
     if (action !== "read") {
       const p = rolePermissions[optionId];
@@ -887,9 +822,10 @@
         >
           <Info size={18} class="text-brand-500 shrink-0 mt-0.5" />
           <p class="text-[10px] text-text-muted leading-relaxed">
-            Al activar <strong>Crear</strong>, <strong>Editar</strong>, 
-            <strong>Eliminar</strong> o <strong>Anular</strong>, el permiso de <strong>Lectura</strong> se
-            habilita automáticamente.
+            Al activar <strong>Crear</strong>, <strong>Editar</strong>,
+            <strong>Eliminar</strong>, <strong>Anular</strong> o
+            <strong>Autorizar</strong>, el permiso de <strong>Lectura</strong>
+            se habilita automáticamente.
           </p>
         </div>
       </div>
@@ -900,49 +836,53 @@
       <div
         class="bg-surface-raised rounded-3xl border border-border-subtle overflow-hidden shadow-xl"
       >
-        <div class="overflow-x-auto pb-4">
+        <div
+          class="overflow-auto max-h-[calc(100vh-14rem)] min-h-[420px] custom-scrollbar"
+        >
           <table
-            class="w-full min-w-[700px] text-left border-separate border-spacing-0"
+            class="w-full min-w-[620px] text-left border-separate border-spacing-0"
           >
             <thead>
-              <tr class="bg-surface-base/50">
+              <tr>
                 <th
-                  class="px-6 py-4 text-xs font-bold uppercase tracking-wider text-text-muted border-b border-border-subtle sticky left-0 bg-surface-raised z-20"
+                  class="px-5 py-3.5 text-xs font-bold uppercase tracking-wider text-text-muted border-b border-border-subtle sticky left-0 top-0 bg-surface-raised z-40 shadow-[0_1px_0_0_var(--border-color)]"
                   >Opción</th
                 >
                 <th
-                  class="px-6 py-4 text-xs font-bold uppercase tracking-wider text-text-muted text-center border-b border-border-subtle"
-                  >Control</th
-                >
-                <th
-                  class="px-6 py-4 text-xs font-bold uppercase tracking-wider text-text-muted text-center border-b border-border-subtle"
+                  class="px-3 py-3.5 text-xs font-bold uppercase tracking-wider text-text-muted text-center border-b border-border-subtle sticky top-0 z-30 bg-surface-raised shadow-[0_1px_0_0_var(--border-color)]"
                   >Leer</th
                 >
                 <th
-                  class="px-6 py-4 text-xs font-bold uppercase tracking-wider text-text-muted text-center border-b border-border-subtle"
+                  class="px-3 py-3.5 text-xs font-bold uppercase tracking-wider text-text-muted text-center border-b border-border-subtle sticky top-0 z-30 bg-surface-raised shadow-[0_1px_0_0_var(--border-color)]"
                   >Crear</th
                 >
                 <th
-                  class="px-6 py-4 text-xs font-bold uppercase tracking-wider text-text-muted text-center border-b border-border-subtle"
+                  class="px-3 py-3.5 text-xs font-bold uppercase tracking-wider text-text-muted text-center border-b border-border-subtle sticky top-0 z-30 bg-surface-raised shadow-[0_1px_0_0_var(--border-color)]"
                   >Editar</th
                 >
                 <th
-                  class="px-6 py-4 text-xs font-bold uppercase tracking-wider text-text-muted text-center border-b border-border-subtle"
+                  class="px-3 py-3.5 text-xs font-bold uppercase tracking-wider text-text-muted text-center border-b border-border-subtle sticky top-0 z-30 bg-surface-raised shadow-[0_1px_0_0_var(--border-color)]"
                   >Eliminar</th
                 >
                 <th
-                  class="px-6 py-4 text-xs font-bold uppercase tracking-wider text-text-muted text-center border-b border-border-subtle"
+                  class="px-3 py-3.5 text-xs font-bold uppercase tracking-wider text-text-muted text-center border-b border-border-subtle sticky top-0 z-30 bg-surface-raised shadow-[0_1px_0_0_var(--border-color)]"
                   >Anular</th
                 >
                 <th
-                  class="px-6 py-4 text-xs font-bold uppercase tracking-wider text-text-muted text-center border-b border-border-subtle"
+                  class="px-3 py-3.5 text-xs font-bold uppercase tracking-wider text-text-muted text-center border-b border-border-subtle sticky top-0 z-30 bg-surface-raised shadow-[0_1px_0_0_var(--border-color)]"
                   >Terceros</th
                 >
                 <th
-                  class="px-6 py-4 text-xs font-bold uppercase tracking-wider text-amber-500 text-center border-b border-border-subtle"
-                  title="Permite aprobar con su clave la edición manual de precios o retenciones"
-                  >Autorizar</th
+                  class="px-3 py-2.5 text-xs font-bold uppercase tracking-wider text-text-muted text-center border-b border-border-subtle sticky top-0 z-30 bg-surface-raised shadow-[0_1px_0_0_var(--border-color)]"
+                  title="Permite autorizar con clave la edición de montos en Cotizaciones, Pedidos, Cobros y Pagos"
                 >
+                  <div class="flex flex-col items-center leading-tight">
+                    <span>Autorizar</span>
+                    <span class="text-[9px] font-semibold tracking-normal opacity-80"
+                      >Montos</span
+                    >
+                  </div>
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -953,8 +893,8 @@
                   onclick={() => toggleCategory(category.id)}
                 >
                   <td
-                    colspan="9"
-                    class="px-6 py-3 border-b border-border-subtle sticky left-0 bg-surface-raised/90 backdrop-blur-sm z-10"
+                    colspan="8"
+                    class="px-5 py-3 border-b border-border-subtle sticky left-0 bg-surface-raised/95 backdrop-blur-sm z-10"
                   >
                     <div class="flex items-center justify-between">
                       <div class="flex items-center gap-3">
@@ -988,7 +928,7 @@
                       transition:slide={{ duration: 200 }}
                     >
                       <td
-                        class="px-6 py-4 border-b border-border-subtle pl-12 sticky left-0 bg-surface-raised z-10"
+                        class="px-5 py-4 border-b border-border-subtle pl-10 sticky left-0 bg-surface-raised z-10"
                       >
                         <span
                           class="text-sm font-medium text-text-base whitespace-nowrap"
@@ -996,36 +936,9 @@
                         >
                       </td>
 
-                      <!-- Control Total Toggle -->
-                      <td
-                        class="px-6 py-4 text-center border-b border-border-subtle"
-                      >
-                        {#if opt.id !== "cash_exchange" && !(opt as any).onlyRead}
-                          <button
-                            type="button"
-                            onclick={() => toggleAll(opt.id)}
-                            class="w-6 h-6 rounded-lg border-2 border-brand-500/30 flex items-center justify-center transition-all {isControlChecked(opt)
-                              ? 'bg-brand-500 border-brand-500'
-                              : 'hover:bg-brand-500/10'}"
-                          >
-                            {#if isControlChecked(opt)}
-                              <div in:fade={{ duration: 100 }}>
-                                <Check
-                                  size={14}
-                                  class="text-white"
-                                  strokeWidth={4}
-                                />
-                              </div>
-                            {/if}
-                          </button>
-                        {:else}
-                          <span class="text-[9px] text-text-muted/20">—</span>
-                        {/if}
-                      </td>
-
                       {#each ["read", "create", "update", "delete", "void", "others", "authorize"] as action}
                         <td
-                          class="px-6 py-4 text-center border-b border-border-subtle"
+                          class="px-3 py-4 text-center border-b border-border-subtle"
                         >
                           {#if isActionAllowed(opt, action)}
                             <label
@@ -1082,4 +995,13 @@
   </div>
 </div>
 
-<style></style>
+<style>
+  .custom-scrollbar::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    background: var(--border-bold);
+    border-radius: 10px;
+  }
+</style>

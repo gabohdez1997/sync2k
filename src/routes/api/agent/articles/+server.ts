@@ -24,19 +24,11 @@ export const GET: RequestHandler = async ({ url, locals, fetch }) => {
 
 		const params = new URLSearchParams(url.search);
 		const rawSearch = (params.get('search') || '').trim();
-		const rawLinea = (params.get('linea') || '').trim();
 		const rawCoArt = (params.get('co_art') || '').trim();
 		const rawPage = Number.parseInt(params.get('page') || '1', 10);
 		const rawLimit = Number.parseInt(params.get('limit') || '12', 10);
 		const sort = (params.get('sort') || '').trim();
 		const isPriceSort = sort === 'price_asc' || sort === 'price_desc';
-
-		// Detección de servicios: Línea 09 o búsquedas que empiezan por 09
-		const isServiceSearch = rawLinea === '09' || rawSearch.startsWith('09');
-
-		if (isServiceSearch) {
-			params.set('in_stock', 'all'); 
-		}
 
 		// Normalizar query para el endpoint /articulos/search del agente.
 		const agentParams = new URLSearchParams();
@@ -65,7 +57,7 @@ export const GET: RequestHandler = async ({ url, locals, fetch }) => {
 			agentParams.set('search', rawSearch);
 		}
 
-		if (isServiceSearch || rawCoArt || params.get('in_stock') === 'all') {
+		if (rawCoArt || params.get('in_stock') === 'all') {
 			agentParams.set('in_stock', 'all');
 		}
 

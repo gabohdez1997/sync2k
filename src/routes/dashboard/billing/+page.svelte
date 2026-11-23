@@ -51,22 +51,27 @@
     urlConsulta?: string;
   } | null>(null);
 
-  function parseBuyerIdentification(rifRaw?: string, fallbackCode?: string): {
-    tipoIdentificacion: 'V' | 'J' | 'G' | 'E' | 'P';
+  function parseBuyerIdentification(
+    rifRaw?: string,
+    fallbackCode?: string,
+  ): {
+    tipoIdentificacion: "V" | "J" | "G" | "E" | "P";
     numeroIdentificacion: string;
   } {
-    const clean = String(rifRaw || fallbackCode || '').trim().toUpperCase();
+    const clean = String(rifRaw || fallbackCode || "")
+      .trim()
+      .toUpperCase();
     const match = clean.match(/^([VJGEP])[-_.\s]*([0-9]+)/);
     if (match) {
       return {
-        tipoIdentificacion: match[1] as 'V' | 'J' | 'G' | 'E' | 'P',
-        numeroIdentificacion: match[2]
+        tipoIdentificacion: match[1] as "V" | "J" | "G" | "E" | "P",
+        numeroIdentificacion: match[2],
       };
     }
-    const digits = clean.replace(/[^0-9]/g, '');
+    const digits = clean.replace(/[^0-9]/g, "");
     return {
-      tipoIdentificacion: 'V',
-      numeroIdentificacion: digits || '00000000'
+      tipoIdentificacion: "V",
+      numeroIdentificacion: digits || "00000000",
     };
   }
   const uniqueOrigins = $derived.by(() => {
@@ -84,12 +89,12 @@
 
   const activeCoVen = $derived.by(() => {
     const firstLine = billingLines.find((l) => l.checked);
-    return firstLine ? firstLine.co_ven : (selectedClient?.co_ven || null);
+    return firstLine ? firstLine.co_ven : selectedClient?.co_ven || null;
   });
 
   const activeVenDes = $derived.by(() => {
     const firstLine = billingLines.find((l) => l.checked);
-    return firstLine ? firstLine.ven_des : (selectedClient?.ven_des || null);
+    return firstLine ? firstLine.ven_des : selectedClient?.ven_des || null;
   });
 
   let importedOrdersInfo = $state<Record<string, { descrip: string }>>({});
@@ -110,12 +115,15 @@
 
   // Branch Confirmation Modal State for Service items
   let showServiceSucuModal = $state(false);
-  let pendingSaveResolve = $state<((value: string | null) => void) | null>(null);
+  let pendingSaveResolve = $state<((value: string | null) => void) | null>(
+    null,
+  );
 
   const selectedBranchConfig = $derived(
     data.branches?.find(
-      (b: any) => String(b.id).toLowerCase() === String(filterSede).toLowerCase()
-    )
+      (b: any) =>
+        String(b.id).toLowerCase() === String(filterSede).toLowerCase(),
+    ),
   );
 
   const allowEditablePrices = $derived(
@@ -123,8 +131,8 @@
       selectedBranchConfig?.allow_editable_prices ??
         selectedBranchConfig?.sql_config?.profit_defaults
           ?.allow_editable_prices ??
-        false
-    )
+        false,
+    ),
   );
 
   let priceAuthModal = $state<{
@@ -156,7 +164,7 @@
 
   function applyAuthorizedBillingPrice(
     newVal: number,
-    authorizer: { email: string; full_name: string }
+    authorizer: { email: string; full_name: string },
   ) {
     const idx = priceAuthModal.lineIndex;
     const line = billingLines[idx];
@@ -189,7 +197,7 @@
       (c: any) =>
         c.is_default === true ||
         String(c.is_default) === "true" ||
-        c.default === true
+        c.default === true,
     );
     return found ? found.code : "";
   });
@@ -199,7 +207,7 @@
       (c: any) =>
         c.is_default === false ||
         String(c.is_default) === "false" ||
-        !c.is_default
+        !c.is_default,
     );
     return found ? found.code : "";
   });
@@ -238,6 +246,18 @@
     };
   });
 
+  const EXEMPT_TAX_CODES = ["0", "4", "5", "6", "7"];
+  function isLineExempt(line: any): boolean {
+    const ti = String(line?.tipo_imp ?? "").trim();
+    return EXEMPT_TAX_CODES.includes(ti) || Number(line?.porc_imp ?? 16) === 0;
+  }
+  function isServiceLine(line: any): boolean {
+    const t = String(line?.tipo_art || line?.tipo || "")
+      .trim()
+      .toUpperCase();
+    return t === "S";
+  }
+
   // Totals calculations based on active lines
   const invoiceTotals = $derived.by(() => {
     let subtotal = 0;
@@ -246,7 +266,7 @@
       if (line.checked) {
         const qty = Number(line.cantidad || 0);
         const price = Number(line.precio || 0);
-        const pImp = Number(line.porc_imp || 0);
+        const pImp = isLineExempt(line) ? 0 : Number(line.porc_imp) || 16;
 
         const lineTotal = qty * price;
         const lineTax = (lineTotal * pImp) / 100;
@@ -255,14 +275,27 @@
         tax += lineTax;
       }
     }
-    const porcEsp = selectedClient?.porc_esp ? Number(selectedClient.porc_esp) : 0;
+    const porcEsp = selectedClient?.porc_esp
+      ? Number(selectedClient.porc_esp)
+      : 0;
     const retencion = tax * (porcEsp / 100);
     const totalFactura = subtotal + tax;
 
-    const currentIgtfUsd = enableIgtf && Number(igtfMontoDivisa || 0) > 0 ? Number(igtfMontoDivisa) * 0.03 : 0;
+    const currentIgtfUsd =
+      enableIgtf && Number(igtfMontoDivisa || 0) > 0
+        ? Number(igtfMontoDivisa) * 0.03
+        : 0;
     const total = totalFactura - retencion + currentIgtfUsd;
 
-    return { subtotal, tax, retencion, porc_esp: porcEsp, totalFactura, total, igtfUsd: currentIgtfUsd };
+    return {
+      subtotal,
+      tax,
+      retencion,
+      porc_esp: porcEsp,
+      totalFactura,
+      total,
+      igtfUsd: currentIgtfUsd,
+    };
   });
 
   function handleBranchChange() {
@@ -354,19 +387,33 @@
 
         const lines = orderDetails.renglones || [];
         const docTasa = Number(orderDetails.tasa || 1);
-        const tasa = docTasa > 1 ? docTasa : Number(orderDetails.tasa_actual || 1);
+        const tasa =
+          docTasa > 1 ? docTasa : Number(orderDetails.tasa_actual || 1);
 
         const newLines = lines
           .filter((l: any) => Number(l.pendiente ?? l.cantidad) > 0)
           .map((l: any) => {
             const itemQty = Number(l.pendiente ?? l.cantidad);
-            const usdPrice = Number(l.prec_vta_om || 0) > 0 ? Number(l.prec_vta_om) : Number(l.precio || 0) / tasa;
-            const rawComment = String(l.comentario || '').trim();
-            const authBy = rawComment.startsWith('PRECIO_AUT:')
-              ? rawComment.replace(/^PRECIO_AUT:/, '').trim()
-              : '';
+            const usdPrice =
+              Number(l.prec_vta_om || 0) > 0
+                ? Number(l.prec_vta_om)
+                : Number(l.precio || 0) / tasa;
+            const rawComment = String(l.comentario || "").trim();
+            const authBy = rawComment.startsWith("PRECIO_AUT:")
+              ? rawComment.replace(/^PRECIO_AUT:/, "").trim()
+              : "";
+            const normTipoImp =
+              String(l.tipo_imp || l.art_tipo_imp || "1").trim() || "1";
+            const normPorcImp = EXEMPT_TAX_CODES.includes(normTipoImp)
+              ? 0
+              : Number(l.porc_imp ?? 16);
             return {
               ...l,
+              tipo_art: String(l.tipo_art || l.tipo || "V")
+                .trim()
+                .toUpperCase(),
+              tipo_imp: normTipoImp,
+              porc_imp: normPorcImp,
               doc_num: orderDetails.doc_num,
               cantidad: itemQty,
               precio: usdPrice,
@@ -384,7 +431,10 @@
         }
 
         // Check if there is already an order loaded
-        if (selectedClient && selectedClient.co_cli.trim() !== orderDetails.co_cli.trim()) {
+        if (
+          selectedClient &&
+          selectedClient.co_cli.trim() !== orderDetails.co_cli.trim()
+        ) {
           // Different client: Replace everything
           selectedClient = {
             co_cli: orderDetails.co_cli,
@@ -400,16 +450,21 @@
             contribu_e: orderDetails.contribu_e,
             contribuyente: !!orderDetails.contribu_e,
           };
-          const orderDesc = (orderDetails.descrip || "").trim() || (orderDetails.comentario || "").trim() || "Sin descripción";
+          const orderDesc =
+            (orderDetails.descrip || "").trim() ||
+            (orderDetails.comentario || "").trim() ||
+            "Sin descripción";
 
           billingLines = newLines;
           activeTasa = tasa;
           importedOrdersInfo = {
             [orderDetails.doc_num.trim()]: {
-              descrip: orderDesc
-            }
+              descrip: orderDesc,
+            },
           };
-          toast.success(`Pedido ${orderDetails.doc_num} importado (sustituyó pedido anterior por cambio de cliente)`);
+          toast.success(
+            `Pedido ${orderDetails.doc_num} importado (sustituyó pedido anterior por cambio de cliente)`,
+          );
         } else {
           // Same client or first import
           if (!selectedClient) {
@@ -429,24 +484,34 @@
             };
             activeTasa = tasa;
             billingLines = newLines;
-            const orderDesc = (orderDetails.descrip || "").trim() || (orderDetails.comentario || "").trim() || "Sin descripción";
+            const orderDesc =
+              (orderDetails.descrip || "").trim() ||
+              (orderDetails.comentario || "").trim() ||
+              "Sin descripción";
             importedOrdersInfo = {
               [orderDetails.doc_num.trim()]: {
-                descrip: orderDesc
-              }
+                descrip: orderDesc,
+              },
             };
-            toast.success(`Pedido ${orderDetails.doc_num} importado (${newLines.length} artículos)`);
+            toast.success(
+              `Pedido ${orderDetails.doc_num} importado (${newLines.length} artículos)`,
+            );
           } else {
             // Append lines
             billingLines = [...billingLines, ...newLines];
-            const orderDesc = (orderDetails.descrip || "").trim() || (orderDetails.comentario || "").trim() || "Sin descripción";
+            const orderDesc =
+              (orderDetails.descrip || "").trim() ||
+              (orderDetails.comentario || "").trim() ||
+              "Sin descripción";
             importedOrdersInfo = {
               ...importedOrdersInfo,
               [orderDetails.doc_num.trim()]: {
-                descrip: orderDesc
-              }
+                descrip: orderDesc,
+              },
             };
-            toast.success(`Pedido ${orderDetails.doc_num} agregado (${newLines.length} artículos)`);
+            toast.success(
+              `Pedido ${orderDetails.doc_num} agregado (${newLines.length} artículos)`,
+            );
           }
         }
 
@@ -480,8 +545,10 @@
   }
 
   function removeOrder(docNum: string) {
-    billingLines = billingLines.filter((l) => l.doc_num?.trim() !== docNum.trim());
-    
+    billingLines = billingLines.filter(
+      (l) => l.doc_num?.trim() !== docNum.trim(),
+    );
+
     // Eliminar descripción de cache
     const cleanDoc = docNum.trim();
     const newInfo = { ...importedOrdersInfo };
@@ -509,53 +576,92 @@
   // Modal de Previsualización y Envío a Impresoras
   let showPreviewModal = $state(false);
   let isPrintingNote = $state(false);
-  let previewFormat = $state<'thermal' | 'matrix'>('thermal');
-  let selectedPrinterId = $state<string>('');
+  let previewFormat = $state<"thermal" | "matrix">("thermal");
+  let selectedPrinterId = $state<string>("");
   let previewDocData = $state<any>(null);
 
   // Impresoras activas para la sede actual (filterSede)
   const branchPrinters = $derived.by(() => {
-    return (data.printers || []).filter((p: any) => 
-      String(p.branch_id) === String(filterSede) && p.is_active
+    return (data.printers || []).filter(
+      (p: any) => String(p.branch_id) === String(filterSede) && p.is_active,
     );
   });
 
   // Impresora fiscal activa disponible en la sede actual
   const fiscalPrinter = $derived.by(() => {
     return branchPrinters.find((p: any) => {
-      const subs = (p.sublines || []).map((s: any) => String(s).trim().toUpperCase());
-      return subs.includes('TYPE:FISCAL') || subs.includes('DOC:FACTURA_FISCAL') || String(p.port || '') === '8088';
+      const subs = (p.sublines || []).map((s: any) =>
+        String(s).trim().toUpperCase(),
+      );
+      return (
+        subs.includes("TYPE:FISCAL") ||
+        subs.includes("DOC:FACTURA_FISCAL") ||
+        String(p.port || "") === "8088"
+      );
     });
   });
 
   // Impresora térmica para emisión de Nota de Entrega (Factura sin IVA)
   const thermalNotePrinter = $derived.by(() => {
-    return branchPrinters.find((p: any) => {
-      const subs = (p.sublines || []).map((s: any) => String(s).trim().toUpperCase());
-      const isThermal = subs.includes('TYPE:THERMAL') || String(p.port || '') === '9100';
-      const isNote = subs.includes('DOC:NOTA_ENTREGA');
-      return isThermal && isNote;
-    }) || branchPrinters.find((p: any) => {
-      const subs = (p.sublines || []).map((s: any) => String(s).trim().toUpperCase());
-      const isNote = subs.includes('DOC:NOTA_ENTREGA');
-      const isNotOther = !subs.includes('TYPE:MATRIX_NETWORK') && !subs.includes('TYPE:FISCAL') && String(p.port || '') !== '445' && String(p.port || '') !== '8088';
-      return isNote && isNotOther;
-    }) || branchPrinters.find((p: any) => {
-      const subs = (p.sublines || []).map((s: any) => String(s).trim().toUpperCase());
-      const isThermal = subs.includes('TYPE:THERMAL') || String(p.port || '') === '9100';
-      const isExcluded = subs.includes('DOC:PRE_DESPACHO') || subs.includes('DOC:FACTURA_FISCAL') || subs.includes('TYPE:MATRIX_NETWORK') || subs.includes('TYPE:FISCAL');
-      return isThermal && !isExcluded;
-    });
+    return (
+      branchPrinters.find((p: any) => {
+        const subs = (p.sublines || []).map((s: any) =>
+          String(s).trim().toUpperCase(),
+        );
+        const isThermal =
+          subs.includes("TYPE:THERMAL") || String(p.port || "") === "9100";
+        const isNote = subs.includes("DOC:NOTA_ENTREGA");
+        return isThermal && isNote;
+      }) ||
+      branchPrinters.find((p: any) => {
+        const subs = (p.sublines || []).map((s: any) =>
+          String(s).trim().toUpperCase(),
+        );
+        const isNote = subs.includes("DOC:NOTA_ENTREGA");
+        const isNotOther =
+          !subs.includes("TYPE:MATRIX_NETWORK") &&
+          !subs.includes("TYPE:FISCAL") &&
+          String(p.port || "") !== "445" &&
+          String(p.port || "") !== "8088";
+        return isNote && isNotOther;
+      }) ||
+      branchPrinters.find((p: any) => {
+        const subs = (p.sublines || []).map((s: any) =>
+          String(s).trim().toUpperCase(),
+        );
+        const isThermal =
+          subs.includes("TYPE:THERMAL") || String(p.port || "") === "9100";
+        const isExcluded =
+          subs.includes("DOC:PRE_DESPACHO") ||
+          subs.includes("DOC:FACTURA_FISCAL") ||
+          subs.includes("TYPE:MATRIX_NETWORK") ||
+          subs.includes("TYPE:FISCAL");
+        return isThermal && !isExcluded;
+      })
+    );
   });
 
   // Impresoras térmicas de pre-despacho para almacén
   const preDespachoPrinters = $derived.by(() => {
     return branchPrinters.filter((p: any) => {
-      const subs = (p.sublines || []).map((s: any) => String(s).trim().toUpperCase());
-      const isThermal = subs.includes('TYPE:THERMAL') || (!subs.some((s: string) => s.startsWith('TYPE:')) && String(p.port || '') === '9100');
-      const isPreDespacho = subs.includes('DOC:PRE_DESPACHO') || 
-        (!subs.some((s: string) => s.startsWith('DOC:')) && !subs.some((s: string) => s.includes('NOTA_ENTREGA') || s.includes('FISCAL')));
-      const isExcluded = subs.includes('DOC:NOTA_ENTREGA') || subs.includes('DOC:FACTURA_FISCAL') || subs.includes('TYPE:MATRIX_NETWORK') || subs.includes('TYPE:FISCAL');
+      const subs = (p.sublines || []).map((s: any) =>
+        String(s).trim().toUpperCase(),
+      );
+      const isThermal =
+        subs.includes("TYPE:THERMAL") ||
+        (!subs.some((s: string) => s.startsWith("TYPE:")) &&
+          String(p.port || "") === "9100");
+      const isPreDespacho =
+        subs.includes("DOC:PRE_DESPACHO") ||
+        (!subs.some((s: string) => s.startsWith("DOC:")) &&
+          !subs.some(
+            (s: string) => s.includes("NOTA_ENTREGA") || s.includes("FISCAL"),
+          ));
+      const isExcluded =
+        subs.includes("DOC:NOTA_ENTREGA") ||
+        subs.includes("DOC:FACTURA_FISCAL") ||
+        subs.includes("TYPE:MATRIX_NETWORK") ||
+        subs.includes("TYPE:FISCAL");
 
       return isThermal && isPreDespacho && !isExcluded;
     });
@@ -564,7 +670,9 @@
   function openPreviewModal() {
     const activeLines = billingLines.filter((l) => l.checked);
     if (activeLines.length === 0) {
-      toast.error("Debes tener al menos un artículo seleccionado para previsualizar.");
+      toast.error(
+        "Debes tener al menos un artículo seleccionado para previsualizar.",
+      );
       return;
     }
     if (!selectedClient) {
@@ -572,31 +680,45 @@
       return;
     }
 
-    const branchObj = data.branches?.find((b: any) => String(b.id) === String(filterSede));
-    const isParaparal = branchObj?.name?.toLowerCase().includes('paraparal');
-    const branchPrefix = isParaparal ? 'G4' : 'G3';
+    const branchObj = data.branches?.find(
+      (b: any) => String(b.id) === String(filterSede),
+    );
+    const isParaparal = branchObj?.name?.toLowerCase().includes("paraparal");
+    const branchPrefix = isParaparal ? "G4" : "G3";
 
     let rawDoc = originOrderNum || "9";
     let formattedDocNum = rawDoc;
-    if (!rawDoc.toUpperCase().startsWith('G')) {
-      const numOnly = rawDoc.replace(/\D/g, '') || '9';
-      formattedDocNum = `${branchPrefix}${numOnly.padStart(8, '0')}`;
+    if (!rawDoc.toUpperCase().startsWith("G")) {
+      const numOnly = rawDoc.replace(/\D/g, "") || "9";
+      formattedDocNum = `${branchPrefix}${numOnly.padStart(8, "0")}`;
     }
 
     let branchAddr = branchObj?.address;
     if (!branchAddr) {
       if (isParaparal) {
-        branchAddr = 'CTRA NACIONAL LOS GUAYOS-GUACARA CRUCE CON CALLE 940-A Y CALLE PARAPARAL LOCAL GALPON NRO 20-21 SECTOR LOS GUAYOS LOS GUAYOS CARABOBO;';
+        branchAddr =
+          "CTRA NACIONAL LOS GUAYOS-GUACARA CRUCE CON CALLE 940-A Y CALLE PARAPARAL LOCAL GALPON NRO 20-21 SECTOR LOS GUAYOS LOS GUAYOS CARABOBO;";
       } else {
-        branchAddr = 'Av. 92 Pedro melean (via La Isabelica), Valencia, Carabobo';
+        branchAddr =
+          "Av. 92 Pedro melean (via La Isabelica), Valencia, Carabobo";
       }
     }
 
     const multiplier = showUSD ? 1 : Number(activeTasa || 1);
-    const totalBruto = activeLines.reduce((sum, l) => sum + (Number(l.cantidad) * (Number(l.precio) * multiplier)), 0);
+    const totalBruto = activeLines.reduce(
+      (sum, l) => sum + Number(l.cantidad) * (Number(l.precio) * multiplier),
+      0,
+    );
     const montoImp = activeLines.reduce((sum, l) => {
-      const isExento = l.tipo_imp === '0' || Number(l.porc_imp) === 0;
-      return sum + (isExento ? 0 : (Number(l.cantidad) * (Number(l.precio) * multiplier) * (Number(l.porc_imp) / 100)));
+      const isExento = isLineExempt(l);
+      return (
+        sum +
+        (isExento
+          ? 0
+          : Number(l.cantidad) *
+            (Number(l.precio) * multiplier) *
+            (Number(l.porc_imp || 16) / 100))
+      );
     }, 0);
     const totalNeto = totalBruto + montoImp;
 
@@ -607,18 +729,26 @@
       fecha_hora: dayjs().format("DD/MM/YYYY hh:mm A"),
       fecha_emision: dayjs().format("DD/MM/YYYY"),
       branch_id: filterSede,
-      branch_name: branchObj?.business_name || branchObj?.name || "inversiones Galpe 2021 C.A.",
+      branch_name:
+        branchObj?.business_name ||
+        branchObj?.name ||
+        "inversiones Galpe 2021 C.A.",
       branch_rif: branchObj?.rif || "J-401750354",
-      branch_desc: branchObj?.name || (isParaparal ? "Paraparal" : "Boca de Rio"),
+      branch_desc:
+        branchObj?.name || (isParaparal ? "Paraparal" : "Boca de Rio"),
       branch_address: branchAddr,
       cli_des: selectedClient.cli_des,
       rif: selectedClient.rif,
-      telefonos: selectedClient.telefonos || '---',
-      direc1: selectedClient.direc1 || '---',
-      dir_entrega: selectedClient.dir_ent || selectedClient.direc1 || 'CARABOBO',
+      telefonos: selectedClient.telefonos || "---",
+      direc1: selectedClient.direc1 || "---",
+      dir_entrega:
+        selectedClient.dir_ent || selectedClient.direc1 || "CARABOBO",
       transporte: "INTERNO",
       vendedor: activeVenDes || activeCoVen || "FRANKLIN GONZALEZ",
-      cajero: data.userProfile?.full_name || data.userProfile?.name || "DARIANNA GUEVARA",
+      cajero:
+        data.userProfile?.full_name ||
+        data.userProfile?.name ||
+        "DARIANNA GUEVARA",
       co_cond: selectedClient.co_cond || "CONTADO",
       cond_des: selectedClient.cond_des || "CONTADO",
       renglones: activeLines.map((l: any) => {
@@ -633,7 +763,7 @@
           porc_imp: Number(l.porc_imp),
           tipo_imp: l.tipo_imp,
           co_subl: l.co_subl,
-          co_lin: l.co_lin
+          co_lin: l.co_lin,
         };
       }),
       total_bruto: totalBruto,
@@ -642,7 +772,7 @@
       is_usd: showUSD,
       tasa: activeTasa,
       is_fiscal: montoImp > 0,
-      comentario: originOrderNum ? `ORIGEN: PEDIDO N° ${originOrderNum}` : ""
+      comentario: originOrderNum ? `ORIGEN: PEDIDO N° ${originOrderNum}` : "",
     };
 
     showPreviewModal = true;
@@ -663,10 +793,8 @@
 
     // --- CHECK SINGLE SERVICE FORCE BRANCH ---
     let forceSucu: string | null = null;
-    const isSingleService = activeLines.length === 1 && (
-      activeLines[0].co_lin === '09' || 
-      String(activeLines[0].co_art || '').trim().startsWith('09')
-    );
+    const isSingleService =
+      activeLines.length === 1 && isServiceLine(activeLines[0]);
 
     if (isSingleService) {
       const choice = await askServiceSucuConfirmation();
@@ -701,8 +829,8 @@
         co_precio: line.co_precio,
         precio: Number(line.precio), // precio ya está en USD en el estado de Svelte
         porc_imp: Number(line.porc_imp),
-        tipo_imp: line.tipo_imp || '1',
-        tipo_doc: 'PCLI',
+        tipo_imp: line.tipo_imp || "1",
+        tipo_doc: "PCLI",
         num_doc: line.doc_num,
         rowguid_doc: line.rowguid,
         co_subl: line.co_subl,
@@ -723,28 +851,52 @@
       const saveResult = await saveResponse.json();
 
       if (!saveResult.success) {
-        throw new Error(saveResult.message || "Error al guardar la factura en la base de datos.");
+        throw new Error(
+          saveResult.message ||
+            "Error al guardar la factura en la base de datos.",
+        );
       }
 
       const realDocNum = saveResult.doc_num || saveResult.results?.[0]?.doc_num;
       if (!realDocNum) {
-        throw new Error("No se recibió el número de documento correlativo generado.");
+        throw new Error(
+          "No se recibió el número de documento correlativo generado.",
+        );
       }
 
-      toast.success(`Factura Nro. ${realDocNum} guardada exitosamente en la base de datos.`);
+      toast.success(
+        `Factura Nro. ${realDocNum} guardada exitosamente en la base de datos.`,
+      );
 
       const multiplier = showUSD ? 1 : Number(activeTasa || 1);
-      const totalBruto = activeLines.reduce((sum, l) => sum + (Number(l.cantidad) * (Number(l.precio) * multiplier)), 0);
+      const totalBruto = activeLines.reduce(
+        (sum, l) => sum + Number(l.cantidad) * (Number(l.precio) * multiplier),
+        0,
+      );
       const montoImp = activeLines.reduce((sum, l) => {
-        const isExento = l.tipo_imp === '0' || Number(l.porc_imp) === 0;
-        return sum + (isExento ? 0 : (Number(l.cantidad) * (Number(l.precio) * multiplier) * (Number(l.porc_imp) / 100)));
+        const isExento = isLineExempt(l);
+        return (
+          sum +
+          (isExento
+            ? 0
+            : Number(l.cantidad) *
+              (Number(l.precio) * multiplier) *
+              (Number(l.porc_imp || 16) / 100))
+        );
       }, 0);
       const totalNeto = totalBruto + montoImp;
 
       // DETERMINAR SI LA FACTURA ES FISCAL (IVA > 0 o forzada como fiscal)
-      const isFiscalInvoice = montoImp > 0 || (forceSucu !== null && defaultBranchCode !== null && forceSucu === defaultBranchCode);
-      const clientCondForHka = String(selectedClient?.co_cond || '').trim().toUpperCase();
-      const isContadoForHka = clientCondForHka === '01' || clientCondForHka === 'CONTADO';
+      const isFiscalInvoice =
+        montoImp > 0 ||
+        (forceSucu !== null &&
+          defaultBranchCode !== null &&
+          forceSucu === defaultBranchCode);
+      const clientCondForHka = String(selectedClient?.co_cond || "")
+        .trim()
+        .toUpperCase();
+      const isContadoForHka =
+        clientCondForHka === "01" || clientCondForHka === "CONTADO";
 
       if (isFiscalInvoice) {
         // =========================================================================
@@ -755,18 +907,23 @@
         if (data.hkaActive) {
           toast.info("Emitiendo Factura Electrónica en The Factory HKA...");
           try {
-            const buyerId = parseBuyerIdentification(selectedClient.rif, selectedClient.co_cli);
+            const buyerId = parseBuyerIdentification(
+              selectedClient.rif,
+              selectedClient.co_cli,
+            );
             const rateBs = Number(activeTasa || 1);
             const hkaItems = activeLines.map((line: any) => {
-              const isExento = line.tipo_imp === '0' || Number(line.porc_imp) === 0;
+              const isExento = isLineExempt(line);
               return {
-                codigo: (line.co_art || 'ART').trim(),
-                descripcion: (line.art_des || 'ARTICULO').trim(),
+                codigo: (line.co_art || "ART").trim(),
+                descripcion: (line.art_des || "ARTICULO").trim(),
                 cantidad: Number(line.cantidad || 1),
-                precioUnitario: Number((Number(line.precio || 0) * rateBs).toFixed(2)),
+                precioUnitario: Number(
+                  (Number(line.precio || 0) * rateBs).toFixed(2),
+                ),
                 tasaIVA: isExento ? 0 : Number(line.porc_imp || 16),
-                codigoImpuesto: (isExento ? 'E' : 'G') as 'E' | 'G',
-                unidadMedida: (line.co_uni || 'UND').trim()
+                codigoImpuesto: (isExento ? "E" : "G") as "E" | "G",
+                unidadMedida: (line.co_uni || "UND").trim(),
               };
             });
 
@@ -779,22 +936,26 @@
                 branch_id: filterSede,
                 monto_usd: Number(invoiceTotals.totalFactura || 0),
                 input: {
-                  tipoDocumento: '01',
+                  tipoDocumento: "01",
                   comprador: {
                     tipoIdentificacion: buyerId.tipoIdentificacion,
                     numeroIdentificacion: buyerId.numeroIdentificacion,
-                    razonSocial: selectedClient.cli_des || selectedClient.co_cli,
-                    direccion: selectedClient.direc1 || 'VALENCIA, EDO. CARABOBO',
-                    telefono: selectedClient.telefonos || '',
-                    correo: selectedClient.email || ''
+                    razonSocial:
+                      selectedClient.cli_des || selectedClient.co_cli,
+                    direccion:
+                      selectedClient.direc1 || "VALENCIA, EDO. CARABOBO",
+                    telefono: selectedClient.telefonos || "",
+                    correo: selectedClient.email || "",
                   },
                   items: hkaItems,
-                  moneda: 'VES',
-                  tipoDePago: isContadoForHka ? '01' : '02',
-                  formaDePagoDescripcion: isContadoForHka ? 'CONTADO' : 'CREDITO',
-                  observacion: invoiceData.descrip
-                }
-              })
+                  moneda: "VES",
+                  tipoDePago: isContadoForHka ? "01" : "02",
+                  formaDePagoDescripcion: isContadoForHka
+                    ? "CONTADO"
+                    : "CREDITO",
+                  observacion: invoiceData.descrip,
+                },
+              }),
             });
 
             const hkaJson = await hkaRes.json();
@@ -802,24 +963,28 @@
               hkaEmittedInfo = {
                 numeroDocumento: hkaJson.hkaResult.numeroDocumento,
                 numeroControl: hkaJson.hkaResult.numeroControl,
-                urlConsulta: hkaJson.hkaResult.urlConsulta
+                urlConsulta: hkaJson.hkaResult.urlConsulta,
               };
               toast.success(
-                `Factura Electrónica HKA #${hkaEmittedInfo.numeroDocumento} emitida (Control: ${hkaEmittedInfo.numeroControl}).`
+                `Factura Electrónica HKA #${hkaEmittedInfo.numeroDocumento} emitida (Control: ${hkaEmittedInfo.numeroControl}).`,
               );
             } else if (!hkaJson.skipped) {
               toast.warning(
-                `Factura guardada en Profit (#${realDocNum}), pero The Factory HKA reportó: ${hkaJson.message || 'Error al emitir'}`
+                `Factura guardada en Profit (#${realDocNum}), pero The Factory HKA reportó: ${hkaJson.message || "Error al emitir"}`,
               );
             }
           } catch (hkaErr: any) {
             console.error("Error al emitir factura en HKA:", hkaErr);
-            toast.warning(`Factura guardada en Profit (#${realDocNum}), pero no se pudo conectar con The Factory HKA: ${hkaErr.message}`);
+            toast.warning(
+              `Factura guardada en Profit (#${realDocNum}), pero no se pudo conectar con The Factory HKA: ${hkaErr.message}`,
+            );
           }
         }
 
         if (fiscalPrinter) {
-          toast.info(`Imprimiendo Factura Fiscal en [${fiscalPrinter.name}]...`);
+          toast.info(
+            `Imprimiendo Factura Fiscal en [${fiscalPrinter.name}]...`,
+          );
           try {
             const fiscalRes = await fetch("/api/agent/printers/print-fiscal", {
               method: "POST",
@@ -840,21 +1005,30 @@
                   monto_imp: montoImp,
                   total_neto: totalNeto,
                   tasa: activeTasa,
-                }
-              })
+                },
+              }),
             });
             const fiscalResult = await fiscalRes.json();
             if (fiscalResult.success) {
-              toast.success(fiscalResult.message || `Factura fiscal impresa en [${fiscalPrinter.name}].`);
+              toast.success(
+                fiscalResult.message ||
+                  `Factura fiscal impresa en [${fiscalPrinter.name}].`,
+              );
             } else {
-              toast.warning(`Factura guardada, pero ocurrió un aviso en impresora fiscal: ${fiscalResult.message}`);
+              toast.warning(
+                `Factura guardada, pero ocurrió un aviso en impresora fiscal: ${fiscalResult.message}`,
+              );
             }
           } catch (fiscalErr: any) {
             console.error("Error al imprimir en impresora fiscal:", fiscalErr);
-            toast.warning(`Factura guardada pero no se pudo conectar con la impresora fiscal: ${fiscalErr.message}`);
+            toast.warning(
+              `Factura guardada pero no se pudo conectar con la impresora fiscal: ${fiscalErr.message}`,
+            );
           }
         } else if (!data.hkaActive) {
-          toast.warning("Factura fiscal registrada, pero no hay impresora fiscal activa configurada en esta sede.");
+          toast.warning(
+            "Factura fiscal registrada, pero no hay impresora fiscal activa configurada en esta sede.",
+          );
         }
       } else {
         // =========================================================================
@@ -863,24 +1037,36 @@
         // =========================================================================
         // 2. Imprimir Nota de Entrega en formato térmico 80mm si hay impresora térmica activa
         if (thermalNotePrinter) {
-          toast.info(`Imprimiendo Nota de Entrega en ${thermalNotePrinter.name}...`);
+          toast.info(
+            `Imprimiendo Nota de Entrega en ${thermalNotePrinter.name}...`,
+          );
           try {
-            const branchObj = data.branches?.find((b: any) => String(b.id) === String(filterSede));
-            const isParaparal = branchObj?.name?.toLowerCase().includes('paraparal');
-            const branchPrefix = isParaparal ? 'G4' : 'G3';
+            const branchObj = data.branches?.find(
+              (b: any) => String(b.id) === String(filterSede),
+            );
+            const isParaparal = branchObj?.name
+              ?.toLowerCase()
+              .includes("paraparal");
+            const branchPrefix = isParaparal ? "G4" : "G3";
 
-            let formattedDocNum = String(realDocNum || '').trim();
-            if (formattedDocNum && !formattedDocNum.toUpperCase().startsWith('G')) {
-              const numOnly = formattedDocNum.replace(/\D/g, '') || formattedDocNum;
-              formattedDocNum = `${branchPrefix}${numOnly.padStart(8, '0')}`;
+            let formattedDocNum = String(realDocNum || "").trim();
+            if (
+              formattedDocNum &&
+              !formattedDocNum.toUpperCase().startsWith("G")
+            ) {
+              const numOnly =
+                formattedDocNum.replace(/\D/g, "") || formattedDocNum;
+              formattedDocNum = `${branchPrefix}${numOnly.padStart(8, "0")}`;
             }
 
             let branchAddr = branchObj?.address;
             if (!branchAddr) {
               if (isParaparal) {
-                branchAddr = 'CTRA NACIONAL LOS GUAYOS-GUACARA CRUCE CON CALLE 940-A Y CALLE PARAPARAL LOCAL GALPON NRO 20-21 SECTOR LOS GUAYOS LOS GUAYOS CARABOBO;';
+                branchAddr =
+                  "CTRA NACIONAL LOS GUAYOS-GUACARA CRUCE CON CALLE 940-A Y CALLE PARAPARAL LOCAL GALPON NRO 20-21 SECTOR LOS GUAYOS LOS GUAYOS CARABOBO;";
               } else {
-                branchAddr = 'Av. 92 Pedro melean (via La Isabelica), Valencia, Carabobo';
+                branchAddr =
+                  "Av. 92 Pedro melean (via La Isabelica), Valencia, Carabobo";
               }
             }
 
@@ -892,18 +1078,24 @@
               fecha_hora: dayjs().format("DD/MM/YYYY hh:mm A"),
               fecha_emision: dayjs().format("DD/MM/YYYY"),
               branch_id: filterSede,
-              branch_name: branchObj?.business_name || branchObj?.name || "inversiones Galpe 2021 C.A.",
+              branch_name:
+                branchObj?.business_name ||
+                branchObj?.name ||
+                "inversiones Galpe 2021 C.A.",
               branch_rif: branchObj?.rif || "J-401750354",
-              branch_desc: branchObj?.name || (isParaparal ? "Paraparal" : "Boca de Rio"),
+              branch_desc:
+                branchObj?.name || (isParaparal ? "Paraparal" : "Boca de Rio"),
               branch_address: branchAddr,
               cli_des: selectedClient.cli_des,
               rif: selectedClient.rif,
-              telefonos: selectedClient.telefonos || '---',
-              direc1: selectedClient.direc1 || '---',
-              dir_entrega: selectedClient.dir_ent || selectedClient.direc1 || 'CARABOBO',
+              telefonos: selectedClient.telefonos || "---",
+              direc1: selectedClient.direc1 || "---",
+              dir_entrega:
+                selectedClient.dir_ent || selectedClient.direc1 || "CARABOBO",
               transporte: "INTERNO",
               vendedor: activeVenDes || activeCoVen || "---",
-              cajero: data.userProfile?.full_name || data.userProfile?.name || "---",
+              cajero:
+                data.userProfile?.full_name || data.userProfile?.name || "---",
               co_cond: selectedClient.co_cond || "CONTADO",
               cond_des: selectedClient.cond_des || "CONTADO",
               renglones: activeLines.map((l: any) => {
@@ -916,7 +1108,7 @@
                   precio: itemPrice,
                   total: Number(l.cantidad) * itemPrice,
                   porc_imp: Number(l.porc_imp),
-                  tipo_imp: l.tipo_imp
+                  tipo_imp: l.tipo_imp,
                 };
               }),
               total_bruto: totalBruto,
@@ -924,7 +1116,9 @@
               total_neto: totalNeto,
               is_usd: showUSD,
               tasa: activeTasa,
-              comentario: originOrderNum ? `ORIGEN: PEDIDO N° ${originOrderNum}` : ""
+              comentario: originOrderNum
+                ? `ORIGEN: PEDIDO N° ${originOrderNum}`
+                : "",
             };
 
             const noteRes = await fetch("/api/agent/printers/print-note", {
@@ -934,21 +1128,30 @@
                 branch_id: filterSede,
                 format: "thermal",
                 printer_id: thermalNotePrinter.id,
-                doc: noteDocData
-              })
+                doc: noteDocData,
+              }),
             });
             const noteResult = await noteRes.json();
             if (noteResult.success) {
-              toast.success(noteResult.message || `Nota de Entrega impresa en [${thermalNotePrinter.name}].`);
+              toast.success(
+                noteResult.message ||
+                  `Nota de Entrega impresa en [${thermalNotePrinter.name}].`,
+              );
             } else {
-              toast.warning(`La factura se guardó pero falló la Nota de Entrega: ${noteResult.message}`);
+              toast.warning(
+                `La factura se guardó pero falló la Nota de Entrega: ${noteResult.message}`,
+              );
             }
           } catch (noteErr: any) {
             console.error("Error al imprimir Nota de Entrega:", noteErr);
-            toast.warning(`La factura se guardó pero ocurrió un error en Nota de Entrega: ${noteErr.message}`);
+            toast.warning(
+              `La factura se guardó pero ocurrió un error en Nota de Entrega: ${noteErr.message}`,
+            );
           }
         } else {
-          toast.info("No hay impresora térmica configurada para Notas de Entrega en esta sede.");
+          toast.info(
+            "No hay impresora térmica configurada para Notas de Entrega en esta sede.",
+          );
         }
       }
 
@@ -968,7 +1171,7 @@
               invoice: {
                 ...invoiceData,
                 invoice_num: realDocNum, // Usado para imprimir origen FACTURA Nro. XXX
-                doc_num: realDocNum,     // Usado para el código grande al pie del ticket
+                doc_num: realDocNum, // Usado para el código grande al pie del ticket
                 cli_des: selectedClient.cli_des,
                 rif: selectedClient.rif,
                 telefonos: selectedClient.telefonos,
@@ -979,18 +1182,24 @@
           });
           const printResult = await printResponse.json();
           if (printResult.success) {
-            toast.success(printResult.message || "Ticket de predespacho enviado.");
+            toast.success(
+              printResult.message || "Ticket de predespacho enviado.",
+            );
           } else {
             toast.warning(`Pre-despacho no impreso: ${printResult.message}`);
           }
         } catch (printErr: any) {
           console.error("Error al imprimir ticket:", printErr);
-          toast.warning(`La factura se guardó pero ocurrió un error al imprimir pre-despacho: ${printErr.message}`);
+          toast.warning(
+            `La factura se guardó pero ocurrió un error al imprimir pre-despacho: ${printErr.message}`,
+          );
         }
       }
 
-      const clientCond = String(selectedClient?.co_cond || '').trim().toUpperCase();
-      const isContado = clientCond === '01' || clientCond === 'CONTADO';
+      const clientCond = String(selectedClient?.co_cond || "")
+        .trim()
+        .toUpperCase();
+      const isContado = clientCond === "01" || clientCond === "CONTADO";
 
       if (isContado) {
         // Reset billing form en caso de éxito
@@ -1002,7 +1211,9 @@
         igtfMontoDivisa = null;
 
         // Redirigir al creador de Cobros precargando la factura generada
-        goto(`/dashboard/cash/payments?branch_id=${filterSede}&import_invoice=${realDocNum}`);
+        goto(
+          `/dashboard/cash/payments?branch_id=${filterSede}&import_invoice=${realDocNum}`,
+        );
       } else {
         // Factura a Crédito: Mostrar pantalla de éxito
         generatedDocNum = realDocNum;
@@ -1015,7 +1226,7 @@
     }
   }
 
-  async function handlePrintFromModal(forcedFormat?: 'thermal' | 'matrix') {
+  async function handlePrintFromModal(forcedFormat?: "thermal" | "matrix") {
     if (!previewDocData) return;
     isPrintingNote = true;
     const formatToUse = forcedFormat || previewFormat;
@@ -1027,14 +1238,19 @@
           branch_id: filterSede,
           format: formatToUse,
           printer_id: selectedPrinterId || undefined,
-          doc: previewDocData
-        })
+          doc: previewDocData,
+        }),
       });
       const result = await res.json();
       if (result.success) {
-        const typeLabel = formatToUse === 'thermal' ? 'térmica' : 'matricial';
-        const printerName = result.printer_used?.name ? ` [${result.printer_used.name}]` : '';
-        toast.success(result.message || `Nota de Entrega enviada a la impresora ${typeLabel}${printerName}.`);
+        const typeLabel = formatToUse === "thermal" ? "térmica" : "matricial";
+        const printerName = result.printer_used?.name
+          ? ` [${result.printer_used.name}]`
+          : "";
+        toast.success(
+          result.message ||
+            `Nota de Entrega enviada a la impresora ${typeLabel}${printerName}.`,
+        );
       } else {
         toast.error(result.message || "Error al enviar a la impresora.");
       }
@@ -1059,12 +1275,14 @@
         body: JSON.stringify({
           branch_id: filterSede,
           printer_id: fiscalPrinter.id,
-          invoice: previewDocData
-        })
+          invoice: previewDocData,
+        }),
       });
       const result = await res.json();
       if (result.success) {
-        toast.success(result.message || `Factura fiscal enviada a [${fiscalPrinter.name}].`);
+        toast.success(
+          result.message || `Factura fiscal enviada a [${fiscalPrinter.name}].`,
+        );
       } else {
         toast.error(result.message || "Error al enviar a la impresora fiscal.");
       }
@@ -1078,7 +1296,9 @@
   async function handlePrintPreDespachoFromModal() {
     if (!previewDocData) return;
     if (preDespachoPrinters.length === 0) {
-      toast.warning("No hay impresoras térmicas de pre-despacho configuradas en esta sede.");
+      toast.warning(
+        "No hay impresoras térmicas de pre-despacho configuradas en esta sede.",
+      );
       return;
     }
     isPrintingNote = true;
@@ -1097,12 +1317,14 @@
             telefonos: previewDocData.telefonos,
             direc1: previewDocData.direc1,
             vendedor: previewDocData.vendedor || "---",
-          }
-        })
+          },
+        }),
       });
       const result = await res.json();
       if (result.success) {
-        toast.success(result.message || "Ticket de predespacho enviado a almacén.");
+        toast.success(
+          result.message || "Ticket de predespacho enviado a almacén.",
+        );
       } else {
         toast.warning(`Pre-despacho no impreso: ${result.message}`);
       }
@@ -1116,7 +1338,6 @@
   function handleBrowserPrint() {
     window.print();
   }
-
 
   function getBranchName(id: string) {
     const b = data.branches?.find((br: any) => br.id === id);
@@ -1150,16 +1371,26 @@
       </div>
     </div>
     {#if hkaEmittedInfo}
-      <div class="w-full bg-emerald-500/10 border border-emerald-500/20 px-6 py-4 rounded-2xl space-y-1.5 text-center">
-        <span class="text-[10px] font-black uppercase tracking-widest text-emerald-400 block">
+      <div
+        class="w-full bg-emerald-500/10 border border-emerald-500/20 px-6 py-4 rounded-2xl space-y-1.5 text-center"
+      >
+        <span
+          class="text-[10px] font-black uppercase tracking-widest text-emerald-400 block"
+        >
           Factura Electrónica The Factory HKA
         </span>
-        <div class="flex flex-wrap items-center justify-center gap-4 text-sm font-mono">
+        <div
+          class="flex flex-wrap items-center justify-center gap-4 text-sm font-mono"
+        >
           <span class="font-black text-text-base">
-            Doc: <span class="text-emerald-400">{hkaEmittedInfo.numeroDocumento}</span>
+            Doc: <span class="text-emerald-400"
+              >{hkaEmittedInfo.numeroDocumento}</span
+            >
           </span>
           <span class="font-black text-text-base">
-            Control: <span class="text-emerald-400">{hkaEmittedInfo.numeroControl}</span>
+            Control: <span class="text-emerald-400"
+              >{hkaEmittedInfo.numeroControl}</span
+            >
           </span>
         </div>
         {#if hkaEmittedInfo.urlConsulta}
@@ -1201,508 +1432,609 @@
   </div>
 {:else}
   <div class="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
-  <!-- TOP HEADER -->
-  <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
-    <div>
-      <h1 class="text-4xl font-black tracking-tight flex items-center gap-3">
-        <Receipt size={40} class="text-brand-500" />
-        Factura de Venta
-      </h1>
-      <p class="text-text-muted mt-2 text-lg">
-        Importación de pedidos y facturación.
-      </p>
-    </div>
-
-    <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full md:w-auto">
-      <!-- Sede Selector -->
-      {#if data.branches && data.branches.length > 1}
-        <div class="w-full sm:w-56 relative group">
-          <Store
-            size={16}
-            class="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted group-focus-within:text-brand-500 transition-colors pointer-events-none"
-          />
-          <select
-            bind:value={filterSede}
-            onchange={handleBranchChange}
-            class="w-full h-14 pl-10 pr-10 bg-surface-soft border border-border-subtle rounded-2xl focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none transition-all font-medium text-sm appearance-none cursor-pointer text-text-base"
-          >
-            {#each data.branches as b}
-              <option value={b.id}>{b.name}</option>
-            {/each}
-          </select>
-          <ChevronDown
-            size={16}
-            class="absolute right-4 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none"
-          />
-        </div>
-      {/if}
-
-      <button
-        onclick={openImportModal}
-        class="flex items-center justify-center gap-2 px-6 h-14 rounded-2xl bg-brand-500/10 hover:bg-brand-500/20 text-brand-400 border border-brand-500/30 transition-all font-bold active:scale-95 shadow-sm shrink-0 cursor-pointer w-full sm:w-auto"
-      >
-        <ShoppingBag size={18} />
-        Importar Pedido
-      </button>
-
-      <button
-        onclick={() => {
-          const params = new URLSearchParams();
-          if (filterSede) params.set("branch_id", filterSede);
-          goto(`/dashboard/billing/history?${params.toString()}`);
-        }}
-        class="flex items-center justify-center gap-2 px-6 h-14 rounded-2xl bg-surface-strong hover:bg-surface-base text-text-base border border-border-subtle transition-all font-bold active:scale-95 shadow-sm shrink-0 cursor-pointer w-full sm:w-auto"
-      >
-        <Clock size={18} class="text-brand-400" />
-        Ver Historial
-      </button>
-    </div>
-  </div>
-
-  <div class="grid grid-cols-1 xl:grid-cols-3 gap-8">
-    <!-- LEFT/CENTER: INVOICE FORM & LINES -->
-    <div class="xl:col-span-2 space-y-6">
-      <!-- CLIENT INFO BOX -->
-      <div
-        class="glass p-6 rounded-3xl border border-border-subtle shadow-xl space-y-4"
-      >
-        <h3
-          class="text-sm font-black uppercase tracking-widest text-text-muted flex items-center gap-2"
-        >
-          <User size={16} />
-          Datos del Cliente
-        </h3>
-
-        {#if !selectedClient}
-          <div
-            class="p-8 border border-dashed border-border-subtle rounded-2xl flex flex-col items-center justify-center text-center gap-2"
-          >
-            <User size={32} class="text-text-muted/30" />
-            <p class="text-xs text-text-muted font-bold">
-              No hay ningún cliente cargado. Haz clic en "Importar Pedido" para
-              iniciar.
-            </p>
-          </div>
-        {:else}
-          <div class="grid grid-cols-1 md:grid-cols-3 gap-4" in:slide>
-            <div class="md:col-span-2 space-y-1">
-              <span
-                class="text-[9px] font-black uppercase tracking-widest text-text-muted"
-                >Nombre / Razón Social</span
-              >
-              <p class="text-base font-black text-text-base">
-                {selectedClient.cli_des}
-              </p>
-            </div>
-            <div class="space-y-1">
-              <span
-                class="text-[9px] font-black uppercase tracking-widest text-text-muted"
-                >RIF / CI</span
-              >
-              <p class="text-base font-bold font-mono text-text-base">
-                {selectedClient.rif || "---"}
-              </p>
-            </div>
-            <div class="md:col-span-2 space-y-1">
-              <span
-                class="text-[9px] font-black uppercase tracking-widest text-text-muted"
-                >Dirección</span
-              >
-              <p class="text-xs text-text-muted font-bold leading-relaxed">
-                {selectedClient.direc1 || "---"}
-              </p>
-            </div>
-            <div class="space-y-1">
-              <span
-                class="text-[9px] font-black uppercase tracking-widest text-text-muted"
-                >Teléfono</span
-              >
-              <p class="text-xs text-text-muted font-bold font-mono">
-                {selectedClient.telefonos || "---"}
-              </p>
-            </div>
-             <div class="md:col-span-3 grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 border-t border-border-subtle/30">
-              <div class="space-y-1">
-                <span
-                  class="text-[9px] font-black uppercase tracking-widest text-text-muted"
-                  >Estatus Fiscal</span
-                >
-                <p class="text-xs font-bold text-brand-400">
-                  {selectedClient.porc_esp > 0
-                    ? `Contribuyente Especial (${selectedClient.porc_esp}%)`
-                    : selectedClient.contribuyente
-                      ? "Contribuyente Especial"
-                      : "No Contribuyente"}
-                </p>
-              </div>
-              <div class="space-y-1">
-                <span
-                  class="text-[9px] font-black uppercase tracking-widest text-text-muted"
-                  >Vendedor del Pedido</span
-                >
-                <p class="text-xs font-bold text-text-base">
-                  {activeVenDes || activeCoVen || "Sin asignar"}
-                </p>
-              </div>
-            </div>
-          </div>
-        {/if}
+    <!-- TOP HEADER -->
+    <div
+      class="flex flex-col md:flex-row md:items-center justify-between gap-4"
+    >
+      <div>
+        <h1 class="text-4xl font-black tracking-tight flex items-center gap-3">
+          <Receipt size={40} class="text-brand-500" />
+          Factura de Venta
+        </h1>
+        <p class="text-text-muted mt-2 text-lg">
+          Importación de pedidos y facturación.
+        </p>
       </div>
 
-      <!-- INVOICE RENG-LINES TABLE -->
       <div
-        class="glass border border-border-subtle rounded-3xl shadow-xl overflow-hidden"
+        class="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full md:w-auto"
       >
+        <!-- Sede Selector -->
+        {#if data.branches && data.branches.length > 1}
+          <div class="w-full sm:w-56 relative group">
+            <Store
+              size={16}
+              class="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted group-focus-within:text-brand-500 transition-colors pointer-events-none"
+            />
+            <select
+              bind:value={filterSede}
+              onchange={handleBranchChange}
+              class="w-full h-14 pl-10 pr-10 bg-surface-soft border border-border-subtle rounded-2xl focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none transition-all font-medium text-sm appearance-none cursor-pointer text-text-base"
+            >
+              {#each data.branches as b}
+                <option value={b.id}>{b.name}</option>
+              {/each}
+            </select>
+            <ChevronDown
+              size={16}
+              class="absolute right-4 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none"
+            />
+          </div>
+        {/if}
+
+        <button
+          onclick={openImportModal}
+          class="flex items-center justify-center gap-2 px-6 h-14 rounded-2xl bg-brand-500/10 hover:bg-brand-500/20 text-brand-400 border border-brand-500/30 transition-all font-bold active:scale-95 shadow-sm shrink-0 cursor-pointer w-full sm:w-auto"
+        >
+          <ShoppingBag size={18} />
+          Importar Pedido
+        </button>
+
+        <button
+          onclick={() => {
+            const params = new URLSearchParams();
+            if (filterSede) params.set("branch_id", filterSede);
+            goto(`/dashboard/billing/history?${params.toString()}`);
+          }}
+          class="flex items-center justify-center gap-2 px-6 h-14 rounded-2xl bg-surface-strong hover:bg-surface-base text-text-base border border-border-subtle transition-all font-bold active:scale-95 shadow-sm shrink-0 cursor-pointer w-full sm:w-auto"
+        >
+          <Clock size={18} class="text-brand-400" />
+          Ver Historial
+        </button>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-1 xl:grid-cols-3 gap-8">
+      <!-- LEFT/CENTER: INVOICE FORM & LINES -->
+      <div class="xl:col-span-2 space-y-6">
+        <!-- CLIENT INFO BOX -->
         <div
-          class="p-6 border-b border-border-subtle bg-surface-soft/40 flex items-center justify-between"
+          class="glass p-6 rounded-3xl border border-border-subtle shadow-xl space-y-4"
         >
           <h3
             class="text-sm font-black uppercase tracking-widest text-text-muted flex items-center gap-2"
           >
-            <ShoppingBag size={16} />
-            Artículos a Facturar
+            <User size={16} />
+            Datos del Cliente
           </h3>
-          {#if uniqueOrigins.length > 0}
-            <div class="flex flex-wrap items-center gap-2 justify-end max-w-xl">
-              {#each uniqueOrigins as origin}
-                <div class="flex items-center gap-2.5 px-4 py-2 bg-brand-500/10 border border-brand-500/20 text-xs md:text-sm font-bold text-text-base rounded-2xl transition-all shadow-sm hover:border-brand-500/30">
-                  <div class="flex items-center gap-1.5 truncate max-w-[280px] md:max-w-md">
-                    <span class="font-black text-brand-400 font-mono">{origin}</span>
-                    {#if importedOrdersInfo[origin]?.descrip}
-                      <span class="text-text-muted">: </span>
-                      <span class="text-text-secondary truncate font-medium text-xs md:text-sm" title={importedOrdersInfo[origin].descrip}>
-                        {importedOrdersInfo[origin].descrip}
-                      </span>
-                    {/if}
-                  </div>
-                  <button 
-                    onclick={() => removeOrder(origin)}
-                    class="p-1 hover:bg-brand-500/20 text-brand-400 hover:text-brand-300 rounded-lg transition-colors cursor-pointer flex items-center justify-center border-none bg-transparent shrink-0"
-                    title={`Quitar pedido ${origin}`}
+
+          {#if !selectedClient}
+            <div
+              class="p-8 border border-dashed border-border-subtle rounded-2xl flex flex-col items-center justify-center text-center gap-2"
+            >
+              <User size={32} class="text-text-muted/30" />
+              <p class="text-xs text-text-muted font-bold">
+                No hay ningún cliente cargado. Haz clic en "Importar Pedido"
+                para iniciar.
+              </p>
+            </div>
+          {:else}
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4" in:slide>
+              <div class="md:col-span-2 space-y-1">
+                <span
+                  class="text-[9px] font-black uppercase tracking-widest text-text-muted"
+                  >Nombre / Razón Social</span
+                >
+                <p class="text-base font-black text-text-base">
+                  {selectedClient.cli_des}
+                </p>
+              </div>
+              <div class="space-y-1">
+                <span
+                  class="text-[9px] font-black uppercase tracking-widest text-text-muted"
+                  >RIF / CI</span
+                >
+                <p class="text-base font-bold font-mono text-text-base">
+                  {selectedClient.rif || "---"}
+                </p>
+              </div>
+              <div class="md:col-span-2 space-y-1">
+                <span
+                  class="text-[9px] font-black uppercase tracking-widest text-text-muted"
+                  >Dirección</span
+                >
+                <p class="text-xs text-text-muted font-bold leading-relaxed">
+                  {selectedClient.direc1 || "---"}
+                </p>
+              </div>
+              <div class="space-y-1">
+                <span
+                  class="text-[9px] font-black uppercase tracking-widest text-text-muted"
+                  >Teléfono</span
+                >
+                <p class="text-xs text-text-muted font-bold font-mono">
+                  {selectedClient.telefonos || "---"}
+                </p>
+              </div>
+              <div
+                class="md:col-span-3 grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 border-t border-border-subtle/30"
+              >
+                <div class="space-y-1">
+                  <span
+                    class="text-[9px] font-black uppercase tracking-widest text-text-muted"
+                    >Estatus Fiscal</span
                   >
-                    <X size={14} class="stroke-[3]" />
-                  </button>
+                  <p class="text-xs font-bold text-brand-400">
+                    {selectedClient.porc_esp > 0
+                      ? `Contribuyente Especial (${selectedClient.porc_esp}%)`
+                      : selectedClient.contribuyente
+                        ? "Contribuyente Especial"
+                        : "No Contribuyente"}
+                  </p>
                 </div>
-              {/each}
+                <div class="space-y-1">
+                  <span
+                    class="text-[9px] font-black uppercase tracking-widest text-text-muted"
+                    >Vendedor del Pedido</span
+                  >
+                  <p class="text-xs font-bold text-text-base">
+                    {activeVenDes || activeCoVen || "Sin asignar"}
+                  </p>
+                </div>
+              </div>
             </div>
           {/if}
         </div>
 
-        {#if billingLines.length === 0}
+        <!-- INVOICE RENG-LINES TABLE -->
+        <div
+          class="glass border border-border-subtle rounded-3xl shadow-xl overflow-hidden"
+        >
           <div
-            class="p-20 text-center flex flex-col items-center justify-center gap-3"
+            class="p-6 border-b border-border-subtle bg-surface-soft/40 flex items-center justify-between"
           >
-            <ShoppingBag size={48} class="text-text-muted/30 animate-pulse" />
-            <h4 class="text-lg font-bold text-text-muted">Factura vacía</h4>
-            <p class="text-xs text-text-muted/50 max-w-xs">
-              Los artículos importados del pedido seleccionado aparecerán aquí.
-            </p>
-          </div>
-        {:else}
-          <div class="overflow-x-auto" in:slide>
-            <table class="w-full text-left border-collapse">
-              <thead>
-                <tr
-                  class="bg-surface-strong border-b border-border-subtle text-xs font-black uppercase tracking-wider text-text-muted"
-                >
-                  <th class="px-6 py-4 w-12 text-center">Item</th>
-                  <th class="px-6 py-4">Artículo</th>
-                  <th class="px-6 py-4 text-center">Cantidad</th>
-                  <th class="px-6 py-4 text-center">Tipo Precio</th>
-                  <th class="px-6 py-4 text-right">Precio {showUSD ? 'USD' : 'Bs'}</th>
-                  <th class="px-6 py-4 text-right">Total {showUSD ? 'USD' : 'Bs'}</th>
-                </tr>
-              </thead>
-              <tbody class="divide-y divide-border-subtle text-xs">
-                {#each billingLines as line, idx (line.co_art + idx)}
-                  <tr class="hover:bg-surface-soft/60 transition-colors">
-                    <td class="px-6 py-4 text-center font-mono text-text-muted">
-                      {line.reng_num || idx + 1}
-                    </td>
-
-                    <td class="px-6 py-4 min-w-[220px]">
-                      <div class="flex flex-col gap-1">
-                        <span class="font-black text-text-base leading-snug break-words">
-                          {line.art_des}
-                        </span>
+            <h3
+              class="text-sm font-black uppercase tracking-widest text-text-muted flex items-center gap-2"
+            >
+              <ShoppingBag size={16} />
+              Artículos a Facturar
+            </h3>
+            {#if uniqueOrigins.length > 0}
+              <div
+                class="flex flex-wrap items-center gap-2 justify-end max-w-xl"
+              >
+                {#each uniqueOrigins as origin}
+                  <div
+                    class="flex items-center gap-2.5 px-4 py-2 bg-brand-500/10 border border-brand-500/20 text-xs md:text-sm font-bold text-text-base rounded-2xl transition-all shadow-sm hover:border-brand-500/30"
+                  >
+                    <div
+                      class="flex items-center gap-1.5 truncate max-w-[280px] md:max-w-md"
+                    >
+                      <span class="font-black text-brand-400 font-mono"
+                        >{origin}</span
+                      >
+                      {#if importedOrdersInfo[origin]?.descrip}
+                        <span class="text-text-muted">: </span>
                         <span
-                          class="text-[9px] text-text-muted font-mono font-bold"
-                          >{line.co_art.trim()}</span
+                          class="text-text-secondary truncate font-medium text-xs md:text-sm"
+                          title={importedOrdersInfo[origin].descrip}
                         >
-                      </div>
-                    </td>
+                          {importedOrdersInfo[origin].descrip}
+                        </span>
+                      {/if}
+                    </div>
+                    <button
+                      onclick={() => removeOrder(origin)}
+                      class="p-1 hover:bg-brand-500/20 text-brand-400 hover:text-brand-300 rounded-lg transition-colors cursor-pointer flex items-center justify-center border-none bg-transparent shrink-0"
+                      title={`Quitar pedido ${origin}`}
+                    >
+                      <X size={14} class="stroke-[3]" />
+                    </button>
+                  </div>
+                {/each}
+              </div>
+            {/if}
+          </div>
 
-                    <td class="px-6 py-4 text-center font-black text-text-base">
-                      {Number(line.cantidad).toFixed(2)} {line.unidad?.trim() || line.co_uni?.trim()}
-                    </td>
+          {#if billingLines.length === 0}
+            <div
+              class="p-20 text-center flex flex-col items-center justify-center gap-3"
+            >
+              <ShoppingBag size={48} class="text-text-muted/30 animate-pulse" />
+              <h4 class="text-lg font-bold text-text-muted">Factura vacía</h4>
+              <p class="text-xs text-text-muted/50 max-w-xs">
+                Los artículos importados del pedido seleccionado aparecerán
+                aquí.
+              </p>
+            </div>
+          {:else}
+            <div class="overflow-x-auto" in:slide>
+              <table class="w-full text-left border-collapse">
+                <thead>
+                  <tr
+                    class="bg-surface-strong border-b border-border-subtle text-xs font-black uppercase tracking-wider text-text-muted"
+                  >
+                    <th class="px-6 py-4 w-12 text-center">Item</th>
+                    <th class="px-6 py-4">Artículo</th>
+                    <th class="px-6 py-4 text-center">Cantidad</th>
+                    <th class="px-6 py-4 text-center">Tipo Precio</th>
+                    <th class="px-6 py-4 text-right"
+                      >Precio {showUSD ? "USD" : "Bs"}</th
+                    >
+                    <th class="px-6 py-4 text-right"
+                      >Total {showUSD ? "USD" : "Bs"}</th
+                    >
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-border-subtle text-xs">
+                  {#each billingLines as line, idx (line.co_art + idx)}
+                    <tr class="hover:bg-surface-soft/60 transition-colors">
+                      <td
+                        class="px-6 py-4 text-center font-mono text-text-muted"
+                      >
+                        {line.reng_num || idx + 1}
+                      </td>
 
-                    <td class="px-6 py-4 text-center font-bold text-text-muted font-mono">
-                      {#if line.is_custom_price}
-                        <div class="inline-flex flex-col items-center gap-0.5">
-                          <span class="px-2 py-0.5 rounded-md bg-amber-500/15 text-amber-400 border border-amber-500/30 text-[10px] font-black uppercase">
-                            Precio Autorizado
+                      <td class="px-6 py-4 min-w-[220px]">
+                        <div class="flex flex-col gap-1">
+                          <span
+                            class="font-black text-text-base leading-snug break-words"
+                          >
+                            {line.art_des}
                           </span>
-                          {#if line.authorized_by}
-                            <span class="text-[9px] text-amber-400/80 font-semibold">
-                              Aut: {line.authorized_by}
+                          <div class="flex flex-wrap items-center gap-1.5">
+                            <span
+                              class="text-[9px] text-text-muted font-mono font-bold"
+                              >{line.co_art.trim()}</span
+                            >
+                            {#if isServiceLine(line)}
+                              <span
+                                class="px-1.5 py-0.5 rounded bg-violet-500/15 border border-violet-500/30 text-[8px] font-black text-violet-300 uppercase"
+                                >SERVICIO</span
+                              >
+                            {/if}
+                            {#if isLineExempt(line)}
+                              <span
+                                class="px-1.5 py-0.5 rounded bg-amber-500/15 border border-amber-500/30 text-[8px] font-black text-amber-400 uppercase"
+                                >EXENTO 0%</span
+                              >
+                            {:else}
+                              <span
+                                class="px-1.5 py-0.5 rounded bg-emerald-500/15 border border-emerald-500/30 text-[8px] font-black text-emerald-400 uppercase"
+                                >IVA {Number(line.porc_imp || 16)}%</span
+                              >
+                            {/if}
+                          </div>
+                        </div>
+                      </td>
+
+                      <td
+                        class="px-6 py-4 text-center font-black text-text-base"
+                      >
+                        {Number(line.cantidad).toFixed(2)}
+                        {line.unidad?.trim() || line.co_uni?.trim()}
+                      </td>
+
+                      <td
+                        class="px-6 py-4 text-center font-bold text-text-muted font-mono"
+                      >
+                        {#if line.is_custom_price}
+                          <div
+                            class="inline-flex flex-col items-center gap-0.5"
+                          >
+                            <span
+                              class="px-2 py-0.5 rounded-md bg-amber-500/15 text-amber-400 border border-amber-500/30 text-[10px] font-black uppercase"
+                            >
+                              Precio Autorizado
                             </span>
+                            {#if line.authorized_by}
+                              <span
+                                class="text-[9px] text-amber-400/80 font-semibold"
+                              >
+                                Aut: {line.authorized_by}
+                              </span>
+                            {/if}
+                          </div>
+                        {:else}
+                          {line.co_precio
+                            ? `Precio ${parseInt(line.co_precio, 10) || line.co_precio.trim()}`
+                            : "---"}
+                        {/if}
+                      </td>
+
+                      <td
+                        class="px-6 py-4 text-right font-bold text-text-muted"
+                      >
+                        <div
+                          class="inline-flex items-center justify-end gap-1.5"
+                        >
+                          <span>
+                            {activeTotals.symbol}
+                            {(
+                              Number(line.precio) *
+                              (showUSD ? 1 : Number(activeTasa || 1))
+                            ).toLocaleString("de-DE", {
+                              minimumFractionDigits: 2,
+                              maximumFractionDigits: 2,
+                            })}
+                          </span>
+                          {#if allowEditablePrices}
+                            <button
+                              type="button"
+                              onclick={() => openBillingPriceAuthModal(idx)}
+                              class="p-1.5 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/25 transition-colors cursor-pointer"
+                              title="Editar precio unitario (requiere autorización)"
+                            >
+                              <KeyRound size={12} />
+                            </button>
                           {/if}
                         </div>
-                      {:else}
-                        {line.co_precio ? `Precio ${parseInt(line.co_precio, 10) || line.co_precio.trim()}` : '---'}
-                      {/if}
-                    </td>
+                      </td>
 
-                    <td class="px-6 py-4 text-right font-bold text-text-muted">
-                      <div class="inline-flex items-center justify-end gap-1.5">
-                        <span>
-                          {activeTotals.symbol} {(Number(line.precio) * (showUSD ? 1 : Number(activeTasa || 1))).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                        </span>
-                        {#if allowEditablePrices}
-                          <button
-                            type="button"
-                            onclick={() => openBillingPriceAuthModal(idx)}
-                            class="p-1.5 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/25 transition-colors cursor-pointer"
-                            title="Editar precio unitario (requiere autorización)"
-                          >
-                            <KeyRound size={12} />
-                          </button>
-                        {/if}
-                      </div>
-                    </td>
-
-                    <td class="px-6 py-4 text-right font-black text-brand-500">
-                      {activeTotals.symbol} {(Number(line.cantidad) * Number(line.precio) * (showUSD ? 1 : Number(activeTasa || 1))).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    </td>
-                  </tr>
-                {/each}
-              </tbody>
-            </table>
-          </div>
-        {/if}
-      </div>
-    </div>
-
-    <!-- RIGHT COLUMN: TOTALS & PRINT SETTINGS -->
-    <div class="xl:col-span-1">
-      <div
-        class="glass p-8 rounded-[32px] border border-border-subtle space-y-8 bg-brand-500/[0.03] backdrop-blur-3xl relative overflow-hidden flex flex-col sticky top-24 shadow-xl"
-      >
-        <div
-          class="absolute -top-12 -right-12 w-48 h-48 bg-brand-500/10 rounded-full blur-[80px]"
-        ></div>
-
-        <div
-          class="flex items-center justify-between border-b border-border-subtle pb-6 relative z-10"
-        >
-          <h4
-            class="text-[10px] font-black uppercase tracking-[0.2em] text-text-muted"
-          >
-            Total Documento
-          </h4>
-          <div
-            class="flex bg-surface-base p-1 rounded-xl border border-border-bold shadow-lg"
-          >
-            <button
-              onclick={() => toggleCurrency(true)}
-              class={`px-5 py-2 rounded-lg text-xs font-black transition-all duration-300 ${showUSD ? "bg-brand-600 text-white shadow-lg scale-105" : "text-text-muted hover:text-text-base"}`}
-              >USD</button
-            >
-            <button
-              onclick={() => toggleCurrency(false)}
-              class={`px-5 py-2 rounded-lg text-xs font-black transition-all duration-300 ${!showUSD ? "bg-brand-600 text-white shadow-lg scale-105" : "text-text-muted hover:text-text-base"}`}
-              >BS</button
-            >
-          </div>
+                      <td
+                        class="px-6 py-4 text-right font-black text-brand-500"
+                      >
+                        {activeTotals.symbol}
+                        {(
+                          Number(line.cantidad) *
+                          Number(line.precio) *
+                          (showUSD ? 1 : Number(activeTasa || 1))
+                        ).toLocaleString("de-DE", {
+                          minimumFractionDigits: 2,
+                          maximumFractionDigits: 2,
+                        })}
+                      </td>
+                    </tr>
+                  {/each}
+                </tbody>
+              </table>
+            </div>
+          {/if}
         </div>
+      </div>
 
-        <div class="space-y-6 relative z-10">
+      <!-- RIGHT COLUMN: TOTALS & PRINT SETTINGS -->
+      <div class="xl:col-span-1">
+        <div
+          class="glass p-8 rounded-[32px] border border-border-subtle space-y-8 bg-brand-500/[0.03] backdrop-blur-3xl relative overflow-hidden flex flex-col sticky top-24 shadow-xl"
+        >
           <div
-            class="flex justify-between items-center text-base font-bold text-text-muted"
-          >
-            <span>Sub-Total</span>
-            <span class="font-mono text-text-base"
-              >{activeTotals.symbol} {activeTotals.subtotal.toLocaleString("de-DE", {
-                minimumFractionDigits: 2,
-                maximumFractionDigits: 2,
-              })}</span
-            >
-          </div>
+            class="absolute -top-12 -right-12 w-48 h-48 bg-brand-500/10 rounded-full blur-[80px]"
+          ></div>
 
           <div
-            class="flex justify-between items-center text-base font-bold text-text-muted"
+            class="flex items-center justify-between border-b border-border-subtle pb-6 relative z-10"
           >
-            <span>I.V.A</span>
-            <span class="font-mono text-brand-400"
-              >{activeTotals.symbol} {activeTotals.tax.toLocaleString("de-DE", {
-                minimumFractionDigits: 2,
-                maximumFractionDigits: 2,
-              })}</span
+            <h4
+              class="text-[10px] font-black uppercase tracking-[0.2em] text-text-muted"
             >
-          </div>
-
-          <div
-            class="flex justify-between items-center text-base font-bold text-text-muted border-t border-border-subtle/50 pt-4"
-          >
-            <span>Total Factura</span>
-            <span class="font-mono text-text-base"
-              >{activeTotals.symbol} {activeTotals.totalFactura.toLocaleString("de-DE", {
-                minimumFractionDigits: 2,
-                maximumFractionDigits: 2,
-              })}</span
-            >
-          </div>
-
-          {#if activeTotals.retencion > 0}
+              Total Documento
+            </h4>
             <div
-              class="flex justify-between items-center text-base font-bold text-amber-500/90"
-              transition:slide
+              class="flex bg-surface-base p-1 rounded-xl border border-border-bold shadow-lg"
             >
-              <span>Retención ({activeTotals.porc_esp}%)</span>
-              <span class="font-mono"
-                >- {activeTotals.symbol} {activeTotals.retencion.toLocaleString("de-DE", {
+              <button
+                onclick={() => toggleCurrency(true)}
+                class={`px-5 py-2 rounded-lg text-xs font-black transition-all duration-300 ${showUSD ? "bg-brand-600 text-white shadow-lg scale-105" : "text-text-muted hover:text-text-base"}`}
+                >USD</button
+              >
+              <button
+                onclick={() => toggleCurrency(false)}
+                class={`px-5 py-2 rounded-lg text-xs font-black transition-all duration-300 ${!showUSD ? "bg-brand-600 text-white shadow-lg scale-105" : "text-text-muted hover:text-text-base"}`}
+                >BS</button
+              >
+            </div>
+          </div>
+
+          <div class="space-y-6 relative z-10">
+            <div
+              class="flex justify-between items-center text-base font-bold text-text-muted"
+            >
+              <span>Sub-Total</span>
+              <span class="font-mono text-text-base"
+                >{activeTotals.symbol}
+                {activeTotals.subtotal.toLocaleString("de-DE", {
                   minimumFractionDigits: 2,
                   maximumFractionDigits: 2,
                 })}</span
               >
             </div>
-          {/if}
 
-          <!-- IGTF Switch and Amount input -->
-          <div class="border-t border-border-subtle/50 pt-4 space-y-4">
-            <div class="flex items-center justify-between">
-              <span class="text-sm font-bold text-text-muted flex items-center gap-2">
-                <Landmark size={16} class="text-brand-500" />
-                Aplicar IGTF (3%)
-              </span>
-              <button
-                type="button"
-                onclick={() => {
-                  enableIgtf = !enableIgtf;
-                  if (!enableIgtf) igtfMontoDivisa = null;
-                }}
-                class={`w-12 h-6 flex items-center rounded-full p-1 cursor-pointer transition-all duration-300 ${
-                  enableIgtf ? 'bg-brand-600' : 'bg-surface-strong'
-                }`}
+            <div
+              class="flex justify-between items-center text-base font-bold text-text-muted"
+            >
+              <span>I.V.A</span>
+              <span class="font-mono text-brand-400"
+                >{activeTotals.symbol}
+                {activeTotals.tax.toLocaleString("de-DE", {
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2,
+                })}</span
               >
-                <div
-                  class={`bg-white w-4 h-4 rounded-full shadow-md transform transition-all duration-300 ${
-                    enableIgtf ? 'translate-x-6' : 'translate-x-0'
-                  }`}
-                ></div>
-              </button>
             </div>
 
-            {#if enableIgtf}
-              <div class="space-y-2" transition:slide>
-                <div class="flex items-center justify-between text-xs text-text-muted">
-                  <span>Monto en divisa a cancelar:</span>
-                </div>
-                <div class="relative">
-                  <span class="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-text-muted">$</span>
-                  <input
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    placeholder="Monto en USD..."
-                    bind:value={igtfMontoDivisa}
-                    class="w-full bg-surface-soft border border-border-subtle pl-7 pr-4 py-2.5 rounded-xl text-xs text-text-base placeholder-text-muted/50 focus:border-brand-500/50 focus:ring-0 focus:outline-hidden transition-all font-mono"
-                  />
-                </div>
-                {#if activeTotals.igtfUsd > 0}
-                  <div class="flex justify-between items-center text-xs font-bold text-brand-400 mt-2 font-mono" transition:fade>
-                    <span>Impuesto IGTF (3%):</span>
-                    <span>{activeTotals.symbol} {activeTotals.igtfUsd.toLocaleString("de-DE", {
-                      minimumFractionDigits: 2,
-                      maximumFractionDigits: 2,
-                    })}</span>
-                  </div>
-                {/if}
-              </div>
-            {/if}
-          </div>
+            <div
+              class="flex justify-between items-center text-base font-bold text-text-muted border-t border-border-subtle/50 pt-4"
+            >
+              <span>Total Factura</span>
+              <span class="font-mono text-text-base"
+                >{activeTotals.symbol}
+                {activeTotals.totalFactura.toLocaleString("de-DE", {
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2,
+                })}</span
+              >
+            </div>
 
-          <div
-            class="pt-8 border-t border-border-bold flex flex-col gap-2"
-          >
-            <div class="flex justify-between items-end">
-              <div>
-                <span
-                  class="text-[10px] font-black uppercase tracking-[0.2em] text-brand-400/60 block mb-2"
-                  >Total a Cobrar</span
-                >
-                <div
-                  class="text-5xl font-black text-text-base drop-shadow-[0_4px_12px_rgba(var(--brand-rgb),0.3)] tracking-tight leading-none text-brand-400"
-                >
-                  {activeTotals.symbol} {activeTotals.total.toLocaleString("de-DE", {
+            {#if activeTotals.retencion > 0}
+              <div
+                class="flex justify-between items-center text-base font-bold text-amber-500/90"
+                transition:slide
+              >
+                <span>Retención ({activeTotals.porc_esp}%)</span>
+                <span class="font-mono"
+                  >- {activeTotals.symbol}
+                  {activeTotals.retencion.toLocaleString("de-DE", {
                     minimumFractionDigits: 2,
                     maximumFractionDigits: 2,
-                  })}
+                  })}</span
+                >
+              </div>
+            {/if}
+
+            <!-- IGTF Switch and Amount input -->
+            <div class="border-t border-border-subtle/50 pt-4 space-y-4">
+              <div class="flex items-center justify-between">
+                <span
+                  class="text-sm font-bold text-text-muted flex items-center gap-2"
+                >
+                  <Landmark size={16} class="text-brand-500" />
+                  Aplicar IGTF (3%)
+                </span>
+                <button
+                  type="button"
+                  onclick={() => {
+                    enableIgtf = !enableIgtf;
+                    if (!enableIgtf) igtfMontoDivisa = null;
+                  }}
+                  class={`w-12 h-6 flex items-center rounded-full p-1 cursor-pointer transition-all duration-300 ${
+                    enableIgtf ? "bg-brand-600" : "bg-surface-strong"
+                  }`}
+                >
+                  <div
+                    class={`bg-white w-4 h-4 rounded-full shadow-md transform transition-all duration-300 ${
+                      enableIgtf ? "translate-x-6" : "translate-x-0"
+                    }`}
+                  ></div>
+                </button>
+              </div>
+
+              {#if enableIgtf}
+                <div class="space-y-2" transition:slide>
+                  <div
+                    class="flex items-center justify-between text-xs text-text-muted"
+                  >
+                    <span>Monto en divisa a cancelar:</span>
+                  </div>
+                  <div class="relative">
+                    <span
+                      class="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-text-muted"
+                      >$</span
+                    >
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      placeholder="Monto en USD..."
+                      bind:value={igtfMontoDivisa}
+                      class="w-full bg-surface-soft border border-border-subtle pl-7 pr-4 py-2.5 rounded-xl text-xs text-text-base placeholder-text-muted/50 focus:border-brand-500/50 focus:ring-0 focus:outline-hidden transition-all font-mono"
+                    />
+                  </div>
+                  {#if activeTotals.igtfUsd > 0}
+                    <div
+                      class="flex justify-between items-center text-xs font-bold text-brand-400 mt-2 font-mono"
+                      transition:fade
+                    >
+                      <span>Impuesto IGTF (3%):</span>
+                      <span
+                        >{activeTotals.symbol}
+                        {activeTotals.igtfUsd.toLocaleString("de-DE", {
+                          minimumFractionDigits: 2,
+                          maximumFractionDigits: 2,
+                        })}</span
+                      >
+                    </div>
+                  {/if}
+                </div>
+              {/if}
+            </div>
+
+            <div class="pt-8 border-t border-border-bold flex flex-col gap-2">
+              <div class="flex justify-between items-end">
+                <div>
+                  <span
+                    class="text-[10px] font-black uppercase tracking-[0.2em] text-brand-400/60 block mb-2"
+                    >Total a Cobrar</span
+                  >
+                  <div
+                    class="text-5xl font-black text-text-base drop-shadow-[0_4px_12px_rgba(var(--brand-rgb),0.3)] tracking-tight leading-none text-brand-400"
+                  >
+                    {activeTotals.symbol}
+                    {activeTotals.total.toLocaleString("de-DE", {
+                      minimumFractionDigits: 2,
+                      maximumFractionDigits: 2,
+                    })}
+                  </div>
                 </div>
               </div>
             </div>
           </div>
-        </div>
 
-        {#if hasMultipleOrigins}
-          <div
-            class="p-4 bg-red-500/10 border border-red-500/20 text-red-400 rounded-2xl text-xs flex gap-2 items-start relative z-10"
-          >
-            <AlertTriangle size={16} class="shrink-0 mt-0.5" />
-            <div>
-              <p class="font-bold">Múltiples Pedidos Cargados</p>
-              <p class="text-[10px] text-red-500/70 mt-1 font-medium leading-relaxed font-mono">
-                Esta factura contiene artículos de múltiples pedidos ({originOrderNum}). Solo se permite sumar montos para visualización; la facturación está inhabilitada.
-              </p>
-            </div>
-          </div>
-        {/if}
-
-        <!-- ACTION BUTTONS: SAVE & SECONDARY (DESCARTAR / PREVISUALIZAR) -->
-        <div class="pt-6 space-y-4 relative z-10">
-          <!-- SAVE BUTTON -->
-          <button
-            type="button"
-            onclick={saveAndPrintSimulatedInvoice}
-            disabled={billingLines.length === 0 ||
-              isSavingInvoice ||
-              hasMultipleOrigins}
-            class="w-full h-20 bg-brand-600 hover:bg-brand-500 text-white rounded-[24px] font-black text-xl uppercase tracking-[0.2em] shadow-[0_20px_40px_-10px_rgba(var(--brand-rgb),0.3)] active:scale-[0.97] transition-all flex items-center justify-center gap-4 disabled:opacity-50 disabled:grayscale group cursor-pointer border-none"
-          >
-            {#if isSavingInvoice}
-              <RefreshCw size={28} class="animate-spin text-brand-400/40" />
-              <span class="animate-pulse">Guardando Factura...</span>
-            {:else}
-              <div class="bg-surface-strong/50 p-2.5 rounded-xl group-hover:scale-110 transition-transform">
-                <Check size={28} />
+          {#if hasMultipleOrigins}
+            <div
+              class="p-4 bg-red-500/10 border border-red-500/20 text-red-400 rounded-2xl text-xs flex gap-2 items-start relative z-10"
+            >
+              <AlertTriangle size={16} class="shrink-0 mt-0.5" />
+              <div>
+                <p class="font-bold">Múltiples Pedidos Cargados</p>
+                <p
+                  class="text-[10px] text-red-500/70 mt-1 font-medium leading-relaxed font-mono"
+                >
+                  Esta factura contiene artículos de múltiples pedidos ({originOrderNum}).
+                  Solo se permite sumar montos para visualización; la
+                  facturación está inhabilitada.
+                </p>
               </div>
-              <span>Guardar Factura</span>
-            {/if}
-          </button>
+            </div>
+          {/if}
 
-          <!-- SECONDARY BUTTONS: DESCARTAR TODO & PREVISUALIZAR -->
-          <div class="grid grid-cols-2 gap-4">
+          <!-- ACTION BUTTONS: SAVE & SECONDARY (DESCARTAR / PREVISUALIZAR) -->
+          <div class="pt-6 space-y-4 relative z-10">
+            <!-- SAVE BUTTON -->
             <button
               type="button"
-              onclick={clearBillingForm}
-              disabled={billingLines.length === 0 && !selectedClient}
-              class="h-14 rounded-2xl text-text-muted hover:bg-red-500/10 hover:text-red-400 hover:border-red-500/20 transition-all text-xs font-black uppercase tracking-widest border border-border-subtle cursor-pointer disabled:opacity-40 disabled:pointer-events-none flex items-center justify-center active:scale-[0.98]"
+              onclick={saveAndPrintSimulatedInvoice}
+              disabled={billingLines.length === 0 ||
+                isSavingInvoice ||
+                hasMultipleOrigins}
+              class="w-full h-20 bg-brand-600 hover:bg-brand-500 text-white rounded-[24px] font-black text-xl uppercase tracking-[0.2em] shadow-[0_20px_40px_-10px_rgba(var(--brand-rgb),0.3)] active:scale-[0.97] transition-all flex items-center justify-center gap-4 disabled:opacity-50 disabled:grayscale group cursor-pointer border-none"
             >
-              Descartar Todo
+              {#if isSavingInvoice}
+                <RefreshCw size={28} class="animate-spin text-brand-400/40" />
+                <span class="animate-pulse">Guardando Factura...</span>
+              {:else}
+                <div
+                  class="bg-surface-strong/50 p-2.5 rounded-xl group-hover:scale-110 transition-transform"
+                >
+                  <Check size={28} />
+                </div>
+                <span>Guardar Factura</span>
+              {/if}
             </button>
-            <button
-              type="button"
-              onclick={openPreviewModal}
-              disabled={billingLines.length === 0 || isSavingInvoice}
-              class="h-14 rounded-2xl text-brand-400 hover:bg-brand-500/10 transition-all text-xs font-black uppercase tracking-widest border border-brand-500/15 cursor-pointer disabled:opacity-40 disabled:pointer-events-none flex items-center justify-center active:scale-[0.98]"
-            >
-              Previsualizar
-            </button>
+
+            <!-- SECONDARY BUTTONS: DESCARTAR TODO & PREVISUALIZAR -->
+            <div class="grid grid-cols-2 gap-4">
+              <button
+                type="button"
+                onclick={clearBillingForm}
+                disabled={billingLines.length === 0 && !selectedClient}
+                class="h-14 rounded-2xl text-text-muted hover:bg-red-500/10 hover:text-red-400 hover:border-red-500/20 transition-all text-xs font-black uppercase tracking-widest border border-border-subtle cursor-pointer disabled:opacity-40 disabled:pointer-events-none flex items-center justify-center active:scale-[0.98]"
+              >
+                Descartar Todo
+              </button>
+              <button
+                type="button"
+                onclick={openPreviewModal}
+                disabled={billingLines.length === 0 || isSavingInvoice}
+                class="h-14 rounded-2xl text-brand-400 hover:bg-brand-500/10 transition-all text-xs font-black uppercase tracking-widest border border-brand-500/15 cursor-pointer disabled:opacity-40 disabled:pointer-events-none flex items-center justify-center active:scale-[0.98]"
+              >
+                Previsualizar
+              </button>
+            </div>
           </div>
         </div>
       </div>
     </div>
-  </div>
   </div>
 {/if}
 
@@ -1746,64 +2078,82 @@
       </div>
 
       <!-- Contenido Modal -->
-      <div class="flex-1 overflow-y-auto p-6 space-y-6 no-scrollbar min-h-[300px] custom-scrollbar">
+      <div
+        class="flex-1 overflow-y-auto p-6 space-y-6 no-scrollbar min-h-[300px] custom-scrollbar"
+      >
         <!-- Buscador -->
         <div class="relative">
-          <Search size={18} class="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted" />
-          <input 
-            type="text" 
-            placeholder="Buscar por nro. pedido, RIF o nombre de cliente..." 
+          <Search
+            size={18}
+            class="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted"
+          />
+          <input
+            type="text"
+            placeholder="Buscar por nro. pedido, RIF o nombre de cliente..."
             bind:value={importSearchQuery}
             oninput={searchOrders}
             class="w-full bg-surface-soft border border-border-subtle pl-12 pr-4 py-3.5 rounded-2xl text-sm text-text-base placeholder-text-muted/50 focus:border-brand-500/50 focus:ring-0 focus:outline-hidden transition-all font-medium"
           />
           {#if isSearchingOrders}
-            <RefreshCw size={16} class="animate-spin absolute right-4 top-1/2 -translate-y-1/2 text-brand-500" />
+            <RefreshCw
+              size={16}
+              class="animate-spin absolute right-4 top-1/2 -translate-y-1/2 text-brand-500"
+            />
           {/if}
         </div>
 
         <!-- Resultados -->
         <div class="space-y-3">
-        {#if isSearchingOrders}
-          <div class="flex flex-col items-center justify-center py-20 gap-4">
-            <Loader2 size={40} class="animate-spin text-brand-500" />
-            <p class="text-text-muted font-bold animate-pulse">
-              Buscando pedidos...
-            </p>
-          </div>
-        {:else if foundOrders.length === 0}
-          <div
-            class="flex flex-col items-center justify-center py-20 gap-3 text-text-muted opacity-50 bg-surface-base"
-          >
-            <FileText size={48} />
-            <p class="font-bold">No se encontraron pedidos pendientes</p>
-          </div>
-        {:else}
-          {#each foundOrders as order (order.doc_num + order.sede_id)}
-            {@const isParcial = String(order.status).trim() === '1'}
-            {@const docTasa = Number(order.tasa || 1) > 1 ? Number(order.tasa) : Number(order.tasa_actual || 1)}
-            {@const rawUsd = Number(order.total_neto) / docTasa}
-            {@const formattedUsd = rawUsd.toLocaleString('de-DE', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
-            {@const formattedBs = Number(order.total_neto).toLocaleString('de-DE', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
-            
-            <ImportItemCard
-              docType="PED"
-              docNum={order.doc_num}
-              statusLabel={isParcial ? 'Parcial' : 'Sin Procesar'}
-              statusClass={isParcial ? 'bg-amber-500/10 text-amber-400 border-amber-500/20' : 'bg-brand-500/10 text-brand-400 border-brand-500/20'}
-              clientName={order.cli_des || order.co_cli}
-              clientRif={order.co_cli}
-              dateEmis={dayjs(order.fec_emis).format("DD/MM/YYYY")}
-              amountUsd={formattedUsd}
-              amountBs={formattedBs}
-              branchName={getBranchName(order.sede_id) || "N/A"}
-              onclick={() => loadOrderDetailAndImport(order)}
-            />
-          {/each}
-        {/if}
+          {#if isSearchingOrders}
+            <div class="flex flex-col items-center justify-center py-20 gap-4">
+              <Loader2 size={40} class="animate-spin text-brand-500" />
+              <p class="text-text-muted font-bold animate-pulse">
+                Buscando pedidos...
+              </p>
+            </div>
+          {:else if foundOrders.length === 0}
+            <div
+              class="flex flex-col items-center justify-center py-20 gap-3 text-text-muted opacity-50 bg-surface-base"
+            >
+              <FileText size={48} />
+              <p class="font-bold">No se encontraron pedidos pendientes</p>
+            </div>
+          {:else}
+            {#each foundOrders as order (order.doc_num + order.sede_id)}
+              {@const isParcial = String(order.status).trim() === "1"}
+              {@const docTasa =
+                Number(order.tasa || 1) > 1
+                  ? Number(order.tasa)
+                  : Number(order.tasa_actual || 1)}
+              {@const rawUsd = Number(order.total_neto) / docTasa}
+              {@const formattedUsd = rawUsd.toLocaleString("de-DE", {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2,
+              })}
+              {@const formattedBs = Number(order.total_neto).toLocaleString(
+                "de-DE",
+                { minimumFractionDigits: 2, maximumFractionDigits: 2 },
+              )}
+
+              <ImportItemCard
+                docType="PED"
+                docNum={order.doc_num}
+                statusLabel={isParcial ? "Parcial" : "Sin Procesar"}
+                statusClass={isParcial
+                  ? "bg-amber-500/10 text-amber-400 border-amber-500/20"
+                  : "bg-brand-500/10 text-brand-400 border-brand-500/20"}
+                clientName={order.cli_des || order.co_cli}
+                clientRif={order.co_cli}
+                dateEmis={dayjs(order.fec_emis).format("DD/MM/YYYY")}
+                amountUsd={formattedUsd}
+                amountBs={formattedBs}
+                branchName={getBranchName(order.sede_id) || "N/A"}
+                onclick={() => loadOrderDetailAndImport(order)}
+              />
+            {/each}
+          {/if}
         </div>
       </div>
-
     </div>
 
     {#if isLoadingOrderDetail}
@@ -1847,18 +2197,22 @@
       class="w-full max-w-md bg-surface-base border border-border-subtle rounded-[32px] shadow-2xl p-8 space-y-6 text-center relative z-[130]"
       in:scale={{ duration: 200, start: 0.95 }}
     >
-      <div class="h-16 w-16 rounded-2xl bg-brand-500/10 flex items-center justify-center text-brand-400 mx-auto">
+      <div
+        class="h-16 w-16 rounded-2xl bg-brand-500/10 flex items-center justify-center text-brand-400 mx-auto"
+      >
         <Receipt size={32} />
       </div>
-      
+
       <div class="space-y-2">
         <h3 class="text-xl font-black text-text-base">Emisión de Documento</h3>
         <p class="text-xs text-text-muted leading-relaxed">
-          El pedido contiene únicamente un renglón de servicio (exento). ¿Desea emitir el documento como Fiscal?
+          El pedido contiene únicamente un renglón de servicio (exento). ¿Desea
+          emitir el documento como Fiscal?
         </p>
         {#if selectedBranchConfig}
           <p class="text-[10px] text-text-muted/60 font-mono">
-            Sede: {selectedBranchConfig.name} | Fiscal ({defaultBranchCode || 'N/A'}) - Nota ({nonDefaultBranchCode || 'N/A'})
+            Sede: {selectedBranchConfig.name} | Fiscal ({defaultBranchCode ||
+              "N/A"}) - Nota ({nonDefaultBranchCode || "N/A"})
           </p>
         {/if}
       </div>
@@ -1876,7 +2230,8 @@
         <button
           onclick={() => {
             showServiceSucuModal = false;
-            if (pendingSaveResolve) pendingSaveResolve(nonDefaultBranchCode || defaultBranchCode);
+            if (pendingSaveResolve)
+              pendingSaveResolve(nonDefaultBranchCode || defaultBranchCode);
           }}
           class="w-full h-12 bg-surface-strong hover:bg-surface-base text-text-base border border-border-subtle rounded-xl font-bold transition-all text-sm flex items-center justify-center gap-2 cursor-pointer"
         >
@@ -1911,38 +2266,57 @@
       in:scale={{ duration: 200, start: 0.95 }}
     >
       <!-- MODAL HEADER CON TABS DE FORMATO -->
-      <div class="p-6 md:p-7 border-b border-border-subtle flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-surface-soft/60">
+      <div
+        class="p-6 md:p-7 border-b border-border-subtle flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-surface-soft/60"
+      >
         <div class="flex items-center gap-3">
           <div class="p-3 bg-brand-500/10 text-brand-400 rounded-2xl">
-            {#if previewFormat === 'thermal'}
+            {#if previewFormat === "thermal"}
               <Receipt size={24} />
             {:else}
               <FileText size={24} />
             {/if}
           </div>
           <div>
-            <h2 class="text-2xl font-black tracking-tight text-text-base">Previsualización de Documento</h2>
+            <h2 class="text-2xl font-black tracking-tight text-text-base">
+              Previsualización de Documento
+            </h2>
             <p class="text-text-muted text-xs font-medium">
-              {previewDocData.is_fiscal ? 'Factura Fiscal N°' : 'Nota de Entrega N°'} <span class="font-bold text-text-base">{previewDocData.doc_num}</span>
+              {previewDocData.is_fiscal
+                ? "Factura Fiscal N°"
+                : "Nota de Entrega N°"}
+              <span class="font-bold text-text-base"
+                >{previewDocData.doc_num}</span
+              >
             </p>
           </div>
         </div>
 
-        <div class="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-end">
+        <div
+          class="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-end"
+        >
           <!-- SELECTOR DE FORMATO (TÉRMICA 80MM VS MATRICIAL) -->
-          <div class="flex items-center bg-surface-base p-1 rounded-2xl border border-border-subtle shadow-inner">
+          <div
+            class="flex items-center bg-surface-base p-1 rounded-2xl border border-border-subtle shadow-inner"
+          >
             <button
               type="button"
-              onclick={() => (previewFormat = 'thermal')}
-              class="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer {previewFormat === 'thermal' ? 'bg-brand-600 text-white shadow-md' : 'text-text-muted hover:text-text-base'}"
+              onclick={() => (previewFormat = "thermal")}
+              class="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer {previewFormat ===
+              'thermal'
+                ? 'bg-brand-600 text-white shadow-md'
+                : 'text-text-muted hover:text-text-base'}"
             >
               <Receipt size={14} />
               <span>Térmica 80mm</span>
             </button>
             <button
               type="button"
-              onclick={() => (previewFormat = 'matrix')}
-              class="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer {previewFormat === 'matrix' ? 'bg-brand-600 text-white shadow-md' : 'text-text-muted hover:text-text-base'}"
+              onclick={() => (previewFormat = "matrix")}
+              class="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer {previewFormat ===
+              'matrix'
+                ? 'bg-brand-600 text-white shadow-md'
+                : 'text-text-muted hover:text-text-base'}"
             >
               <FileText size={14} />
               <span>Matricial 5.5"</span>
@@ -1960,9 +2334,10 @@
       </div>
 
       <!-- PREVIEW BODY -->
-      <div class="flex-1 overflow-y-auto p-6 bg-surface-soft/30 flex justify-center items-start custom-scrollbar select-none">
-        
-        {#if previewFormat === 'thermal'}
+      <div
+        class="flex-1 overflow-y-auto p-6 bg-surface-soft/30 flex justify-center items-start custom-scrollbar select-none"
+      >
+        {#if previewFormat === "thermal"}
           <!-- TICKET TÉRMICO 80MM (RÉPLICA EXACTA PROFIT ESCRITORIO) -->
           <div
             id="thermal-receipt-printable"
@@ -1970,18 +2345,28 @@
           >
             <!-- 1. ENCABEZADO CENTRADO: LOGO/EMPRESA + RIF + DIRECCIÓN FISCAL DE LA SEDE -->
             <div class="text-center space-y-1 mb-4">
-              <div class="font-black text-sm tracking-tight">{previewDocData.branch_name || 'inversiones Galpe 2021 C.A.'}</div>
-              <div class="text-[10.5px] font-bold">{previewDocData.branch_rif || 'J-401750354'}</div>
-              <div class="text-[9px] uppercase font-medium leading-tight text-slate-800 pt-1 px-1">
+              <div class="font-black text-sm tracking-tight">
+                {previewDocData.branch_name || "inversiones Galpe 2021 C.A."}
+              </div>
+              <div class="text-[10.5px] font-bold">
+                {previewDocData.branch_rif || "J-401750354"}
+              </div>
+              <div
+                class="text-[9px] uppercase font-medium leading-tight text-slate-800 pt-1 px-1"
+              >
                 {previewDocData.branch_address}
               </div>
             </div>
 
             <!-- 2. DATOS DE CLIENTE Y DOCUMENTO -->
-            <div class="space-y-1 text-[10.5px] border-b border-black/10 pb-3 mb-3">
+            <div
+              class="space-y-1 text-[10.5px] border-b border-black/10 pb-3 mb-3"
+            >
               <div>
                 <span class="font-bold">Cliente :</span>
-                <span class="font-bold uppercase pl-1">{previewDocData.cli_des}</span>
+                <span class="font-bold uppercase pl-1"
+                  >{previewDocData.cli_des}</span
+                >
               </div>
 
               <!-- Fila C.I./RIF a la izq | FECHA a la der -->
@@ -2004,22 +2389,28 @@
               <div class="flex justify-between items-baseline">
                 <div>
                   <span class="font-bold">Teléfonos:</span>
-                  <span class="pl-1">{previewDocData.telefonos || '---'}</span>
+                  <span class="pl-1">{previewDocData.telefonos || "---"}</span>
                 </div>
                 <div class="text-right">
-                  <span class="font-black text-[11px] tracking-tight">NOTA DE ENTREGA</span>
+                  <span class="font-black text-[11px] tracking-tight"
+                    >NOTA DE ENTREGA</span
+                  >
                 </div>
               </div>
 
               <!-- Fila Número de Documento a la derecha -->
               <div class="flex justify-end">
-                <span class="font-black text-xs tracking-wider">{previewDocData.doc_num}</span>
+                <span class="font-black text-xs tracking-wider"
+                  >{previewDocData.doc_num}</span
+                >
               </div>
 
               <!-- Dirección del Cliente -->
               <div class="pt-0.5">
                 <span class="font-bold">Dirección:</span>
-                <span class="pl-1 uppercase text-[10px]">{previewDocData.direc1 || '---'}</span>
+                <span class="pl-1 uppercase text-[10px]"
+                  >{previewDocData.direc1 || "---"}</span
+                >
               </div>
 
               <!-- Vendedor -->
@@ -2037,7 +2428,9 @@
 
             <!-- 3. TABLA DE ARTÍCULOS: Descripción | Cant. | Precio | Total -->
             <div class="mb-3">
-              <div class="flex justify-between font-bold text-[10.5px] border-b border-black/20 pb-1 mb-2 px-0.5">
+              <div
+                class="flex justify-between font-bold text-[10.5px] border-b border-black/20 pb-1 mb-2 px-0.5"
+              >
                 <span class="w-[42%] text-left">Descripción</span>
                 <span class="w-[16%] text-right">Cant.</span>
                 <span class="w-[20%] text-right">Precio</span>
@@ -2048,19 +2441,39 @@
                 {#each previewDocData.renglones as r}
                   <div class="space-y-0.5">
                     <!-- Código de artículo -->
-                    <div class="pl-1 text-[9.5px] font-mono text-slate-700 font-bold">{r.co_art}</div>
-                    
+                    <div
+                      class="pl-1 text-[9.5px] font-mono text-slate-700 font-bold"
+                    >
+                      {r.co_art}
+                    </div>
+
                     <!-- Fila con Descripción, Cantidad, Precio y Total -->
                     <div class="flex justify-between items-baseline">
-                      <span class="w-[42%] uppercase font-medium truncate">{r.art_des.slice(0, 18)}</span>
-                      <span class="w-[16%] text-right font-medium">{r.cantidad.toFixed(2).replace('.', ',')}</span>
-                      <span class="w-[20%] text-right font-medium">{r.precio.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                      <span class="w-[22%] text-right font-bold">{r.total.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                      <span class="w-[42%] uppercase font-medium truncate"
+                        >{r.art_des.slice(0, 18)}</span
+                      >
+                      <span class="w-[16%] text-right font-medium"
+                        >{r.cantidad.toFixed(2).replace(".", ",")}</span
+                      >
+                      <span class="w-[20%] text-right font-medium"
+                        >{r.precio.toLocaleString("de-DE", {
+                          minimumFractionDigits: 2,
+                          maximumFractionDigits: 2,
+                        })}</span
+                      >
+                      <span class="w-[22%] text-right font-bold"
+                        >{r.total.toLocaleString("de-DE", {
+                          minimumFractionDigits: 2,
+                          maximumFractionDigits: 2,
+                        })}</span
+                      >
                     </div>
 
                     <!-- Si el nombre excede 18 car, envolver identado abajo -->
                     {#if r.art_des.length > 18}
-                      <div class="pl-1 text-[9px] uppercase text-slate-600 leading-tight">
+                      <div
+                        class="pl-1 text-[9px] uppercase text-slate-600 leading-tight"
+                      >
                         {r.art_des.slice(18)}
                       </div>
                     {/if}
@@ -2070,78 +2483,154 @@
             </div>
 
             <!-- 4. TOTAL -->
-            <div class="border-t border-black/20 pt-2 flex justify-between items-baseline font-bold text-xs mt-3 px-1">
+            <div
+              class="border-t border-black/20 pt-2 flex justify-between items-baseline font-bold text-xs mt-3 px-1"
+            >
               <div class="text-[11px] font-black tracking-tight text-slate-700">
                 Galpe
               </div>
               <div class="flex items-baseline gap-4">
                 <span class="text-xs font-bold">Total</span>
-                <span class="text-sm font-black tracking-tight">{previewDocData.total_neto.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                <span class="text-sm font-black tracking-tight"
+                  >{previewDocData.total_neto.toLocaleString("de-DE", {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
+                  })}</span
+                >
               </div>
             </div>
 
             <!-- 5. PIE LEGAL CENTRADO -->
-            <div class="text-center font-bold text-[10px] tracking-tight mt-5 pt-1 uppercase border-t border-dashed border-slate-300">
+            <div
+              class="text-center font-bold text-[10px] tracking-tight mt-5 pt-1 uppercase border-t border-dashed border-slate-300"
+            >
               {#if previewDocData.is_fiscal}
-                DOCUMENTO FISCAL (IVA REF: {previewDocData.monto_imp.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})
+                DOCUMENTO FISCAL (IVA REF: {previewDocData.monto_imp.toLocaleString(
+                  "de-DE",
+                  { minimumFractionDigits: 2, maximumFractionDigits: 2 },
+                )})
               {:else}
                 SIN DERECHO A CREDITO FISCAL
               {/if}
             </div>
 
             <!-- BORDE DENTADO DE PAPEL TÉRMICO -->
-            <div class="mt-4 pt-2 border-t-2 border-dotted border-slate-300 flex justify-center text-[9px] text-slate-400">
+            <div
+              class="mt-4 pt-2 border-t-2 border-dotted border-slate-300 flex justify-center text-[9px] text-slate-400"
+            >
               - - - - CORTE DE PAPEL - - - -
             </div>
           </div>
         {:else}
           <!-- FORMATO MATRICIAL CONTINUO MEDIA PÁGINA (5.5" ESC/P) -->
-          <div class="w-full max-w-2xl bg-white text-black p-6 rounded-md shadow-2xl font-mono text-[11px] leading-tight border border-slate-300 relative select-text">
-            
+          <div
+            class="w-full max-w-2xl bg-white text-black p-6 rounded-md shadow-2xl font-mono text-[11px] leading-tight border border-slate-300 relative select-text"
+          >
             <!-- TRACTOR FEED HOLES (LEFT & RIGHT) -->
-            <div class="absolute left-1.5 top-0 bottom-0 flex flex-col justify-between py-4 pointer-events-none opacity-25 text-[8px] text-slate-400">
+            <div
+              class="absolute left-1.5 top-0 bottom-0 flex flex-col justify-between py-4 pointer-events-none opacity-25 text-[8px] text-slate-400"
+            >
               {#each Array(14) as _}
-                <div class="w-2.5 h-2.5 rounded-full border border-slate-400 bg-slate-200"></div>
+                <div
+                  class="w-2.5 h-2.5 rounded-full border border-slate-400 bg-slate-200"
+                ></div>
               {/each}
             </div>
-            <div class="absolute right-1.5 top-0 bottom-0 flex flex-col justify-between py-4 pointer-events-none opacity-25 text-[8px] text-slate-400">
+            <div
+              class="absolute right-1.5 top-0 bottom-0 flex flex-col justify-between py-4 pointer-events-none opacity-25 text-[8px] text-slate-400"
+            >
               {#each Array(14) as _}
-                <div class="w-2.5 h-2.5 rounded-full border border-slate-400 bg-slate-200"></div>
+                <div
+                  class="w-2.5 h-2.5 rounded-full border border-slate-400 bg-slate-200"
+                ></div>
               {/each}
             </div>
 
             <!-- PAPER INNER CONTENT -->
             <div class="px-3 space-y-2">
-              
               <!-- TOP ENCLOSED BOX -->
               <div class="border border-black rounded-sm p-2.5 space-y-1.5">
-                <div class="flex justify-between items-baseline font-bold text-xs">
-                  <span class="text-sm font-black tracking-tight">{previewDocData.branch_name || 'inversiones Galpe 2021 C.A.'}</span>
-                  <span class="text-[11px]">R.I.F.: {previewDocData.branch_rif || 'J-401750354'}</span>
-                  <span class="text-[11px]">PEDIDO: {previewDocData.origin_doc || previewDocData.doc_num}</span>
+                <div
+                  class="flex justify-between items-baseline font-bold text-xs"
+                >
+                  <span class="text-sm font-black tracking-tight"
+                    >{previewDocData.branch_name ||
+                      "inversiones Galpe 2021 C.A."}</span
+                  >
+                  <span class="text-[11px]"
+                    >R.I.F.: {previewDocData.branch_rif || "J-401750354"}</span
+                  >
+                  <span class="text-[11px]"
+                    >PEDIDO: {previewDocData.origin_doc ||
+                      previewDocData.doc_num}</span
+                  >
                 </div>
 
                 <div class="text-[8.5px] text-slate-700 leading-tight">
                   {previewDocData.branch_address}
                 </div>
 
-                <div class="grid grid-cols-12 gap-2 pt-1.5 border-t border-black">
+                <div
+                  class="grid grid-cols-12 gap-2 pt-1.5 border-t border-black"
+                >
                   <div class="col-span-7 space-y-1 text-[10px]">
-                    <div class="flex"><span class="w-20 font-bold shrink-0">Cliente :</span> <span class="font-bold uppercase truncate">{previewDocData.cli_des}</span></div>
-                    <div class="flex"><span class="w-20 font-bold shrink-0">R.I.F.:</span> <span class="uppercase">{previewDocData.rif}</span></div>
-                    <div class="flex"><span class="w-20 font-bold shrink-0">Teléfonos:</span> <span>{previewDocData.telefonos || '---'}</span></div>
-                    <div class="flex"><span class="w-20 font-bold shrink-0">Dirección:</span> <span class="line-clamp-2 uppercase text-[9.5px]">{previewDocData.direc1 || '---'}</span></div>
-                    <div class="flex"><span class="w-20 font-bold shrink-0">Dir. Ent.:</span> <span class="uppercase">{previewDocData.dir_entrega || 'CARABOBO'}</span></div>
-                    <div class="flex"><span class="w-20 font-bold shrink-0">Transporte:</span> <span class="uppercase">{previewDocData.transporte || 'INTERNO'}</span></div>
+                    <div class="flex">
+                      <span class="w-20 font-bold shrink-0">Cliente :</span>
+                      <span class="font-bold uppercase truncate"
+                        >{previewDocData.cli_des}</span
+                      >
+                    </div>
+                    <div class="flex">
+                      <span class="w-20 font-bold shrink-0">R.I.F.:</span>
+                      <span class="uppercase">{previewDocData.rif}</span>
+                    </div>
+                    <div class="flex">
+                      <span class="w-20 font-bold shrink-0">Teléfonos:</span>
+                      <span>{previewDocData.telefonos || "---"}</span>
+                    </div>
+                    <div class="flex">
+                      <span class="w-20 font-bold shrink-0">Dirección:</span>
+                      <span class="line-clamp-2 uppercase text-[9.5px]"
+                        >{previewDocData.direc1 || "---"}</span
+                      >
+                    </div>
+                    <div class="flex">
+                      <span class="w-20 font-bold shrink-0">Dir. Ent.:</span>
+                      <span class="uppercase"
+                        >{previewDocData.dir_entrega || "CARABOBO"}</span
+                      >
+                    </div>
+                    <div class="flex">
+                      <span class="w-20 font-bold shrink-0">Transporte:</span>
+                      <span class="uppercase"
+                        >{previewDocData.transporte || "INTERNO"}</span
+                      >
+                    </div>
                   </div>
 
-                  <div class="col-span-5 text-right space-y-0.5 text-[10px] pl-2 border-l border-slate-300">
-                    <div class="text-sm font-black tracking-wider text-black">NOTA DE ENTREGA</div>
-                    <div class="text-base font-black tracking-widest text-black">{previewDocData.doc_num}</div>
-                    <div class="font-bold uppercase text-[10.5px]">{previewDocData.cond_des || 'CONTADO'}</div>
-                    <div class="text-[9.5px] text-slate-800">Fecha Emisión: {previewDocData.fecha}</div>
-                    <div class="text-[9.5px] text-slate-800 truncate">Vendedor: {previewDocData.vendedor}</div>
-                    <div class="text-[9.5px] font-bold">Moneda: {previewDocData.is_usd ? 'DOLAR' : 'BOLIVARES'}</div>
+                  <div
+                    class="col-span-5 text-right space-y-0.5 text-[10px] pl-2 border-l border-slate-300"
+                  >
+                    <div class="text-sm font-black tracking-wider text-black">
+                      NOTA DE ENTREGA
+                    </div>
+                    <div
+                      class="text-base font-black tracking-widest text-black"
+                    >
+                      {previewDocData.doc_num}
+                    </div>
+                    <div class="font-bold uppercase text-[10.5px]">
+                      {previewDocData.cond_des || "CONTADO"}
+                    </div>
+                    <div class="text-[9.5px] text-slate-800">
+                      Fecha Emisión: {previewDocData.fecha}
+                    </div>
+                    <div class="text-[9.5px] text-slate-800 truncate">
+                      Vendedor: {previewDocData.vendedor}
+                    </div>
+                    <div class="text-[9.5px] font-bold">
+                      Moneda: {previewDocData.is_usd ? "DOLAR" : "BOLIVARES"}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -2149,26 +2638,52 @@
               <!-- ITEMS TABLE -->
               <div class="border border-black rounded-sm overflow-hidden">
                 <table class="w-full text-left text-[10px] border-collapse">
-                  <thead class="bg-slate-100 border-b border-black text-black font-bold">
+                  <thead
+                    class="bg-slate-100 border-b border-black text-black font-bold"
+                  >
                     <tr>
-                      <th class="p-1.5 w-24 border-r border-slate-300">Código</th>
-                      <th class="p-1.5 border-r border-slate-300">Descripción</th>
-                      <th class="p-1.5 text-right w-16 border-r border-slate-300">Cantidad</th>
-                      <th class="p-1.5 text-right w-20 border-r border-slate-300">Precio</th>
+                      <th class="p-1.5 w-24 border-r border-slate-300"
+                        >Código</th
+                      >
+                      <th class="p-1.5 border-r border-slate-300"
+                        >Descripción</th
+                      >
+                      <th
+                        class="p-1.5 text-right w-16 border-r border-slate-300"
+                        >Cantidad</th
+                      >
+                      <th
+                        class="p-1.5 text-right w-20 border-r border-slate-300"
+                        >Precio</th
+                      >
                       <th class="p-1.5 text-right w-20">Neto</th>
                     </tr>
                   </thead>
                   <tbody class="divide-y divide-slate-200 text-black">
                     {#each previewDocData.renglones as r}
                       <tr class="hover:bg-slate-50">
-                        <td class="p-1.5 font-mono border-r border-slate-300">{r.co_art}</td>
-                        <td class="p-1.5 font-medium uppercase border-r border-slate-300">{r.art_des}</td>
-                        <td class="p-1.5 text-right font-bold border-r border-slate-300">{r.cantidad.toFixed(2).replace('.', ',')}</td>
+                        <td class="p-1.5 font-mono border-r border-slate-300"
+                          >{r.co_art}</td
+                        >
+                        <td
+                          class="p-1.5 font-medium uppercase border-r border-slate-300"
+                          >{r.art_des}</td
+                        >
+                        <td
+                          class="p-1.5 text-right font-bold border-r border-slate-300"
+                          >{r.cantidad.toFixed(2).replace(".", ",")}</td
+                        >
                         <td class="p-1.5 text-right border-r border-slate-300">
-                          {r.precio.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          {r.precio.toLocaleString("de-DE", {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2,
+                          })}
                         </td>
                         <td class="p-1.5 text-right font-bold">
-                          {r.total.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          {r.total.toLocaleString("de-DE", {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2,
+                          })}
                         </td>
                       </tr>
                     {/each}
@@ -2177,105 +2692,121 @@
               </div>
 
               <!-- FOOTER BOX -->
-              <div class="border border-black rounded-sm p-2 flex justify-between items-end text-[10px]">
+              <div
+                class="border border-black rounded-sm p-2 flex justify-between items-end text-[10px]"
+              >
                 <div class="space-y-1">
                   <div class="font-bold text-black uppercase">
-                    {String(previewDocData.cond_des || '').toUpperCase().includes('CREDITO') ? 'NOTA A CREDITO' : 'NOTA A CONTADO'}
+                    {String(previewDocData.cond_des || "")
+                      .toUpperCase()
+                      .includes("CREDITO")
+                      ? "NOTA A CREDITO"
+                      : "NOTA A CONTADO"}
                   </div>
                   <div class="text-[9px] text-slate-600">Página 1 de 1</div>
                 </div>
 
                 <div class="text-right space-y-0.5">
-                  <div class="flex justify-end gap-3 text-sm font-black text-black">
+                  <div
+                    class="flex justify-end gap-3 text-sm font-black text-black"
+                  >
                     <span>Neto:</span>
                     <span class="w-24 text-right">
-                      {previewDocData.total_neto.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      {previewDocData.total_neto.toLocaleString("de-DE", {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                      })}
                     </span>
                   </div>
-                  <div class="text-[9.5px] font-bold text-black uppercase tracking-tight">
+                  <div
+                    class="text-[9.5px] font-bold text-black uppercase tracking-tight"
+                  >
                     {#if previewDocData.is_fiscal}
-                      DOCUMENTO FISCAL (IVA REF: {previewDocData.monto_imp.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})
+                      DOCUMENTO FISCAL (IVA REF: {previewDocData.monto_imp.toLocaleString(
+                        "de-DE",
+                        { minimumFractionDigits: 2, maximumFractionDigits: 2 },
+                      )})
                     {:else}
                       SIN DERECHO A CREDITO FISCAL
                     {/if}
                   </div>
                 </div>
               </div>
-
             </div>
           </div>
         {/if}
       </div>
 
       <!-- MODAL FOOTER ACTIONS -->
-      <div class="p-6 border-t border-border-subtle bg-surface-soft/60 flex items-center justify-end gap-3">
+      <div
+        class="p-6 border-t border-border-subtle bg-surface-soft/60 flex items-center justify-end gap-3"
+      >
+        <!-- BOTÓN IMPRESIÓN DIRECTA NAVEGADOR -->
+        <button
+          type="button"
+          onclick={handleBrowserPrint}
+          class="px-5 py-3 rounded-2xl bg-surface-base hover:bg-surface-strong text-text-base font-bold text-sm transition-all cursor-pointer border border-border-subtle flex items-center gap-2 shadow-sm"
+        >
+          <Printer size={16} class="text-brand-500" />
+          <span>Navegador (Local)</span>
+        </button>
 
-          <!-- BOTÓN IMPRESIÓN DIRECTA NAVEGADOR -->
+        <!-- BOTÓN IMPRESIÓN POR RED AGENTE O FISCAL -->
+        {#if previewDocData.is_fiscal && fiscalPrinter}
           <button
             type="button"
-            onclick={handleBrowserPrint}
-            class="px-5 py-3 rounded-2xl bg-surface-base hover:bg-surface-strong text-text-base font-bold text-sm transition-all cursor-pointer border border-border-subtle flex items-center gap-2 shadow-sm"
+            onclick={handlePrintFiscalFromModal}
+            disabled={isPrintingNote}
+            class="px-6 py-3 rounded-2xl bg-cyan-600 hover:bg-cyan-500 disabled:opacity-50 text-white font-black text-sm flex items-center justify-center gap-2 shadow-lg shadow-cyan-500/20 transition-all cursor-pointer border-none active:scale-[0.98]"
           >
-            <Printer size={16} class="text-brand-500" />
-            <span>Navegador (Local)</span>
+            {#if isPrintingNote}
+              <RefreshCw size={18} class="animate-spin" />
+              <span>Imprimiendo Fiscal...</span>
+            {:else}
+              <Printer size={18} />
+              <span>Enviar a Impresora Fiscal</span>
+            {/if}
           </button>
+        {:else}
+          <button
+            type="button"
+            onclick={() => handlePrintFromModal()}
+            disabled={isPrintingNote}
+            class="px-7 py-3 rounded-2xl bg-brand-600 hover:bg-brand-500 disabled:opacity-50 text-white font-black text-sm flex items-center justify-center gap-2 shadow-lg shadow-brand-500/20 transition-all cursor-pointer border-none active:scale-[0.98]"
+          >
+            {#if isPrintingNote}
+              <RefreshCw size={18} class="animate-spin" />
+              <span>Imprimiendo...</span>
+            {:else}
+              <Printer size={18} />
+              <span>
+                {#if previewFormat === "thermal"}
+                  Enviar a Térmica Red
+                {:else}
+                  Enviar a Matricial (LX-350)
+                {/if}
+              </span>
+            {/if}
+          </button>
+        {/if}
 
-          <!-- BOTÓN IMPRESIÓN POR RED AGENTE O FISCAL -->
-          {#if previewDocData.is_fiscal && fiscalPrinter}
-            <button
-              type="button"
-              onclick={handlePrintFiscalFromModal}
-              disabled={isPrintingNote}
-              class="px-6 py-3 rounded-2xl bg-cyan-600 hover:bg-cyan-500 disabled:opacity-50 text-white font-black text-sm flex items-center justify-center gap-2 shadow-lg shadow-cyan-500/20 transition-all cursor-pointer border-none active:scale-[0.98]"
-            >
-              {#if isPrintingNote}
-                <RefreshCw size={18} class="animate-spin" />
-                <span>Imprimiendo Fiscal...</span>
-              {:else}
-                <Printer size={18} />
-                <span>Enviar a Impresora Fiscal</span>
-              {/if}
-            </button>
-          {:else}
-            <button
-              type="button"
-              onclick={() => handlePrintFromModal()}
-              disabled={isPrintingNote}
-              class="px-7 py-3 rounded-2xl bg-brand-600 hover:bg-brand-500 disabled:opacity-50 text-white font-black text-sm flex items-center justify-center gap-2 shadow-lg shadow-brand-500/20 transition-all cursor-pointer border-none active:scale-[0.98]"
-            >
-              {#if isPrintingNote}
-                <RefreshCw size={18} class="animate-spin" />
-                <span>Imprimiendo...</span>
-              {:else}
-                <Printer size={18} />
-                <span>
-                  {#if previewFormat === 'thermal'}
-                    Enviar a Térmica Red
-                  {:else}
-                    Enviar a Matricial (LX-350)
-                  {/if}
-                </span>
-              {/if}
-            </button>
-          {/if}
-
-          <!-- BOTÓN REENVIAR TICKET PRE-DESPACHO ALMACÉN -->
-          {#if preDespachoPrinters.length > 0}
-            <button
-              type="button"
-              onclick={handlePrintPreDespachoFromModal}
-              disabled={isPrintingNote}
-              class="px-5 py-3 rounded-2xl bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white font-black text-sm flex items-center justify-center gap-2 shadow-lg shadow-amber-500/20 transition-all cursor-pointer border-none active:scale-[0.98]"
-            >
-              {#if isPrintingNote}
-                <RefreshCw size={18} class="animate-spin" />
-                <span>Enviando...</span>
-              {:else}
-                <PackageCheck size={18} />
-                <span>Ticket Pre-Despacho</span>
-              {/if}
-            </button>
-          {/if}
+        <!-- BOTÓN REENVIAR TICKET PRE-DESPACHO ALMACÉN -->
+        {#if preDespachoPrinters.length > 0}
+          <button
+            type="button"
+            onclick={handlePrintPreDespachoFromModal}
+            disabled={isPrintingNote}
+            class="px-5 py-3 rounded-2xl bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white font-black text-sm flex items-center justify-center gap-2 shadow-lg shadow-amber-500/20 transition-all cursor-pointer border-none active:scale-[0.98]"
+          >
+            {#if isPrintingNote}
+              <RefreshCw size={18} class="animate-spin" />
+              <span>Enviando...</span>
+            {:else}
+              <PackageCheck size={18} />
+              <span>Ticket Pre-Despacho</span>
+            {/if}
+          </button>
+        {/if}
       </div>
     </div>
   </div>
@@ -2325,5 +2856,3 @@
     }
   }
 </style>
-
-

@@ -176,6 +176,18 @@
     localStorage.setItem("currency_switch_y", dragY.toString());
   }
 
+  const EXEMPT_TAX_CODES = ["4", "5", "6", "7"];
+  function isServiceArticle(item: any): boolean {
+    const t = String(item?.tipo || item?.tipo_art || "")
+      .trim()
+      .toUpperCase();
+    return t === "S";
+  }
+  function isExemptArticle(item: any): boolean {
+    const ti = String(item?.art_tipo_imp ?? item?.tipo_imp ?? "1").trim();
+    return EXEMPT_TAX_CODES.includes(ti);
+  }
+
   let quoteTaxRate = $state(16); // 16 o 0 (global para items no exentos)
   let quoteDescription = $state("");
   let masterBranchId = $state(""); // Sede donde se inició la cotización (dueña del cliente)
@@ -239,7 +251,11 @@
         showUSD = String(q.co_mone || "")
           .toUpperCase()
           .includes("US");
-        quoteTaxRate = (Number(q.monto_imp) || 0) === 0 ? 0 : 16;
+        const hasNonExemptQuoteLines =
+          Array.isArray(q.renglones) &&
+          q.renglones.some((r: any) => !isExemptArticle(r));
+        quoteTaxRate =
+          hasNonExemptQuoteLines && (Number(q.monto_imp) || 0) === 0 ? 0 : 16;
         quoteDescription = String(q.descrip || q.comentario || "").trim();
 
         // 2. Cliente (Campos Críticos)
@@ -302,11 +318,18 @@
               co_art: artId,
               co_lin: String(r.co_lin || "").trim(),
               co_subl: String(r.co_subl || "").trim(),
+              tipo: String(r.tipo || r.tipo_art || "V").trim().toUpperCase(),
+              art_tipo_imp: String(r.art_tipo_imp || "").trim() || undefined,
+              tipo_imp: String(r.art_tipo_imp || r.tipo_imp || "1").trim(),
               art_des: String(r.art_des || "").trim(),
               qty: Number(r.cantidad || 0),
               precio_ves: savedVes,
               precio_usd: savedUsd,
-              porc_imp: Number(r.porc_imp ?? 16),
+              porc_imp: EXEMPT_TAX_CODES.includes(
+                String(r.art_tipo_imp || r.tipo_imp || "1").trim(),
+              )
+                ? 0
+                : Number(r.porc_imp ?? 16),
               co_alma_selected: almaId,
               co_uni: String(r.co_uni || "").trim(),
               unidad: String(r.unidad || r.co_uni || "UND").trim(),
@@ -510,6 +533,27 @@
             };
           });
 
+          if (isServiceArticle(fresh)) {
+            for (const w of data.context?.warehouses || []) {
+              const wCode = String(w.co_alma || "")
+                .trim()
+                .toUpperCase();
+              const already = validDispo.some(
+                (d: any) =>
+                  String(d.co_alma || "")
+                    .trim()
+                    .toUpperCase() === wCode,
+              );
+              if (!already && wCode) {
+                validDispo.push({
+                  co_alma: w.co_alma,
+                  des_alma: String(w.des_alma || w.nombre || w.co_alma).trim(),
+                  stock: 0,
+                });
+              }
+            }
+          }
+
           // --- BUSCAR ÍNDICE DE PRECIO QUE COINCIDA CON LA COTIZACIÓN ---
           let matchedPriceIndex = -1;
           const targetIdPrecio = String(
@@ -611,11 +655,22 @@
           selectedItemPriceIndex[co] =
             finalPriceIndex >= 0 ? finalPriceIndex : 0;
 
+          const normFreshTipo = String(
+            fresh.tipo || cart[i].tipo || "V",
+          )
+            .trim()
+            .toUpperCase();
+          const normFreshTipoImp =
+            String(fresh.tipo_imp || cart[i].tipo_imp || "1").trim() || "1";
+
           // Actualizar item en el carrito con RE-ASIGNACIÓN para Svelte kit
           const updatedItem = {
             ...cart[i],
             co_lin: fresh.co_lin || cart[i].co_lin,
             co_subl: fresh.co_subl || cart[i].co_subl,
+            tipo: normFreshTipo,
+            art_tipo_imp: String(fresh.tipo_imp || "").trim() || cart[i].art_tipo_imp,
+            tipo_imp: normFreshTipoImp,
             art_des: fresh.descripcion || fresh.art_des || cart[i].art_des,
             disponibilidad: validDispo,
             precios:
@@ -623,8 +678,7 @@
                 ? fresh.precios
                 : cart[i].precios,
             unidad: fresh.unidad || cart[i].unidad,
-            porc_imp:
-              fresh.tipo_imp === "7" ? 0 : (fresh.porc_imp ?? cart[i].porc_imp),
+            porc_imp: EXEMPT_TAX_CODES.includes(normFreshTipoImp) ? 0 : 16,
             price_index_selected: finalPriceIndex,
             price_selected: finalPriceSelected,
             co_alma_selected: item.co_alma_selected,
@@ -881,9 +935,8 @@
     const step = getStep(article);
     const qty = quantities[co_art] || step;
 
-    // Identify if it's a service (Linea 09 or code starts with 09)
-    const isService =
-      article.co_lin?.trim() === "09" || (co_art || "").startsWith("09");
+    // Identify if it's a service (Profit native tipo === 'S')
+    const isService = isServiceArticle(article);
 
     // Obtener almacén seleccionado
     let almId =
@@ -967,6 +1020,9 @@
         ...cart,
         {
           ...article,
+          tipo: String(article.tipo || "V").trim().toUpperCase(),
+          art_tipo_imp: String(article.tipo_imp || "").trim() || undefined,
+          tipo_imp: String(article.tipo_imp || "1").trim() || "1",
           disponibilidad: itemDispo,
           qty,
           co_alma_selected: almId,
@@ -995,9 +1051,7 @@
     // Forzar escalón y evitar imprecisiones de coma flotante
     let roundedQty = Math.round(newQty / step) * step;
 
-    const isService =
-      item.co_lin?.trim() === "09" ||
-      (item.co_art || item.codigo || "").startsWith("09");
+    const isService = isServiceArticle(item);
 
     if (isService) {
       cart[index].qty = roundedQty;
@@ -1023,7 +1077,7 @@
 
     item.co_alma_selected = co_alma;
     const stock = newAlm.stock || 0;
-    if (item.qty > stock) {
+    if (!isServiceArticle(item) && item.qty > stock) {
       toast.warning(`Cantidad ajustada al stock de ${newAlm.des_alma}`);
       item.qty = Math.max(1, stock);
     }
@@ -1134,10 +1188,7 @@
     let ivaBS = 0;
 
     cart.forEach((item) => {
-      // Un ítem es estrictamente exento SOLO si es de la sublinea 0901 (Fletes)
-      const isStrictlyExempt =
-        (item.co_subl || "").trim() === "0901" ||
-        (item.co_art || "").startsWith("0901");
+      const isStrictlyExempt = isExemptArticle(item);
 
       const rate = isStrictlyExempt ? 0 : quoteTaxRate;
 
@@ -2197,11 +2248,25 @@
                 >
                   {article.art_des || article.descripcion}
                 </h3>
-                <p
-                  class="text-[10px] text-text-muted mt-1 font-bold uppercase tracking-wider"
+                <div
+                  class="flex flex-wrap items-center gap-1.5 mt-1.5"
                 >
-                  <span class="text-brand-400">{article.unidad || "UNID"}</span>
-                </p>
+                  <span class="text-[10px] text-brand-400 font-bold uppercase tracking-wider">{article.unidad || "UNID"}</span>
+                  {#if isServiceArticle(article)}
+                    <span class="px-1.5 py-0.5 rounded bg-violet-500/15 border border-violet-500/30 text-[9px] font-black text-violet-600 dark:text-violet-300 uppercase">
+                      SERVICIO · Stock ∞
+                    </span>
+                  {/if}
+                  {#if isExemptArticle(article)}
+                    <span class="px-1.5 py-0.5 rounded bg-amber-500/15 border border-amber-500/30 text-[9px] font-black text-amber-400 uppercase">
+                      EXENTO 0%
+                    </span>
+                  {:else}
+                    <span class="px-1.5 py-0.5 rounded bg-emerald-500/15 border border-emerald-500/30 text-[9px] font-black text-emerald-400 uppercase">
+                      IVA 16%
+                    </span>
+                  {/if}
+                </div>
 
                 <div class="mt-4 flex flex-col gap-3">
                   <!-- Resaltado de Precio Seleccionado -->
@@ -2258,13 +2323,13 @@
                         >Disponibilidad</span
                       >
                       <span
-                        class="text-sm font-black {article.co_lin?.trim() ===
-                          '09' || (curAlm?.stock || 0) > 0
+                        class="text-sm font-black {isServiceArticle(article) ||
+                        (curAlm?.stock || 0) > 0
                           ? 'text-green-400'
                           : 'text-red-400'}"
                       >
-                        {article.co_lin?.trim() === "09"
-                          ? "Stock Ilimitado"
+                        {isServiceArticle(article)
+                          ? "Stock ∞"
                           : curAlm?.stock || 0}
                       </span>
                     </div>
@@ -2278,12 +2343,12 @@
                         }
                         class="w-full h-11 bg-surface-soft hover:bg-surface-strong rounded-xl px-4 text-xs font-black outline-none border border-border-subtle appearance-none transition-all cursor-pointer text-text-muted hover:text-text-base"
                       >
-                        {#each article.disponibilidad || [] as alm}
+                        {#each article.disponibilidad && article.disponibilidad.length > 0 ? article.disponibilidad : isServiceArticle(article) ? data.context?.warehouses || [] : [] as alm}
                           <option
                             value={alm.co_alma}
                             class="bg-surface-dark text-white text-sm"
                           >
-                            {alm.des_alma}
+                            {alm.des_alma || alm.nombre || alm.co_alma}
                           </option>
                         {/each}
                       </select>
@@ -2325,7 +2390,7 @@
                           const step = getStep(article);
                           const stock = curAlm?.stock || 0;
 
-                          if (!isNaN(val) && val > stock) {
+                          if (!isServiceArticle(article) && !isNaN(val) && val > stock) {
                             quantities[article.co_art] =
                               Math.floor(stock / step) * step || step;
                             toast.warning(`Máximo disponible: ${stock}`);
@@ -2345,7 +2410,7 @@
                       <button
                         onclick={(e) => {
                           e.stopPropagation();
-                          const isService = article.co_lin?.trim() === "09";
+                          const isService = isServiceArticle(article);
                           const stock = curAlm?.stock || 0;
                           const step = getStep(article);
                           const currentQty = quantities[article.co_art] || step;
@@ -2772,7 +2837,7 @@
                           {item.art_des || item.descripcion}
                         </div>
                         <div
-                          class="flex items-center gap-4 text-[11px] font-bold uppercase tracking-[0.15em]"
+                          class="flex flex-wrap items-center gap-2.5 text-[11px] font-bold uppercase tracking-[0.15em]"
                         >
                           <span class="text-brand-400 font-mono"
                             >{item.co_art}</span
@@ -2786,6 +2851,12 @@
                               item.co_uni ||
                               "UNID"}</span
                           >
+                          {#if isServiceArticle(item)}
+                            <span
+                              class="px-2 py-0.5 rounded-md bg-violet-500/15 border border-violet-500/30 text-[9px] font-black text-violet-600 dark:text-violet-300 tracking-wider"
+                              >SERVICIO</span
+                            >
+                          {/if}
                         </div>
                       </div>
                       <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -2800,7 +2871,7 @@
                               <option
                                 value={alm.co_alma}
                                 class="bg-surface-base text-text-base text-sm"
-                                >{alm.des_alma} ({alm.stock})</option
+                                >{alm.des_alma} ({isServiceArticle(item) ? "∞" : alm.stock})</option
                               >
                             {/each}
                           </select>
@@ -3116,11 +3187,17 @@
                         quoteDescription || "Pedido registrado vía portal web.",
                       showUSD: showUSD,
                       renglones: cart.map((item) => {
-                        const isStrictlyExempt =
-                          (item.co_subl || "").trim() === "0901" ||
-                          (item.co_art || "").startsWith("0901");
+                        const isStrictlyExempt = isExemptArticle(item);
                         const rate = isStrictlyExempt ? 0 : quoteTaxRate;
-                        const taxType = rate === 16 ? "1" : "5";
+                        const rawTipoImp = String(
+                          item.art_tipo_imp ?? item.tipo_imp ?? "",
+                        ).trim();
+                        const taxType =
+                          rate > 0
+                            ? "1"
+                            : EXEMPT_TAX_CODES.includes(rawTipoImp)
+                              ? rawTipoImp
+                              : "5";
                         const itemUsd = Number(
                           item.price_selected?.precio ??
                             item.precios?.[0]?.precio ??

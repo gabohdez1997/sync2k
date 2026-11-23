@@ -51,6 +51,92 @@
 
   let isSearching = $state(false);
 
+  // ── QUICK CLASSIFICATION CONTROLS (Tipo V/S/C & IVA 16%/0%) ───────────────
+  const EXEMPT_TAX_CODES = ["4", "5", "6", "7"];
+  const TIPO_LABELS: Record<string, string> = {
+    V: "Venta",
+    S: "Servicio (Stock ∞)",
+    C: "Consumo",
+  };
+
+  let classificationOverrides = $state<
+    Record<string, { tipo?: string; tipo_imp?: string }>
+  >({});
+  let savingClassification = $state<Record<string, boolean>>({});
+
+  function getArticleTipo(article: any): "V" | "S" | "C" {
+    const raw = String(
+      classificationOverrides[article.co_art]?.tipo ?? article.tipo ?? "V",
+    )
+      .trim()
+      .toUpperCase();
+    return raw === "S" || raw === "C" ? raw : "V";
+  }
+
+  function getArticleTipoImp(article: any): string {
+    return (
+      String(
+        classificationOverrides[article.co_art]?.tipo_imp ??
+          article.tipo_imp ??
+          "1",
+      ).trim() || "1"
+    );
+  }
+
+  function isArticleExempt(article: any): boolean {
+    return EXEMPT_TAX_CODES.includes(getArticleTipoImp(article));
+  }
+
+  async function updateArticleClassification(
+    article: any,
+    patch: { tipo?: "V" | "S" | "C"; tipo_imp?: "1" | "4" },
+  ) {
+    const coArt = article.co_art;
+    if (!coArt || savingClassification[coArt]) return;
+
+    const prevOverride = classificationOverrides[coArt]
+      ? { ...classificationOverrides[coArt] }
+      : undefined;
+
+    classificationOverrides[coArt] = {
+      ...(prevOverride || {}),
+      ...patch,
+    };
+    savingClassification[coArt] = true;
+
+    try {
+      const res = await fetch(
+        `/api/agent/articles/${encodeURIComponent(coArt)}/classification`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(patch),
+        },
+      );
+      const body = await res.json();
+      if (!res.ok || !body.success) {
+        throw new Error(body.message || "Error al actualizar clasificación");
+      }
+
+      const changes: string[] = [];
+      if (patch.tipo) changes.push(TIPO_LABELS[patch.tipo] || patch.tipo);
+      if (patch.tipo_imp)
+        changes.push(patch.tipo_imp === "4" ? "Exento 0%" : "IVA 16%");
+      toast.success(`Artículo ${coArt} actualizado: ${changes.join(" · ")}`);
+    } catch (err: any) {
+      if (prevOverride) {
+        classificationOverrides[coArt] = prevOverride;
+      } else {
+        const next = { ...classificationOverrides };
+        delete next[coArt];
+        classificationOverrides = next;
+      }
+      toast.error(err.message || "No se pudo actualizar la clasificación");
+    } finally {
+      savingClassification[coArt] = false;
+    }
+  }
+
   // ── DELETE MODAL ───────────────────────────────────────────────────────────
   let showDeleteModal = $state(false);
   let articleToDelete = $state<any>(null);
@@ -450,6 +536,9 @@
   >
     {#each data.articles as article (article.co_art + "-" + (article._branch_id || "default"))}
       {@const isSelected = selectedCodes.has(article.co_art)}
+      {@const artTipo = getArticleTipo(article)}
+      {@const artExempt = isArticleExempt(article)}
+      {@const isSavingClass = Boolean(savingClassification[article.co_art])}
       <label
         for="select-{article.co_art}-{article._branch_id || 'default'}"
         class="glass p-6 rounded-3xl border transition-all hover:shadow-2xl flex flex-col gap-4 cursor-pointer select-none
@@ -493,7 +582,7 @@
           </div>
         </div>
 
-        <div class="flex flex-col gap-1">
+        <div class="flex flex-col gap-1.5">
           <h3
             class="text-lg font-black leading-tight text-text-base line-clamp-none"
           >
@@ -505,7 +594,127 @@
             <Box size={12} />
             {article.linea} | {article.categoria}
           </div>
+          <div class="flex flex-wrap items-center gap-1.5 pt-0.5">
+            {#if artTipo === "S"}
+              <span
+                class="px-2 py-0.5 rounded-md bg-violet-500/15 border border-violet-500/30 text-[9px] font-black text-violet-300 uppercase tracking-wider"
+              >
+                SERVICIO · Stock ∞
+              </span>
+            {:else if artTipo === "C"}
+              <span
+                class="px-2 py-0.5 rounded-md bg-slate-500/15 border border-slate-400/30 text-[9px] font-black text-slate-300 uppercase tracking-wider"
+              >
+                CONSUMO
+              </span>
+            {:else}
+              <span
+                class="px-2 py-0.5 rounded-md bg-brand-500/15 border border-brand-500/30 text-[9px] font-black text-brand-400 uppercase tracking-wider"
+              >
+                VENTA
+              </span>
+            {/if}
+            {#if artExempt}
+              <span
+                class="px-2 py-0.5 rounded-md bg-amber-500/15 border border-amber-500/30 text-[9px] font-black text-amber-400 uppercase tracking-wider"
+              >
+                EXENTO 0%
+              </span>
+            {:else}
+              <span
+                class="px-2 py-0.5 rounded-md bg-emerald-500/15 border border-emerald-500/30 text-[9px] font-black text-emerald-400 uppercase tracking-wider"
+              >
+                IVA 16%
+              </span>
+            {/if}
+          </div>
         </div>
+
+        {#if canEdit}
+          <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
+          <div
+            class="p-3 rounded-2xl bg-surface-base/40 border border-white/10 space-y-2.5 cursor-default"
+            onclick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+            }}
+          >
+            <div class="flex items-center justify-between">
+              <span
+                class="text-[9px] uppercase font-black tracking-widest text-text-muted"
+                >Clasificación Rápida</span
+              >
+              {#if isSavingClass}
+                <Loader2 size={12} class="animate-spin text-brand-400" />
+              {/if}
+            </div>
+
+            <!-- Tipo: V / S / C -->
+            <div class="grid grid-cols-3 gap-1">
+              {#each [
+                { code: "V", label: "Venta (V)", activeClass: "bg-brand-600 text-white border-brand-500" },
+                { code: "S", label: "Serv. (S)", activeClass: "bg-violet-600 text-white border-violet-500" },
+                { code: "C", label: "Cons. (C)", activeClass: "bg-slate-600 text-white border-slate-500" },
+              ] as opt}
+                <button
+                  type="button"
+                  disabled={isSavingClass}
+                  onclick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    if (artTipo !== opt.code) {
+                      updateArticleClassification(article, {
+                        tipo: opt.code as "V" | "S" | "C",
+                      });
+                    }
+                  }}
+                  class="h-8 px-2 rounded-lg text-[10px] font-black uppercase tracking-wide border transition-all cursor-pointer disabled:opacity-60 {artTipo ===
+                  opt.code
+                    ? opt.activeClass
+                    : 'bg-surface-base/60 text-text-muted border-white/10 hover:text-text-base hover:border-white/20'}"
+                >
+                  {opt.label}
+                </button>
+              {/each}
+            </div>
+
+            <!-- IVA: 16% / 0% -->
+            <div class="grid grid-cols-2 gap-1">
+              <button
+                type="button"
+                disabled={isSavingClass}
+                onclick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  if (artExempt) {
+                    updateArticleClassification(article, { tipo_imp: "1" });
+                  }
+                }}
+                class="h-8 px-2 rounded-lg text-[10px] font-black uppercase tracking-wide border transition-all cursor-pointer disabled:opacity-60 {!artExempt
+                  ? 'bg-emerald-600 text-white border-emerald-500'
+                  : 'bg-surface-base/60 text-text-muted border-white/10 hover:text-text-base hover:border-white/20'}"
+              >
+                Gravado 16%
+              </button>
+              <button
+                type="button"
+                disabled={isSavingClass}
+                onclick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  if (!artExempt) {
+                    updateArticleClassification(article, { tipo_imp: "4" });
+                  }
+                }}
+                class="h-8 px-2 rounded-lg text-[10px] font-black uppercase tracking-wide border transition-all cursor-pointer disabled:opacity-60 {artExempt
+                  ? 'bg-amber-600 text-white border-amber-500'
+                  : 'bg-surface-base/60 text-text-muted border-white/10 hover:text-text-base hover:border-white/20'}"
+              >
+                Exento 0%
+              </button>
+            </div>
+          </div>
+        {/if}
 
         <!-- COSTOS Y PRECIOS -->
         <div class="grid grid-cols-2 gap-2 mt-2">
@@ -600,10 +809,28 @@
 
         <!-- EXISTENCIA CONSOLIDADA POR SUCURSAL -->
         <div class="flex flex-col gap-2 pt-4 border-t border-white/5">
-          <span
-            class="text-[10px] uppercase font-black tracking-widest text-text-muted"
-            >Existencia por Sucursal</span
-          >
+          <div class="flex items-center justify-between">
+            <span
+              class="text-[10px] uppercase font-black tracking-widest text-text-muted"
+              >Existencia por Sucursal</span
+            >
+            {#if artTipo === "S"}
+              <span
+                class="text-[10px] font-black text-emerald-400 bg-emerald-500/15 border border-emerald-500/25 px-2 py-0.5 rounded-md"
+                >Stock ∞</span
+              >
+            {/if}
+          </div>
+          {#if artTipo === "S"}
+            <div
+              class="py-2 px-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl flex items-center justify-between"
+            >
+              <span class="text-[11px] font-black text-emerald-300 uppercase tracking-tight"
+                >Servicio (Sin límite de stock)</span
+              >
+              <span class="text-sm font-black text-emerald-400">∞</span>
+            </div>
+          {/if}
           {#if article.existencia_consolidada?.length > 0}
             <div class="flex flex-col gap-1.5">
               {#each article.existencia_consolidada as sede}

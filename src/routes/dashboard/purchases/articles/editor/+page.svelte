@@ -19,7 +19,7 @@
   // ── General ──
   let co_art = $state(data.article?.co_art || "");
   let art_des = $state(data.article?.art_des || "");
-  let tipo = $state(data.article?.tipo || "V");
+  let tipo = $state(String(data.article?.tipo || "V").trim().toUpperCase() || "V");
   let co_lin = $state(data.article?.co_lin || "");
   let co_subl = $state(data.article?.co_subl || "");
   let co_cat = $state(data.article?.co_cat || "");
@@ -34,7 +34,8 @@
   let sCo_Uni_Sec = $state(data.article?.sSco_Uni || "");
   let bManeja_Serial = $state(data.article?.bManeja_Serial ?? false);
   let bManeja_Lote = $state(data.article?.bManeja_Lote ?? false);
-  let tipo_imp = $state(data.article?.tipo_imp || "1");
+  const rawTipoImp = String(data.article?.tipo_imp || "1").trim();
+  let tipo_imp = $state(["4", "5", "6", "7"].includes(rawTipoImp) ? "4" : rawTipoImp || "1");
   let peso = $state(data.article?.peso || 0);
   let volumen = $state(data.article?.volumen || 0);
   let stock_min = $state(data.article?.stock_min || 0);
