@@ -53,22 +53,98 @@
   let islrTabFilter = $state<"ALL" | "7" | "5">("7");
 
   const FALLBACK_ISLR_CONCEPTS = [
-    { co_islr: "055", co_tab: "7", tabLabel: "Persona Jurídica (PJD)", islr_des: "Pagos a Empresas Contratistas o Subcontratistas (Corte/Servicios)", porc_ret: 2 },
-    { co_islr: "072", co_tab: "7", tabLabel: "Persona Jurídica (PJD)", islr_des: "Pagos por Gastos de Transporte conformados por Fletes", porc_ret: 3 },
-    { co_islr: "084", co_tab: "7", tabLabel: "Persona Jurídica (PJD)", islr_des: "Pagos por Servicios de Publicidad y Propaganda", porc_ret: 5 },
-    { co_islr: "004", co_tab: "7", tabLabel: "Persona Jurídica (PJD)", islr_des: "Honorarios Profesionales No Mercantiles", porc_ret: 5 },
-    { co_islr: "063", co_tab: "7", tabLabel: "Persona Jurídica (PJD)", islr_des: "Cánones de Arrendamientos de Bienes Muebles", porc_ret: 5 },
-    { co_islr: "076", co_tab: "7", tabLabel: "Persona Jurídica (PJD)", islr_des: "Pagos de las Empresas de Seguro a sus Contratistas", porc_ret: 5 },
-    { co_islr: "020", co_tab: "7", tabLabel: "Persona Jurídica (PJD)", islr_des: "Cualquier otra Comisión distinta a Remuneraciones", porc_ret: 5 },
-    { co_islr: "053", co_tab: "5", tabLabel: "Persona Natural (PNR)", islr_des: "Pagos a Empresas Contratistas o Subcontratistas", porc_ret: 1 },
-    { co_islr: "071", co_tab: "5", tabLabel: "Persona Natural (PNR)", islr_des: "Pagos por Gastos de Transporte conformados por Fletes", porc_ret: 1 },
-    { co_islr: "083", co_tab: "5", tabLabel: "Persona Natural (PNR)", islr_des: "Pagos por Servicios de Publicidad y Propaganda", porc_ret: 3 },
-    { co_islr: "002", co_tab: "5", tabLabel: "Persona Natural (PNR)", islr_des: "Honorarios Profesionales No Mercantiles", porc_ret: 3 },
-    { co_islr: "018", co_tab: "5", tabLabel: "Persona Natural (PNR)", islr_des: "Cualquier otra Comisión distinta a Remuneraciones", porc_ret: 3 },
+    {
+      co_islr: "055",
+      co_tab: "7",
+      tabLabel: "Persona Jurídica (PJD)",
+      islr_des:
+        "Pagos a Empresas Contratistas o Subcontratistas (Corte/Servicios)",
+      porc_ret: 2,
+    },
+    {
+      co_islr: "072",
+      co_tab: "7",
+      tabLabel: "Persona Jurídica (PJD)",
+      islr_des: "Pagos por Gastos de Transporte conformados por Fletes",
+      porc_ret: 3,
+    },
+    {
+      co_islr: "084",
+      co_tab: "7",
+      tabLabel: "Persona Jurídica (PJD)",
+      islr_des: "Pagos por Servicios de Publicidad y Propaganda",
+      porc_ret: 5,
+    },
+    {
+      co_islr: "004",
+      co_tab: "7",
+      tabLabel: "Persona Jurídica (PJD)",
+      islr_des: "Honorarios Profesionales No Mercantiles",
+      porc_ret: 5,
+    },
+    {
+      co_islr: "063",
+      co_tab: "7",
+      tabLabel: "Persona Jurídica (PJD)",
+      islr_des: "Cánones de Arrendamientos de Bienes Muebles",
+      porc_ret: 5,
+    },
+    {
+      co_islr: "076",
+      co_tab: "7",
+      tabLabel: "Persona Jurídica (PJD)",
+      islr_des: "Pagos de las Empresas de Seguro a sus Contratistas",
+      porc_ret: 5,
+    },
+    {
+      co_islr: "020",
+      co_tab: "7",
+      tabLabel: "Persona Jurídica (PJD)",
+      islr_des: "Cualquier otra Comisión distinta a Remuneraciones",
+      porc_ret: 5,
+    },
+    {
+      co_islr: "053",
+      co_tab: "5",
+      tabLabel: "Persona Natural (PNR)",
+      islr_des: "Pagos a Empresas Contratistas o Subcontratistas",
+      porc_ret: 1,
+    },
+    {
+      co_islr: "071",
+      co_tab: "5",
+      tabLabel: "Persona Natural (PNR)",
+      islr_des: "Pagos por Gastos de Transporte conformados por Fletes",
+      porc_ret: 1,
+    },
+    {
+      co_islr: "083",
+      co_tab: "5",
+      tabLabel: "Persona Natural (PNR)",
+      islr_des: "Pagos por Servicios de Publicidad y Propaganda",
+      porc_ret: 3,
+    },
+    {
+      co_islr: "002",
+      co_tab: "5",
+      tabLabel: "Persona Natural (PNR)",
+      islr_des: "Honorarios Profesionales No Mercantiles",
+      porc_ret: 3,
+    },
+    {
+      co_islr: "018",
+      co_tab: "5",
+      tabLabel: "Persona Natural (PNR)",
+      islr_des: "Cualquier otra Comisión distinta a Remuneraciones",
+      porc_ret: 3,
+    },
   ];
 
   function populateIslrConcepts(rawList: any[]) {
-    const list = Array.isArray(rawList) && rawList.length > 0 ? rawList : FALLBACK_ISLR_CONCEPTS;
+    const list =
+      Array.isArray(rawList) && rawList.length > 0
+        ? rawList
+        : FALLBACK_ISLR_CONCEPTS;
     const seen = new Map<string, any>();
     for (const item of list) {
       const code = String(item.co_islr || "").trim();
@@ -79,7 +155,8 @@
         if (tab === "5") tabLabel = "Persona Natural (PNR)";
         else if (tab === "6") tabLabel = "Persona Natural No Residente (PNNR)";
         else if (tab === "7") tabLabel = "Persona Jurídica (PJD)";
-        else if (tab === "8") tabLabel = "Persona Jurídica No Domiciliada (PJND)";
+        else if (tab === "8")
+          tabLabel = "Persona Jurídica No Domiciliada (PJND)";
 
         seen.set(key, {
           co_islr: code,
@@ -198,26 +275,35 @@
       default_cta_ingr_egr: "01",
       default_segment: "01",
       allowed_islr_concepts: [],
+      allow_editable_prices: false,
+      allow_editable_retentions: false,
     };
     previewUrl = null;
     previewSealUrl = null;
     islrFilterSearch = "";
     islrTabFilter = "7";
-    availableBranchIslrConcepts = populateIslrConcepts(data.conceptosIslr || []);
+    availableBranchIslrConcepts = populateIslrConcepts(
+      data.conceptosIslr || [],
+    );
     showModal = true;
     if (data.branches && data.branches.length > 0) {
-      const bWithAgent = data.branches.find((b: any) => b.agent_url) || data.branches[0];
+      const bWithAgent =
+        data.branches.find((b: any) => b.agent_url) || data.branches[0];
       if (bWithAgent?.id) loadBranchIslrConcepts(bWithAgent.id);
     }
   }
 
   async function loadBranchIslrConcepts(branchId: string) {
     if (availableBranchIslrConcepts.length === 0) {
-      availableBranchIslrConcepts = populateIslrConcepts(data.conceptosIslr || []);
+      availableBranchIslrConcepts = populateIslrConcepts(
+        data.conceptosIslr || [],
+      );
     }
     loadingBranchIslrConcepts = true;
     try {
-      const res = await fetch(`/api/agent/payables/conceptos-islr?branch_id=${branchId}`);
+      const res = await fetch(
+        `/api/agent/payables/conceptos-islr?branch_id=${branchId}`,
+      );
       if (res.ok) {
         const json = await res.json();
         if (json.data && json.data.length > 0) {
@@ -294,8 +380,23 @@
     if (!editingBranch.default_segment) {
       editingBranch.default_segment = pDefaults.default_segment || "01";
     }
-    const rawIslr = editingBranch.allowed_islr_concepts ?? pDefaults.allowed_islr_concepts ?? [];
-    editingBranch.allowed_islr_concepts = Array.isArray(rawIslr) ? [...rawIslr] : [];
+    const rawIslr =
+      editingBranch.allowed_islr_concepts ??
+      pDefaults.allowed_islr_concepts ??
+      [];
+    editingBranch.allowed_islr_concepts = Array.isArray(rawIslr)
+      ? [...rawIslr]
+      : [];
+    editingBranch.allow_editable_prices = Boolean(
+      editingBranch.allow_editable_prices ??
+        pDefaults.allow_editable_prices ??
+        false,
+    );
+    editingBranch.allow_editable_retentions = Boolean(
+      editingBranch.allow_editable_retentions ??
+        pDefaults.allow_editable_retentions ??
+        false,
+    );
     if (!editingBranch.sql_config) {
       editingBranch.sql_config = {
         host: "",
@@ -305,17 +406,19 @@
       };
     }
     previewUrl = editingBranch.logo_url;
-    previewSealUrl = editingBranch.seal_url || editingBranch.sql_config?.seal_url || null;
+    previewSealUrl =
+      editingBranch.seal_url || editingBranch.sql_config?.seal_url || null;
     editingBranch.seal_url = previewSealUrl || "";
     islrFilterSearch = "";
     islrTabFilter = "7";
-    availableBranchIslrConcepts = populateIslrConcepts(data.conceptosIslr || []);
+    availableBranchIslrConcepts = populateIslrConcepts(
+      data.conceptosIslr || [],
+    );
     showModal = true;
     if (editingBranch.id && editingBranch.agent_url) {
       loadBranchIslrConcepts(editingBranch.id);
     }
   }
-
 
   function handleSealFileChange(e: Event) {
     const target = e.target as HTMLInputElement;
@@ -749,7 +852,7 @@
             }
           };
         }}
-        class="flex-1 overflow-auto p-8 space-y-8 custom-scrollbar"
+        class="relative flex-1 overflow-auto p-8 space-y-8 custom-scrollbar"
       >
         <input type="hidden" name="branchId" value={editingBranch.id} />
 
@@ -1036,28 +1139,47 @@
             </div>
 
             <!-- CONCEPTOS DE ISLR VISIBLES EN COBROS -->
-            <div class="space-y-3 lg:col-span-2 p-5 bg-surface-soft/60 border border-border-subtle rounded-3xl">
-              <div class="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
+            <div
+              class="space-y-3 lg:col-span-2 p-5 bg-surface-soft/60 border border-border-subtle rounded-3xl"
+            >
+              <div
+                class="flex flex-col sm:flex-row sm:items-start justify-between gap-3"
+              >
                 <div class="space-y-1">
                   <div class="flex items-center gap-2 flex-wrap">
-                    <span class="text-xs font-black uppercase tracking-wider text-text-base">
+                    <span
+                      class="text-xs font-black uppercase tracking-wider text-text-base"
+                    >
                       Conceptos de ISLR Permitidos en Cobros (Ventas)
                     </span>
-                    <span class="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400 font-bold border border-amber-500/20">
+                    <span
+                      class="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400 font-bold border border-amber-500/20"
+                    >
                       Solo Cobros en Ventas
                     </span>
                     {#if (editingBranch.allowed_islr_concepts?.length || 0) === 0}
-                      <span class="text-[10px] px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-400 font-bold border border-blue-500/20">
+                      <span
+                        class="text-[10px] px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-400 font-bold border border-blue-500/20"
+                      >
                         Todos habilitados (Sin restricción)
                       </span>
                     {:else}
-                      <span class="text-[10px] px-2 py-0.5 rounded-full bg-brand-500/10 text-brand-400 font-bold border border-brand-500/20">
-                        {editingBranch.allowed_islr_concepts.length} seleccionado{editingBranch.allowed_islr_concepts.length === 1 ? '' : 's'}
+                      <span
+                        class="text-[10px] px-2 py-0.5 rounded-full bg-brand-500/10 text-brand-400 font-bold border border-brand-500/20"
+                      >
+                        {editingBranch.allowed_islr_concepts.length} seleccionado{editingBranch
+                          .allowed_islr_concepts.length === 1
+                          ? ""
+                          : "s"}
                       </span>
                     {/if}
                   </div>
                   <p class="text-[11px] text-text-muted">
-                    Configure qué conceptos de retención de ISLR estarán permitidos al registrar Cobros a clientes en Ventas. <strong>No afecta los Pagos a Proveedores en Compras.</strong> Si no selecciona ninguno, se mostrarán todos los conceptos del tabulador del cliente.
+                    Configure qué conceptos de retención de ISLR estarán
+                    permitidos al registrar Cobros a clientes en Ventas. <strong
+                      >No afecta los Pagos a Proveedores en Compras.</strong
+                    > Si no selecciona ninguno, se mostrarán todos los conceptos
+                    del tabulador del cliente.
                   </p>
                 </div>
                 <div class="flex items-center gap-2 shrink-0">
@@ -1065,10 +1187,15 @@
                     type="button"
                     onclick={() => {
                       if (!editingBranch) return;
-                      const baseList = islrTabFilter === 'ALL'
-                        ? availableBranchIslrConcepts
-                        : availableBranchIslrConcepts.filter((c: any) => c.co_tab === islrTabFilter);
-                      const current = new Set(editingBranch.allowed_islr_concepts || []);
+                      const baseList =
+                        islrTabFilter === "ALL"
+                          ? availableBranchIslrConcepts
+                          : availableBranchIslrConcepts.filter(
+                              (c: any) => c.co_tab === islrTabFilter,
+                            );
+                      const current = new Set(
+                        editingBranch.allowed_islr_concepts || [],
+                      );
                       baseList.forEach((c: any) => current.add(c.co_islr));
                       editingBranch.allowed_islr_concepts = Array.from(current);
                     }}
@@ -1090,25 +1217,36 @@
               </div>
 
               <!-- Selector de Pestañas / Tabuladores -->
-              <div class="flex flex-wrap items-center gap-1.5 pt-1 border-t border-border-subtle/40">
+              <div
+                class="flex flex-wrap items-center gap-1.5 pt-1 border-t border-border-subtle/40"
+              >
                 <button
                   type="button"
                   onclick={() => (islrTabFilter = "7")}
-                  class="text-[11px] px-3 py-1.5 rounded-xl font-bold transition-all cursor-pointer {islrTabFilter === '7' ? 'bg-brand-500 text-white shadow-sm' : 'bg-surface-base hover:bg-surface-strong text-text-muted'}"
+                  class="text-[11px] px-3 py-1.5 rounded-xl font-bold transition-all cursor-pointer {islrTabFilter ===
+                  '7'
+                    ? 'bg-brand-500 text-white shadow-sm'
+                    : 'bg-surface-base hover:bg-surface-strong text-text-muted'}"
                 >
                   Personas Jurídicas (PJD - Tabulador 7)
                 </button>
                 <button
                   type="button"
                   onclick={() => (islrTabFilter = "5")}
-                  class="text-[11px] px-3 py-1.5 rounded-xl font-bold transition-all cursor-pointer {islrTabFilter === '5' ? 'bg-brand-500 text-white shadow-sm' : 'bg-surface-base hover:bg-surface-strong text-text-muted'}"
+                  class="text-[11px] px-3 py-1.5 rounded-xl font-bold transition-all cursor-pointer {islrTabFilter ===
+                  '5'
+                    ? 'bg-brand-500 text-white shadow-sm'
+                    : 'bg-surface-base hover:bg-surface-strong text-text-muted'}"
                 >
                   Personas Naturales (PNR - Tabulador 5)
                 </button>
                 <button
                   type="button"
                   onclick={() => (islrTabFilter = "ALL")}
-                  class="text-[11px] px-3 py-1.5 rounded-xl font-bold transition-all cursor-pointer {islrTabFilter === 'ALL' ? 'bg-brand-500 text-white shadow-sm' : 'bg-surface-base hover:bg-surface-strong text-text-muted'}"
+                  class="text-[11px] px-3 py-1.5 rounded-xl font-bold transition-all cursor-pointer {islrTabFilter ===
+                  'ALL'
+                    ? 'bg-brand-500 text-white shadow-sm'
+                    : 'bg-surface-base hover:bg-surface-strong text-text-muted'}"
                 >
                   Todos los Tabuladores ({availableBranchIslrConcepts.length})
                 </button>
@@ -1116,7 +1254,10 @@
 
               <!-- Filtro de búsqueda rápida de conceptos -->
               <div class="relative">
-                <Search size={14} class="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted opacity-50" />
+                <Search
+                  size={14}
+                  class="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted opacity-50"
+                />
                 <input
                   type="text"
                   bind:value={islrFilterSearch}
@@ -1127,27 +1268,45 @@
 
               <!-- Lista de conceptos disponibles -->
               {#if loadingBranchIslrConcepts && availableBranchIslrConcepts.length === 0}
-                <div class="flex items-center gap-2 py-4 text-xs text-text-muted">
+                <div
+                  class="flex items-center gap-2 py-4 text-xs text-text-muted"
+                >
                   <Loader2 size={16} class="animate-spin text-brand-500" />
                   <span>Cargando conceptos de ISLR desde Profit Plus...</span>
                 </div>
               {:else if availableBranchIslrConcepts.length === 0}
-                <div class="p-4 bg-surface-base/50 border border-dashed border-border-subtle rounded-xl text-xs text-text-muted text-center">
-                  No se encontraron conceptos de ISLR. Al dejar la lista vacía se mostrarán todos los conceptos correspondientes a cada cliente.
+                <div
+                  class="p-4 bg-surface-base/50 border border-dashed border-border-subtle rounded-xl text-xs text-text-muted text-center"
+                >
+                  No se encontraron conceptos de ISLR. Al dejar la lista vacía
+                  se mostrarán todos los conceptos correspondientes a cada
+                  cliente.
                 </div>
               {:else}
-                {@const baseList = islrTabFilter === 'ALL'
-                  ? availableBranchIslrConcepts
-                  : availableBranchIslrConcepts.filter((c: any) => c.co_tab === islrTabFilter)}
+                {@const baseList =
+                  islrTabFilter === "ALL"
+                    ? availableBranchIslrConcepts
+                    : availableBranchIslrConcepts.filter(
+                        (c: any) => c.co_tab === islrTabFilter,
+                      )}
                 {@const filteredConcepts = islrFilterSearch.trim()
-                  ? baseList.filter((c: any) =>
-                      c.co_islr.toLowerCase().includes(islrFilterSearch.toLowerCase()) ||
-                      c.islr_des.toLowerCase().includes(islrFilterSearch.toLowerCase())
+                  ? baseList.filter(
+                      (c: any) =>
+                        c.co_islr
+                          .toLowerCase()
+                          .includes(islrFilterSearch.toLowerCase()) ||
+                        c.islr_des
+                          .toLowerCase()
+                          .includes(islrFilterSearch.toLowerCase()),
                     )
                   : baseList}
-                <div class="max-h-60 overflow-y-auto pr-1 grid grid-cols-1 sm:grid-cols-2 gap-1.5 custom-scrollbar">
+                <div
+                  class="max-h-60 overflow-y-auto pr-1 grid grid-cols-1 sm:grid-cols-2 gap-1.5 custom-scrollbar"
+                >
                   {#each filteredConcepts as concept (`${concept.co_islr}_${concept.co_tab}`)}
-                    {@const isChecked = (editingBranch.allowed_islr_concepts || []).includes(concept.co_islr)}
+                    {@const isChecked = (
+                      editingBranch.allowed_islr_concepts || []
+                    ).includes(concept.co_islr)}
                     <button
                       type="button"
                       onclick={() => toggleIslrConcept(concept.co_islr)}
@@ -1163,19 +1322,32 @@
                       />
                       <div class="min-w-0 flex-1">
                         <div class="flex items-center gap-1.5 flex-wrap">
-                          <span class="font-mono text-xs font-bold {isChecked ? 'text-brand-400' : 'text-text-base'}">
+                          <span
+                            class="font-mono text-xs font-bold {isChecked
+                              ? 'text-brand-400'
+                              : 'text-text-base'}"
+                          >
                             {concept.co_islr}
                           </span>
-                          <span class="text-[9px] px-1.5 py-0.2 rounded bg-surface-strong text-brand-400 font-semibold border border-brand-500/20">
-                            {concept.tabLabel || (concept.co_tab === '7' ? 'PJD' : 'PNR')}
+                          <span
+                            class="text-[9px] px-1.5 py-0.2 rounded bg-surface-strong text-brand-400 font-semibold border border-brand-500/20"
+                          >
+                            {concept.tabLabel ||
+                              (concept.co_tab === "7" ? "PJD" : "PNR")}
                           </span>
                           {#if concept.porc_ret > 0}
-                            <span class="text-[10px] px-1.5 py-0.2 rounded bg-surface-strong text-text-muted font-mono font-bold">
+                            <span
+                              class="text-[10px] px-1.5 py-0.2 rounded bg-surface-strong text-text-muted font-mono font-bold"
+                            >
                               {concept.porc_ret}%
                             </span>
                           {/if}
                         </div>
-                        <p class="text-[11px] truncate mt-0.5 {isChecked ? 'text-text-base font-medium' : 'text-text-muted'}">
+                        <p
+                          class="text-[11px] truncate mt-0.5 {isChecked
+                            ? 'text-text-base font-medium'
+                            : 'text-text-muted'}"
+                        >
                           {concept.islr_des}
                         </p>
                       </div>
@@ -1185,15 +1357,97 @@
               {/if}
             </div>
 
+            <!-- Switches de Control de Edición con Autorización por Rol -->
+            <div class="space-y-3 lg:col-span-2 pt-2">
+              <div class="flex items-center gap-2 text-amber-400">
+                <Lock size={15} />
+                <span class="text-xs font-black uppercase tracking-wider">
+                  Controles de Edición Manual (con Autorización de Rol)
+                </span>
+              </div>
+
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <!-- Switch 1: Edición de precios en Cotizaciones y Pedidos -->
+                <div
+                  class="p-4 bg-surface-soft border border-border-subtle rounded-2xl hover:bg-surface-strong transition-all"
+                >
+                  <input
+                    type="hidden"
+                    name="allow_editable_prices"
+                    value={editingBranch.allow_editable_prices
+                      ? "true"
+                      : "false"}
+                  />
+                  <label class="relative flex items-start gap-3 cursor-pointer group">
+                    <input
+                      type="checkbox"
+                      bind:checked={editingBranch.allow_editable_prices}
+                      class="sr-only peer top-0 left-0"
+                    />
+                    <div
+                      class="w-11 h-6 shrink-0 mt-0.5 bg-surface-strong peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:inset-x-0.5 after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-brand-600 relative"
+                    ></div>
+                    <div>
+                      <span class="text-sm font-bold text-text-base block">
+                        Permitir Edición de Precios en Cotizaciones y Pedidos
+                      </span>
+                      <span
+                        class="text-[11px] text-text-muted leading-snug block mt-0.5"
+                      >
+                        Requiere clave de un usuario con permiso <strong
+                          >Autorizar</strong
+                        > en Cotizaciones/Pedidos.
+                      </span>
+                    </div>
+                  </label>
+                </div>
+
+                <!-- Switch 2: Edición de montos retenidos en Cobros y Pagos -->
+                <div
+                  class="p-4 bg-surface-soft border border-border-subtle rounded-2xl hover:bg-surface-strong transition-all"
+                >
+                  <input
+                    type="hidden"
+                    name="allow_editable_retentions"
+                    value={editingBranch.allow_editable_retentions
+                      ? "true"
+                      : "false"}
+                  />
+                  <label class="relative flex items-start gap-3 cursor-pointer group">
+                    <input
+                      type="checkbox"
+                      bind:checked={editingBranch.allow_editable_retentions}
+                      class="sr-only peer top-0 left-0"
+                    />
+                    <div
+                      class="w-11 h-6 shrink-0 mt-0.5 bg-surface-strong peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:inset-x-0.5 after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-brand-600 relative"
+                    ></div>
+                    <div>
+                      <span class="text-sm font-bold text-text-base block">
+                        Permitir Edición de Montos Retenidos (IVA, ISLR y
+                        1x1000)
+                      </span>
+                      <span
+                        class="text-[11px] text-text-muted leading-snug block mt-0.5"
+                      >
+                        Aplica en Cobros y Pagos a Proveedores. Requiere clave
+                        de un usuario con permiso <strong>Autorizar</strong>.
+                      </span>
+                    </div>
+                  </label>
+                </div>
+              </div>
+            </div>
+
             <div class="space-y-2 lg:col-span-2 flex flex-col pt-2">
               <label
-                class="flex items-center gap-3 cursor-pointer group w-max p-4 bg-surface-soft border border-border-subtle rounded-2xl hover:bg-surface-strong transition-all"
+                class="relative flex items-center gap-3 cursor-pointer group w-max p-4 bg-surface-soft border border-border-subtle rounded-2xl hover:bg-surface-strong transition-all"
               >
                 <input
                   type="checkbox"
                   name="active"
                   bind:checked={editingBranch.active}
-                  class="sr-only peer"
+                  class="sr-only peer top-0 left-0"
                 />
                 <div
                   class="w-11 h-6 bg-surface-strong peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:inset-x-0.5 after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-green-600 relative"
@@ -1379,7 +1633,8 @@
               <label
                 class="text-xs font-bold text-text-muted ml-1 flex items-center gap-2"
               >
-                <ShieldCheck size={14} class="text-emerald-500" /> Sello y Firma Digital (Comprobantes)
+                <ShieldCheck size={14} class="text-emerald-500" /> Sello y Firma
+                Digital (Comprobantes)
               </label>
 
               <input

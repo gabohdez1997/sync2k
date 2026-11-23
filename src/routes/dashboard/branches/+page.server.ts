@@ -71,7 +71,9 @@ export const load: PageServerLoad = protectLoad('sec_branches', async ({ locals,
         default_client_type: b.default_client_type || pDef.default_client_type || '01',
         default_cta_ingr_egr: b.default_cta_ingr_egr || pDef.default_cta_ingr_egr || '01',
         default_segment: b.default_segment || pDef.default_segment || '01',
-        allowed_islr_concepts: b.allowed_islr_concepts || pDef.allowed_islr_concepts || []
+        allowed_islr_concepts: b.allowed_islr_concepts || pDef.allowed_islr_concepts || [],
+        allow_editable_prices: Boolean(b.allow_editable_prices ?? pDef.allow_editable_prices ?? false),
+        allow_editable_retentions: Boolean(b.allow_editable_retentions ?? pDef.allow_editable_retentions ?? false)
       };
     });
 
@@ -252,6 +254,9 @@ export const actions: Actions = {
         }
       }
 
+      const allowEditablePrices = formData.get('allow_editable_prices') === 'true';
+      const allowEditableRetentions = formData.get('allow_editable_retentions') === 'true';
+
       if (sqlConfig && typeof sqlConfig === 'object') {
         sqlConfig.profit_defaults = {
           default_zone: defaultZone,
@@ -260,7 +265,9 @@ export const actions: Actions = {
           default_seller: defaultSeller,
           default_segment: defaultSegment,
           default_warehouse: defaultWarehouse,
-          allowed_islr_concepts: allowedIslrConcepts
+          allowed_islr_concepts: allowedIslrConcepts,
+          allow_editable_prices: allowEditablePrices,
+          allow_editable_retentions: allowEditableRetentions
         };
       }
 

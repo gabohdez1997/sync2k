@@ -26,9 +26,11 @@
     ChevronDown,
     ShoppingBag,
     Clock,
+    KeyRound,
   } from "lucide-svelte";
   import { toast } from "svelte-sonner";
   import ImportItemCard from "$lib/components/ui/ImportItemCard.svelte";
+  import AuthorizeEditModal from "$lib/components/ui/AuthorizeEditModal.svelte";
 
   let { data } = $props();
 
@@ -179,6 +181,7 @@
       inp.islr_lines[0].porc_islr = porcRet;
       inp.islr_lines[0].porc_base_islr = porcImp;
       inp.islr_lines[0].sustraendo_islr_bs = sustraen;
+      inp.islr_lines[0].manual_override_islr = false;
     }
     recalculateDocAmounts(docNo, doc);
   }
@@ -221,6 +224,8 @@
     );
     const remaining = Math.max(0, r2(docTotalBaseBs - otherLinesAssigned));
     inp.islr_lines[lineIndex].base_imponible_islr_bs = remaining;
+    inp.islr_lines[lineIndex].manual_override_islr = false;
+    inp.manual_override_islr = false;
     recalculateDocAmounts(docNo, doc);
   }
 
@@ -263,6 +268,8 @@
     if (!inp || !inp.islr_lines || !inp.islr_lines[lineIndex]) return;
     const docTotalBaseBs = getDocBaseBs(doc);
     inp.islr_lines[lineIndex].base_imponible_islr_bs = docTotalBaseBs;
+    inp.islr_lines[lineIndex].manual_override_islr = false;
+    inp.manual_override_islr = false;
     recalculateDocAmounts(docNo, doc);
   }
 
@@ -270,6 +277,7 @@
     const inp = docInputs[docNo];
     if (!inp || !inp.islr_lines || inp.islr_lines.length <= 1) return;
     inp.islr_lines.splice(index, 1);
+    inp.manual_override_islr = false;
     recalculateDocAmounts(docNo, doc);
   }
 
@@ -286,6 +294,7 @@
     if (!line) return;
 
     line.co_islr = selectedCode.trim();
+    line.manual_override_islr = false;
     inp.manual_override_islr = false;
 
     const currentTab = getEffectiveSupplierTab();
@@ -352,6 +361,29 @@
     return inp && !inp.yaTieneRetIslr && inp.showIslrDetails ? r2(inp.reten_islr_bs) : 0;
   }
 
+  let aplicarTimbreFiscal = $state(false);
+
+  function getDocTimbreFiscal(doc: any): {
+    timbreBs: number;
+    timbreUsd: number;
+    baseBs: number;
+  } {
+    const nro = doc?.nro_doc?.trim();
+    const inp = nro ? docInputs[nro] : null;
+    if (
+      (!aplicarTimbreFiscal && !inp?.manual_override_timbre) ||
+      !doc ||
+      isNcDoc(doc)
+    ) {
+      return { timbreBs: 0, timbreUsd: 0, baseBs: 0 };
+    }
+    const baseBs = getDocBaseBs(doc);
+    const timbreBs = inp?.manual_override_timbre
+      ? r2(inp.reten_timbre_bs || 0)
+      : r2(baseBs * 0.001);
+    return { timbreBs, timbreUsd: toUsd(timbreBs), baseBs };
+  }
+
   // Documentos cargados del proveedor
   let documentos = $state<any[]>([]);
   let checkedDocs = $state<Record<string, boolean>>({});
@@ -387,12 +419,18 @@
           base_imponible_islr_bs: number;
           reten_islr: number;
           reten_islr_bs: number;
+          manual_override_islr?: boolean;
+          authorized_by?: string;
         }>;
         sustraendo_islr_bs?: number;
         showIvaDetails: boolean;
         showIslrDetails: boolean;
         manual_override_iva?: boolean;
+        authorized_iva_by?: string;
         manual_override_islr?: boolean;
+        reten_timbre_bs?: number;
+        manual_override_timbre?: boolean;
+        authorized_timbre_by?: string;
         yaTieneRetIva?: boolean;
         nro_comp_iva_previo?: string;
         monto_ret_iva_previo_bs?: number;
@@ -448,9 +486,10 @@
         inp.mont_cob_bs = -appliedToInvoicesBs;
         inp.mont_cob = -toUsd(appliedToInvoicesBs);
       } else {
+        const retTimbreBs = getDocTimbreFiscal(doc).timbreBs;
         const maxAbonoBs = Math.max(
           0,
-          r2(r2(doc.saldo) - getAppliedRetIvaBs(inp) - getAppliedRetIslrBs(inp)),
+          r2(r2(doc.saldo) - getAppliedRetIvaBs(inp) - getAppliedRetIslrBs(inp) - retTimbreBs),
         );
         const appliedBs = r2(Math.min(remainingPaymentBs, maxAbonoBs));
 
@@ -479,7 +518,8 @@
           }
           const inp = docInputs[doc.nro_doc.trim()];
           if (inp) {
-            return acc + Math.max(0, r2(saldoBs - getAppliedRetIvaBs(inp) - getAppliedRetIslrBs(inp)));
+            const retTimbreBs = getDocTimbreFiscal(doc).timbreBs;
+            return acc + Math.max(0, r2(saldoBs - getAppliedRetIvaBs(inp) - getAppliedRetIslrBs(inp) - retTimbreBs));
           }
         }
         return acc;
@@ -588,6 +628,31 @@
     ) / 100,
   );
 
+  // Totales de Retenciones Timbre Fiscal (1x1000)
+  let totalBaseTimbreBs = $derived(
+    r2(
+      documentos.reduce((acc, doc) => {
+        if (checkedDocs[doc.nro_doc.trim()] && !isNcDoc(doc)) {
+          return acc + getDocTimbreFiscal(doc).baseBs;
+        }
+        return acc;
+      }, 0),
+    ),
+  );
+
+  let totalTimbreFiscalBs = $derived(
+    r2(
+      documentos.reduce((acc, doc) => {
+        if (checkedDocs[doc.nro_doc.trim()] && !isNcDoc(doc)) {
+          return acc + getDocTimbreFiscal(doc).timbreBs;
+        }
+        return acc;
+      }, 0),
+    ),
+  );
+
+  let totalTimbreFiscalUsd = $derived(toUsd(totalTimbreFiscalBs));
+
   // Total neto adeudado en facturas de débito seleccionadas
   let totalFacturasNetoBs = $derived(
     r2(
@@ -597,7 +662,8 @@
         const saldoBs = r2(doc.saldo);
         const retIvaBs = inp ? getAppliedRetIvaBs(inp) : 0;
         const retIslrBs = inp ? getAppliedRetIslrBs(inp) : 0;
-        return acc + Math.max(0, r2(saldoBs - retIvaBs - retIslrBs));
+        const retTimbreBs = getDocTimbreFiscal(doc).timbreBs;
+        return acc + Math.max(0, r2(saldoBs - retIvaBs - retIslrBs - retTimbreBs));
       }, 0),
     ),
   );
@@ -680,7 +746,10 @@
 
     // Caso 2: Sin instrumentos de pago (pago parcial exclusivamente de retenciones o cubierto 100% por N/CR)
     if (totalInstrumentosPagoBs === 0) {
-      const hasRetentions = totalRetenidoIvaBs > 0 || totalRetenidoIslrBs > 0;
+      const hasRetentions =
+        totalRetenidoIvaBs > 0 ||
+        totalRetenidoIslrBs > 0 ||
+        totalTimbreFiscalBs > 0;
       const hasCreditApplied = creditoNcAplicadoBs > 0;
       return hasRetentions || hasCreditApplied;
     }
@@ -691,6 +760,119 @@
 
   // Sincronizar sucursal seleccionada
   let selectedBranch = $state(data.selectedBranchId || "");
+
+  const allowEditableRetentions = $derived(
+    Boolean(
+      (data.branches || []).find((b: any) => b.id === selectedBranch)
+        ?.allow_editable_retentions ?? false,
+    ),
+  );
+
+  let retAuthModal = $state<{
+    open: boolean;
+    kind: "IVA" | "ISLR" | "TIMBRE";
+    doc: any;
+    lineIndex: number;
+    initialValue: number;
+    title: string;
+    description: string;
+    fieldLabel: string;
+  }>({
+    open: false,
+    kind: "IVA",
+    doc: null,
+    lineIndex: -1,
+    initialValue: 0,
+    title: "",
+    description: "",
+    fieldLabel: "",
+  });
+
+  function openRetentionAuthModal(
+    kind: "IVA" | "ISLR" | "TIMBRE",
+    doc: any,
+    lineIndex = -1,
+  ) {
+    const nro = doc?.nro_doc?.trim() || "";
+    const inp = docInputs[nro];
+    if (!inp) return;
+
+    if (kind === "IVA") {
+      retAuthModal = {
+        open: true,
+        kind: "IVA",
+        doc,
+        lineIndex: -1,
+        initialValue: Number(inp.reten_iva_bs || 0),
+        title: "Autorizar Monto Retención IVA",
+        description: `Documento ${doc.co_tipo_doc?.trim() || "FACT"} ${nro}`,
+        fieldLabel: "Nuevo Monto Retenido IVA (Bs.)",
+      };
+    } else if (kind === "ISLR") {
+      const line = inp.islr_lines?.[lineIndex];
+      const currentVal = line
+        ? Number(line.reten_islr_bs || 0)
+        : Number(inp.reten_islr_bs || 0);
+      retAuthModal = {
+        open: true,
+        kind: "ISLR",
+        doc,
+        lineIndex,
+        initialValue: currentVal,
+        title: "Autorizar Monto Retención ISLR",
+        description: `Documento ${doc.co_tipo_doc?.trim() || "FACT"} ${nro}${line?.co_islr ? ` · Concepto ${line.co_islr}` : ""}`,
+        fieldLabel: "Nuevo Monto Retenido ISLR (Bs.)",
+      };
+    } else {
+      const currentTimbre = getDocTimbreFiscal(doc).timbreBs;
+      retAuthModal = {
+        open: true,
+        kind: "TIMBRE",
+        doc,
+        lineIndex: -1,
+        initialValue: currentTimbre,
+        title: "Autorizar Retención Timbre 1x1000",
+        description: `Documento ${doc.co_tipo_doc?.trim() || "FACT"} ${nro}`,
+        fieldLabel: "Nuevo Monto Timbre Fiscal 1x1000 (Bs.)",
+      };
+    }
+  }
+
+  function applyAuthorizedRetention(
+    newVal: number,
+    authorizer: { email: string; full_name: string },
+  ) {
+    const doc = retAuthModal.doc;
+    if (!doc) return;
+    const nro = doc.nro_doc.trim();
+    const inp = docInputs[nro];
+    if (!inp) return;
+    const authName = authorizer.full_name || authorizer.email;
+    const rounded = Math.max(0, Math.round(Number(newVal || 0) * 100) / 100);
+
+    if (retAuthModal.kind === "IVA") {
+      inp.reten_iva_bs = rounded;
+      inp.manual_override_iva = true;
+      inp.authorized_iva_by = authName;
+      recalculateDocAmounts(nro, doc, true);
+    } else if (retAuthModal.kind === "ISLR") {
+      ensureIslrLines(inp, doc);
+      const idx = retAuthModal.lineIndex >= 0 ? retAuthModal.lineIndex : 0;
+      if (inp.islr_lines?.[idx]) {
+        inp.islr_lines[idx].reten_islr_bs = rounded;
+        inp.islr_lines[idx].manual_override_islr = true;
+        inp.islr_lines[idx].authorized_by = authName;
+      }
+      inp.manual_override_islr = true;
+      recalculateDocAmounts(nro, doc, true);
+    } else if (retAuthModal.kind === "TIMBRE") {
+      aplicarTimbreFiscal = true;
+      inp.reten_timbre_bs = rounded;
+      inp.manual_override_timbre = true;
+      inp.authorized_timbre_by = authName;
+      recalculateDocAmounts(nro, doc, true);
+    }
+  }
 
   function onBranchChange(newBranchId: string) {
     selectedBranch = newBranchId;
@@ -987,6 +1169,7 @@
     checkedDocs = {};
     docInputs = {};
     formasPago = [];
+    aplicarTimbreFiscal = false;
   }
 
   function toggleDocSelection(docNo: string, doc: any, isChecked: boolean) {
@@ -1024,14 +1207,18 @@
     if (inp.yaTieneRetIslr) {
       inp.showIslrDetails = false;
       inp.reten_islr_bs = 0;
-    } else if (!inp.manual_override_islr) {
-      if (inp.showIslrDetails) {
-        ensureIslrLines(inp, doc);
-        let totalRetBs = 0;
-        let totalBaseBs = 0;
+    } else if (inp.showIslrDetails) {
+      ensureIslrLines(inp, doc);
+      let totalRetBs = 0;
+      let totalBaseBs = 0;
 
-        for (const line of inp.islr_lines) {
-          const lineBaseRaw = Number(line.base_imponible_islr_bs) || 0;
+      for (const line of inp.islr_lines) {
+        const lineBaseRaw = Number(line.base_imponible_islr_bs) || 0;
+        if (line.manual_override_islr) {
+          line.reten_islr_bs = r2(Number(line.reten_islr_bs) || 0);
+          line.reten_islr = toUsd(line.reten_islr_bs);
+          line.base_imponible_islr = toUsd(lineBaseRaw);
+        } else {
           const porcBase = Number(line.porc_base_islr ?? 100) / 100;
           const baseSujeta = r2(lineBaseRaw * porcBase);
           const porcRet = (Number(line.porc_islr) || 0) / 100;
@@ -1043,21 +1230,21 @@
           line.reten_islr_bs = Math.max(0, retNeta);
           line.reten_islr = toUsd(line.reten_islr_bs);
           line.base_imponible_islr = toUsd(lineBaseRaw);
-
-          totalRetBs += line.reten_islr_bs;
-          totalBaseBs += lineBaseRaw;
         }
 
-        inp.reten_islr_bs = r2(totalRetBs);
-        inp.base_imponible_islr_bs = r2(totalBaseBs);
-        if (inp.islr_lines[0]) {
-          inp.co_islr = inp.islr_lines[0].co_islr;
-          inp.porc_islr = inp.islr_lines[0].porc_islr;
-          inp.sustraendo_islr_bs = inp.islr_lines[0].sustraendo_islr_bs;
-        }
-      } else {
-        inp.reten_islr_bs = 0;
+        totalRetBs += line.reten_islr_bs;
+        totalBaseBs += lineBaseRaw;
       }
+
+      inp.reten_islr_bs = r2(totalRetBs);
+      inp.base_imponible_islr_bs = r2(totalBaseBs);
+      if (inp.islr_lines[0]) {
+        inp.co_islr = inp.islr_lines[0].co_islr;
+        inp.porc_islr = inp.islr_lines[0].porc_islr;
+        inp.sustraendo_islr_bs = inp.islr_lines[0].sustraendo_islr_bs;
+      }
+    } else {
+      inp.reten_islr_bs = 0;
     }
     // (si es manual se respeta el monto en Bs ingresado por el usuario)
     inp.base_imponible_islr = toUsd(inp.base_imponible_islr_bs);
@@ -1096,7 +1283,8 @@
       }
 
       const inp = docInputs[nro];
-      totalNeededBs += Math.max(0, r2(saldoBs - getAppliedRetIvaBs(inp) - getAppliedRetIslrBs(inp)));
+      const retTimbreBs = getDocTimbreFiscal(doc).timbreBs;
+      totalNeededBs += Math.max(0, r2(saldoBs - getAppliedRetIvaBs(inp) - getAppliedRetIslrBs(inp) - retTimbreBs));
     }
 
     let otherInstrumentsBs = 0;
@@ -1238,8 +1426,8 @@
       return;
     }
 
-    if (!hasPaymentSurplus && totalInstrumentosPagoBs === 0 && totalRetenidoIvaBs === 0 && totalRetenidoIslrBs === 0 && creditoNcAplicadoBs === 0) {
-      toast.error("Debe ingresar un monto a pagar o aplicar al menos una retención (IVA o ISLR).");
+    if (!hasPaymentSurplus && totalInstrumentosPagoBs === 0 && totalRetenidoIvaBs === 0 && totalRetenidoIslrBs === 0 && totalTimbreFiscalBs === 0 && creditoNcAplicadoBs === 0) {
+      toast.error("Debe ingresar un monto a pagar o aplicar al menos una retención (IVA, ISLR o 1x1000).");
       return;
     }
 
@@ -1262,6 +1450,7 @@
         const isParent = ["FACT", "NDEB", "N/DB", "GIRO", "AJPA"].includes(doc.co_tipo_doc.trim());
         const retIvaBs = (!inp.yaTieneRetIva && inp.showIvaDetails) ? (inp.reten_iva_bs || 0) : 0;
         const retIslrBs = (!inp.yaTieneRetIslr && inp.showIslrDetails) ? (inp.reten_islr_bs || 0) : 0;
+        const retTimbreBs = isNcDoc(doc) ? 0 : getDocTimbreFiscal(doc).timbreBs;
 
         let montCobBs;
         if (isNcDoc(doc)) {
@@ -1283,6 +1472,7 @@
           mont_cob: montCobBs,
           monto_retencion_iva: retIvaBs,
           monto_retencion: retIslrBs,
+          monto_timbre_bs: retTimbreBs,
           num_comprobante_iva: (inp.num_comprobante_iva || "").trim(),
           parent_doc: !isParent ? parentDocNo : null,
         };
@@ -1380,6 +1570,13 @@
         formas_pago: formas_pago_cleaned,
         retenciones_iva,
         retenciones_islr,
+        timbre_fiscal: (aplicarTimbreFiscal || totalTimbreFiscalBs > 0) && totalTimbreFiscalBs > 0 ? {
+          aplicar: true,
+          alicuota: 0.001,
+          base_imponible_bs: totalBaseTimbreBs,
+          monto_bs: totalTimbreFiscalBs,
+          monto_usd: totalTimbreFiscalUsd,
+        } : null,
         ajuste_diferencia: hasPaymentSurplus ? {
           tipo: 'AJPA',
           monto_usd: excedentePagoUsd,
@@ -1616,6 +1813,24 @@
                 <p class="text-xs font-bold text-brand-400">
                   Contribuyente Especial ({selectedSupplier.porc_esp || 75}% Ret. IVA) • Tabulador ISLR: {selectedSupplier.tab_des || getTabDescription(selectedSupplier.co_tab)}
                 </p>
+              </div>
+              <div class="md:col-span-3 pt-2 border-t border-border-subtle/50 flex flex-wrap items-center justify-between gap-3">
+                <label class="inline-flex items-center gap-2.5 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    bind:checked={aplicarTimbreFiscal}
+                    onchange={() => recalculateAllDocAmounts()}
+                    class="w-4 h-4 accent-indigo-500 rounded cursor-pointer"
+                  />
+                  <span class="text-xs font-bold text-indigo-400">
+                    Aplicar Retención Timbre Fiscal 1x1000 (0,1%)
+                  </span>
+                </label>
+                {#if totalTimbreFiscalBs > 0}
+                  <span class="text-xs font-mono font-bold text-indigo-400">
+                    - Bs. {totalTimbreFiscalBs.toLocaleString("de-DE", { minimumFractionDigits: 2 })} (${totalTimbreFiscalUsd.toLocaleString("de-DE", { minimumFractionDigits: 2 })})
+                  </span>
+                {/if}
               </div>
             </div>
           {/if}
@@ -1875,6 +2090,9 @@
                                       input.manual_override_islr = true;
                                     } else {
                                       input.manual_override_islr = false;
+                                      for (const l of input.islr_lines || []) {
+                                        l.manual_override_islr = false;
+                                      }
                                       const currentTab = getEffectiveSupplierTab();
                                       const allList = data.conceptosIslr || [];
                                       const found = allList.find((c: any) => 
@@ -1992,9 +2210,22 @@
                                 </select>
                               </div>
                               <div>
-                                <span class="text-[9px] text-text-muted font-bold block mb-1 font-semibold text-green-400"
-                                  >MTO RETENIDO (Bs.)</span
-                                >
+                                <div class="flex items-center justify-between gap-1 mb-1">
+                                  <span class="text-[9px] font-bold font-semibold text-green-400"
+                                    >MTO RETENIDO (Bs.)</span
+                                  >
+                                  {#if allowEditableRetentions}
+                                    <button
+                                      type="button"
+                                      onclick={() => openRetentionAuthModal("IVA", doc)}
+                                      class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-400 hover:bg-amber-500/25 border border-amber-500/30 text-[9px] font-bold transition-colors cursor-pointer"
+                                      title="Autorizar edición manual del monto retenido de IVA"
+                                    >
+                                      <KeyRound size={10} />
+                                      Editar
+                                    </button>
+                                  {/if}
+                                </div>
                                 <input
                                   type="number"
                                   step="0.01"
@@ -2002,6 +2233,11 @@
                                   value={input.reten_iva_bs}
                                   class="w-full bg-surface-soft/60 border border-border-subtle text-green-400 font-bold px-2 py-1.5 rounded-lg text-xs text-right cursor-not-allowed opacity-90"
                                 />
+                                {#if input.manual_override_iva && input.authorized_iva_by}
+                                  <span class="block text-[9px] text-amber-400 font-semibold mt-0.5 truncate">
+                                    Autorizado por: {input.authorized_iva_by}
+                                  </span>
+                                {/if}
                               </div>
                             </div>
                           </div>
@@ -2110,6 +2346,7 @@
                                       step="0.01"
                                       bind:value={line.base_imponible_islr_bs}
                                       oninput={() => {
+                                        line.manual_override_islr = false;
                                         input.manual_override_islr = false;
                                         recalculateDocAmounts(doc.nro_doc.trim(), doc);
                                       }}
@@ -2123,6 +2360,7 @@
                                       step="0.1"
                                       bind:value={line.porc_islr}
                                       oninput={() => {
+                                        line.manual_override_islr = false;
                                         input.manual_override_islr = false;
                                         recalculateDocAmounts(doc.nro_doc.trim(), doc);
                                       }}
@@ -2130,7 +2368,20 @@
                                     />
                                   </div>
                                   <div class="sm:col-span-2">
-                                    <span class="text-[9px] text-text-muted font-bold block mb-1 font-semibold text-amber-400">RETENIDO (Bs.)</span>
+                                    <div class="flex items-center justify-between gap-1 mb-1">
+                                      <span class="text-[9px] font-bold font-semibold text-amber-400">RETENIDO (Bs.)</span>
+                                      {#if allowEditableRetentions}
+                                        <button
+                                          type="button"
+                                          onclick={() => openRetentionAuthModal("ISLR", doc, lineIdx)}
+                                          class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-400 hover:bg-amber-500/25 border border-amber-500/30 text-[9px] font-bold transition-colors cursor-pointer"
+                                          title="Autorizar edición manual del monto retenido de ISLR"
+                                        >
+                                          <KeyRound size={10} />
+                                          Editar
+                                        </button>
+                                      {/if}
+                                    </div>
                                     <input
                                       type="number"
                                       step="0.01"
@@ -2138,6 +2389,11 @@
                                       value={line.reten_islr_bs}
                                       class="w-full bg-surface-soft/60 border border-border-subtle px-2 py-1.5 rounded-lg text-xs text-right text-amber-400 font-bold cursor-not-allowed opacity-90 font-mono"
                                     />
+                                    {#if line.manual_override_islr && line.authorized_by}
+                                      <span class="block text-[9px] text-amber-400 font-semibold mt-0.5 truncate">
+                                        Autorizado por: {line.authorized_by}
+                                      </span>
+                                    {/if}
                                   </div>
                                   <div class="sm:col-span-1 flex justify-center pt-2 sm:pt-0">
                                     {#if (input.islr_lines?.length || 0) > 1}
@@ -2179,6 +2435,40 @@
                               </div>
                             {/if}
                           </div>
+                        {/if}
+
+                        <!-- Retención Timbre Fiscal 1x1000 por Documento -->
+                        {#if !isNcDoc(doc) && (aplicarTimbreFiscal || input.manual_override_timbre || allowEditableRetentions)}
+                          {@const docTimbre = getDocTimbreFiscal(doc)}
+                          {#if docTimbre.timbreBs > 0 || allowEditableRetentions}
+                            <div class="flex flex-wrap items-center justify-between gap-2 px-3 py-2 rounded-xl bg-indigo-500/5 border border-indigo-500/20 text-xs">
+                              <div class="flex items-center gap-2 flex-wrap">
+                                <span class="font-bold text-indigo-400">Timbre Fiscal (1x1000):</span>
+                                <span class="font-mono font-bold text-text-base">
+                                  Bs. {docTimbre.timbreBs.toLocaleString("de-DE", { minimumFractionDigits: 2 })}
+                                </span>
+                                <span class="text-text-muted text-[10px]">
+                                  (${docTimbre.timbreUsd.toLocaleString("de-DE", { minimumFractionDigits: 2 })})
+                                </span>
+                                {#if input.manual_override_timbre && input.authorized_timbre_by}
+                                  <span class="text-[10px] font-semibold text-amber-400">
+                                    · Autorizado por: {input.authorized_timbre_by}
+                                  </span>
+                                {/if}
+                              </div>
+                              {#if allowEditableRetentions}
+                                <button
+                                  type="button"
+                                  onclick={() => openRetentionAuthModal("TIMBRE", doc)}
+                                  class="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-amber-500/15 text-amber-400 hover:bg-amber-500/25 border border-amber-500/30 text-[10px] font-bold transition-colors cursor-pointer"
+                                  title="Autorizar edición manual del monto de Timbre Fiscal 1x1000"
+                                >
+                                  <KeyRound size={11} />
+                                  Editar 1x1000
+                                </button>
+                              {/if}
+                            </div>
+                          {/if}
                         {/if}
 
                         <!-- Neto Abonado por este Documento -->
@@ -2305,6 +2595,19 @@
                 </span>
               </div>
             {/if}
+            {#if (showUSD ? totalTimbreFiscalUsd : totalTimbreFiscalBs) > 0}
+              <div
+                class="flex justify-between items-center text-base font-bold text-text-muted"
+              >
+                <span>Timbre Fiscal (1x1000)</span>
+                <span class="font-mono text-indigo-400">
+                  {showUSD ? "$" : "Bs."} {(showUSD ? totalTimbreFiscalUsd : totalTimbreFiscalBs).toLocaleString("de-DE", {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
+                  })}
+                </span>
+              </div>
+            {/if}
             <div
               class="flex justify-between items-center text-base font-bold text-text-muted border-t border-border-subtle/50 pt-4"
             >
@@ -2375,7 +2678,7 @@
                   <CheckCircle size={14} />
                   {hasPaymentSurplus ? "Cuadrado (con AJPA)" : "Cuadrado"}
                 </span>
-              {:else if totalInstrumentosPagoBs === 0 && (totalRetenidoIvaBs > 0 || totalRetenidoIslrBs > 0)}
+              {:else if totalInstrumentosPagoBs === 0 && (totalRetenidoIvaBs > 0 || totalRetenidoIslrBs > 0 || totalTimbreFiscalBs > 0)}
                 <span
                   class="text-xs font-black text-blue-400 bg-blue-500/10 border border-blue-500/20 px-3 py-1 rounded-full flex items-center gap-1.5 font-mono"
                 >
@@ -2681,7 +2984,7 @@
               {:else if hasPaymentSurplus}
                 <Wallet size={20} />
                 Generar AJPA y Guardar Pago
-              {:else if totalInstrumentosPagoBs === 0 && (totalRetenidoIvaBs > 0 || totalRetenidoIslrBs > 0)}
+              {:else if totalInstrumentosPagoBs === 0 && (totalRetenidoIvaBs > 0 || totalRetenidoIslrBs > 0 || totalTimbreFiscalBs > 0)}
                 <FileCheck size={20} />
                 Guardar Retención
               {:else if totalFacturasNetoBs === 0 && (totalRetenidoIvaBs > 0 || totalRetenidoIslrBs > 0)}
@@ -2907,3 +3210,17 @@
     </div>
   </div>
 {/if}
+
+<AuthorizeEditModal
+  bind:open={retAuthModal.open}
+  module="pur_payments"
+  branchId={selectedBranch}
+  title={retAuthModal.title}
+  description={retAuthModal.description}
+  fieldLabel={retAuthModal.fieldLabel}
+  currencySymbol="Bs."
+  initialValue={retAuthModal.initialValue}
+  recordId={retAuthModal.doc?.nro_doc?.trim() || ""}
+  currentUserEmail={($page.data as any)?.profile?.email || ""}
+  onAuthorized={applyAuthorizedRetention}
+/>

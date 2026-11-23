@@ -42,12 +42,14 @@
     X,
     Briefcase,
     Building2,
+    KeyRound,
   } from "lucide-svelte";
   import { toast } from "svelte-sonner";
   import Combobox from "$lib/components/ui/Combobox.svelte";
   import SearchBar from "$lib/components/ui/SearchBar.svelte";
   import BarcodeScanner from "$lib/components/ui/BarcodeScanner.svelte";
   import ImageViewer from "$lib/components/ui/ImageViewer.svelte";
+  import AuthorizeEditModal from "$lib/components/ui/AuthorizeEditModal.svelte";
   import dayjs from "dayjs";
   import "dayjs/locale/es";
   import {
@@ -76,9 +78,23 @@
 
   let selectedBranchConfig = $derived(
     Array.isArray(data.branches)
-      ? data.branches.find((b: any) => b.id === selectedBranch)
+      ? data.branches.find((b: any) => String(b.id) === String(selectedBranch))
       : null,
   );
+  const allowEditablePrices = $derived(
+    Boolean(
+      selectedBranchConfig?.allow_editable_prices ??
+        selectedBranchConfig?.sql_config?.profit_defaults
+          ?.allow_editable_prices ??
+        false,
+    ),
+  );
+  let priceAuthModal = $state<{
+    open: boolean;
+    cartIndex: number;
+    item: any;
+    initialPrice: number;
+  }>({ open: false, cartIndex: -1, item: null, initialPrice: 0 });
 
   $effect(() => {
     // Si solo hay una sucursal, seleccionarla por defecto
@@ -125,18 +141,18 @@
   let startDragY = 90;
 
   $effect(() => {
-    if (typeof window !== 'undefined') {
-      const savedX = localStorage.getItem('currency_switch_x');
-      const savedY = localStorage.getItem('currency_switch_y');
+    if (typeof window !== "undefined") {
+      const savedX = localStorage.getItem("currency_switch_x");
+      const savedY = localStorage.getItem("currency_switch_y");
       if (savedX) dragX = parseInt(savedX, 10);
       if (savedY) dragY = parseInt(savedY, 10);
     }
   });
 
   function onPointerDown(e: PointerEvent) {
-    if (e.button !== 0 && e.pointerType === 'mouse') return;
+    if (e.button !== 0 && e.pointerType === "mouse") return;
     const target = e.target as HTMLElement;
-    if (target.closest('button')) return;
+    if (target.closest("button")) return;
     activeDrag = true;
     startX = e.clientX;
     startY = e.clientY;
@@ -156,8 +172,8 @@
   function onPointerUp(e: PointerEvent) {
     if (!activeDrag) return;
     activeDrag = false;
-    localStorage.setItem('currency_switch_x', dragX.toString());
-    localStorage.setItem('currency_switch_y', dragY.toString());
+    localStorage.setItem("currency_switch_x", dragX.toString());
+    localStorage.setItem("currency_switch_y", dragY.toString());
   }
 
   let quoteTaxRate = $state(16); // 16 o 0 (global para items no exentos)
@@ -181,16 +197,24 @@
   let isInitializing = false;
 
   // --- BUSCADOR EN RENGLONES (CARRITO) ---
-  let cartSearchTerm = $state('');
+  let cartSearchTerm = $state("");
 
   let filteredCart = $derived.by(() => {
     const term = cartSearchTerm.trim().toLowerCase();
-    if (!term) return cart.map((item, originalIndex) => ({ item, originalIndex }));
+    if (!term)
+      return cart.map((item, originalIndex) => ({ item, originalIndex }));
     return cart
       .map((item, originalIndex) => ({ item, originalIndex }))
       .filter(({ item }) => {
-        const code = String(item.article?.co_art || item.article?.codigo || item.co_art || '').toLowerCase();
-        const desc = String(item.article?.art_des || item.article?.descripcion || item.art_des || '').toLowerCase();
+        const code = String(
+          item.article?.co_art || item.article?.codigo || item.co_art || "",
+        ).toLowerCase();
+        const desc = String(
+          item.article?.art_des ||
+            item.article?.descripcion ||
+            item.art_des ||
+            "",
+        ).toLowerCase();
         return code.includes(term) || desc.includes(term);
       });
   });
@@ -202,7 +226,7 @@
       isInitializing = true;
       activeTab = 2;
       lastLoadedDoc = q.doc_num;
-      
+
       // LIMPIEZA AGRESIVA: Si entramos a editar, borrar cualquier borrador previo
       localStorage.removeItem("profit_quote_draft");
 
@@ -244,9 +268,26 @@
           Array.isArray(q.renglones) &&
           q.renglones.length > 0
         ) {
+          const docTasa =
+            Number(q.tasa || q.tasa_actual || 1) > 0
+              ? Number(q.tasa || q.tasa_actual || 1)
+              : 1;
           const mappedCart = q.renglones.map((r: any) => {
             const artId = String(r.co_art || "").trim();
             const almaId = String(r.co_alma || "").trim();
+            const savedVes = Number(r.precio || 0);
+            const savedUsd =
+              Number(r.prec_vta_om || 0) > 0
+                ? Number(r.prec_vta_om)
+                : docTasa > 0
+                  ? savedVes / docTasa
+                  : 0;
+            const rawComment = String(r.comentario || "").trim();
+            const authBy = rawComment.startsWith("PRECIO_AUT:")
+              ? rawComment.replace(/^PRECIO_AUT:/, "").trim()
+              : "";
+            const isExplicitCustom = Boolean(authBy);
+            const coPrecio = String(r.co_precio || "01").trim();
 
             // Set individual states
             quantities[artId] = Number(r.cantidad || 1);
@@ -263,18 +304,23 @@
               co_subl: String(r.co_subl || "").trim(),
               art_des: String(r.art_des || "").trim(),
               qty: Number(r.cantidad || 0),
-              precio_ves: Number(r.precio || 0),
-              precio_usd: Number(r.prec_vta_om || 0),
+              precio_ves: savedVes,
+              precio_usd: savedUsd,
               porc_imp: Number(r.porc_imp ?? 16),
               co_alma_selected: almaId,
               co_uni: String(r.co_uni || "").trim(),
               unidad: String(r.unidad || r.co_uni || "UND").trim(),
+              price_index_selected: isExplicitCustom ? -1 : 0,
               price_selected: {
-                precio: Number(r.prec_vta_om || 0),
-                precio_ves: Number(r.precio || 0),
-                id_precio: String(r.co_precio || "01").trim(),
+                precio: savedUsd,
+                precio_ves: savedVes,
+                id_precio: coPrecio,
+                co_precio: coPrecio,
+                des_precio: isExplicitCustom ? "Precio Autorizado" : undefined,
+                is_custom: isExplicitCustom,
+                authorized_by: authBy || undefined,
               },
-              co_precio: String(r.co_precio || "01").trim(),
+              co_precio: coPrecio,
               disponibilidad: [
                 {
                   co_alma: almaId,
@@ -284,9 +330,9 @@
               ],
               precios: [
                 {
-                  id_precio: String(r.co_precio || "01").trim(),
-                  precio: Number(r.prec_vta_om || 0),
-                  precio_ves: Number(r.precio || 0),
+                  id_precio: coPrecio,
+                  precio: savedUsd,
+                  precio_ves: savedVes,
                   moneda: String(q.co_mone || "BS"),
                 },
               ],
@@ -382,31 +428,56 @@
 
           // --- FILTRADO DE ALMACENES POR PERMISO Y STOCK DISPONIBLE (> 0 o seleccionado) ---
           const allowedIds = (data.context?.warehouses || []).map((w: any) =>
-            String(w.co_alma || "").trim().toUpperCase(),
+            String(w.co_alma || "")
+              .trim()
+              .toUpperCase(),
           );
           let validDispo = (fresh.disponibilidad || []).filter(
             (disp: any) =>
-              allowedIds.includes(String(disp.co_alma || "").trim().toUpperCase()) && Number(disp.stock || 0) > 0,
+              allowedIds.includes(
+                String(disp.co_alma || "")
+                  .trim()
+                  .toUpperCase(),
+              ) && Number(disp.stock || 0) > 0,
           );
 
-          const currentAlmaCode = String(item.co_alma_selected || "01").trim().toUpperCase();
+          const currentAlmaCode = String(item.co_alma_selected || "01")
+            .trim()
+            .toUpperCase();
           const hasCurrentInDispo = validDispo.some(
-            (d: any) => String(d.co_alma || "").trim().toUpperCase() === currentAlmaCode,
+            (d: any) =>
+              String(d.co_alma || "")
+                .trim()
+                .toUpperCase() === currentAlmaCode,
           );
 
           if (!hasCurrentInDispo) {
             const freshSel = fresh.disponibilidad?.find(
-              (d: any) => String(d.co_alma || "").trim().toUpperCase() === currentAlmaCode,
+              (d: any) =>
+                String(d.co_alma || "")
+                  .trim()
+                  .toUpperCase() === currentAlmaCode,
             );
             const contextSel = data.context?.warehouses?.find(
-              (w: any) => String(w.co_alma || "").trim().toUpperCase() === currentAlmaCode,
+              (w: any) =>
+                String(w.co_alma || "")
+                  .trim()
+                  .toUpperCase() === currentAlmaCode,
             );
             const cartSel = cart[i]?.disponibilidad?.find(
-              (d: any) => String(d.co_alma || "").trim().toUpperCase() === currentAlmaCode,
+              (d: any) =>
+                String(d.co_alma || "")
+                  .trim()
+                  .toUpperCase() === currentAlmaCode,
             );
 
             const desAlma = String(
-              freshSel?.des_alma || contextSel?.des_alma || contextSel?.nombre || cartSel?.des_alma || item.co_alma_selected || currentAlmaCode,
+              freshSel?.des_alma ||
+                contextSel?.des_alma ||
+                contextSel?.nombre ||
+                cartSel?.des_alma ||
+                item.co_alma_selected ||
+                currentAlmaCode,
             ).trim();
             const stockVal = Number(freshSel?.stock ?? cartSel?.stock ?? 0);
 
@@ -419,12 +490,20 @@
 
           // Enriquecer descripciones si sólo viene el código
           validDispo = validDispo.map((disp: any) => {
-            const code = String(disp.co_alma || "").trim().toUpperCase();
+            const code = String(disp.co_alma || "")
+              .trim()
+              .toUpperCase();
             const ctxAlma = data.context?.warehouses?.find(
-              (w: any) => String(w.co_alma || "").trim().toUpperCase() === code,
+              (w: any) =>
+                String(w.co_alma || "")
+                  .trim()
+                  .toUpperCase() === code,
             );
             const rawDes = String(disp.des_alma || "").trim();
-            const finalDes = rawDes && rawDes !== code ? rawDes : String(ctxAlma?.des_alma || ctxAlma?.nombre || code).trim();
+            const finalDes =
+              rawDes && rawDes !== code
+                ? rawDes
+                : String(ctxAlma?.des_alma || ctxAlma?.nombre || code).trim();
             return {
               ...disp,
               des_alma: finalDes,
@@ -435,32 +514,102 @@
           let matchedPriceIndex = -1;
           const targetIdPrecio = String(
             cart[i].price_selected?.id_precio ||
-            cart[i].price_selected?.co_precio ||
-            cart[i].co_precio ||
-            ""
+              cart[i].price_selected?.co_precio ||
+              cart[i].co_precio ||
+              "",
           ).trim();
+          const targetOM = Number(
+            cart[i].price_selected?.precio ?? cart[i].precio_usd ?? 0,
+          );
+          const targetVES = Number(
+            cart[i].price_selected?.precio_ves ?? cart[i].precio_ves ?? 0,
+          );
+          const explicitCustom = Boolean(cart[i].price_selected?.is_custom);
 
-          if (targetIdPrecio && fresh.precios && fresh.precios.length > 0) {
-            matchedPriceIndex = fresh.precios.findIndex(
-              (p: any) => String(p.id_precio || p.co_precio || "").trim() === targetIdPrecio,
+          const refFreshPrice = fresh.precios?.[0];
+          const freshTasa =
+            refFreshPrice?.precio > 0 && refFreshPrice?.precio_ves > 0
+              ? refFreshPrice.precio_ves / refFreshPrice.precio
+              : Number(
+                  fresh.tasa ||
+                    data.preloadedQuote?.tasa_actual ||
+                    data.preloadedQuote?.tasa ||
+                    1,
+                );
+
+          const matchesCatalogPrice = (p: any) => {
+            const pUsd = Number(p.precio || 0);
+            const pVes = Number(p.precio_ves || 0);
+            if (showUSD && targetOM > 0) {
+              return Math.abs(pUsd - targetOM) < 0.015;
+            }
+            if (!showUSD && targetVES > 0) {
+              return (
+                Math.abs(pVes - targetVES) < 0.05 ||
+                (targetOM > 0 && Math.abs(pUsd - targetOM) < 0.015)
+              );
+            }
+            return (
+              (targetOM > 0 && Math.abs(pUsd - targetOM) < 0.015) ||
+              (targetVES > 0 && Math.abs(pVes - targetVES) < 0.05)
             );
+          };
+
+          if (!explicitCustom && fresh.precios && fresh.precios.length > 0) {
+            if (targetIdPrecio) {
+              matchedPriceIndex = fresh.precios.findIndex(
+                (p: any) =>
+                  String(p.id_precio || p.co_precio || "").trim() ===
+                    targetIdPrecio && matchesCatalogPrice(p),
+              );
+            }
+            if (matchedPriceIndex === -1) {
+              matchedPriceIndex = fresh.precios.findIndex(matchesCatalogPrice);
+            }
           }
 
-          if (matchedPriceIndex === -1 && fresh.precios && fresh.precios.length > 0) {
-            const targetOM = Number(cart[i].price_selected?.precio || 0);
-            const targetVES = Number(cart[i].price_selected?.precio_ves || 0);
+          let finalPriceIndex = matchedPriceIndex;
+          let finalPriceSelected =
+            matchedPriceIndex >= 0
+              ? fresh.precios?.[matchedPriceIndex]
+              : cart[i].price_selected;
 
-            matchedPriceIndex = fresh.precios.findIndex((p: any) => {
-              const matchOM = targetOM > 0 && Math.abs(Number(p.precio) - targetOM) < 0.05;
-              const matchVES = targetVES > 0 && Math.abs(Number(p.precio_ves) - targetVES) < 0.05;
-              return matchOM || matchVES;
-            });
+          if (
+            explicitCustom ||
+            (matchedPriceIndex === -1 && (targetOM > 0 || targetVES > 0))
+          ) {
+            finalPriceIndex = -1;
+            const customUsd =
+              targetOM > 0
+                ? Math.round(targetOM * 100) / 100
+                : freshTasa > 0
+                  ? Math.round((targetVES / freshTasa) * 100) / 100
+                  : 0;
+            const customVes =
+              !showUSD && targetVES > 0
+                ? Math.round(targetVES * 100) / 100
+                : freshTasa > 0
+                  ? Math.round(customUsd * freshTasa * 100) / 100
+                  : Math.round(targetVES * 100) / 100;
+
+            finalPriceSelected = {
+              id_precio: targetIdPrecio || "01",
+              co_precio: targetIdPrecio || "01",
+              des_precio:
+                cart[i].price_selected?.des_precio || "Precio Autorizado",
+              precio: customUsd,
+              precio_ves: customVes,
+              is_custom: true,
+              authorized_by: cart[i].price_selected?.authorized_by,
+            };
+          } else if (finalPriceIndex === -1) {
+            finalPriceIndex = 0;
+            finalPriceSelected = fresh.precios?.[0] || cart[i].price_selected;
           }
 
-          if (matchedPriceIndex === -1) matchedPriceIndex = 0;
-
-          // Actualizar estados reactivos globales
-          selectedItemPriceIndex[co] = matchedPriceIndex;
+          // Actualizar estados reactivos globales (el catálogo usa índice >= 0)
+          selectedItemPriceIndex[co] =
+            finalPriceIndex >= 0 ? finalPriceIndex : 0;
 
           // Actualizar item en el carrito con RE-ASIGNACIÓN para Svelte kit
           const updatedItem = {
@@ -469,13 +618,15 @@
             co_subl: fresh.co_subl || cart[i].co_subl,
             art_des: fresh.descripcion || fresh.art_des || cart[i].art_des,
             disponibilidad: validDispo,
-            precios: fresh.precios && fresh.precios.length > 0 ? fresh.precios : cart[i].precios,
+            precios:
+              fresh.precios && fresh.precios.length > 0
+                ? fresh.precios
+                : cart[i].precios,
             unidad: fresh.unidad || cart[i].unidad,
             porc_imp:
               fresh.tipo_imp === "7" ? 0 : (fresh.porc_imp ?? cart[i].porc_imp),
-            price_index_selected: matchedPriceIndex,
-            price_selected:
-              fresh.precios?.[matchedPriceIndex] || cart[i].price_selected,
+            price_index_selected: finalPriceIndex,
+            price_selected: finalPriceSelected,
             co_alma_selected: item.co_alma_selected,
           };
 
@@ -531,7 +682,9 @@
       newClient.porc_esp = 0;
     }
     newClient.contribu_e = Boolean(
-      newClient.contribuyente && !isNaturalNewClient && Number(newClient.porc_esp) > 0,
+      newClient.contribuyente &&
+        !isNaturalNewClient &&
+        Number(newClient.porc_esp) > 0,
     );
   });
 
@@ -624,8 +777,6 @@
     }
   });
 
-
-
   // --- ACCIONES ---
   function nextStep() {
     if (activeTab === 0) {
@@ -653,7 +804,7 @@
     masterBranchId = "";
     localStorage.removeItem("profit_quote_draft");
     lastLoadedDoc = ""; // Resetear rastreador de edición
-    
+
     if (!avoidRedirect) {
       toast.success("Formulario limpiado");
       // Si estábamos editando, limpiar la URL para que no vuelva a precargar
@@ -668,8 +819,10 @@
     const docNumInUrl = $page.url.searchParams.get("doc_num");
     // Solo limpiar si venimos de haber cargado un documento (lastLoadedDoc) y ahora la URL está limpia (doc_num null)
     if (!docNumInUrl && lastLoadedDoc !== "" && !isInitializing) {
-      console.log("🧹 [STATE] Detectada salida de edición. Limpiando para nueva cotización.");
-      clearQuote(true); 
+      console.log(
+        "🧹 [STATE] Detectada salida de edición. Limpiando para nueva cotización.",
+      );
+      clearQuote(true);
       lastLoadedDoc = ""; // Resetear marca de carga
       activeTab = 0;
     }
@@ -680,25 +833,43 @@
     let allowed: string[] = [];
     if (Array.isArray(rawConfig)) {
       allowed = rawConfig
-        .map((u: any) => String(u).replace(/[\[\]"']/g, '').trim().toUpperCase())
+        .map((u: any) =>
+          String(u)
+            .replace(/[\[\]"']/g, "")
+            .trim()
+            .toUpperCase(),
+        )
         .filter(Boolean);
     } else {
-      const configStr = String(rawConfig || 'MTS, MTS2, KG');
+      const configStr = String(rawConfig || "MTS, MTS2, KG");
       allowed = configStr
-        .replace(/[\[\]"']/g, '')
-        .split(',')
+        .replace(/[\[\]"']/g, "")
+        .split(",")
         .map((s: string) => s.trim().toUpperCase())
         .filter(Boolean);
     }
     if (allowed.length === 0) {
-      allowed = ['MTS', 'MTS2', 'KG'];
+      allowed = ["MTS", "MTS2", "KG"];
     }
 
-    const co_uni = String(itemOrArticle?.co_uni || '').replace(/[\[\]"']/g, '').trim().toUpperCase();
-    const unidad = String(itemOrArticle?.unidad || '').replace(/[\[\]"']/g, '').trim().toUpperCase();
-    
+    const co_uni = String(itemOrArticle?.co_uni || "")
+      .replace(/[\[\]"']/g, "")
+      .trim()
+      .toUpperCase();
+    const unidad = String(itemOrArticle?.unidad || "")
+      .replace(/[\[\]"']/g, "")
+      .trim()
+      .toUpperCase();
+
     // Coincidencia exacta o coincidencia por inclusión
-    return allowed.some(a => a && (co_uni === a || unidad === a || co_uni.includes(a) || unidad.includes(a)));
+    return allowed.some(
+      (a) =>
+        a &&
+        (co_uni === a ||
+          unidad === a ||
+          co_uni.includes(a) ||
+          unidad.includes(a)),
+    );
   }
 
   function getStep(itemOrArticle: any) {
@@ -711,7 +882,8 @@
     const qty = quantities[co_art] || step;
 
     // Identify if it's a service (Linea 09 or code starts with 09)
-    const isService = article.co_lin?.trim() === "09" || (co_art || "").startsWith("09");
+    const isService =
+      article.co_lin?.trim() === "09" || (co_art || "").startsWith("09");
 
     // Obtener almacén seleccionado
     let almId =
@@ -742,7 +914,7 @@
         }
         return maxAlm.co_alma;
       })();
-    
+
     // For services, if still no warehouse, force first one available in context
     if (isService && !almId) {
       almId = data.context?.warehouses?.[0]?.co_alma || "01";
@@ -783,13 +955,14 @@
     if (existingIndex >= 0) {
       cart[existingIndex].qty += qty;
     } else {
-      const itemDispo = (article.disponibilidad && article.disponibilidad.length > 0)
-        ? article.disponibilidad
-        : (data.context?.warehouses || []).map((w: any) => ({
-            co_alma: w.co_alma,
-            des_alma: w.des_alma || w.nombre || w.co_alma,
-            stock: 0
-          }));
+      const itemDispo =
+        article.disponibilidad && article.disponibilidad.length > 0
+          ? article.disponibilidad
+          : (data.context?.warehouses || []).map((w: any) => ({
+              co_alma: w.co_alma,
+              des_alma: w.des_alma || w.nombre || w.co_alma,
+              stock: 0,
+            }));
       cart = [
         ...cart,
         {
@@ -818,7 +991,7 @@
       cart[index].qty = step;
       return;
     }
-    
+
     // Forzar escalón y evitar imprecisiones de coma flotante
     let roundedQty = Math.round(newQty / step) * step;
 
@@ -858,6 +1031,7 @@
   }
 
   function updateCartPrice(index: number, priceIndex: number) {
+    if (priceIndex < 0) return;
     const item = cart[index];
     const newPrice = item.precios?.[priceIndex];
     if (!newPrice) return;
@@ -865,6 +1039,55 @@
     item.price_index_selected = priceIndex;
     item.price_selected = newPrice;
     cart[index] = { ...item };
+  }
+
+  function openPriceAuthModal(index: number) {
+    const item = cart[index];
+    if (!item) return;
+    const currentVal = showUSD
+      ? Number(item.price_selected?.precio ?? item.precios?.[0]?.precio ?? 0)
+      : Number(
+          item.price_selected?.precio_ves ?? item.precios?.[0]?.precio_ves ?? 0,
+        );
+    priceAuthModal = {
+      open: true,
+      cartIndex: index,
+      item,
+      initialPrice: Math.round(currentVal * 100) / 100,
+    };
+  }
+
+  function applyAuthorizedPrice(
+    newVal: number,
+    authorizer: { email: string; full_name: string },
+  ) {
+    const idx = priceAuthModal.cartIndex;
+    const item = cart[idx];
+    if (!item) return;
+
+    const refPrice = item.precios?.[0];
+    const itemTasa =
+      refPrice?.precio > 0 && refPrice?.precio_ves > 0
+        ? refPrice.precio_ves / refPrice.precio
+        : Number(item.tasa || 1);
+
+    const precioUsd = showUSD
+      ? newVal
+      : itemTasa > 0
+        ? newVal / itemTasa
+        : newVal;
+    const precioVes = showUSD ? newVal * itemTasa : newVal;
+
+    item.price_index_selected = -1;
+    item.price_selected = {
+      co_precio: item.price_selected?.co_precio || "01",
+      des_precio: "Precio Autorizado",
+      precio: Math.round(precioUsd * 100) / 100,
+      precio_ves: Math.round(precioVes * 100) / 100,
+      is_custom: true,
+      authorized_by: authorizer.full_name || authorizer.email,
+    };
+    cart[idx] = { ...item };
   }
 
   function toggleCurrency(toUSD: boolean) {
@@ -890,7 +1113,7 @@
 
     if (selectedCategoria) url.searchParams.set("categoria", selectedCategoria);
     else url.searchParams.delete("categoria");
-    
+
     if (sortOption && sortOption !== "relevance")
       url.searchParams.set("sort", sortOption);
     else url.searchParams.delete("sort");
@@ -951,8 +1174,20 @@
       total: showUSD ? totalUSD : totalBS,
       symbol: showUSD ? "$" : "Bs.",
       raw: {
-        usd: { sub: subUSD, iva: ivaUSD, retencion: retencionUSD, totalFactura: totalFacturaUSD, total: totalUSD },
-        bs: { sub: subBS, iva: ivaBS, retencion: retencionBS, totalFactura: totalFacturaBS, total: totalBS },
+        usd: {
+          sub: subUSD,
+          iva: ivaUSD,
+          retencion: retencionUSD,
+          totalFactura: totalFacturaUSD,
+          total: totalUSD,
+        },
+        bs: {
+          sub: subBS,
+          iva: ivaBS,
+          retencion: retencionBS,
+          totalFactura: totalFacturaBS,
+          total: totalBS,
+        },
       },
     };
   });
@@ -975,18 +1210,38 @@
       </p>
       {#if data.preloadedQuote}
         <div class="flex flex-col sm:flex-row sm:items-center gap-2 mt-2">
-          <div class="flex items-center gap-2 bg-brand-500/10 border border-brand-500/20 px-3 py-1.5 rounded-xl text-xs font-bold text-brand-400">
-            <span class="font-black uppercase tracking-wider opacity-60">Creación:</span>
-            <span>{dayjs(data.preloadedQuote.fec_reg || data.preloadedQuote.fec_emis).format('DD/MM/YYYY hh:mm A')}</span>
+          <div
+            class="flex items-center gap-2 bg-brand-500/10 border border-brand-500/20 px-3 py-1.5 rounded-xl text-xs font-bold text-brand-400"
+          >
+            <span class="font-black uppercase tracking-wider opacity-60"
+              >Creación:</span
+            >
+            <span
+              >{dayjs(
+                data.preloadedQuote.fec_reg || data.preloadedQuote.fec_emis,
+              ).format("DD/MM/YYYY hh:mm A")}</span
+            >
           </div>
           {#if data.preloadedQuote.fec_us_mo}
-            <div class="flex items-center gap-2 bg-amber-500/10 border border-amber-500/20 px-3 py-1.5 rounded-xl text-xs font-bold text-amber-400">
-              <span class="font-black uppercase tracking-wider opacity-60">Última Edición:</span>
-              <span>{dayjs(data.preloadedQuote.fec_us_mo).format('DD/MM/YYYY hh:mm A')}</span>
+            <div
+              class="flex items-center gap-2 bg-amber-500/10 border border-amber-500/20 px-3 py-1.5 rounded-xl text-xs font-bold text-amber-400"
+            >
+              <span class="font-black uppercase tracking-wider opacity-60"
+                >Última Edición:</span
+              >
+              <span
+                >{dayjs(data.preloadedQuote.fec_us_mo).format(
+                  "DD/MM/YYYY hh:mm A",
+                )}</span
+              >
             </div>
           {:else}
-            <div class="flex items-center gap-2 bg-white/5 border border-white/10 px-3 py-1.5 rounded-xl text-xs font-bold text-text-muted opacity-60">
-              <span class="font-black uppercase tracking-wider opacity-60">Última Edición:</span>
+            <div
+              class="flex items-center gap-2 bg-white/5 border border-white/10 px-3 py-1.5 rounded-xl text-xs font-bold text-text-muted opacity-60"
+            >
+              <span class="font-black uppercase tracking-wider opacity-60"
+                >Última Edición:</span
+              >
               <span>Sin modificar</span>
             </div>
           {/if}
@@ -1094,7 +1349,9 @@
 
         <!-- Search Bar for RIF -->
         <div class="w-full mt-8">
-          <div class="glass p-4 rounded-3xl border border-white/5 shadow-2xl flex flex-col md:flex-row justify-center gap-4 items-center relative z-10 w-full">
+          <div
+            class="glass p-4 rounded-3xl border border-white/5 shadow-2xl flex flex-col md:flex-row justify-center gap-4 items-center relative z-10 w-full"
+          >
             {#if data.branches && data.branches.length > 1}
               <div class="w-full md:w-[calc(50%-0.5rem)] xl:w-[25%]">
                 <Combobox
@@ -1316,7 +1573,8 @@
                           ? "Persona Natural (Sin retención)"
                           : isContribuyenteEspecialClient(selectedClient)
                             ? `Contribuyente Especial (${getEffectivePorcEsp(selectedClient)}%)`
-                            : (selectedClient.contrib || selectedClient.contribuyente)
+                            : selectedClient.contrib ||
+                                selectedClient.contribuyente
                               ? "Contribuyente Ordinario"
                               : "No Contribuyente"}
                       </span>
@@ -1431,7 +1689,11 @@
                 <input type="hidden" name="rif" value={newClient.rif} />
                 <input type="hidden" name="co_cli" value={newClient.rif} />
                 <input type="hidden" name="tip_cli" value={newClient.tip_cli} />
-                <input type="hidden" name="cli_des" value={newClient.descripcion} />
+                <input
+                  type="hidden"
+                  name="cli_des"
+                  value={newClient.descripcion}
+                />
 
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <!-- RIF -->
@@ -1465,10 +1727,12 @@
                       >TIPO DE CLIENTE</label
                     >
                     <Combobox
-                      options={(data.context?.tiposCliente || []).map((tc: any) => ({
-                        value: tc.tip_cli,
-                        label: tc.des_tipo,
-                      }))}
+                      options={(data.context?.tiposCliente || []).map(
+                        (tc: any) => ({
+                          value: tc.tip_cli,
+                          label: tc.des_tipo,
+                        }),
+                      )}
                       bind:value={newClient.tip_cli}
                       placeholder="Seleccione tipo de cliente..."
                       allLabel="Sin tipo"
@@ -1617,7 +1881,9 @@
                   </div>
 
                   {#if newClient.contribuyente}
-                    <div class="md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-6 animate-in fade-in slide-in-from-top-2 duration-300">
+                    <div
+                      class="md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-6 animate-in fade-in slide-in-from-top-2 duration-300"
+                    >
                       {#if !isNaturalNewClient && Number(newClient.porc_esp) > 0}
                         <input type="hidden" name="contribu_e" value="true" />
                       {/if}
@@ -1722,22 +1988,26 @@
           <!-- 0. Sucursal (Nuevo Selector en esta pestaña) -->
           {#if data.branches && data.branches.length > 1}
             <div class="col-span-2 lg:col-span-1">
-               <Combobox
-                  options={(data.branches || []).map((b: any) => ({
-                    value: b.id,
-                    label: b.name,
-                  }))}
-                  bind:value={selectedBranch}
-                  placeholder="Sucursal..."
-                  icon={Store}
-                  onchange={() => handleSearch()}
-                  class="w-full h-14"
-                />
+              <Combobox
+                options={(data.branches || []).map((b: any) => ({
+                  value: b.id,
+                  label: b.name,
+                }))}
+                bind:value={selectedBranch}
+                placeholder="Sucursal..."
+                icon={Store}
+                onchange={() => handleSearch()}
+                class="w-full h-14"
+              />
             </div>
           {/if}
 
           <!-- 1. Buscador + Scanner -->
-          <div class="flex items-center gap-2 col-span-2 {data.branches?.length > 1 ? 'lg:col-span-1' : 'lg:col-span-2'}">
+          <div
+            class="flex items-center gap-2 col-span-2 {data.branches?.length > 1
+              ? 'lg:col-span-1'
+              : 'lg:col-span-2'}"
+          >
             <form onsubmit={handleSearch} class="relative group flex-1 h-14">
               <input
                 type="text"
@@ -1894,7 +2164,6 @@
                   >
                     {article.co_art || article.codigo}
                   </span>
-
                 </div>
 
                 <div
@@ -2035,7 +2304,10 @@
                         onclick={(e) => {
                           e.stopPropagation();
                           const step = getStep(article);
-                          quantities[article.co_art] = Math.max(step, (quantities[article.co_art] || step) - step);
+                          quantities[article.co_art] = Math.max(
+                            step,
+                            (quantities[article.co_art] || step) - step,
+                          );
                         }}
                         class="w-10 h-full flex items-center justify-center text-text-muted hover:text-brand-400 transition-colors bg-surface-soft"
                         title="Restar"><Minus size={12} /></button
@@ -2047,20 +2319,26 @@
                         bind:value={quantities[article.co_art]}
                         onclick={(e) => e.stopPropagation()}
                         oninput={(e) => {
-                          const val = parseFloat((e.target as HTMLInputElement).value);
+                          const val = parseFloat(
+                            (e.target as HTMLInputElement).value,
+                          );
                           const step = getStep(article);
                           const stock = curAlm?.stock || 0;
 
                           if (!isNaN(val) && val > stock) {
-                            quantities[article.co_art] = Math.floor(stock / step) * step || step;
+                            quantities[article.co_art] =
+                              Math.floor(stock / step) * step || step;
                             toast.warning(`Máximo disponible: ${stock}`);
                           }
                         }}
                         onblur={(e) => {
-                          let val = parseFloat((e.target as HTMLInputElement).value);
+                          let val = parseFloat(
+                            (e.target as HTMLInputElement).value,
+                          );
                           const step = getStep(article);
                           if (isNaN(val) || val < step) val = step;
-                          quantities[article.co_art] = Math.round(val / step) * step;
+                          quantities[article.co_art] =
+                            Math.round(val / step) * step;
                         }}
                         class="w-full flex-1 text-center text-base font-black bg-transparent outline-none no-arrows text-brand-400 px-1"
                       />
@@ -2071,12 +2349,15 @@
                           const stock = curAlm?.stock || 0;
                           const step = getStep(article);
                           const currentQty = quantities[article.co_art] || step;
-                          
+
                           if (isService || currentQty + step <= stock) {
                             quantities[article.co_art] = currentQty + step;
                           } else {
-                            toast.error("Alcanzó el límite de stock disponible");
-                            quantities[article.co_art] = Math.floor(stock / step) * step || step;
+                            toast.error(
+                              "Alcanzó el límite de stock disponible",
+                            );
+                            quantities[article.co_art] =
+                              Math.floor(stock / step) * step || step;
                           }
                         }}
                         class="w-10 h-full flex items-center justify-center text-text-muted hover:text-brand-400 transition-colors bg-surface-soft"
@@ -2085,11 +2366,19 @@
                     </div>
 
                     {#if masterBranchId && selectedBranch !== masterBranchId}
-                      <div class="px-2 py-1 bg-amber-500/10 border border-amber-500/20 rounded-xl flex items-center gap-2 flex-1">
+                      <div
+                        class="px-2 py-1 bg-amber-500/10 border border-amber-500/20 rounded-xl flex items-center gap-2 flex-1"
+                      >
                         <Info size={14} class="text-amber-400 shrink-0" />
-                        <p class="text-[8px] font-bold text-amber-200 leading-tight">
-                          Consulta de stock en { (data.branches?.find(b => b.id === selectedBranch))?.name }.
-                          <br/>Regrese a { (data.branches?.find(b => b.id === masterBranchId))?.name } para facturar.
+                        <p
+                          class="text-[8px] font-bold text-amber-200 leading-tight"
+                        >
+                          Consulta de stock en {data.branches?.find(
+                            (b) => b.id === selectedBranch,
+                          )?.name}.
+                          <br />Regrese a {data.branches?.find(
+                            (b) => b.id === masterBranchId,
+                          )?.name} para facturar.
                         </p>
                       </div>
                     {:else}
@@ -2172,7 +2461,8 @@
                     Cotización en curso
                   </div>
                   <div class="text-sm font-black text-white">
-                    {totals().symbol} {totals().total.toLocaleString("de-DE", {
+                    {totals().symbol}
+                    {totals().total.toLocaleString("de-DE", {
                       minimumFractionDigits: 2,
                       maximumFractionDigits: 2,
                     })}
@@ -2321,7 +2611,8 @@
                         ? "Persona Natural (Sin retención)"
                         : isContribuyenteEspecialClient(selectedClient)
                           ? `Contribuyente Especial (${getEffectivePorcEsp(selectedClient)}%)`
-                          : (selectedClient.contrib || selectedClient.contribuyente)
+                          : selectedClient.contrib ||
+                              selectedClient.contribuyente
                             ? "Contribuyente Ordinario"
                             : "No Contribuyente"}
                     </span>
@@ -2361,7 +2652,10 @@
             >
               <!-- Buscador en Renglones (reemplaza texto Renglones) -->
               <div class="relative flex-1 max-w-xl">
-                <Search size={16} class="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none" />
+                <Search
+                  size={16}
+                  class="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none"
+                />
                 <input
                   type="text"
                   bind:value={cartSearchTerm}
@@ -2371,7 +2665,7 @@
                 {#if cartSearchTerm}
                   <button
                     type="button"
-                    onclick={() => (cartSearchTerm = '')}
+                    onclick={() => (cartSearchTerm = "")}
                     class="absolute right-3.5 top-1/2 -translate-y-1/2 text-text-muted hover:text-white transition-colors cursor-pointer"
                     title="Limpiar búsqueda"
                   >
@@ -2395,178 +2689,229 @@
                   No hay artículos en la cotización.
                 </div>
               {:else if filteredCart.length === 0}
-                <div class="p-12 text-center text-text-muted text-sm font-bold space-y-3">
-                  <Search size={32} class="mx-auto text-text-muted opacity-40" />
-                  <p>No se encontraron artículos que coincidan con "<span class="text-white font-black">{cartSearchTerm}</span>"</p>
+                <div
+                  class="p-12 text-center text-text-muted text-sm font-bold space-y-3"
+                >
+                  <Search
+                    size={32}
+                    class="mx-auto text-text-muted opacity-40"
+                  />
+                  <p>
+                    No se encontraron artículos que coincidan con "<span
+                      class="text-white font-black">{cartSearchTerm}</span
+                    >"
+                  </p>
                   <button
                     type="button"
-                    onclick={() => (cartSearchTerm = '')}
+                    onclick={() => (cartSearchTerm = "")}
                     class="text-xs font-bold text-brand-400 hover:underline cursor-pointer"
                   >
                     Limpiar búsqueda
                   </button>
                 </div>
               {:else}
-                {#each filteredCart as { item, originalIndex: i } (item.article?.co_art + '_' + item.warehouse + '_' + i)}
-                <div
-                  class="p-8 flex flex-col lg:flex-row items-start lg:items-center gap-8 transition-all hover:bg-surface-soft group relative border-b border-border-subtle last:border-0"
-                >
-                  <!-- Product Identity & Qty -->
+                {#each filteredCart as { item, originalIndex: i } (item.article?.co_art + "_" + item.warehouse + "_" + i)}
                   <div
-                    class="flex items-center gap-6 shrink-0 w-full lg:w-auto"
+                    class="p-8 flex flex-col lg:flex-row items-start lg:items-center gap-8 transition-all hover:bg-surface-soft group relative border-b border-border-subtle last:border-0"
                   >
+                    <!-- Product Identity & Qty -->
                     <div
-                      class="h-16 w-16 rounded-2xl bg-surface-soft flex items-center justify-center text-brand-400 relative group-hover:scale-110 transition-transform duration-500"
+                      class="flex items-center gap-6 shrink-0 w-full lg:w-auto"
                     >
                       <div
-                        class="absolute inset-0 bg-brand-500/10 rounded-2xl blur-lg opacity-0 group-hover:opacity-100 transition-opacity"
-                      ></div>
-                      <Package size={28} />
+                        class="h-16 w-16 rounded-2xl bg-surface-soft flex items-center justify-center text-brand-400 relative group-hover:scale-110 transition-transform duration-500"
+                      >
+                        <div
+                          class="absolute inset-0 bg-brand-500/10 rounded-2xl blur-lg opacity-0 group-hover:opacity-100 transition-opacity"
+                        ></div>
+                        <Package size={28} />
+                      </div>
+                      <div
+                        class="flex items-center bg-surface-base/40 rounded-xl border border-border-subtle h-12 overflow-hidden shadow-inner"
+                      >
+                        <button
+                          onclick={() =>
+                            updateCartQty(i, item.qty - getStep(item))}
+                          class="w-10 h-full flex items-center justify-center text-text-muted hover:text-brand-400 hover:bg-surface-soft transition-all"
+                          ><Minus size={14} /></button
+                        >
+                        <input
+                          type="number"
+                          min={getStep(item)}
+                          step={getStep(item)}
+                          value={item.qty}
+                          oninput={(e) => {
+                            const v = parseFloat(
+                              (e.currentTarget as HTMLInputElement).value,
+                            );
+                            if (!isNaN(v)) updateCartQty(i, v);
+                          }}
+                          onblur={(e) => {
+                            const v = parseFloat(
+                              (e.currentTarget as HTMLInputElement).value,
+                            );
+                            updateCartQty(i, isNaN(v) ? getStep(item) : v);
+                          }}
+                          class="w-12 text-center text-base font-black bg-transparent outline-none no-arrows text-brand-400"
+                        />
+                        <button
+                          onclick={() =>
+                            updateCartQty(i, item.qty + getStep(item))}
+                          class="w-10 h-full flex items-center justify-center text-text-muted hover:text-brand-400 hover:bg-surface-soft transition-all"
+                          ><Plus size={14} /></button
+                        >
+                      </div>
                     </div>
+
+                    <!-- Item Details & Configuration -->
+                    <div class="flex-1 min-w-0 space-y-4 w-full">
+                      <div class="space-y-1">
+                        <div
+                          class="text-lg font-black text-text-base leading-tight"
+                        >
+                          {item.art_des || item.descripcion}
+                        </div>
+                        <div
+                          class="flex items-center gap-4 text-[11px] font-bold uppercase tracking-[0.15em]"
+                        >
+                          <span class="text-brand-400 font-mono"
+                            >{item.co_art}</span
+                          >
+
+                          <span class="h-1 w-1 rounded-full bg-border-subtle"
+                          ></span>
+                          <span class="text-text-muted"
+                            >{item.uni_venta ||
+                              item.unidad ||
+                              item.co_uni ||
+                              "UNID"}</span
+                          >
+                        </div>
+                      </div>
+                      <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <div class="relative group/sel">
+                          <select
+                            value={item.co_alma_selected}
+                            onchange={(e) =>
+                              updateCartWarehouse(i, e.currentTarget.value)}
+                            class="w-full h-11 bg-surface-soft rounded-xl px-4 text-sm font-black outline-none border border-border-subtle appearance-none cursor-pointer focus:border-brand-500/30 transition-all hover:bg-surface-strong"
+                          >
+                            {#each item.disponibilidad && item.disponibilidad.length > 0 ? item.disponibilidad : (data.context?.warehouses || []).map( (w) => ({ co_alma: w.co_alma, des_alma: w.des_alma || w.nombre || w.co_alma, stock: 0 }), ) as alm}
+                              <option
+                                value={alm.co_alma}
+                                class="bg-surface-base text-text-base text-sm"
+                                >{alm.des_alma} ({alm.stock})</option
+                              >
+                            {/each}
+                          </select>
+                          <ChevronDown
+                            size={14}
+                            class="absolute right-4 top-1/2 -translate-y-1/2 text-text-muted group-hover/sel:text-brand-400 transition-colors pointer-events-none"
+                          />
+                        </div>
+                        <div class="space-y-1">
+                          <div class="relative group/sel">
+                            <select
+                              value={item.price_index_selected}
+                              onchange={(e) =>
+                                updateCartPrice(
+                                  i,
+                                  parseInt(e.currentTarget.value),
+                                )}
+                              class="w-full h-11 bg-surface-soft rounded-xl px-4 text-sm font-black outline-none border border-border-subtle appearance-none cursor-pointer focus:border-brand-500/30 transition-all hover:bg-surface-strong"
+                            >
+                              {#if item.price_selected?.is_custom}
+                                <option
+                                  value={-1}
+                                  class="bg-surface-base text-amber-400 text-sm"
+                                  >Precio Autorizado - $ {Number(
+                                    item.price_selected.precio || 0,
+                                  ).toLocaleString("de-DE", {
+                                    minimumFractionDigits: 2,
+                                    maximumFractionDigits: 2,
+                                  })}</option
+                                >
+                              {/if}
+                              {#each item.precios || [] as price, idx}
+                                <option
+                                  value={idx}
+                                  class="bg-surface-base text-text-base text-sm"
+                                  >{price.des_precio || `Tipo ${idx + 1}`} - $ {price.precio.toLocaleString(
+                                    "de-DE",
+                                    {
+                                      minimumFractionDigits: 2,
+                                      maximumFractionDigits: 2,
+                                    },
+                                  )}</option
+                                >
+                              {/each}
+                            </select>
+                            <ChevronDown
+                              size={14}
+                              class="absolute right-4 top-1/2 -translate-y-1/2 text-text-muted group-hover/sel:text-brand-400 transition-colors pointer-events-none"
+                            />
+                          </div>
+                          {#if item.price_selected?.is_custom && item.price_selected?.authorized_by}
+                            <p
+                              class="text-[10px] font-bold text-amber-400/90 pl-1"
+                            >
+                              Autorizado por: {item.price_selected
+                                .authorized_by}
+                            </p>
+                          {/if}
+                        </div>
+                      </div>
+                    </div>
+
+                    <!-- Financial Detail per Row -->
                     <div
-                      class="flex items-center bg-surface-base/40 rounded-xl border border-border-subtle h-12 overflow-hidden shadow-inner"
+                      class="flex flex-row lg:flex-col items-center lg:items-end justify-between lg:justify-center w-full lg:w-48 gap-4 border-t lg:border-t-0 border-border-subtle pt-6 lg:pt-0"
                     >
-                      <button
-                        onclick={() => updateCartQty(i, item.qty - getStep(item))}
-                        class="w-10 h-full flex items-center justify-center text-text-muted hover:text-brand-400 hover:bg-surface-soft transition-all"
-                        ><Minus size={14} /></button
-                      >
-                      <input
-                        type="number"
-                        min={getStep(item)}
-                        step={getStep(item)}
-                        value={item.qty}
-                        oninput={(e) => {
-                          const v = parseFloat((e.currentTarget as HTMLInputElement).value);
-                          if (!isNaN(v)) updateCartQty(i, v);
-                        }}
-                        onblur={(e) => {
-                          const v = parseFloat((e.currentTarget as HTMLInputElement).value);
-                          updateCartQty(i, isNaN(v) ? getStep(item) : v);
-                        }}
-                        class="w-12 text-center text-base font-black bg-transparent outline-none no-arrows text-brand-400"
-                      />
-                      <button
-                        onclick={() => updateCartQty(i, item.qty + getStep(item))}
-                        class="w-10 h-full flex items-center justify-center text-text-muted hover:text-brand-400 hover:bg-surface-soft transition-all"
-                        ><Plus size={14} /></button
-                      >
-                    </div>
-                  </div>
-
-                  <!-- Item Details & Configuration -->
-                  <div class="flex-1 min-w-0 space-y-4 w-full">
-                    <div class="space-y-1">
-                      <div
-                        class="text-lg font-black text-text-base leading-tight"
-                      >
-                        {item.art_des || item.descripcion}
+                      <div class="text-right space-y-1">
+                        <div
+                          class="text-xl font-black text-brand-400 leading-none"
+                        >
+                          {totals().symbol}
+                          {(
+                            (showUSD
+                              ? item.price_selected?.precio ||
+                                item.precios?.[0]?.precio ||
+                                0
+                              : item.price_selected?.precio_ves ||
+                                item.precios?.[0]?.precio_ves ||
+                                0) * item.qty
+                          ).toLocaleString("de-DE", {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2,
+                          })}
+                        </div>
+                        <div
+                          class="text-[10px] text-text-muted font-bold uppercase tracking-widest"
+                        >
+                          Total {totals().symbol}
+                        </div>
                       </div>
-                      <div
-                        class="flex items-center gap-4 text-[11px] font-bold uppercase tracking-[0.15em]"
-                      >
-                        <span class="text-brand-400 font-mono"
-                          >{item.co_art}</span
+                      <div class="flex items-center gap-2">
+                        {#if allowEditablePrices}
+                          <button
+                            type="button"
+                            onclick={() => openPriceAuthModal(i)}
+                            class="h-10 px-3 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/25 flex items-center gap-1.5 text-xs font-bold transition-all cursor-pointer shrink-0"
+                            title="Editar precio unitario (requiere autorización)"
+                          >
+                            <KeyRound size={16} />
+                            <span>Editar</span>
+                          </button>
+                        {/if}
+                        <button
+                          onclick={() => removeFromCart(i)}
+                          class="h-10 w-10 rounded-xl flex items-center justify-center text-text-muted hover:bg-red-500/10 hover:text-red-500 transition-all border border-border-subtle"
                         >
-
-
-
-                        <span class="h-1 w-1 rounded-full bg-border-subtle"
-                        ></span>
-                        <span class="text-text-muted"
-                          >{item.uni_venta ||
-                            item.unidad ||
-                            item.co_uni ||
-                            "UNID"}</span
-                        >
-                      </div>
-                    </div>
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-                      <div class="relative group/sel">
-                        <select
-                          value={item.co_alma_selected}
-                          onchange={(e) =>
-                            updateCartWarehouse(i, e.currentTarget.value)}
-                          class="w-full h-11 bg-surface-soft rounded-xl px-4 text-sm font-black outline-none border border-border-subtle appearance-none cursor-pointer focus:border-brand-500/30 transition-all hover:bg-surface-strong"
-                        >
-                          {#each (item.disponibilidad && item.disponibilidad.length > 0 ? item.disponibilidad : (data.context?.warehouses || []).map((w) => ({ co_alma: w.co_alma, des_alma: w.des_alma || w.nombre || w.co_alma, stock: 0 }))) as alm}
-                            <option
-                              value={alm.co_alma}
-                              class="bg-surface-base text-text-base text-sm"
-                              >{alm.des_alma} ({alm.stock})</option
-                            >
-                          {/each}
-                        </select>
-                        <ChevronDown
-                          size={14}
-                          class="absolute right-4 top-1/2 -translate-y-1/2 text-text-muted group-hover/sel:text-brand-400 transition-colors pointer-events-none"
-                        />
-                      </div>
-                      <div class="relative group/sel">
-                        <select
-                          value={item.price_index_selected}
-                          onchange={(e) =>
-                            updateCartPrice(i, parseInt(e.currentTarget.value))}
-                          class="w-full h-11 bg-surface-soft rounded-xl px-4 text-sm font-black outline-none border border-border-subtle appearance-none cursor-pointer focus:border-brand-500/30 transition-all hover:bg-surface-strong"
-                        >
-                          {#each item.precios || [] as price, idx}
-                            <option
-                              value={idx}
-                              class="bg-surface-base text-text-base text-sm"
-                              >{price.des_precio || `Tipo ${idx + 1}`} - $ {price.precio.toLocaleString(
-                                "de-DE",
-                                {
-                                  minimumFractionDigits: 2,
-                                  maximumFractionDigits: 2,
-                                },
-                              )}</option
-                            >
-                          {/each}
-                        </select>
-                        <ChevronDown
-                          size={14}
-                          class="absolute right-4 top-1/2 -translate-y-1/2 text-text-muted group-hover/sel:text-brand-400 transition-colors pointer-events-none"
-                        />
+                          <Trash2 size={18} />
+                        </button>
                       </div>
                     </div>
                   </div>
-
-                  <!-- Financial Detail per Row -->
-                  <div
-                    class="flex flex-row lg:flex-col items-center lg:items-end justify-between lg:justify-center w-full lg:w-48 gap-4 border-t lg:border-t-0 border-border-subtle pt-6 lg:pt-0"
-                  >
-                    <div class="text-right space-y-1">
-                      <div
-                        class="text-xl font-black text-brand-400 leading-none"
-                      >
-                        {totals().symbol}
-                        {(
-                          (showUSD
-                            ? item.price_selected?.precio ||
-                              item.precios?.[0]?.precio ||
-                              0
-                            : item.price_selected?.precio_ves ||
-                              item.precios?.[0]?.precio_ves ||
-                              0) * item.qty
-                        ).toLocaleString("de-DE", {
-                          minimumFractionDigits: 2,
-                          maximumFractionDigits: 2,
-                        })}
-                      </div>
-                      <div
-                        class="text-[10px] text-text-muted font-bold uppercase tracking-widest"
-                      >
-                        Total {totals().symbol}
-                      </div>
-                    </div>
-                    <button
-                      onclick={() => removeFromCart(i)}
-                      class="h-10 w-10 rounded-xl flex items-center justify-center text-text-muted hover:bg-red-500/10 hover:text-red-500 transition-all border border-border-subtle"
-                    >
-                      <Trash2 size={18} />
-                    </button>
-                  </div>
-                </div>
                 {/each}
               {/if}
             </div>
@@ -2776,22 +3121,35 @@
                           (item.co_art || "").startsWith("0901");
                         const rate = isStrictlyExempt ? 0 : quoteTaxRate;
                         const taxType = rate === 16 ? "1" : "5";
+                        const itemUsd = Number(
+                          item.price_selected?.precio ??
+                            item.precios?.[0]?.precio ??
+                            0,
+                        );
+                        const itemVes = Number(
+                          item.price_selected?.precio_ves ??
+                            item.precios?.[0]?.precio_ves ??
+                            0,
+                        );
                         return {
                           co_art: item.co_art || item.codigo,
                           art_des: item.art_des || item.descripcion,
                           cantidad: item.qty,
-                          precio: showUSD
-                            ? item.price_selected?.precio ||
-                              item.precios?.[0]?.precio ||
-                              0
-                            : item.price_selected?.precio_ves ||
-                              item.precios?.[0]?.precio_ves ||
-                              0,
+                          precio: showUSD ? itemUsd : itemVes,
+                          prec_vta_om: itemUsd,
+                          prec_vta: itemVes,
                           co_alma: item.co_alma_selected,
                           co_uni: item.co_uni || item.unidad,
-                          co_precio: item.price_selected?.id_precio || item.price_selected?.co_precio || item.co_precio || "01",
+                          co_precio:
+                            item.price_selected?.id_precio ||
+                            item.price_selected?.co_precio ||
+                            item.co_precio ||
+                            "01",
                           tipo_imp: taxType,
                           porc_imp: rate,
+                          comentario: item.price_selected?.is_custom
+                            ? `PRECIO_AUT:${item.price_selected?.authorized_by || "Autorizado"}`
+                            : "",
                         };
                       }),
                     })}
@@ -2841,28 +3199,6 @@
   </div>
 </div>
 
-<style>
-  /* Chrome, Safari, Edge, Opera */
-  input::-webkit-outer-spin-button,
-  input::-webkit-inner-spin-button {
-    -webkit-appearance: none;
-    margin: 0;
-  }
-
-  /* Firefox */
-  input[type="number"] {
-    -moz-appearance: textfield;
-  }
-
-  .no-scrollbar::-webkit-scrollbar {
-    display: none;
-  }
-  .no-scrollbar {
-    -ms-overflow-style: none;
-    scrollbar-width: none;
-  }
-</style>
-
 {#if showClientSelectionModal}
   <div
     class="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
@@ -2877,12 +3213,15 @@
         class="flex items-center justify-between p-6 border-b border-border-subtle bg-surface-soft"
       >
         <div>
-          <h2 class="text-2xl font-black tracking-tight flex items-center gap-2">
+          <h2
+            class="text-2xl font-black tracking-tight flex items-center gap-2"
+          >
             <Users size={24} class="text-brand-500" />
             Múltiples Clientes Encontrados
           </h2>
           <p class="text-text-muted mt-1 text-sm">
-            Seleccione el cliente correcto de la lista ({matchingClients.length} resultados)
+            Seleccione el cliente correcto de la lista ({matchingClients.length}
+            resultados)
           </p>
         </div>
         <button
@@ -2902,14 +3241,23 @@
               rifInput = client.rif || client.co_cli;
               showRegistrationForm = false;
               showClientSelectionModal = false;
-              toast.success("Cliente seleccionado: " + (client.descripcion || client.cli_des));
+              toast.success(
+                "Cliente seleccionado: " +
+                  (client.descripcion || client.cli_des),
+              );
             }}
           >
-            <div class="absolute inset-0 bg-brand-500/5 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+            <div
+              class="absolute inset-0 bg-brand-500/5 opacity-0 group-hover:opacity-100 transition-opacity"
+            ></div>
             <div class="relative z-10 flex items-start justify-between w-full">
               <div>
-                <h3 class="font-bold text-lg">{client.descripcion || client.cli_des}</h3>
-                <div class="flex items-center gap-3 mt-2 text-sm text-text-muted">
+                <h3 class="font-bold text-lg">
+                  {client.descripcion || client.cli_des}
+                </h3>
+                <div
+                  class="flex items-center gap-3 mt-2 text-sm text-text-muted"
+                >
                   <span class="flex items-center gap-1">
                     <User size={14} class="text-brand-400" />
                     {client.rif || client.co_cli}
@@ -2922,7 +3270,9 @@
                   {/if}
                 </div>
               </div>
-              <div class="h-8 w-8 rounded-full bg-brand-500/20 text-brand-400 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity -translate-x-4 group-hover:translate-x-0">
+              <div
+                class="h-8 w-8 rounded-full bg-brand-500/20 text-brand-400 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity -translate-x-4 group-hover:translate-x-0"
+              >
                 <ChevronRight size={18} />
               </div>
             </div>
@@ -2960,7 +3310,7 @@
           <span class="w-1 h-1 bg-text-base rounded-full"></span>
         </div>
       </div>
-      
+
       <button
         onclick={() => toggleCurrency(true)}
         class={`h-11 px-5 rounded-xl text-xs font-black tracking-widest transition-all duration-300 flex items-center gap-2 ${
@@ -2986,3 +3336,45 @@
 {/if}
 
 <ImageViewer bind:isOpen={viewerOpen} imageUrl={viewerUrl} />
+
+<AuthorizeEditModal
+  bind:open={priceAuthModal.open}
+  module="sales_quotes"
+  branchId={selectedBranch}
+  title="Autorizar Edición de Precio"
+  description={priceAuthModal.item
+    ? `Artículo: ${(priceAuthModal.item.co_art || priceAuthModal.item.codigo || "").trim()} · ${priceAuthModal.item.art_des || priceAuthModal.item.descripcion || ""}`
+    : ""}
+  fieldLabel={`Nuevo Precio Unitario (${showUSD ? "USD" : "Bs."})`}
+  currencySymbol={showUSD ? "$" : "Bs."}
+  initialValue={priceAuthModal.initialPrice}
+  recordId={(
+    priceAuthModal.item?.co_art ||
+    priceAuthModal.item?.codigo ||
+    ""
+  ).trim()}
+  currentUserEmail={($page.data as any)?.profile?.email || ""}
+  onAuthorized={applyAuthorizedPrice}
+/>
+
+<style>
+  /* Chrome, Safari, Edge, Opera */
+  input::-webkit-outer-spin-button,
+  input::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+
+  /* Firefox */
+  input[type="number"] {
+    -moz-appearance: textfield;
+  }
+
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+</style>

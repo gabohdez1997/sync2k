@@ -45,12 +45,14 @@
           label: "Cotizaciones",
           hasOthers: true,
           hasVoid: true,
+          hasAuthorize: true,
         },
         {
           id: "sales_orders",
           label: "Pedidos",
           hasOthers: true,
           hasVoid: true,
+          hasAuthorize: true,
         },
         {
           id: "sales_price_checker",
@@ -76,6 +78,7 @@
           label: "Cobros",
           hasOthers: true,
           hasVoid: true,
+          hasAuthorize: true,
         },
         {
           id: "cash_credits",
@@ -129,6 +132,7 @@
           label: "Pagos a Proveedores",
           hasOthers: true,
           hasVoid: true,
+          hasAuthorize: true,
         },
       ],
     },
@@ -306,6 +310,7 @@
         delete: boolean;
         void: boolean;
         others: boolean;
+        authorize: boolean;
       }
     >
   >({});
@@ -338,6 +343,7 @@
           delete: false,
           void: false,
           others: false,
+          authorize: false,
         };
       }),
     );
@@ -414,6 +420,7 @@
           delete: role.permissions[optId].delete ?? false,
           void: role.permissions[optId].void ?? false,
           others: role.permissions[optId].others ?? false,
+          authorize: role.permissions[optId].authorize ?? false,
         };
       }
     }
@@ -458,6 +465,7 @@
     if (action === "delete") return !opt.excludeDelete;
     if (action === "void") return !!opt.hasVoid;
     if (action === "others") return !!opt.hasOthers;
+    if (action === "authorize") return !!opt.hasAuthorize;
     return false;
   }
 
@@ -475,6 +483,7 @@
     if (!opt.excludeDelete && !p.delete) return false;
     if (opt.hasOthers && !p.others) return false;
     if (opt.hasVoid && !p.void) return false;
+    if (opt.hasAuthorize && !p.authorize) return false;
     return true;
   }
 
@@ -487,6 +496,7 @@
 
     const supportsOthers = (option as any)?.hasOthers || false;
     const supportsVoid = (option as any)?.hasVoid || false;
+    const supportsAuthorize = (option as any)?.hasAuthorize || false;
     const excludesDelete = (option as any)?.excludeDelete || false;
     const excludesUpdate = (option as any)?.excludeUpdate || false;
     const onlyReadAndEdit = (option as any)?.onlyReadAndEdit || false;
@@ -501,6 +511,7 @@
         delete: false,
         void: false,
         others: supportsOthers ? anyOff : false,
+        authorize: supportsAuthorize ? anyOff : false,
       };
     } else {
       anyOff =
@@ -509,7 +520,8 @@
         (!excludesUpdate && !p.update) ||
         (!excludesDelete && !p.delete) ||
         (supportsOthers && !p.others) ||
-        (supportsVoid && !p.void);
+        (supportsVoid && !p.void) ||
+        (supportsAuthorize && !p.authorize);
       rolePermissions[optionId] = {
         read: anyOff,
         create: anyOff,
@@ -517,6 +529,7 @@
         delete: excludesDelete ? false : anyOff,
         void: supportsVoid ? anyOff : false,
         others: supportsOthers ? anyOff : false,
+        authorize: supportsAuthorize ? anyOff : false,
       };
     }
   }
@@ -524,7 +537,7 @@
   function handleCheckboxChange(optionId: string, action: string) {
     if (action !== "read") {
       const p = rolePermissions[optionId];
-      if (p.create || p.update || p.delete || p.others || p.void) {
+      if (p.create || p.update || p.delete || p.others || p.void || p.authorize) {
         rolePermissions[optionId].read = true;
       }
     }
@@ -925,6 +938,11 @@
                   class="px-6 py-4 text-xs font-bold uppercase tracking-wider text-text-muted text-center border-b border-border-subtle"
                   >Terceros</th
                 >
+                <th
+                  class="px-6 py-4 text-xs font-bold uppercase tracking-wider text-amber-500 text-center border-b border-border-subtle"
+                  title="Permite aprobar con su clave la edición manual de precios o retenciones"
+                  >Autorizar</th
+                >
               </tr>
             </thead>
             <tbody>
@@ -935,7 +953,7 @@
                   onclick={() => toggleCategory(category.id)}
                 >
                   <td
-                    colspan="8"
+                    colspan="9"
                     class="px-6 py-3 border-b border-border-subtle sticky left-0 bg-surface-raised/90 backdrop-blur-sm z-10"
                   >
                     <div class="flex items-center justify-between">
@@ -1005,7 +1023,7 @@
                         {/if}
                       </td>
 
-                      {#each ["read", "create", "update", "delete", "void", "others"] as action}
+                      {#each ["read", "create", "update", "delete", "void", "others", "authorize"] as action}
                         <td
                           class="px-6 py-4 text-center border-b border-border-subtle"
                         >

@@ -54,6 +54,8 @@ export interface BranchRecord {
   default_cta_ingr_egr?: string | null;
   default_segment?: string | null;
   allowed_islr_concepts?: string[];
+  allow_editable_prices?: boolean;
+  allow_editable_retentions?: boolean;
   sql_config?: any;
   active?: boolean;
   sort_order?: number;
@@ -184,6 +186,8 @@ export async function getActiveBranches(fetchFn?: typeof fetch): Promise<BranchR
           default_cta_ingr_egr: b.default_cta_ingr_egr || b.sql_config?.profit_defaults?.default_cta_ingr_egr || '01',
           default_segment: b.default_segment || b.sql_config?.profit_defaults?.default_segment || '01',
           allowed_islr_concepts: b.allowed_islr_concepts || b.sql_config?.profit_defaults?.allowed_islr_concepts || [],
+          allow_editable_prices: Boolean(b.allow_editable_prices ?? b.sql_config?.profit_defaults?.allow_editable_prices ?? false),
+          allow_editable_retentions: Boolean(b.allow_editable_retentions ?? b.sql_config?.profit_defaults?.allow_editable_retentions ?? false),
           sql_config: b.sql_config,
           active: b.active,
           sort_order: b.sort_order,
@@ -252,10 +256,13 @@ export async function getBranchById(
       .maybeSingle();
 
     if (!error && data) {
+      const pDef = (data as any).sql_config?.profit_defaults || {};
       return {
         ...data,
         business_name: data.business_name || data.name,
-        seal_url: data.seal_url || data.sql_config?.seal_url || null
+        seal_url: (data as any).seal_url || (data as any).sql_config?.seal_url || null,
+        allow_editable_prices: Boolean((data as any).allow_editable_prices ?? pDef.allow_editable_prices ?? false),
+        allow_editable_retentions: Boolean((data as any).allow_editable_retentions ?? pDef.allow_editable_retentions ?? false)
       } as BranchRecord;
     }
   } catch (e) {

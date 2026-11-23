@@ -1,4 +1,5 @@
 import { getSupabaseAdmin } from '$lib/server/supabase';
+import { getActiveBranches } from '$lib/server/branches';
 
 export type CRUD = {
   read: boolean;
@@ -7,6 +8,7 @@ export type CRUD = {
   delete: boolean;
   void?: boolean;
   others: boolean;
+  authorize?: boolean;
 };
 
 export type Profile = {
@@ -24,6 +26,9 @@ export type Profile = {
     profit_branch_code: string | null;
     profit_server_id: string | null;
     local_dns_alias: string | null;
+    allow_editable_prices?: boolean;
+    allow_editable_retentions?: boolean;
+    sql_config?: any;
   }>;
   allowed_warehouses: string[];
   profit_user: string | null;
@@ -203,6 +208,28 @@ export async function getUserProfile(userId: string, fetchFn?: typeof fetch): Pr
       }
     }
 
+    let enrichedBranches = Array.isArray(rawData.allowed_branches) ? rawData.allowed_branches : [];
+    if (enrichedBranches.length > 0) {
+      try {
+        const activeBranches = await getActiveBranches(fetchFn);
+        if (activeBranches.length > 0) {
+          const branchMap = new Map(activeBranches.map((b) => [String(b.id).toLowerCase(), b]));
+          enrichedBranches = enrichedBranches.map((ab: any) => {
+            const full = branchMap.get(String(ab.id || '').toLowerCase());
+            const pDef = full?.sql_config?.profit_defaults || ab?.sql_config?.profit_defaults || {};
+            return {
+              ...ab,
+              allow_editable_prices: Boolean(full?.allow_editable_prices ?? ab?.allow_editable_prices ?? pDef.allow_editable_prices ?? false),
+              allow_editable_retentions: Boolean(full?.allow_editable_retentions ?? ab?.allow_editable_retentions ?? pDef.allow_editable_retentions ?? false),
+              sql_config: full?.sql_config ?? ab?.sql_config
+            };
+          });
+        }
+      } catch (e) {
+        // Ignorar fallo al enriquecer flags de sucursal
+      }
+    }
+
     const profile: Profile = {
       id:                rawData.id,
       full_name:         rawData.full_name ?? null,
@@ -210,7 +237,7 @@ export async function getUserProfile(userId: string, fetchFn?: typeof fetch): Pr
       active:            rawData.active ?? false,
       permissions:       rawData.permissions ?? {},
       roles:             rawData.roles ?? [],
-      allowed_branches:  rawData.allowed_branches ?? [],
+      allowed_branches:  enrichedBranches,
       allowed_warehouses: rawData.allowed_warehouses ?? [],
       profit_user:       rawData.profit_user ?? null,
       profit_pass:       rawData.profit_pass ?? null,

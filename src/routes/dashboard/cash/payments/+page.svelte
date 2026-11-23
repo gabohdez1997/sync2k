@@ -27,9 +27,11 @@
     ChevronDown,
     ShoppingBag,
     Clock,
+    KeyRound,
   } from "lucide-svelte";
   import { toast } from "svelte-sonner";
   import ImportItemCard from "$lib/components/ui/ImportItemCard.svelte";
+  import AuthorizeEditModal from "$lib/components/ui/AuthorizeEditModal.svelte";
   import {
     isPersonaNaturalClient,
     isContribuyenteEspecialClient,
@@ -387,7 +389,8 @@
       porc_base_islr: porcImp,
       sustraendo_islr_bs: sustraen,
       base_imponible_islr_bs: initialLineBaseBs,
-      base_imponible_islr: Math.round((initialLineBaseBs / docTasa) * 100) / 100,
+      base_imponible_islr:
+        Math.round((initialLineBaseBs / docTasa) * 100) / 100,
       reten_islr: 0,
       reten_islr_bs: 0,
     });
@@ -420,18 +423,16 @@
       Math.round((docTotalBaseBs - otherLinesAssigned) * 100) / 100,
     );
     inp.islr_lines[lineIndex].base_imponible_islr_bs = remaining;
+    inp.islr_lines[lineIndex].manual_override_islr = false;
     recalculateDocAmounts(docNo, doc);
   }
 
-  function setLineToFullBase(
-    docNo: string,
-    doc: any,
-    lineIndex: number,
-  ) {
+  function setLineToFullBase(docNo: string, doc: any, lineIndex: number) {
     const inp = docInputs[docNo];
     if (!inp || !inp.islr_lines || !inp.islr_lines[lineIndex]) return;
     const docTotalBaseBs = getDocBaseIslrBs(doc);
     inp.islr_lines[lineIndex].base_imponible_islr_bs = docTotalBaseBs;
+    inp.islr_lines[lineIndex].manual_override_islr = false;
     recalculateDocAmounts(docNo, doc);
   }
 
@@ -448,6 +449,7 @@
     if (!line) return;
 
     line.co_islr = selectedCode.trim();
+    line.manual_override_islr = false;
     inp.manual_override_islr = false;
 
     const currentTab = getEffectiveClientTab();
@@ -628,11 +630,17 @@
           base_imponible_islr_bs: number;
           reten_islr: number;
           reten_islr_bs: number;
+          manual_override_islr?: boolean;
+          authorized_by?: string;
         }>;
         showIvaDetails: boolean;
         showIslrDetails: boolean;
         manual_override_iva?: boolean;
         manual_override_islr?: boolean;
+        manual_override_timbre?: boolean;
+        reten_timbre_bs?: number;
+        authorized_iva_by?: string;
+        authorized_timbre_by?: string;
         manual_override_abono?: boolean;
         yaTieneRetIva?: boolean;
         nro_comp_iva_previo?: string;
@@ -928,16 +936,37 @@
   // Modal toggle
   let showImportModal = $state(false);
 
-  // Retención Timbre Fiscal 1x1000 (Entes Gubernamentales)
+  // Retención Timbre Fiscal 1x1000 (Entes Gubernamentales o habilitado por sucursal)
   let aplicarTimbreFiscal = $state(false);
 
-  function getDocTimbreFiscal(doc: any): { timbreBs: number; timbreUsd: number; baseBs: number } {
-    if (!aplicarTimbreFiscal || !isGubernamentalClient(selectedClient) || isCreditDoc(doc?.co_tipo_doc)) {
+  function getDocTimbreFiscal(doc: any): {
+    timbreBs: number;
+    timbreUsd: number;
+    baseBs: number;
+  } {
+    if (
+      !aplicarTimbreFiscal ||
+      (!isGubernamentalClient(selectedClient) && !allowEditableRetentions) ||
+      isCreditDoc(doc?.co_tipo_doc)
+    ) {
       return { timbreBs: 0, timbreUsd: 0, baseBs: 0 };
     }
-    const docTasa = doc?.tasa > 0 ? doc.tasa : currentExchangeRate > 0 ? currentExchangeRate : 1;
-    const baseBs = Math.max(0, Number(doc?.total_neto || 0) - Number(doc?.monto_imp || 0) - Number(doc?.otros1 || 0));
-    const timbreBs = Math.round(baseBs * 0.001 * 100) / 100;
+    const docTasa =
+      doc?.tasa > 0
+        ? doc.tasa
+        : currentExchangeRate > 0
+          ? currentExchangeRate
+          : 1;
+    const baseBs = Math.max(
+      0,
+      Number(doc?.total_neto || 0) -
+        Number(doc?.monto_imp || 0) -
+        Number(doc?.otros1 || 0),
+    );
+    const inp = docInputs[doc?.nro_doc?.trim() || ""];
+    const timbreBs = inp?.manual_override_timbre
+      ? Math.max(0, Math.round((Number(inp.reten_timbre_bs) || 0) * 100) / 100)
+      : Math.round(baseBs * 0.001 * 100) / 100;
     const timbreUsd = Math.round((timbreBs / docTasa) * 100) / 100;
     return { timbreBs, timbreUsd, baseBs };
   }
@@ -948,37 +977,38 @@
         const nro = doc.nro_doc.trim();
         if (!checkedDocs[nro]) return acc;
         if (isCreditDoc(doc.co_tipo_doc)) return acc;
-        const baseBs = Math.max(0, Number(doc.total_neto || 0) - Number(doc.monto_imp || 0) - Number(doc.otros1 || 0));
+        const baseBs = Math.max(
+          0,
+          Number(doc.total_neto || 0) -
+            Number(doc.monto_imp || 0) -
+            Number(doc.otros1 || 0),
+        );
         return acc + baseBs;
       }, 0) * 100,
     ) / 100,
   );
 
   let totalTimbreFiscalBs = $derived(
-    aplicarTimbreFiscal && isGubernamentalClient(selectedClient)
+    aplicarTimbreFiscal &&
+      (isGubernamentalClient(selectedClient) || allowEditableRetentions)
       ? Math.round(
           documentos.reduce((acc, doc) => {
             const nro = doc.nro_doc.trim();
             if (!checkedDocs[nro]) return acc;
-            if (isCreditDoc(doc.co_tipo_doc)) return acc;
-            const baseBs = Math.max(0, Number(doc.total_neto || 0) - Number(doc.monto_imp || 0) - Number(doc.otros1 || 0));
-            return acc + Math.round(baseBs * 0.001 * 100) / 100;
+            return acc + getDocTimbreFiscal(doc).timbreBs;
           }, 0) * 100,
         ) / 100
       : 0,
   );
 
   let totalTimbreFiscalUsd = $derived(
-    aplicarTimbreFiscal && isGubernamentalClient(selectedClient)
+    aplicarTimbreFiscal &&
+      (isGubernamentalClient(selectedClient) || allowEditableRetentions)
       ? Math.round(
           documentos.reduce((acc, doc) => {
             const nro = doc.nro_doc.trim();
             if (!checkedDocs[nro]) return acc;
-            if (isCreditDoc(doc.co_tipo_doc)) return acc;
-            const docTasa = doc.tasa > 0 ? doc.tasa : currentExchangeRate > 0 ? currentExchangeRate : 1;
-            const baseBs = Math.max(0, Number(doc.total_neto || 0) - Number(doc.monto_imp || 0) - Number(doc.otros1 || 0));
-            const timbreBs = Math.round(baseBs * 0.001 * 100) / 100;
-            return acc + Math.round((timbreBs / docTasa) * 100) / 100;
+            return acc + getDocTimbreFiscal(doc).timbreUsd;
           }, 0) * 100,
         ) / 100
       : 0,
@@ -1029,7 +1059,10 @@
           );
         }
 
-        return acc + Math.max(0, doc.saldo - retIvaBs - retIslrBs - retTimbreBs + diffBs);
+        return (
+          acc +
+          Math.max(0, doc.saldo - retIvaBs - retIslrBs - retTimbreBs + diffBs)
+        );
       }, 0) * 100,
     ) / 100,
   );
@@ -1050,7 +1083,13 @@
             : 0;
         const { timbreUsd: retTimbreUsd } = getDocTimbreFiscal(doc);
         const docTasa = doc.tasa > 0 ? doc.tasa : 1;
-        return acc + Math.max(0, doc.saldo / docTasa - retIvaUsd - retIslrUsd - retTimbreUsd);
+        return (
+          acc +
+          Math.max(
+            0,
+            doc.saldo / docTasa - retIvaUsd - retIslrUsd - retTimbreUsd,
+          )
+        );
       }, 0) * 100,
     ) / 100,
   );
@@ -1320,6 +1359,126 @@
   // Sucursal seleccionada
   let selectedBranch = $state(data.selectedBranchId);
 
+  const selectedBranchConfig = $derived(
+    (data.branches || []).find(
+      (b: any) => String(b.id) === String(selectedBranch),
+    ) || null,
+  );
+  const allowEditableRetentions = $derived(
+    Boolean(
+      selectedBranchConfig?.allow_editable_retentions ??
+        selectedBranchConfig?.sql_config?.profit_defaults
+          ?.allow_editable_retentions ??
+        false,
+    ),
+  );
+
+  let retAuthModal = $state<{
+    open: boolean;
+    kind: "IVA" | "ISLR" | "TIMBRE";
+    doc: any;
+    lineIndex: number;
+    initialValue: number;
+    title: string;
+    description: string;
+    fieldLabel: string;
+  }>({
+    open: false,
+    kind: "IVA",
+    doc: null,
+    lineIndex: -1,
+    initialValue: 0,
+    title: "",
+    description: "",
+    fieldLabel: "",
+  });
+
+  function openRetentionAuthModal(
+    kind: "IVA" | "ISLR" | "TIMBRE",
+    doc: any,
+    lineIndex = -1,
+  ) {
+    const nro = doc?.nro_doc?.trim() || "";
+    const inp = docInputs[nro];
+    if (!inp) return;
+
+    if (kind === "IVA") {
+      retAuthModal = {
+        open: true,
+        kind: "IVA",
+        doc,
+        lineIndex: -1,
+        initialValue: Number(inp.reten_iva_bs || 0),
+        title: "Autorizar Monto Retención IVA",
+        description: `Documento ${doc.co_tipo_doc?.trim() || "FACT"} ${nro}`,
+        fieldLabel: "Nuevo Monto Retenido IVA (Bs.)",
+      };
+    } else if (kind === "ISLR") {
+      const line = inp.islr_lines?.[lineIndex];
+      const currentVal = line
+        ? Number(line.reten_islr_bs || 0)
+        : Number(inp.reten_islr_bs || 0);
+      retAuthModal = {
+        open: true,
+        kind: "ISLR",
+        doc,
+        lineIndex,
+        initialValue: currentVal,
+        title: "Autorizar Monto Retención ISLR",
+        description: `Documento ${doc.co_tipo_doc?.trim() || "FACT"} ${nro}${line?.co_islr ? ` · Concepto ${line.co_islr}` : ""}`,
+        fieldLabel: "Nuevo Monto Retenido ISLR (Bs.)",
+      };
+    } else {
+      const currentTimbre = getDocTimbreFiscal(doc).timbreBs;
+      retAuthModal = {
+        open: true,
+        kind: "TIMBRE",
+        doc,
+        lineIndex: -1,
+        initialValue: currentTimbre,
+        title: "Autorizar Retención Timbre 1x1000",
+        description: `Documento ${doc.co_tipo_doc?.trim() || "FACT"} ${nro}`,
+        fieldLabel: "Nuevo Monto Timbre Fiscal 1x1000 (Bs.)",
+      };
+    }
+  }
+
+  function applyAuthorizedRetention(
+    newVal: number,
+    authorizer: { email: string; full_name: string },
+  ) {
+    const doc = retAuthModal.doc;
+    if (!doc) return;
+    const nro = doc.nro_doc.trim();
+    const inp = docInputs[nro];
+    if (!inp) return;
+    const authName = authorizer.full_name || authorizer.email;
+    const rounded = Math.max(0, Math.round(Number(newVal || 0) * 100) / 100);
+
+    if (retAuthModal.kind === "IVA") {
+      inp.reten_iva_bs = rounded;
+      inp.manual_override_iva = true;
+      inp.authorized_iva_by = authName;
+      recalculateDocAmounts(nro, doc, true);
+    } else if (retAuthModal.kind === "ISLR") {
+      ensureIslrLines(inp, doc);
+      const idx = retAuthModal.lineIndex >= 0 ? retAuthModal.lineIndex : 0;
+      if (inp.islr_lines?.[idx]) {
+        inp.islr_lines[idx].reten_islr_bs = rounded;
+        inp.islr_lines[idx].manual_override_islr = true;
+        inp.islr_lines[idx].authorized_by = authName;
+      }
+      inp.manual_override_islr = true;
+      recalculateDocAmounts(nro, doc, true);
+    } else if (retAuthModal.kind === "TIMBRE") {
+      aplicarTimbreFiscal = true;
+      inp.reten_timbre_bs = rounded;
+      inp.manual_override_timbre = true;
+      inp.authorized_timbre_by = authName;
+      recalculateDocAmounts(nro, doc, true);
+    }
+  }
+
   // Sincronizar sucursal inicial y cargar tasa al montar
   onMount(() => {
     selectedBranch = data.selectedBranchId;
@@ -1386,15 +1545,22 @@
         if (resJson.success && resJson.tasa) {
           currentExchangeRate = Number(resJson.tasa) || 1;
           tasaFechaInfo = resJson.fecha_str || resJson.fecha || null;
-          tasaEsExacta = resJson.es_exacta !== undefined ? Boolean(resJson.es_exacta) : true;
+          tasaEsExacta =
+            resJson.es_exacta !== undefined ? Boolean(resJson.es_exacta) : true;
           syncSinglePaymentInstrument();
 
-          const infoDate = tasaFechaInfo ? String(tasaFechaInfo).split("T")[0] : dateToUse;
+          const infoDate = tasaFechaInfo
+            ? String(tasaFechaInfo).split("T")[0]
+            : dateToUse;
           const formatted = infoDate.split("-").reverse().join("/");
           if (tasaEsExacta) {
-            toast.info(`Tasa cargada para el ${formatted}: Bs. ${currentExchangeRate.toFixed(2)}`);
+            toast.info(
+              `Tasa cargada para el ${formatted}: Bs. ${currentExchangeRate.toFixed(2)}`,
+            );
           } else {
-            toast.info(`Tasa previa encontrada (${formatted}): Bs. ${currentExchangeRate.toFixed(2)}`);
+            toast.info(
+              `Tasa previa encontrada (${formatted}): Bs. ${currentExchangeRate.toFixed(2)}`,
+            );
           }
         }
       }
@@ -1789,8 +1955,15 @@
           getEffectivePorcEsp(selectedClient) ||
           75;
         input.porc_ret_iva = porc;
-        input.reten_iva_bs =
-          Math.round(doc.monto_imp * (porc / 100) * 100) / 100;
+        if (input.manual_override_iva) {
+          input.reten_iva_bs = Math.max(
+            0,
+            Math.round((Number(input.reten_iva_bs) || 0) * 100) / 100,
+          );
+        } else {
+          input.reten_iva_bs =
+            Math.round(doc.monto_imp * (porc / 100) * 100) / 100;
+        }
         input.reten_iva =
           Math.round((input.reten_iva_bs / docTasa) * 100) / 100;
 
@@ -1830,15 +2003,22 @@
           line.base_imponible_islr_bs = lineBaseBs;
           line.base_imponible_islr =
             Math.round((lineBaseBs / docTasa) * 100) / 100;
-          const porcBase = Number(line.porc_base_islr ?? 100) / 100;
-          const baseSujeta = Math.round(lineBaseBs * porcBase * 100) / 100;
-          const porcRet = (Number(line.porc_islr) || 0) / 100;
-          const sustraendoBs = Number(line.sustraendo_islr_bs) || 0;
-          const retBruta = Math.round(baseSujeta * porcRet * 100) / 100;
-          line.reten_islr_bs = Math.max(
-            0,
-            Math.round((retBruta - sustraendoBs) * 100) / 100,
-          );
+          if (line.manual_override_islr) {
+            line.reten_islr_bs = Math.max(
+              0,
+              Math.round((Number(line.reten_islr_bs) || 0) * 100) / 100,
+            );
+          } else {
+            const porcBase = Number(line.porc_base_islr ?? 100) / 100;
+            const baseSujeta = Math.round(lineBaseBs * porcBase * 100) / 100;
+            const porcRet = (Number(line.porc_islr) || 0) / 100;
+            const sustraendoBs = Number(line.sustraendo_islr_bs) || 0;
+            const retBruta = Math.round(baseSujeta * porcRet * 100) / 100;
+            line.reten_islr_bs = Math.max(
+              0,
+              Math.round((retBruta - sustraendoBs) * 100) / 100,
+            );
+          }
           line.reten_islr =
             Math.round((line.reten_islr_bs / docTasa) * 100) / 100;
 
@@ -1922,7 +2102,8 @@
         !inp?.yaTieneRetIslr && inp?.showIslrDetails
           ? Number(inp.reten_islr) || 0
           : 0;
-      const { timbreBs: retTimbreBs, timbreUsd: retTimbreUsd } = getDocTimbreFiscal(doc);
+      const { timbreBs: retTimbreBs, timbreUsd: retTimbreUsd } =
+        getDocTimbreFiscal(doc);
 
       // Cálculo del diferencial cambiario N/DB EXCLUSIVAMENTE para Facturas de venta (FACT) de una fecha anterior
       const isFactura = doc.co_tipo_doc?.trim()?.toUpperCase() === "FACT";
@@ -1947,8 +2128,14 @@
         );
       }
 
-      const maxBs = Math.max(0, doc.saldo - retIvaBs - retIslrBs - retTimbreBs + diffBs);
-      const maxUsd = Math.max(0, doc.saldo / docTasa - retIvaUsd - retIslrUsd - retTimbreUsd);
+      const maxBs = Math.max(
+        0,
+        doc.saldo - retIvaBs - retIslrBs - retTimbreBs + diffBs,
+      );
+      const maxUsd = Math.max(
+        0,
+        doc.saldo / docTasa - retIvaUsd - retIslrUsd - retTimbreUsd,
+      );
 
       totalNeededBs += maxBs;
       totalNeededUsd += maxUsd;
@@ -2513,7 +2700,9 @@
 
       const netDebtBs = Math.max(
         0,
-        Math.round((doc.saldo - retIvaBs - retIslrBs - retTimbreBs + diffBs) * 100) / 100,
+        Math.round(
+          (doc.saldo - retIvaBs - retIslrBs - retTimbreBs + diffBs) * 100,
+        ) / 100,
       );
       totalDebtToCoverBs += netDebtBs;
       debitDocInfoMap.set(nro, { retIvaBs, retIslrBs, diffBs, netDebtBs });
@@ -3086,9 +3275,8 @@
                   {#if isPersonaNaturalClient(selectedClient)}
                     Persona Natural (No aplica retenciones)
                   {:else if isGubernamentalClient(selectedClient)}
-                    Ente Gubernamental (Aplica Retención Timbre Fiscal 1x1000) • Tabulador ISLR: {getTabDescription(
-                      getEffectiveClientTab(),
-                    )}
+                    Ente Gubernamental (Aplica Retención Timbre Fiscal 1x1000) •
+                    Tabulador ISLR: {getTabDescription(getEffectiveClientTab())}
                   {:else if isContribuyenteEspecialClient(selectedClient)}
                     Contribuyente Especial ({getEffectivePorcEsp(
                       selectedClient,
@@ -3107,42 +3295,61 @@
               </div>
             </div>
 
-            {#if isGubernamentalClient(selectedClient)}
+            {#if isGubernamentalClient(selectedClient) || allowEditableRetentions}
               <div class="pt-4 border-t border-border-subtle/40">
-                <div class="p-4 rounded-2xl bg-indigo-500/10 border border-indigo-500/30 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 animate-in fade-in duration-200">
+                <div
+                  class="p-4 rounded-2xl bg-indigo-500/10 border border-indigo-500/30 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 animate-in fade-in duration-200"
+                >
                   <div class="flex items-center gap-3">
-                    <div class="p-2.5 rounded-xl bg-indigo-500/20 text-indigo-400 shrink-0">
+                    <div
+                      class="p-2.5 rounded-xl bg-indigo-500/20 text-indigo-400 shrink-0"
+                    >
                       <Receipt size={20} />
                     </div>
                     <div>
                       <div class="flex items-center gap-2">
-                        <span class="font-bold text-sm text-text-base">Retención Timbre Fiscal (1x1000)</span>
-                        <span class="text-[9px] font-black uppercase px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/40">
+                        <span class="font-bold text-sm text-text-base"
+                          >Retención Timbre Fiscal (1x1000)</span
+                        >
+                        <span
+                          class="text-[9px] font-black uppercase px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/40"
+                        >
                           Ente Gubernamental
                         </span>
                       </div>
                       <p class="text-xs text-text-muted mt-0.5">
-                        Aplica el 0,1% (0,001) sobre la base imponible y genera automáticamente el ajuste (AJNM) al guardar el cobro.
+                        Aplica el 0,1% (0,001) sobre la base imponible y genera
+                        automáticamente el ajuste (AJNM) al guardar el cobro.
                       </p>
                     </div>
                   </div>
 
-                  <div class="flex items-center gap-3 self-end sm:self-center shrink-0">
+                  <div
+                    class="flex items-center gap-3 self-end sm:self-center shrink-0"
+                  >
                     {#if aplicarTimbreFiscal && totalTimbreFiscalBs > 0}
                       <div class="text-right">
-                        <span class="text-xs font-black text-indigo-400 block font-mono">
-                          -${totalTimbreFiscalUsd.toLocaleString('de-DE', { minimumFractionDigits: 2 })}
+                        <span
+                          class="text-xs font-black text-indigo-400 block font-mono"
+                        >
+                          -${totalTimbreFiscalUsd.toLocaleString("de-DE", {
+                            minimumFractionDigits: 2,
+                          })}
                         </span>
-                        <span class="text-[10px] text-text-muted font-bold block font-mono">
-                          -Bs. {totalTimbreFiscalBs.toLocaleString('de-DE', { minimumFractionDigits: 2 })}
+                        <span
+                          class="text-[10px] text-text-muted font-bold block font-mono"
+                        >
+                          -Bs. {totalTimbreFiscalBs.toLocaleString("de-DE", {
+                            minimumFractionDigits: 2,
+                          })}
                         </span>
                       </div>
                     {/if}
                     <button
                       type="button"
                       onclick={toggleTimbreFiscal}
-                      class="px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer flex items-center gap-2 {aplicarTimbreFiscal 
-                        ? 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-500/25' 
+                      class="px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer flex items-center gap-2 {aplicarTimbreFiscal
+                        ? 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-500/25'
                         : 'bg-surface-soft hover:bg-surface-soft/80 text-text-muted border border-border-subtle'}"
                     >
                       {#if aplicarTimbreFiscal}
@@ -4052,18 +4259,55 @@
                             {/if}
                           </div>
 
-                          {#if aplicarTimbreFiscal && isGubernamentalClient(selectedClient) && !isCreditDoc(doc.co_tipo_doc)}
+                          {#if aplicarTimbreFiscal && (isGubernamentalClient(selectedClient) || allowEditableRetentions) && !isCreditDoc(doc.co_tipo_doc)}
                             {@const docTimbre = getDocTimbreFiscal(doc)}
-                            {#if docTimbre.timbreBs > 0}
-                              <div class="flex items-center justify-between text-xs py-2 px-3.5 rounded-xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 font-bold animate-in fade-in duration-150">
-                                <span class="flex items-center gap-2">
+                            {#if docTimbre.timbreBs > 0 || allowEditableRetentions}
+                              <div
+                                class="flex items-center justify-between gap-2 text-xs py-2 px-3.5 rounded-xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 font-bold animate-in fade-in duration-150"
+                              >
+                                <span class="flex items-center gap-2 min-w-0">
                                   <Receipt size={14} class="shrink-0" />
-                                  <span>Retención Timbre Fiscal 1x1000 (0,1% sobre Base Imponible Bs. {docTimbre.baseBs.toLocaleString('de-DE', { minimumFractionDigits: 2 })})</span>
+                                  <span>
+                                    Retención Timbre Fiscal 1x1000 (0,1% sobre
+                                    Base Imponible Bs. {docTimbre.baseBs.toLocaleString(
+                                      "de-DE",
+                                      { minimumFractionDigits: 2 },
+                                    )})
+                                    {#if input.manual_override_timbre && input.authorized_timbre_by}
+                                      <span
+                                        class="block text-[10px] text-amber-400 font-semibold"
+                                        >Editado (Aut: {input.authorized_timbre_by})</span
+                                      >
+                                    {/if}
+                                  </span>
                                 </span>
-                                <span class="font-mono font-black text-right">
-                                  -${docTimbre.timbreUsd.toLocaleString('de-DE', { minimumFractionDigits: 2 })}
-                                  <span class="text-text-muted font-normal text-[10px] block sm:inline sm:ml-1">(-Bs. {docTimbre.timbreBs.toLocaleString('de-DE', { minimumFractionDigits: 2 })})</span>
-                                </span>
+                                <div class="flex items-center gap-2.5 shrink-0">
+                                  <span class="font-mono font-black text-right">
+                                    -${docTimbre.timbreUsd.toLocaleString(
+                                      "de-DE",
+                                      { minimumFractionDigits: 2 },
+                                    )}
+                                    <span
+                                      class="text-text-muted font-normal text-[10px] block sm:inline sm:ml-1"
+                                      >(-Bs. {docTimbre.timbreBs.toLocaleString(
+                                        "de-DE",
+                                        { minimumFractionDigits: 2 },
+                                      )})</span
+                                    >
+                                  </span>
+                                  {#if allowEditableRetentions}
+                                    <button
+                                      type="button"
+                                      onclick={() =>
+                                        openRetentionAuthModal("TIMBRE", doc)}
+                                      class="px-2.5 py-1 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/30 text-[10px] font-black uppercase flex items-center gap-1 cursor-pointer transition-colors"
+                                      title="Editar monto 1x1000 (requiere autorización)"
+                                    >
+                                      <KeyRound size={11} />
+                                      <span>Editar</span>
+                                    </button>
+                                  {/if}
+                                </div>
                               </div>
                             {/if}
                           {/if}
@@ -4141,6 +4385,7 @@
                                   <select
                                     bind:value={input.porc_ret_iva}
                                     onchange={() => {
+                                      input.manual_override_iva = false;
                                       recalculateDocAmounts(
                                         doc.nro_doc.trim(),
                                         doc,
@@ -4153,10 +4398,26 @@
                                   </select>
                                 </div>
                                 <div>
-                                  <span
-                                    class="text-[9px] text-text-muted font-bold block mb-1 font-semibold text-emerald-700 dark:text-green-400"
-                                    >MTO RETENIDO (Bs.)</span
+                                  <div
+                                    class="flex items-center justify-between gap-1 mb-1"
                                   >
+                                    <span
+                                      class="text-[9px] font-bold font-semibold text-emerald-700 dark:text-green-400"
+                                      >MTO RETENIDO (Bs.)</span
+                                    >
+                                    {#if allowEditableRetentions}
+                                      <button
+                                        type="button"
+                                        onclick={() =>
+                                          openRetentionAuthModal("IVA", doc)}
+                                        class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-600 dark:text-amber-400 hover:bg-amber-500/25 border border-amber-500/30 text-[9px] font-bold transition-colors cursor-pointer"
+                                        title="Autorizar edición manual del monto retenido de IVA"
+                                      >
+                                        <KeyRound size={10} />
+                                        Editar
+                                      </button>
+                                    {/if}
+                                  </div>
                                   <input
                                     type="number"
                                     step="0.01"
@@ -4164,6 +4425,13 @@
                                     value={input.reten_iva_bs}
                                     class="w-full bg-surface-soft/60 border border-border-subtle text-emerald-700 dark:text-green-400 font-bold px-2 py-1.5 rounded-lg text-xs text-right cursor-not-allowed opacity-90"
                                   />
+                                  {#if input.manual_override_iva && input.authorized_iva_by}
+                                    <span
+                                      class="block text-[9px] text-amber-600 dark:text-amber-400 font-semibold mt-0.5 truncate"
+                                    >
+                                      Autorizado por: {input.authorized_iva_by}
+                                    </span>
+                                  {/if}
                                 </div>
                               </div>
                             </div>
@@ -4209,13 +4477,21 @@
                                       type="button"
                                       onclick={() => {
                                         if (difBaseBs > 0) {
-                                          const targetIdx = (input.islr_lines || []).findIndex(
-                                            (l) => (Number(l.base_imponible_islr_bs) || 0) === 0,
+                                          const targetIdx = (
+                                            input.islr_lines || []
+                                          ).findIndex(
+                                            (l) =>
+                                              (Number(
+                                                l.base_imponible_islr_bs,
+                                              ) || 0) === 0,
                                           );
                                           assignRemainingBaseToLine(
                                             doc.nro_doc.trim(),
                                             doc,
-                                            targetIdx !== -1 ? targetIdx : (input.islr_lines?.length || 1) - 1,
+                                            targetIdx !== -1
+                                              ? targetIdx
+                                              : (input.islr_lines?.length ||
+                                                  1) - 1,
                                           );
                                         }
                                       }}
@@ -4223,7 +4499,9 @@
                                       0
                                         ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30 hover:bg-amber-500/30 cursor-pointer'
                                         : 'bg-rose-500/20 text-rose-300 border border-rose-500/30'} font-semibold transition-colors"
-                                      title={difBaseBs > 0 ? "Haz clic para asignar el remanente" : ""}
+                                      title={difBaseBs > 0
+                                        ? "Haz clic para asignar el remanente"
+                                        : ""}
                                     >
                                       {difBaseBs > 0
                                         ? `Por asignar: Bs. ${difBaseBs.toLocaleString("de-DE", { minimumFractionDigits: 2 })} (clic para asignar)`
@@ -4294,14 +4572,24 @@
                                       </select>
                                     </div>
                                     <div class="sm:col-span-3">
-                                      <div class="flex justify-between items-center mb-1 flex-wrap gap-1">
-                                        <span class="text-[9px] text-text-muted font-bold block">BASE IMPONIBLE (Bs.)</span>
+                                      <div
+                                        class="flex justify-between items-center mb-1 flex-wrap gap-1"
+                                      >
+                                        <span
+                                          class="text-[9px] text-text-muted font-bold block"
+                                          >BASE IMPONIBLE (Bs.)</span
+                                        >
                                         <div class="flex items-center gap-1.5">
                                           {#if (Number(line.base_imponible_islr_bs) || 0) === 0 && difBaseBs > 0}
                                             <button
                                               type="button"
                                               title="Asignar el remanente no cubierto a este concepto"
-                                              onclick={() => assignRemainingBaseToLine(doc.nro_doc.trim(), doc, lineIdx)}
+                                              onclick={() =>
+                                                assignRemainingBaseToLine(
+                                                  doc.nro_doc.trim(),
+                                                  doc,
+                                                  lineIdx,
+                                                )}
                                               class="text-[9px] font-bold text-amber-500 hover:text-amber-400 underline cursor-pointer"
                                             >
                                               + Remanente
@@ -4311,7 +4599,12 @@
                                             <button
                                               type="button"
                                               title="Colocar la base total de la factura a este concepto"
-                                              onclick={() => setLineToFullBase(doc.nro_doc.trim(), doc, lineIdx)}
+                                              onclick={() =>
+                                                setLineToFullBase(
+                                                  doc.nro_doc.trim(),
+                                                  doc,
+                                                  lineIdx,
+                                                )}
                                               class="text-[9px] font-semibold text-text-muted hover:text-amber-400 cursor-pointer"
                                             >
                                               Base total
@@ -4324,6 +4617,8 @@
                                         step="0.01"
                                         bind:value={line.base_imponible_islr_bs}
                                         oninput={() => {
+                                          line.manual_override_islr = false;
+                                          input.manual_override_islr = false;
                                           recalculateDocAmounts(
                                             doc.nro_doc.trim(),
                                             doc,
@@ -4346,10 +4641,30 @@
                                       />
                                     </div>
                                     <div class="sm:col-span-2">
-                                      <span
-                                        class="text-[9px] text-text-muted font-bold block mb-1 font-semibold text-amber-700 dark:text-amber-400"
-                                        >RETENIDO (Bs.)</span
+                                      <div
+                                        class="flex items-center justify-between gap-1 mb-1"
                                       >
+                                        <span
+                                          class="text-[9px] font-bold font-semibold text-amber-700 dark:text-amber-400"
+                                          >RETENIDO (Bs.)</span
+                                        >
+                                        {#if allowEditableRetentions}
+                                          <button
+                                            type="button"
+                                            onclick={() =>
+                                              openRetentionAuthModal(
+                                                "ISLR",
+                                                doc,
+                                                lineIdx,
+                                              )}
+                                            class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-600 dark:text-amber-400 hover:bg-amber-500/25 border border-amber-500/30 text-[9px] font-bold transition-colors cursor-pointer"
+                                            title="Autorizar edición manual del monto retenido de ISLR"
+                                          >
+                                            <KeyRound size={10} />
+                                            Editar
+                                          </button>
+                                        {/if}
+                                      </div>
                                       <input
                                         type="number"
                                         step="0.01"
@@ -4357,6 +4672,13 @@
                                         value={line.reten_islr_bs}
                                         class="w-full bg-surface-soft/60 border border-border-subtle px-2 py-1.5 rounded-lg text-xs text-right text-amber-700 dark:text-amber-400 font-bold cursor-not-allowed opacity-90 font-mono"
                                       />
+                                      {#if line.manual_override_islr && line.authorized_by}
+                                        <span
+                                          class="block text-[9px] text-amber-600 dark:text-amber-400 font-semibold mt-0.5 truncate"
+                                        >
+                                          Autorizado por: {line.authorized_by}
+                                        </span>
+                                      {/if}
                                     </div>
                                     <div
                                       class="sm:col-span-1 flex justify-center pt-2 sm:pt-0"
@@ -4532,9 +4854,17 @@
                               <div
                                 class="flex items-center justify-between bg-surface-soft/60 border border-border-subtle p-3 rounded-2xl text-xs mb-3 text-text-muted animate-in fade-in duration-150"
                               >
-                                <span class="flex items-center gap-1.5 font-bold">
-                                  <Info size={14} class="text-amber-400 shrink-0" />
-                                  <span>Diferencial cambiario desactivado (Se salda a tasa original sin AJPA)</span>
+                                <span
+                                  class="flex items-center gap-1.5 font-bold"
+                                >
+                                  <Info
+                                    size={14}
+                                    class="text-amber-400 shrink-0"
+                                  />
+                                  <span
+                                    >Diferencial cambiario desactivado (Se salda
+                                    a tasa original sin AJPA)</span
+                                  >
                                 </span>
                                 <button
                                   type="button"
@@ -4596,7 +4926,9 @@
         >
           <div class="flex items-center justify-between">
             <div>
-              <span class="text-[10px] font-black uppercase tracking-[0.2em] text-text-muted block">
+              <span
+                class="text-[10px] font-black uppercase tracking-[0.2em] text-text-muted block"
+              >
                 Tasa Cambiaria del Cobro
               </span>
               <div class="flex items-center gap-2 mt-1.5">
@@ -4612,7 +4944,9 @@
                   type="button"
                   onclick={() => loadExchangeRate(fechaCobro)}
                   title="Cargar tasa histórica para la fecha de cobro seleccionada"
-                  class="p-1.5 hover:bg-white/5 rounded-xl text-text-muted hover:text-brand-400 transition-all cursor-pointer {loadingTasa ? 'animate-spin text-brand-400' : ''}"
+                  class="p-1.5 hover:bg-white/5 rounded-xl text-text-muted hover:text-brand-400 transition-all cursor-pointer {loadingTasa
+                    ? 'animate-spin text-brand-400'
+                    : ''}"
                 >
                   <RefreshCw size={14} />
                 </button>
@@ -4620,7 +4954,10 @@
             </div>
 
             <div class="text-right">
-              <label for="fecha-cobro-card" class="text-[9px] font-black uppercase tracking-wider text-text-muted block cursor-pointer">
+              <label
+                for="fecha-cobro-card"
+                class="text-[9px] font-black uppercase tracking-wider text-text-muted block cursor-pointer"
+              >
                 Fecha del Cobro
               </label>
               <div class="flex items-center justify-end gap-1.5 mt-1">
@@ -4637,11 +4974,21 @@
               </div>
               {#if tasaFechaInfo && !tasaEsExacta}
                 <span class="text-[9px] font-bold text-amber-400 block mt-0.5">
-                  Tasa previa ({String(tasaFechaInfo).split('T')[0].split('-').reverse().join('/')})
+                  Tasa previa ({String(tasaFechaInfo)
+                    .split("T")[0]
+                    .split("-")
+                    .reverse()
+                    .join("/")})
                 </span>
               {:else if tasaFechaInfo && tasaEsExacta}
-                <span class="text-[9px] font-bold text-emerald-400 block mt-0.5">
-                  Tasa del día ({String(tasaFechaInfo).split('T')[0].split('-').reverse().join('/')})
+                <span
+                  class="text-[9px] font-bold text-emerald-400 block mt-0.5"
+                >
+                  Tasa del día ({String(tasaFechaInfo)
+                    .split("T")[0]
+                    .split("-")
+                    .reverse()
+                    .join("/")})
                 </span>
               {/if}
             </div>
@@ -4649,28 +4996,38 @@
 
           <!-- Switch Habilitar/Deshabilitar Diferencial Cambiario AJPA -->
           <div
-            class="p-3.5 rounded-2xl border transition-all {generarDiferencial ? 'bg-blue-500/10 border-blue-500/30' : 'bg-surface-soft/60 border-border-subtle'}"
+            class="p-3.5 rounded-2xl border transition-all {generarDiferencial
+              ? 'bg-blue-500/10 border-blue-500/30'
+              : 'bg-surface-soft/60 border-border-subtle'}"
           >
             <div class="flex items-center justify-between gap-3">
               <div class="space-y-0.5">
                 <div class="flex items-center gap-2">
-                  <span class="text-xs font-bold text-text-base">Diferencial (AJPA)</span>
-                  <span class="text-[9px] font-black uppercase px-2 py-0.5 rounded-full {generarDiferencial ? 'bg-blue-500/20 text-blue-300 border border-blue-500/40' : 'bg-surface-strong text-text-muted border border-border-subtle'}">
-                    {generarDiferencial ? 'Habilitado' : 'Omitir AJPA'}
+                  <span class="text-xs font-bold text-text-base"
+                    >Diferencial (AJPA)</span
+                  >
+                  <span
+                    class="text-[9px] font-black uppercase px-2 py-0.5 rounded-full {generarDiferencial
+                      ? 'bg-blue-500/20 text-blue-300 border border-blue-500/40'
+                      : 'bg-surface-strong text-text-muted border border-border-subtle'}"
+                  >
+                    {generarDiferencial ? "Habilitado" : "Omitir AJPA"}
                   </span>
                 </div>
                 <p class="text-[10px] text-text-muted leading-tight">
                   {generarDiferencial
-                    ? 'Genera Ajuste Positivo (AJPA) si la tasa actual supera la de la factura.'
-                    : 'Desactivado: no genera AJPA y salda las facturas a su tasa original.'}
+                    ? "Genera Ajuste Positivo (AJPA) si la tasa actual supera la de la factura."
+                    : "Desactivado: no genera AJPA y salda las facturas a su tasa original."}
                 </p>
               </div>
               <button
                 type="button"
                 onclick={toggleGenerarDiferencial}
-                class="px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer shrink-0 {generarDiferencial ? 'bg-blue-600 hover:bg-blue-500 text-white shadow-md shadow-blue-500/20' : 'bg-surface-strong hover:bg-surface-strong/80 text-text-muted border border-border-subtle'}"
+                class="px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer shrink-0 {generarDiferencial
+                  ? 'bg-blue-600 hover:bg-blue-500 text-white shadow-md shadow-blue-500/20'
+                  : 'bg-surface-strong hover:bg-surface-strong/80 text-text-muted border border-border-subtle'}"
               >
-                {generarDiferencial ? 'Activo' : 'Desactivado'}
+                {generarDiferencial ? "Activo" : "Desactivado"}
               </button>
             </div>
           </div>
@@ -5615,3 +5972,17 @@
     </div>
   </div>
 {/if}
+
+<AuthorizeEditModal
+  bind:open={retAuthModal.open}
+  module="cash_payments"
+  branchId={selectedBranch}
+  title={retAuthModal.title}
+  description={retAuthModal.description}
+  fieldLabel={retAuthModal.fieldLabel}
+  currencySymbol="Bs."
+  initialValue={retAuthModal.initialValue}
+  recordId={retAuthModal.doc?.nro_doc?.trim() || ""}
+  currentUserEmail={($page.data as any)?.profile?.email || ""}
+  onAuthorized={applyAuthorizedRetention}
+/>

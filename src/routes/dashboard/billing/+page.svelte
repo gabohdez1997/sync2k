@@ -27,12 +27,14 @@
     Loader2,
     Clock,
     PackageCheck,
+    KeyRound,
   } from "lucide-svelte";
   import { toast } from "svelte-sonner";
   import { goto } from "$app/navigation";
   import { page } from "$app/stores";
   import dayjs from "dayjs";
   import ImportItemCard from "$lib/components/ui/ImportItemCard.svelte";
+  import AuthorizeEditModal from "$lib/components/ui/AuthorizeEditModal.svelte";
 
   let { data } = $props();
 
@@ -115,6 +117,59 @@
       (b: any) => String(b.id).toLowerCase() === String(filterSede).toLowerCase()
     )
   );
+
+  const allowEditablePrices = $derived(
+    Boolean(
+      selectedBranchConfig?.allow_editable_prices ??
+        selectedBranchConfig?.sql_config?.profit_defaults
+          ?.allow_editable_prices ??
+        false
+    )
+  );
+
+  let priceAuthModal = $state<{
+    open: boolean;
+    lineIndex: number;
+    line: any;
+    initialPrice: number;
+  }>({
+    open: false,
+    lineIndex: -1,
+    line: null,
+    initialPrice: 0,
+  });
+
+  function openBillingPriceAuthModal(index: number) {
+    const line = billingLines[index];
+    if (!line) return;
+    const tasa = Number(activeTasa || 1) > 0 ? Number(activeTasa || 1) : 1;
+    const currentVal = showUSD
+      ? Number(line.precio || 0)
+      : Number(line.precio || 0) * tasa;
+    priceAuthModal = {
+      open: true,
+      lineIndex: index,
+      line,
+      initialPrice: Math.round(currentVal * 100) / 100,
+    };
+  }
+
+  function applyAuthorizedBillingPrice(
+    newVal: number,
+    authorizer: { email: string; full_name: string }
+  ) {
+    const idx = priceAuthModal.lineIndex;
+    const line = billingLines[idx];
+    if (!line) return;
+    const tasa = Number(activeTasa || 1) > 0 ? Number(activeTasa || 1) : 1;
+    const usdVal = showUSD ? newVal : newVal / tasa;
+    billingLines[idx] = {
+      ...line,
+      precio: Math.round(usdVal * 10000) / 10000,
+      is_custom_price: true,
+      authorized_by: authorizer.full_name || authorizer.email,
+    };
+  }
 
   const profitBranchCodes = $derived.by(() => {
     if (!selectedBranchConfig?.profit_branch_codes) return [];
@@ -306,6 +361,10 @@
           .map((l: any) => {
             const itemQty = Number(l.pendiente ?? l.cantidad);
             const usdPrice = Number(l.prec_vta_om || 0) > 0 ? Number(l.prec_vta_om) : Number(l.precio || 0) / tasa;
+            const rawComment = String(l.comentario || '').trim();
+            const authBy = rawComment.startsWith('PRECIO_AUT:')
+              ? rawComment.replace(/^PRECIO_AUT:/, '').trim()
+              : '';
             return {
               ...l,
               doc_num: orderDetails.doc_num,
@@ -314,6 +373,8 @@
               checked: true,
               co_ven: orderDetails.co_ven,
               ven_des: orderDetails.ven_des,
+              is_custom_price: Boolean(authBy),
+              authorized_by: authBy || null,
             };
           });
 
@@ -1376,11 +1437,38 @@
                     </td>
 
                     <td class="px-6 py-4 text-center font-bold text-text-muted font-mono">
-                      {line.co_precio ? `Precio ${parseInt(line.co_precio, 10) || line.co_precio.trim()}` : '---'}
+                      {#if line.is_custom_price}
+                        <div class="inline-flex flex-col items-center gap-0.5">
+                          <span class="px-2 py-0.5 rounded-md bg-amber-500/15 text-amber-400 border border-amber-500/30 text-[10px] font-black uppercase">
+                            Precio Autorizado
+                          </span>
+                          {#if line.authorized_by}
+                            <span class="text-[9px] text-amber-400/80 font-semibold">
+                              Aut: {line.authorized_by}
+                            </span>
+                          {/if}
+                        </div>
+                      {:else}
+                        {line.co_precio ? `Precio ${parseInt(line.co_precio, 10) || line.co_precio.trim()}` : '---'}
+                      {/if}
                     </td>
 
                     <td class="px-6 py-4 text-right font-bold text-text-muted">
-                      {activeTotals.symbol} {(Number(line.precio) * (showUSD ? 1 : Number(activeTasa || 1))).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      <div class="inline-flex items-center justify-end gap-1.5">
+                        <span>
+                          {activeTotals.symbol} {(Number(line.precio) * (showUSD ? 1 : Number(activeTasa || 1))).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </span>
+                        {#if allowEditablePrices}
+                          <button
+                            type="button"
+                            onclick={() => openBillingPriceAuthModal(idx)}
+                            class="p-1.5 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/25 transition-colors cursor-pointer"
+                            title="Editar precio unitario (requiere autorización)"
+                          >
+                            <KeyRound size={12} />
+                          </button>
+                        {/if}
+                      </div>
                     </td>
 
                     <td class="px-6 py-4 text-right font-black text-brand-500">
@@ -2192,6 +2280,22 @@
     </div>
   </div>
 {/if}
+
+<AuthorizeEditModal
+  bind:open={priceAuthModal.open}
+  module="sales_orders"
+  branchId={filterSede}
+  title="Autorizar Edición de Precio"
+  description={priceAuthModal.line
+    ? `${priceAuthModal.line.co_art?.trim() || ""} — ${priceAuthModal.line.art_des?.trim() || ""}`
+    : ""}
+  fieldLabel={`Nuevo Precio Unitario (${showUSD ? "USD" : "Bs."})`}
+  currencySymbol={showUSD ? "$" : "Bs."}
+  initialValue={priceAuthModal.initialPrice}
+  recordId={priceAuthModal.line?.co_art?.trim() || ""}
+  currentUserEmail={($page.data as any)?.profile?.email || ""}
+  onAuthorized={applyAuthorizedBillingPrice}
+/>
 
 <style>
   @media print {
