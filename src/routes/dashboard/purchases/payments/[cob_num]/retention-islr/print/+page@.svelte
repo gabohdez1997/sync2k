@@ -447,7 +447,7 @@
                                 <td class="text-center font-mono">{formatSqlDate(row.fecha_documento, v.fechaEmision)}</td>
                                 <td class="text-center font-mono font-bold">{docNum || '---'}</td>
                                 <td class="text-center font-mono">{row.numero_control_documento || '---'}</td>
-                                <td class="text-center font-bold text-gray-700">{row.doc_descrip && row.doc_descrip !== '0' ? row.doc_descrip : '0'}</td>
+                                <td class="text-left font-bold text-gray-800 text-[10px] leading-tight px-1.5 uppercase">{row.islr_des || v.primaryConcept || (row.doc_descrip && row.doc_descrip !== '0' ? row.doc_descrip : '---')}</td>
                                 <td class="text-right font-mono font-bold">{formatCurrency(totalDoc)}</td>
                                 <td class="text-right font-mono">{formatCurrency(base)}</td>
                                 <td class="text-center font-bold">{porc}%</td>
@@ -760,10 +760,10 @@
 
     .col-date { width: 9%; }
     .col-doc { width: 10%; }
-    .col-ctrl { width: 12%; }
-    .col-desc { width: 15%; }
-    .col-amount { width: 12%; }
-    .col-pct { width: 9%; }
+    .col-ctrl { width: 11%; }
+    .col-desc { width: 20%; }
+    .col-amount { width: 11%; }
+    .col-pct { width: 6%; }
 
     .text-center { text-align: center; }
     .text-right { text-align: right; }

@@ -19,6 +19,14 @@
     FileText,
     ShieldCheck,
     ArrowRightLeft,
+    Calendar,
+    Eye,
+    TrendingUp,
+    TrendingDown,
+    Building2,
+    RefreshCw,
+    Receipt,
+    Coins,
   } from "lucide-svelte";
   import { goto } from "$app/navigation";
   import { page } from "$app/stores";
@@ -155,6 +163,134 @@
     accountToDelete = account;
     deletePassword = "";
     showDeleteModal = true;
+  }
+
+  // Modal de Detalle de Movimientos
+  let showMovementsModal = $state(false);
+  let selectedAccountForMovs = $state<any>(null);
+  let movsLoading = $state(false);
+  let movsList = $state<any[]>([]);
+  let movsMetrics = $state({
+    total_registros: 0,
+    total_anulados: 0,
+    total_conciliados: 0,
+    total_ingresos_bs: 0,
+    total_ingresos_usd: 0,
+    total_egresos_bs: 0,
+    total_egresos_usd: 0,
+    total_idb_bs: 0,
+  });
+  let movsPagination = $state({
+    total: 0,
+    page: 1,
+    limit: 25,
+    totalPages: 1,
+  });
+  let movsFechaD = $state("");
+  let movsFechaH = $state("");
+  let movsSearch = $state("");
+  let movsBalanceBs = $derived(
+    movsMetrics.total_ingresos_bs - movsMetrics.total_egresos_bs - movsMetrics.total_idb_bs
+  );
+
+  function formatCurrency(amount: number, curr = "BS") {
+    const n = Number(amount || 0);
+    const formatted = n.toLocaleString("es-VE", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    });
+    return curr === "USD" ? `$ ${formatted}` : `Bs. ${formatted}`;
+  }
+
+  function formatDate(val: any) {
+    if (!val) return "---";
+    const s = String(val);
+    const match = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (match) return `${match[3]}/${match[2]}/${match[1]}`;
+    const d = new Date(val);
+    if (isNaN(d.getTime())) return s;
+    const day = String(d.getDate()).padStart(2, "0");
+    const month = String(d.getMonth() + 1).padStart(2, "0");
+    return `${day}/${month}/${d.getFullYear()}`;
+  }
+
+  function openMovementsModal(account: any) {
+    selectedAccountForMovs = account;
+    showMovementsModal = true;
+    movsSearch = "";
+
+    const today = new Date();
+    const yyyy = today.getFullYear();
+    const mm = String(today.getMonth() + 1).padStart(2, "0");
+    const dd = String(today.getDate()).padStart(2, "0");
+    if (!movsFechaD) movsFechaD = `${yyyy}-01-01`;
+    if (!movsFechaH) movsFechaH = `${yyyy}-${mm}-${dd}`;
+
+    loadAccountMovements(1);
+  }
+
+  function setQuickRange(type: "month" | "year" | "all") {
+    const today = new Date();
+    const yyyy = today.getFullYear();
+    const mm = String(today.getMonth() + 1).padStart(2, "0");
+    const dd = String(today.getDate()).padStart(2, "0");
+
+    if (type === "month") {
+      movsFechaD = `${yyyy}-${mm}-01`;
+      movsFechaH = `${yyyy}-${mm}-${dd}`;
+    } else if (type === "year") {
+      movsFechaD = `${yyyy}-01-01`;
+      movsFechaH = `${yyyy}-${mm}-${dd}`;
+    } else if (type === "all") {
+      movsFechaD = "";
+      movsFechaH = "";
+    }
+    loadAccountMovements(1);
+  }
+
+  async function loadAccountMovements(newPage = 1) {
+    if (!selectedAccountForMovs) return;
+    movsLoading = true;
+
+    try {
+      const params = new URLSearchParams();
+      if (selectedBranch) params.set("branch_id", selectedBranch);
+      params.set("page", String(newPage));
+      params.set("limit", "25");
+      if (movsFechaD) params.set("fecha_d", movsFechaD);
+      if (movsFechaH) params.set("fecha_h", movsFechaH);
+      if (movsSearch.trim()) params.set("search", movsSearch.trim());
+
+      const url = `/api/agent/bancos/cuentas-ingr-egr/${encodeURIComponent(selectedAccountForMovs.co_cta_ingr_egr)}/movimientos?${params.toString()}`;
+      const res = await fetch(url);
+      const json = await res.json();
+
+      if (json.success) {
+        movsList = json.data || [];
+        movsMetrics = json.metrics || {
+          total_registros: 0,
+          total_anulados: 0,
+          total_conciliados: 0,
+          total_ingresos_bs: 0,
+          total_ingresos_usd: 0,
+          total_egresos_bs: 0,
+          total_egresos_usd: 0,
+          total_idb_bs: 0,
+        };
+        movsPagination = json.pagination || {
+          total: movsList.length,
+          page: newPage,
+          limit: 25,
+          totalPages: 1,
+        };
+      } else {
+        toast.error(json.message || "Error al consultar movimientos.");
+      }
+    } catch (e: any) {
+      toast.error("Error al conectar: " + e.message);
+    } finally {
+      movsLoading = false;
+    }
   }
 </script>
 
@@ -338,16 +474,19 @@
                 <td class="px-8 py-6">
                   {#if account.tiene_movimientos}
                     <div class="space-y-1">
-                      <span
-                        class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-amber-500/15 text-amber-500 border border-amber-500/25"
+                      <button
+                        type="button"
+                        onclick={() => openMovementsModal(account)}
+                        class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-amber-500/15 text-amber-500 border border-amber-500/25 hover:bg-amber-500/25 transition-all cursor-pointer text-left"
+                        title="Ver detalle de movimientos en esta cuenta"
                       >
                         <Lock size={12} />
                         {account.total_movimientos} movimiento{account.total_movimientos === 1 ? "" : "s"}
-                      </span>
+                      </button>
                       <p class="text-[11px] text-text-muted">
                         Banco: {account.mov_banco} · Caja: {account.mov_caja}
                         {#if account.transf_banco + account.dep_banco + account.ord_pago > 0}
-                          · Otros movs: {account.transf_banco + account.dep_banco + account.ord_pago}
+                          · Otros: {account.transf_banco + account.dep_banco + account.ord_pago}
                         {/if}
                       </p>
                     </div>
@@ -375,6 +514,14 @@
 
                 <td class="px-8 py-6">
                   <div class="flex items-center justify-end gap-2">
+                    <button
+                      type="button"
+                      onclick={() => openMovementsModal(account)}
+                      class="p-2 text-text-muted hover:text-brand-500 hover:bg-brand-500/10 rounded-xl transition-all cursor-pointer"
+                      title="Ver Movimientos de la Cuenta"
+                    >
+                      <Eye size={18} />
+                    </button>
                     {#if canUpdate}
                       {#if account.editable}
                         <button
@@ -752,6 +899,382 @@
             </button>
           </div>
         </form>
+      </div>
+    </div>
+  </div>
+{/if}
+
+<!-- Modal de Detalle de Movimientos de la Cuenta -->
+{#if showMovementsModal}
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <div
+    class="fixed inset-0 bg-slate-900/60 dark:bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-3 md:p-6 text-text-base"
+    transition:fade
+    onmousedown={(e) => {
+      if (e.target === e.currentTarget) showMovementsModal = false;
+    }}
+  >
+    <div
+      class="bg-surface-raised w-full max-w-6xl max-h-[92vh] rounded-[36px] border border-border-bold shadow-2xl flex flex-col overflow-hidden"
+      transition:fly={{ y: 50, duration: 350 }}
+      onmousedown={(e) => e.stopPropagation()}
+      onkeydown={(e) => e.key === "Escape" && (showMovementsModal = false)}
+      role="dialog"
+      aria-modal="true"
+      tabindex="-1"
+    >
+      <!-- Modal Header -->
+      <div
+        class="p-6 md:p-8 border-b border-border-subtle flex items-center justify-between bg-surface-base/60 shrink-0"
+      >
+        <div class="flex items-center gap-4">
+          <div
+            class="h-14 w-14 rounded-2xl bg-brand-500/15 flex items-center justify-center text-brand-500 font-mono font-black shadow-inner shrink-0 text-base"
+          >
+            {selectedAccountForMovs?.co_cta_ingr_egr?.slice(0, 3) || "CTA"}
+          </div>
+          <div>
+            <div class="flex flex-wrap items-center gap-2 mb-1">
+              <span class="font-mono text-xs font-black px-2 py-0.5 rounded bg-brand-500/15 text-brand-400 border border-brand-500/20">
+                {selectedAccountForMovs?.co_cta_ingr_egr}
+              </span>
+              {#if selectedAccountForMovs?.co_islr}
+                <span class="text-[10px] font-black uppercase tracking-tight bg-amber-500/15 text-amber-400 border border-amber-500/25 px-2 py-0.5 rounded">
+                  ISLR {selectedAccountForMovs.co_islr}
+                </span>
+              {/if}
+            </div>
+            <h2 class="text-xl md:text-2xl font-black text-text-base uppercase tracking-tight">
+              {selectedAccountForMovs?.descrip}
+            </h2>
+            <p class="text-xs text-text-muted">
+              Historial detallado de movimientos bancarios y de caja asociados a esta cuenta.
+            </p>
+          </div>
+        </div>
+
+        <button
+          type="button"
+          onclick={() => (showMovementsModal = false)}
+          class="p-3 text-text-muted hover:text-text-base hover:bg-surface-soft rounded-2xl transition-all cursor-pointer shrink-0"
+          title="Cerrar"
+        >
+          <X size={24} />
+        </button>
+      </div>
+
+      <!-- Filter Controls -->
+      <div class="p-4 md:p-6 bg-surface-base/30 border-b border-border-subtle shrink-0 space-y-3">
+        <form
+          onsubmit={(e) => {
+            e.preventDefault();
+            loadAccountMovements(1);
+          }}
+          class="flex flex-wrap items-center gap-3"
+        >
+          <!-- Desde -->
+          <div class="flex items-center gap-2 bg-surface-raised px-3 py-2 rounded-xl border border-border-bold">
+            <span class="text-[11px] font-bold text-text-muted uppercase">Desde:</span>
+            <input
+              type="date"
+              bind:value={movsFechaD}
+              class="bg-transparent text-xs font-mono font-bold text-text-base outline-none cursor-pointer"
+            />
+          </div>
+
+          <!-- Hasta -->
+          <div class="flex items-center gap-2 bg-surface-raised px-3 py-2 rounded-xl border border-border-bold">
+            <span class="text-[11px] font-bold text-text-muted uppercase">Hasta:</span>
+            <input
+              type="date"
+              bind:value={movsFechaH}
+              class="bg-transparent text-xs font-mono font-bold text-text-base outline-none cursor-pointer"
+            />
+          </div>
+
+          <!-- Quick Filters -->
+          <div class="flex items-center gap-1.5">
+            <button
+              type="button"
+              onclick={() => setQuickRange("month")}
+              class="text-xs font-bold px-3 py-2 rounded-xl bg-surface-soft hover:bg-surface-strong text-text-muted hover:text-text-base transition-all border border-border-subtle cursor-pointer"
+            >
+              Este Mes
+            </button>
+            <button
+              type="button"
+              onclick={() => setQuickRange("year")}
+              class="text-xs font-bold px-3 py-2 rounded-xl bg-surface-soft hover:bg-surface-strong text-text-muted hover:text-text-base transition-all border border-border-subtle cursor-pointer"
+            >
+              Este Año
+            </button>
+            <button
+              type="button"
+              onclick={() => setQuickRange("all")}
+              class="text-xs font-bold px-3 py-2 rounded-xl bg-surface-soft hover:bg-surface-strong text-text-muted hover:text-text-base transition-all border border-border-subtle cursor-pointer"
+            >
+              Todo
+            </button>
+          </div>
+
+          <!-- Búsqueda rápida de texto -->
+          <div class="relative flex-1 min-w-[200px]">
+            <Search size={16} class="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted opacity-50" />
+            <input
+              type="text"
+              placeholder="Buscar por N° mov, ref, banco..."
+              bind:value={movsSearch}
+              class="w-full bg-surface-raised border border-border-bold rounded-xl pl-9 pr-3 py-2 text-xs text-text-base outline-none focus:border-brand-500 transition-all"
+            />
+          </div>
+
+          <!-- Botón de consultar -->
+          <button
+            type="submit"
+            disabled={movsLoading}
+            class="flex items-center gap-2 px-5 py-2 rounded-xl bg-brand-600 hover:bg-brand-500 text-white font-bold text-xs shadow-lg shadow-brand-500/20 transition-all active:scale-95 disabled:opacity-50 cursor-pointer shrink-0"
+          >
+            {#if movsLoading}
+              <Loader2 size={15} class="animate-spin" />
+            {:else}
+              <RefreshCw size={15} />
+            {/if}
+            Consultar
+          </button>
+        </form>
+
+        <!-- Metrics Cards -->
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-3 pt-1">
+          <!-- Total Movimientos -->
+          <div class="p-3.5 rounded-2xl bg-surface-base border border-border-subtle">
+            <span class="text-[10px] font-black uppercase tracking-wider text-text-muted block mb-1">
+              Total Registros
+            </span>
+            <div class="flex items-baseline gap-2">
+              <span class="text-xl font-black font-mono text-text-base">
+                {movsMetrics.total_registros}
+              </span>
+              <span class="text-[10px] font-bold text-text-muted">
+                ({movsMetrics.total_conciliados} conc. · {movsMetrics.total_anulados} anul.)
+              </span>
+            </div>
+          </div>
+
+          <!-- Total Ingresos -->
+          <div class="p-3.5 rounded-2xl bg-emerald-500/5 border border-emerald-500/20">
+            <div class="flex items-center justify-between mb-1">
+              <span class="text-[10px] font-black uppercase tracking-wider text-emerald-400">
+                Ingresos
+              </span>
+              <TrendingUp size={13} class="text-emerald-400" />
+            </div>
+            <p class="text-sm md:text-base font-black font-mono text-emerald-400 truncate">
+              {formatCurrency(movsMetrics.total_ingresos_bs, "BS")}
+            </p>
+            {#if movsMetrics.total_ingresos_usd > 0}
+              <p class="text-[10px] font-mono font-bold text-emerald-400/80">
+                {formatCurrency(movsMetrics.total_ingresos_usd, "USD")}
+              </p>
+            {/if}
+          </div>
+
+          <!-- Total Egresos -->
+          <div class="p-3.5 rounded-2xl bg-rose-500/5 border border-rose-500/20">
+            <div class="flex items-center justify-between mb-1">
+              <span class="text-[10px] font-black uppercase tracking-wider text-rose-400">
+                Egresos + IDB
+              </span>
+              <TrendingDown size={13} class="text-rose-400" />
+            </div>
+            <p class="text-sm md:text-base font-black font-mono text-rose-400 truncate">
+              {formatCurrency(movsMetrics.total_egresos_bs + movsMetrics.total_idb_bs, "BS")}
+            </p>
+            {#if movsMetrics.total_egresos_usd > 0}
+              <p class="text-[10px] font-mono font-bold text-rose-400/80">
+                {formatCurrency(movsMetrics.total_egresos_usd, "USD")}
+              </p>
+            {/if}
+          </div>
+
+          <!-- Balance Neto -->
+          <div class="p-3.5 rounded-2xl bg-surface-base border border-border-subtle">
+            <span class="text-[10px] font-black uppercase tracking-wider text-text-muted block mb-1">
+              Balance Período
+            </span>
+            <p class="text-sm md:text-base font-black font-mono {movsBalanceBs >= 0 ? 'text-emerald-400' : 'text-rose-400'} truncate">
+              {formatCurrency(movsBalanceBs, "BS")}
+            </p>
+            <span class="text-[10px] font-bold text-text-muted">
+              {movsBalanceBs >= 0 ? 'Superávit neto' : 'Déficit neto'}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Movements Table Content -->
+      <div class="flex-1 overflow-y-auto min-h-[280px]">
+        {#if movsLoading}
+          <div class="p-16 flex flex-col items-center justify-center gap-3 text-text-muted">
+            <Loader2 size={36} class="animate-spin text-brand-500" />
+            <p class="text-sm font-bold">Cargando movimientos de la cuenta...</p>
+          </div>
+        {:else if movsList.length === 0}
+          <div class="p-16 flex flex-col items-center justify-center gap-3 text-center">
+            <div class="h-16 w-16 rounded-3xl bg-surface-soft border border-border-subtle flex items-center justify-center text-text-muted">
+              <Receipt size={32} />
+            </div>
+            <h4 class="text-lg font-bold text-text-base">Sin movimientos en el rango</h4>
+            <p class="text-xs text-text-muted max-w-md">
+              No se encontraron movimientos bancarios ni de caja asociados a <span class="font-bold text-brand-400 font-mono">{selectedAccountForMovs?.co_cta_ingr_egr}</span> para las fechas seleccionadas.
+            </p>
+          </div>
+        {:else}
+          <table class="w-full text-left border-collapse">
+            <thead class="sticky top-0 bg-surface-raised z-10 border-b border-border-subtle shadow-sm">
+              <tr class="text-[10px] font-black uppercase tracking-wider text-text-muted">
+                <th class="px-5 py-3">Tipo / N° Mov</th>
+                <th class="px-4 py-3">Fecha</th>
+                <th class="px-5 py-3">Banco / Cuenta / Origen</th>
+                <th class="px-5 py-3">Concepto / Descripción</th>
+                <th class="px-5 py-3 text-right">Monto</th>
+                <th class="px-5 py-3 text-center">Estado</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-border-subtle">
+              {#each movsList as mov}
+                {@const isIngreso = mov.naturaleza === 'INGRESO'}
+                {@const isIdb = mov.naturaleza === 'IDB'}
+                <tr class="hover:bg-surface-base/50 transition-colors text-xs {mov.anulado ? 'opacity-40 line-through' : ''}">
+                  <!-- Tipo / N° Mov -->
+                  <td class="px-5 py-3.5">
+                    <div class="flex items-center gap-2">
+                      <span
+                        class="px-2 py-0.5 rounded text-[10px] font-mono font-black uppercase tracking-tight
+                        {isIngreso ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/20' : 
+                         isIdb ? 'bg-amber-500/15 text-amber-400 border border-amber-500/20' : 
+                         'bg-rose-500/15 text-rose-400 border border-rose-500/20'}"
+                        title={mov.tipo_op_label}
+                      >
+                        {mov.tipo_op}
+                      </span>
+                      <div>
+                        <span class="font-mono font-bold text-text-base block">
+                          {mov.mov_num}
+                        </span>
+                        {#if mov.doc_num}
+                          <span class="text-[10px] text-text-muted font-mono">
+                            Ref: {mov.doc_num}
+                          </span>
+                        {/if}
+                      </div>
+                    </div>
+                  </td>
+
+                  <!-- Fecha -->
+                  <td class="px-4 py-3.5 whitespace-nowrap font-mono text-text-muted font-bold">
+                    {formatDate(mov.fecha)}
+                  </td>
+
+                  <!-- Banco / Cuenta / Origen -->
+                  <td class="px-5 py-3.5">
+                    <p class="font-bold text-text-base uppercase text-[11px] leading-tight truncate max-w-[200px]" title={mov.entidad_nombre}>
+                      {mov.entidad_nombre}
+                    </p>
+                    <div class="flex items-center gap-1.5 text-[10px] text-text-muted font-mono mt-0.5">
+                      <span>{mov.num_cta || mov.cuenta_origen_cod}</span>
+                      <span class="opacity-40">·</span>
+                      <span class="px-1 py-0.2 rounded bg-surface-soft uppercase text-[9px] font-bold">
+                        {mov.fuente}
+                      </span>
+                    </div>
+                  </td>
+
+                  <!-- Concepto / Descripción -->
+                  <td class="px-5 py-3.5">
+                    <p class="text-text-base text-xs font-semibold leading-tight line-clamp-2 uppercase" title={mov.descrip}>
+                      {mov.descrip || 'Sin descripción'}
+                    </p>
+                  </td>
+
+                  <!-- Monto -->
+                  <td class="px-5 py-3.5 text-right font-mono font-black whitespace-nowrap">
+                    {#if isIngreso}
+                      <span class="text-emerald-400">
+                        + {formatCurrency(mov.monto, mov.co_mone)}
+                      </span>
+                    {:else if isIdb}
+                      <span class="text-amber-400">
+                        - {formatCurrency(mov.monto, mov.co_mone)}
+                      </span>
+                    {:else}
+                      <span class="text-rose-400">
+                        - {formatCurrency(mov.monto, mov.co_mone)}
+                      </span>
+                    {/if}
+                  </td>
+
+                  <!-- Estado -->
+                  <td class="px-5 py-3.5 text-center">
+                    {#if mov.anulado}
+                      <span class="inline-block px-2 py-0.5 rounded text-[10px] font-bold bg-rose-500/15 text-rose-400 border border-rose-500/25 uppercase">
+                        Anulado
+                      </span>
+                    {:else if mov.conciliado}
+                      <span class="inline-block px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/25 uppercase">
+                        Conciliado
+                      </span>
+                    {:else}
+                      <span class="inline-block px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/15 text-amber-400 border border-amber-500/25 uppercase">
+                        Pendiente
+                      </span>
+                    {/if}
+                  </td>
+                </tr>
+              {/each}
+            </tbody>
+          </table>
+        {/if}
+      </div>
+
+      <!-- Modal Footer with Pagination -->
+      <div class="p-4 px-6 md:px-8 border-t border-border-subtle bg-surface-base/50 flex flex-col sm:flex-row items-center justify-between gap-3 shrink-0">
+        <p class="text-xs text-text-muted">
+          Mostrando <span class="font-bold text-text-base">{movsList.length}</span> de <span class="font-bold text-text-base">{movsPagination.total}</span> movimientos encontrados
+        </p>
+
+        <div class="flex items-center gap-3">
+          {#if movsPagination.totalPages > 1}
+            <div class="flex items-center gap-1">
+              <button
+                type="button"
+                onclick={() => loadAccountMovements(movsPagination.page - 1)}
+                disabled={movsPagination.page <= 1 || movsLoading}
+                class="px-3 py-1.5 rounded-xl bg-surface-soft hover:bg-surface-strong text-text-muted hover:text-text-base text-xs font-bold disabled:opacity-30 transition-all border border-border-subtle cursor-pointer disabled:cursor-not-allowed"
+              >
+                Anterior
+              </button>
+              <span class="px-2 text-xs font-mono font-bold text-text-muted">
+                {movsPagination.page} / {movsPagination.totalPages}
+              </span>
+              <button
+                type="button"
+                onclick={() => loadAccountMovements(movsPagination.page + 1)}
+                disabled={movsPagination.page >= movsPagination.totalPages || movsLoading}
+                class="px-3 py-1.5 rounded-xl bg-surface-soft hover:bg-surface-strong text-text-muted hover:text-text-base text-xs font-bold disabled:opacity-30 transition-all border border-border-subtle cursor-pointer disabled:cursor-not-allowed"
+              >
+                Siguiente
+              </button>
+            </div>
+          {/if}
+
+          <button
+            type="button"
+            onclick={() => (showMovementsModal = false)}
+            class="px-6 py-2.5 rounded-xl bg-surface-soft hover:bg-surface-strong text-text-muted hover:text-text-base text-xs font-bold transition-all border border-border-subtle cursor-pointer"
+          >
+            Cerrar
+          </button>
+        </div>
       </div>
     </div>
   </div>
