@@ -50,6 +50,11 @@ export function hasPermission(
     return false;
   }
 
+  // "authorize" jamás se hereda por nombre de rol (ni Administrador/Root): debe estar activo explícitamente en el módulo.
+  if (action === 'authorize') {
+    return profile.permissions[optionId]?.authorize === true;
+  }
+
   const isAdmin = profile.roles?.some((r: any) => 
     (typeof r === 'string' && (r.toLowerCase().includes('admin') || r.toLowerCase().includes('administrador'))) || 
     (typeof r === 'object' && (r.name?.toLowerCase().includes('admin') || r.name?.toLowerCase().includes('administrador')))
@@ -230,12 +235,87 @@ export async function getUserProfile(userId: string, fetchFn?: typeof fetch): Pr
       }
     }
 
+    let mergedPermissions: Record<string, CRUD> = rawData.permissions ?? {};
+    try {
+      const userRoleIds = Array.isArray(rawData.roles)
+        ? rawData.roles
+            .map((r: any) => (typeof r === 'object' ? r?.id : r))
+            .filter(Boolean)
+            .map(String)
+        : [];
+      if (userRoleIds.length > 0) {
+        let roleRows: any[] = [];
+        let loadedFromCloud = false;
+        if (!isOfflineFallback) {
+          try {
+            const { data: rData, error: rErr } = await supabaseAdmin
+              .from('roles')
+              .select('id, permissions')
+              .in('id', userRoleIds);
+            if (!rErr && Array.isArray(rData)) {
+              roleRows = rData;
+              loadedFromCloud = true;
+            }
+          } catch {
+            // Continuar a fallback local
+          }
+        }
+        if (!loadedFromCloud) {
+          try {
+            const { queryLocalDb } = await import('$lib/server/local-db');
+            const res = await queryLocalDb(
+              'SELECT id, permissions FROM roles WHERE id::text = ANY($1)',
+              [userRoleIds]
+            );
+            roleRows = res.rows || [];
+          } catch {
+            // Ignorar si BD local no está disponible
+          }
+        }
+
+        const authorizeModules = new Set<string>();
+        for (const rRow of roleRows) {
+          const rPerms = rRow?.permissions;
+          if (rPerms && typeof rPerms === 'object') {
+            for (const [modKey, modPerms] of Object.entries(rPerms)) {
+              if ((modPerms as any)?.authorize === true) {
+                authorizeModules.add(modKey);
+              }
+            }
+          }
+        }
+
+        const nextPerms: Record<string, CRUD> = {};
+        for (const [modKey, modVal] of Object.entries(mergedPermissions)) {
+          nextPerms[modKey] = {
+            ...(modVal as CRUD),
+            authorize: authorizeModules.has(modKey)
+          };
+        }
+        for (const modKey of authorizeModules) {
+          if (!nextPerms[modKey]) {
+            nextPerms[modKey] = {
+              read: true,
+              create: false,
+              update: false,
+              delete: false,
+              others: false,
+              authorize: true
+            };
+          }
+        }
+        mergedPermissions = nextPerms;
+      }
+    } catch {
+      // Ignorar fallo al fusionar permiso authorize desde roles
+    }
+
     const profile: Profile = {
       id:                rawData.id,
       full_name:         rawData.full_name ?? null,
       email:             rawData.email ?? null,
       active:            rawData.active ?? false,
-      permissions:       rawData.permissions ?? {},
+      permissions:       mergedPermissions,
       roles:             rawData.roles ?? [],
       allowed_branches:  enrichedBranches,
       allowed_warehouses: rawData.allowed_warehouses ?? [],

@@ -16,7 +16,7 @@
     id: string;
     email: string;
     full_name: string;
-    roles: string[];
+    roles?: string[];
   }
 
   let {
@@ -45,7 +45,7 @@
     currentUserEmail?: string;
     onAuthorized: (
       newValue: number,
-      authorizer: { email: string; full_name: string }
+      authorizer: { email: string; full_name: string },
     ) => void | Promise<void>;
     onCancel?: () => void;
   } = $props();
@@ -89,12 +89,13 @@
         const currMatch = authorizers.find(
           (a) =>
             currentUserEmail &&
-            a.email.toLowerCase() === currentUserEmail.trim().toLowerCase()
+            a.email.toLowerCase() === currentUserEmail.trim().toLowerCase(),
         );
         selectedEmail = currMatch?.email || authorizers[0]?.email || "";
       } else {
         authorizers = [];
-        errorMsg = json.message || "No se pudieron cargar los usuarios autorizadores.";
+        errorMsg =
+          json.message || "No se pudieron cargar los usuarios autorizadores.";
       }
     } catch (err: any) {
       authorizers = [];
@@ -157,7 +158,7 @@
       }
 
       toast.success(
-        `Edición autorizada por ${json.authorizer?.full_name || selectedEmail}`
+        `Edición autorizada por ${json.authorizer?.full_name || selectedEmail}`,
       );
       open = false;
       await onAuthorized(parsedValue, json.authorizer);
@@ -237,7 +238,8 @@
           >
             <span>{fieldLabel}</span>
             <span class="font-mono text-brand-400">
-              Actual: {currencySymbol} {Number(initialValue || 0).toLocaleString("de-DE", {
+              Actual: {currencySymbol}
+              {Number(initialValue || 0).toLocaleString("de-DE", {
                 minimumFractionDigits: 2,
                 maximumFractionDigits: 2,
               })}
@@ -286,25 +288,18 @@
             >
               {#each authorizers as authUser}
                 <option value={authUser.email}>
-                  {authUser.full_name} ({authUser.email}){authUser.roles?.length
-                    ? ` · ${authUser.roles.join(", ")}`
-                    : ""}
+                  {authUser.full_name && authUser.full_name !== authUser.email
+                    ? `${authUser.full_name} (${authUser.email})`
+                    : authUser.email}
                 </option>
               {/each}
             </select>
           {:else}
-            <div class="space-y-1.5">
-              <input
-                id="auth-user-select"
-                type="email"
-                required
-                placeholder="correo@autorizador.com"
-                bind:value={selectedEmail}
-                class="w-full h-12 bg-surface-base border border-border-bold rounded-2xl px-4 text-xs text-text-base focus:border-amber-500 outline-none transition-all"
-              />
-              <p class="text-[10px] text-amber-400/90 px-1">
-                No se detectaron otros usuarios con el permiso "Autorizar" activo en esta sucursal.
-              </p>
+            <div
+              class="p-3 rounded-2xl bg-amber-500/10 border border-amber-500/25 text-amber-600 dark:text-amber-300 text-xs font-semibold"
+            >
+              No hay usuarios con el permiso "Autorizar" habilitado para este
+              módulo en esta sucursal.
             </div>
           {/if}
         </div>
@@ -327,10 +322,13 @@
               id="auth-password"
               type="password"
               required
+              disabled={submitting ||
+                loadingAuthorizers ||
+                authorizers.length === 0}
               placeholder="Contraseña web del autorizador..."
               bind:value={password}
               autocomplete="off"
-              class="w-full h-12 bg-surface-base border border-border-bold rounded-2xl pl-11 pr-4 text-sm text-text-base focus:border-amber-500 outline-none transition-all font-mono"
+              class="w-full h-12 bg-surface-base border border-border-bold rounded-2xl pl-11 pr-4 text-sm text-text-base focus:border-amber-500 outline-none transition-all font-mono disabled:opacity-50"
             />
           </div>
         </div>
@@ -347,7 +345,9 @@
           </button>
           <button
             type="submit"
-            disabled={submitting || loadingAuthorizers}
+            disabled={submitting ||
+              loadingAuthorizers ||
+              authorizers.length === 0}
             class="flex-1 h-12 rounded-2xl font-black text-xs bg-amber-600 hover:bg-amber-500 text-white shadow-lg shadow-amber-500/20 transition-all active:scale-95 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
           >
             {#if submitting}
@@ -363,4 +363,3 @@
     </div>
   </div>
 {/if}
-

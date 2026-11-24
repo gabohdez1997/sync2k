@@ -2,28 +2,97 @@ import { json } from '@sveltejs/kit';
 import { createClient } from '@supabase/supabase-js';
 import { env as publicEnv } from '$env/dynamic/public';
 import { getSupabaseAdmin } from '$lib/server/supabase';
-import { hasPermission, type Profile } from '$lib/server/auth';
+import type { Profile } from '$lib/server/auth';
 import type { RequestHandler } from './$types';
 
-function isProfileAdmin(p: any): boolean {
-	return Boolean(
-		p?.roles?.some(
-			(r: any) =>
-				(typeof r === 'string' &&
-					(r.toLowerCase().includes('admin') || r.toLowerCase().includes('administrador'))) ||
-				(typeof r === 'object' &&
-					(r?.name?.toLowerCase().includes('admin') ||
-						r?.name?.toLowerCase().includes('administrador')))
-		)
-	);
+async function fetchRolesMap(fetchFn: typeof fetch): Promise<Map<string, any>> {
+	const map = new Map<string, any>();
+
+	try {
+		const supabaseAdmin = getSupabaseAdmin(fetchFn);
+		const { data, error } = await supabaseAdmin
+			.from('roles')
+			.select('id, name, permissions, branch_ids');
+
+		if (!error && Array.isArray(data)) {
+			for (const role of data) {
+				if (role?.id) {
+					map.set(String(role.id).toLowerCase(), role);
+				}
+			}
+			return map;
+		}
+	} catch {
+		// Continuar a fallback local
+	}
+
+	try {
+		const { queryLocalDb } = await import('$lib/server/local-db');
+		const res = await queryLocalDb('SELECT id, name, permissions, branch_ids FROM roles', []);
+		for (const role of res.rows || []) {
+			if (role?.id) {
+				map.set(String(role.id).toLowerCase(), role);
+			}
+		}
+	} catch {
+		// Ignorar
+	}
+
+	return map;
 }
 
-function hasBranchAccess(p: any, branchId: string): boolean {
-	if (!branchId) return true;
-	if (isProfileAdmin(p)) return true;
-	const branches = Array.isArray(p?.allowed_branches) ? p.allowed_branches : [];
-	if (branches.length === 0) return false;
-	return branches.some((b: any) => String(b?.id || '').toLowerCase() === branchId.toLowerCase());
+function canProfileAuthorizeModule(
+	p: Profile,
+	module: string,
+	branchId: string,
+	rolesMap: Map<string, any>
+): boolean {
+	const cleanModule = String(module || '').trim();
+	if (!cleanModule) return false;
+
+	const userRoles = Array.isArray(p?.roles) ? p.roles : [];
+	if (userRoles.length === 0) return false;
+
+	const authorizingRoles: any[] = [];
+	for (const r of userRoles) {
+		const roleId = typeof r === 'object' ? String(r?.id || '').trim().toLowerCase() : '';
+		let roleObj = roleId ? rolesMap.get(roleId) : undefined;
+
+		if (!roleObj && typeof r === 'string') {
+			const cleanRef = r.trim().toLowerCase();
+			roleObj =
+				rolesMap.get(cleanRef) ||
+				Array.from(rolesMap.values()).find(
+					(candidate) => String(candidate?.name || '').trim().toLowerCase() === cleanRef
+				);
+		}
+
+		if (roleObj?.permissions?.[cleanModule]?.authorize === true) {
+			authorizingRoles.push(roleObj);
+		}
+	}
+
+	if (authorizingRoles.length === 0) {
+		return false;
+	}
+
+	const cleanBranchId = String(branchId || '').trim().toLowerCase();
+	if (!cleanBranchId) {
+		return true;
+	}
+
+	const profileBranchIds = new Set(
+		(Array.isArray(p?.allowed_branches) ? p.allowed_branches : [])
+			.map((b: any) => String(b?.id || '').trim().toLowerCase())
+			.filter(Boolean)
+	);
+
+	return authorizingRoles.some((roleObj) => {
+		const roleBranchIds = Array.isArray(roleObj?.branch_ids)
+			? roleObj.branch_ids.map((id: any) => String(id || '').trim().toLowerCase()).filter(Boolean)
+			: [];
+		return roleBranchIds.includes(cleanBranchId) || profileBranchIds.has(cleanBranchId);
+	});
 }
 
 async function fetchActiveProfiles(fetchFn: typeof fetch): Promise<Profile[]> {
@@ -97,18 +166,17 @@ export const GET: RequestHandler = async ({ url, locals, fetch }) => {
 	}
 
 	try {
-		const allProfiles = await fetchActiveProfiles(fetch);
+		const [allProfiles, rolesMap] = await Promise.all([
+			fetchActiveProfiles(fetch),
+			fetchRolesMap(fetch)
+		]);
 		const authorizers = allProfiles
 			.filter((p) => p && p.active && p.email)
-			.filter((p) => hasPermission(p, module, 'authorize'))
-			.filter((p) => hasBranchAccess(p, branchId))
+			.filter((p) => canProfileAuthorizeModule(p, module, branchId, rolesMap))
 			.map((p) => ({
 				id: p.id,
 				email: p.email,
-				full_name: p.full_name || p.email,
-				roles: Array.isArray(p.roles)
-					? p.roles.map((r: any) => (typeof r === 'string' ? r : r?.name)).filter(Boolean)
-					: []
+				full_name: p.full_name || p.email
 			}))
 			.sort((a, b) => String(a.full_name).localeCompare(String(b.full_name)));
 
@@ -143,7 +211,10 @@ export const POST: RequestHandler = async ({ request, locals, fetch }) => {
 			);
 		}
 
-		const authorizerProfile = await fetchProfileByEmail(authorizerEmail, fetch);
+		const [authorizerProfile, rolesMap] = await Promise.all([
+			fetchProfileByEmail(authorizerEmail, fetch),
+			fetchRolesMap(fetch)
+		]);
 		if (!authorizerProfile || !authorizerProfile.email) {
 			return json(
 				{ success: false, message: 'Usuario autorizador no encontrado.' },
@@ -158,14 +229,14 @@ export const POST: RequestHandler = async ({ request, locals, fetch }) => {
 			);
 		}
 
-		if (!hasPermission(authorizerProfile, module, 'authorize')) {
+		if (!canProfileAuthorizeModule(authorizerProfile, module, '', rolesMap)) {
 			return json(
 				{ success: false, message: 'El usuario seleccionado no tiene permiso de Autorizar en este módulo.' },
 				{ status: 403 }
 			);
 		}
 
-		if (!hasBranchAccess(authorizerProfile, branchId)) {
+		if (branchId && !canProfileAuthorizeModule(authorizerProfile, module, branchId, rolesMap)) {
 			return json(
 				{ success: false, message: 'El usuario autorizador no tiene acceso a esta sucursal.' },
 				{ status: 403 }
