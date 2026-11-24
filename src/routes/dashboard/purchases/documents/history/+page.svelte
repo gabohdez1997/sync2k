@@ -20,7 +20,8 @@
     Pen,
     ArrowUpDown,
     ArrowUp,
-    ArrowDown
+    ArrowDown,
+    Landmark
   } from "lucide-svelte";
   import { goto } from "$app/navigation";
   import { page } from "$app/stores";
@@ -64,6 +65,7 @@
     if (t === "FACT") return "bg-brand-500/10 text-brand-500 border-brand-500/20";
     if (t === "N/CR") return "bg-emerald-500/10 text-emerald-500 border-emerald-500/20";
     if (t === "N/DB") return "bg-amber-500/10 text-amber-500 border-amber-500/20";
+    if (["ADEL", "AJNM", "AJPM", "AJPA", "AJNA"].includes(t)) return "bg-violet-500/10 text-violet-400 border-violet-500/20";
     if (t === "IVAN" || t === "ISLR") return "bg-blue-500/10 text-blue-400 border-blue-500/20";
     return "bg-surface-soft text-text-muted border-border-subtle";
   }
@@ -548,6 +550,11 @@
                           Ctrl: {doc.n_control}
                         </span>
                       {/if}
+                      {#if doc.mov_ban && String(doc.mov_ban).trim()}
+                        <span class="text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded-md bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 inline-flex items-center gap-1" title="Movimiento Bancario Asociado">
+                          <Landmark size={9} /> Mov. Banco: {String(doc.mov_ban).trim()}
+                        </span>
+                      {/if}
                     </div>
                   </div>
                 </td>
@@ -808,6 +815,44 @@
             <div class="bg-surface-soft p-4 rounded-2xl border border-border-subtle space-y-1">
               <span class="text-[9px] font-black uppercase text-text-muted">Concepto / Observaciones</span>
               <p class="font-semibold text-text-base uppercase">{selectedDocDetail.observa}</p>
+            </div>
+          {/if}
+
+          {#if selectedDocDetail.mov_ban && String(selectedDocDetail.mov_ban).trim()}
+            <div class="bg-emerald-500/5 p-4 rounded-2xl border border-emerald-500/25 space-y-3">
+              <div class="flex items-center justify-between gap-2">
+                <span class="text-[10px] font-black uppercase tracking-wider text-emerald-400 flex items-center gap-1.5">
+                  <Landmark size={13} />
+                  Movimiento Bancario Asociado
+                </span>
+                <span class={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase ${selectedDocDetail.mov_ban_anulado ? 'bg-red-500/10 text-red-400' : 'bg-emerald-500/15 text-emerald-400'}`}>
+                  {selectedDocDetail.mov_ban_anulado ? "Anulado" : "Activo"}
+                </span>
+              </div>
+              <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                <div>
+                  <span class="text-[9px] font-black uppercase text-text-muted block">N° Movimiento</span>
+                  <span class="font-mono font-black text-emerald-400">{String(selectedDocDetail.mov_ban).trim()}</span>
+                </div>
+                <div>
+                  <span class="text-[9px] font-black uppercase text-text-muted block">Banco / Cuenta</span>
+                  <span class="font-bold text-text-base truncate block">
+                    {selectedDocDetail.mov_ban_des_ban || selectedDocDetail.mov_ban_cod_cta || "N/D"}
+                  </span>
+                </div>
+                <div>
+                  <span class="text-[9px] font-black uppercase text-text-muted block">Operación / Ref.</span>
+                  <span class="font-mono font-bold text-text-base">
+                    {selectedDocDetail.mov_ban_tipo_op || "TR"} • {selectedDocDetail.mov_ban_doc_num || "---"}
+                  </span>
+                </div>
+                <div>
+                  <span class="text-[9px] font-black uppercase text-text-muted block">Fecha / Monto</span>
+                  <span class="font-mono font-bold text-text-base block">
+                    {formatDate(selectedDocDetail.mov_ban_fecha)} • {(String(selectedDocDetail.mov_ban_co_mone || '').toUpperCase().includes('US') || String(selectedDocDetail.mov_ban_co_mone || '').includes('$')) ? '$' : 'Bs.'} {formatNumber(selectedDocDetail.mov_ban_monto_d)}
+                  </span>
+                </div>
+              </div>
             </div>
           {/if}
 

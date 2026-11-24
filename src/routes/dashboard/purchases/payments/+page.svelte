@@ -68,9 +68,69 @@
     return r2((Number(bs) || 0) / getRate());
   }
 
+  const CREDIT_DOC_TYPES = ["N/CR", "NCR", "AJNA", "AJNM", "ADEL", "AJPA", "AJPM"];
+  const ADVANCE_DOC_TYPES = ["ADEL", "AJNM", "AJPA", "AJPM", "AJNA"];
+
+  function docKey(doc: any): string {
+    const t = String(doc?.co_tipo_doc || "").trim().toUpperCase();
+    const n = String(doc?.nro_doc || "").trim();
+    return `${t}::${n}`;
+  }
+
   function isNcDoc(doc: any): boolean {
     const t = doc?.co_tipo_doc?.trim()?.toUpperCase();
-    return t === "N/CR" || t === "NCR" || t === "AJPA" || t === "AJNA";
+    return CREDIT_DOC_TYPES.includes(t);
+  }
+
+  function isAdvanceDoc(doc: any): boolean {
+    const t = doc?.co_tipo_doc?.trim()?.toUpperCase();
+    return ADVANCE_DOC_TYPES.includes(t);
+  }
+
+  function getCreditDocPriority(tipo: string | undefined | null): number {
+    const t = (tipo || "").trim().toUpperCase();
+    if (t === "N/CR" || t === "NCR") return 1;
+    if (t === "AJNA") return 2;
+    if (t === "ADEL" || t === "AJNM" || t === "AJPA" || t === "AJPM") return 3;
+    return 4;
+  }
+
+  function getDocTypeBadge(co_tipo_doc: string) {
+    const t = (co_tipo_doc || "").trim().toUpperCase();
+    if (t === "ADEL") {
+      return {
+        label: "Anticipo / Adelanto",
+        class: "bg-emerald-500/15 text-emerald-500 border border-emerald-500/30",
+      };
+    }
+    if (t === "AJNM" || t === "AJNA") {
+      return {
+        label: t === "AJNM" ? "Anticipo / Ajuste (-)" : "Ajuste (-) Aut.",
+        class: "bg-emerald-500/15 text-emerald-500 border border-emerald-500/30",
+      };
+    }
+    if (t === "AJPA" || t === "AJPM") {
+      return {
+        label: t === "AJPA" ? "Anticipo / Excedente" : "Ajuste (+) Manual",
+        class: "bg-cyan-500/15 text-cyan-400 border border-cyan-500/30",
+      };
+    }
+    if (t === "N/CR" || t === "NCR") {
+      return {
+        label: "Nota de Crédito",
+        class: "bg-teal-500/15 text-teal-400 border border-teal-500/30",
+      };
+    }
+    if (t === "N/DB" || t === "NDEB" || t === "GIRO") {
+      return {
+        label: t === "GIRO" ? "Giro" : "Nota de Débito",
+        class: "bg-amber-500/15 text-amber-400 border border-amber-500/30",
+      };
+    }
+    return {
+      label: "Factura",
+      class: "bg-brand-500/10 text-brand-400 border border-brand-500/20",
+    };
   }
 
   function getPorcRetIva(): number {
@@ -327,16 +387,16 @@
       : (supplierConceptos.find((c: any) => c.co_islr.trim() === '055') || supplierConceptos[0]);
 
     documentos.forEach((doc) => {
-      const nro = doc.nro_doc.trim();
-      const inp = docInputs[nro];
-      if (inp && defaultConceptObj) {
+      const k = docKey(doc);
+      const inp = docInputs[k];
+      if (inp && defaultConceptObj && !isAdvanceDoc(doc)) {
         inp.co_islr = defaultConceptObj.co_islr.trim();
         const { porcRet, porcImp, sustraen } = resolveConceptValues(defaultConceptObj, inp.co_islr, currentTab);
         inp.porc_islr = porcRet;
         inp.porc_base_islr = porcImp;
         inp.sustraendo_islr_bs = sustraen;
         inp.manual_override_islr = false;
-        recalculateDocAmounts(nro, doc, false);
+        recalculateDocAmounts(k, doc, false);
       }
     });
     syncSinglePaymentInstrument();
@@ -368,8 +428,8 @@
     timbreUsd: number;
     baseBs: number;
   } {
-    const nro = doc?.nro_doc?.trim();
-    const inp = nro ? docInputs[nro] : null;
+    const k = doc ? docKey(doc) : "";
+    const inp = k ? docInputs[k] : null;
     if (
       (!aplicarTimbreFiscal && !inp?.manual_override_timbre) ||
       !doc ||
@@ -384,7 +444,20 @@
     return { timbreBs, timbreUsd: toUsd(timbreBs), baseBs };
   }
 
-  // Documentos cargados del proveedor
+  // Modo de operación: Pagar Documentos vs Registrar Anticipo Directo
+  let paymentMode = $state<"documents" | "advance">("documents");
+  let advanceDocType = $state<"ADEL" | "AJPA" | "AJNM">("ADEL");
+  let advanceDescrip = $state("");
+  let advanceCtaIngrEgr = $state("");
+  let paymentCtaIngrEgr = $state("");
+  let showSupplierSearchModal = $state(false);
+  let supplierSearchInput = $state("");
+  let searchingSuppliers = $state(false);
+  let supplierResults = $state<any[]>([]);
+  let generatedAdvanceDoc = $state<{ co_tipo_doc: string; nro_doc: string; saldo?: number } | null>(null);
+  let generatedMovBan = $state<string | null>(null);
+
+  // Documentos cargados del proveedor (keyed por `${co_tipo_doc}::${nro_doc}`)
   let documentos = $state<any[]>([]);
   let checkedDocs = $state<Record<string, boolean>>({});
 
@@ -445,46 +518,87 @@
 
   let formasPago = $state<any[]>([]);
 
-  // Reactivo: Auto-distribuir el total de instrumentos de pago y notas de crédito a las facturas seleccionadas
-  // Reactivo: Auto-distribuir el total de instrumentos de pago y notas de crédito a las facturas seleccionadas
+  // Prorrateo secuencial de créditos y anticipos seleccionados contra las facturas
+  let creditAllocations = $derived.by(() => {
+    const map: Record<string, {
+      netCreditBs: number;
+      appliedBs: number;
+      appliedUsd: number;
+      remainingBs: number;
+      remainingUsd: number;
+      isPartial: boolean;
+    }> = {};
+    if (paymentMode === "advance") return map;
+
+    let remainingNeedBs = totalFacturasNetoBs;
+    const checkedCredits = documentos
+      .filter((d) => checkedDocs[docKey(d)] && isNcDoc(d))
+      .sort((a, b) => {
+        const prio = getCreditDocPriority(a.co_tipo_doc) - getCreditDocPriority(b.co_tipo_doc);
+        if (prio !== 0) return prio;
+        return new Date(a.fec_emis || 0).getTime() - new Date(b.fec_emis || 0).getTime();
+      });
+
+    for (const doc of checkedCredits) {
+      const k = docKey(doc);
+      const inp = docInputs[k];
+      const saldoBs = r2(doc.saldo);
+      const retIvaBs = inp ? getAppliedRetIvaBs(inp) : 0;
+      const retIslrBs = inp ? getAppliedRetIslrBs(inp) : 0;
+      const netCreditBs = Math.max(0, r2(saldoBs - retIvaBs - retIslrBs));
+      const appliedBs = r2(Math.min(netCreditBs, remainingNeedBs));
+      const remainingBs = r2(Math.max(0, netCreditBs - appliedBs));
+      remainingNeedBs = r2(Math.max(0, remainingNeedBs - appliedBs));
+      map[k] = {
+        netCreditBs,
+        appliedBs,
+        appliedUsd: toUsd(appliedBs),
+        remainingBs,
+        remainingUsd: toUsd(remainingBs),
+        isPartial: appliedBs > 0.005 && remainingBs > 0.005,
+      };
+    }
+    return map;
+  });
+
+  let selectedDocsWithCta = $derived.by(() => {
+    if (paymentMode === "advance") {
+      return [] as Array<{ label: string; code: string; descrip: string }>;
+    }
+    return documentos
+      .filter((d) => checkedDocs[docKey(d)])
+      .map((doc) => ({
+        label: `${String(doc.co_tipo_doc || "").trim()} ${String(doc.nro_doc || "").trim()}`.trim(),
+        code: String(doc.co_cta_ingr_egr || "").trim(),
+        descrip: String(doc.des_cta_ingr_egr || "").trim(),
+      }))
+      .filter((d) => d.code !== "");
+  });
+
+  // Reactivo: Auto-distribuir el total de instrumentos de pago y anticipos/notas de crédito a las facturas seleccionadas
   // (todo en Bs, que es la moneda en la que se liquida la factura)
   $effect(() => {
-    // 1. Saldo a favor aportado por Notas de Crédito seleccionadas (descontando retenciones aplicadas en la misma N/CR)
-    let creditFromNCsBs = 0;
-    for (const doc of documentos) {
-      if (!checkedDocs[doc.nro_doc.trim()]) continue;
-      if (isNcDoc(doc)) {
-        const inp = docInputs[doc.nro_doc.trim()];
-        const retIvaBs = inp ? getAppliedRetIvaBs(inp) : 0;
-        const retIslrBs = inp ? getAppliedRetIslrBs(inp) : 0;
-        creditFromNCsBs += Math.max(0, r2(r2(doc.saldo) - retIvaBs - retIslrBs));
-      }
-    }
+    if (paymentMode === "advance") return;
 
-    // 2. Fondo disponible total para aplicar a facturas/deudas (Instrumentos + Notas de Crédito)
-    let remainingPaymentBs = r2(totalInstrumentosPagoBs + creditFromNCsBs);
+    // 1. Fondo disponible total para aplicar a facturas/deudas (Instrumentos + Créditos/Anticipos aplicados)
+    let remainingPaymentBs = r2(totalInstrumentosPagoBs + creditoNcAplicadoBs);
 
-    // 3. Procesar todos los documentos cargados
+    // 2. Procesar todos los documentos cargados
     for (const doc of documentos) {
-      const nro = doc.nro_doc.trim();
-      const inp = docInputs[nro];
+      const k = docKey(doc);
+      const inp = docInputs[k];
       if (!inp) continue;
 
-      if (!checkedDocs[nro]) {
+      if (!checkedDocs[k]) {
         inp.mont_cob = 0;
         inp.mont_cob_bs = 0;
         continue;
       }
 
       if (isNcDoc(doc)) {
-        // La N/CR amortiza facturas únicamente hasta el monto neto que las facturas requieren
-        const saldoBs = r2(doc.saldo);
-        const retIvaBs = getAppliedRetIvaBs(inp);
-        const retIslrBs = getAppliedRetIslrBs(inp);
-        const netCreditBs = Math.max(0, r2(saldoBs - retIvaBs - retIslrBs));
-        const appliedToInvoicesBs = Math.min(netCreditBs, totalFacturasNetoBs);
-        inp.mont_cob_bs = -appliedToInvoicesBs;
-        inp.mont_cob = -toUsd(appliedToInvoicesBs);
+        const allocBs = creditAllocations[k]?.appliedBs ?? 0;
+        inp.mont_cob_bs = -allocBs;
+        inp.mont_cob = -toUsd(allocBs);
       } else {
         const retTimbreBs = getDocTimbreFiscal(doc).timbreBs;
         const maxAbonoBs = Math.max(
@@ -506,25 +620,28 @@
 
   // Monto neto esperado a pagar en efectivo/instrumentos (Bs exactos de la factura)
   let expectedNetPayBs = $derived(
-    r2(
-      documentos.reduce((acc, doc) => {
-        if (checkedDocs[doc.nro_doc.trim()]) {
-          const saldoBs = r2(doc.saldo);
-          if (isNcDoc(doc)) {
-            const inp = docInputs[doc.nro_doc.trim()];
-            const retIvaBs = inp ? getAppliedRetIvaBs(inp) : 0;
-            const retIslrBs = inp ? getAppliedRetIslrBs(inp) : 0;
-            return acc - Math.max(0, r2(saldoBs - retIvaBs - retIslrBs));
-          }
-          const inp = docInputs[doc.nro_doc.trim()];
-          if (inp) {
-            const retTimbreBs = getDocTimbreFiscal(doc).timbreBs;
-            return acc + Math.max(0, r2(saldoBs - getAppliedRetIvaBs(inp) - getAppliedRetIslrBs(inp) - retTimbreBs));
-          }
-        }
-        return acc;
-      }, 0),
-    ),
+    paymentMode === "advance"
+      ? totalInstrumentosPagoBs
+      : r2(
+          documentos.reduce((acc, doc) => {
+            const k = docKey(doc);
+            if (checkedDocs[k]) {
+              const saldoBs = r2(doc.saldo);
+              if (isNcDoc(doc)) {
+                const inp = docInputs[k];
+                const retIvaBs = inp ? getAppliedRetIvaBs(inp) : 0;
+                const retIslrBs = inp ? getAppliedRetIslrBs(inp) : 0;
+                return acc - Math.max(0, r2(saldoBs - retIvaBs - retIslrBs));
+              }
+              const inp = docInputs[k];
+              if (inp) {
+                const retTimbreBs = getDocTimbreFiscal(doc).timbreBs;
+                return acc + Math.max(0, r2(saldoBs - getAppliedRetIvaBs(inp) - getAppliedRetIslrBs(inp) - retTimbreBs));
+              }
+            }
+            return acc;
+          }, 0),
+        ),
   );
 
   let expectedNetPayUsd = $derived(toUsd(expectedNetPayBs));
@@ -533,8 +650,9 @@
   let totalCobradoNetoBs = $derived(
     r2(
       documentos.reduce((acc, doc) => {
-        if (checkedDocs[doc.nro_doc.trim()]) {
-          const inp = docInputs[doc.nro_doc.trim()];
+        const k = docKey(doc);
+        if (checkedDocs[k]) {
+          const inp = docInputs[k];
           return acc + (Number(inp?.mont_cob_bs) || 0);
         }
         return acc;
@@ -548,8 +666,9 @@
   let totalRetenidoIvaBs = $derived(
     r2(
       documentos.reduce((acc, doc) => {
-        if (checkedDocs[doc.nro_doc.trim()]) {
-          return acc + getAppliedRetIvaBs(docInputs[doc.nro_doc.trim()]);
+        const k = docKey(doc);
+        if (checkedDocs[k]) {
+          return acc + getAppliedRetIvaBs(docInputs[k]);
         }
         return acc;
       }, 0),
@@ -561,13 +680,14 @@
   let totalRetenidoIvaVistaBs = $derived(
     r2(
       documentos.reduce((acc, doc) => {
-        if (checkedDocs[doc.nro_doc.trim()]) {
-          const inp = docInputs[doc.nro_doc.trim()];
+        const k = docKey(doc);
+        if (checkedDocs[k]) {
+          const inp = docInputs[k];
           if (inp?.yaTieneRetIva) {
             return acc + (Number(inp.monto_ret_iva_previo_bs) || 0);
           } else if (inp?.showIvaDetails) {
             return acc + r2(inp.reten_iva_bs);
-          } else {
+          } else if (!isAdvanceDoc(doc)) {
             // Retención teórica sobre el IVA en Bs de la factura
             return acc + r2((Number(doc.monto_imp) || 0) * (getPorcRetIva() / 100));
           }
@@ -583,8 +703,9 @@
   let totalRetenidoIslrBs = $derived(
     r2(
       documentos.reduce((acc, doc) => {
-        if (checkedDocs[doc.nro_doc.trim()]) {
-          return acc + getAppliedRetIslrBs(docInputs[doc.nro_doc.trim()]);
+        const k = docKey(doc);
+        if (checkedDocs[k]) {
+          return acc + getAppliedRetIslrBs(docInputs[k]);
         }
         return acc;
       }, 0),
@@ -596,8 +717,9 @@
   let totalRetenidoIslrVistaBs = $derived(
     r2(
       documentos.reduce((acc, doc) => {
-        if (checkedDocs[doc.nro_doc.trim()]) {
-          const inp = docInputs[doc.nro_doc.trim()];
+        const k = docKey(doc);
+        if (checkedDocs[k]) {
+          const inp = docInputs[k];
           if (inp?.yaTieneRetIslr) {
             return acc + (Number(inp.monto_ret_islr_previo_bs) || 0);
           } else if (inp?.showIslrDetails) {
@@ -632,7 +754,7 @@
   let totalBaseTimbreBs = $derived(
     r2(
       documentos.reduce((acc, doc) => {
-        if (checkedDocs[doc.nro_doc.trim()] && !isNcDoc(doc)) {
+        if (checkedDocs[docKey(doc)] && !isNcDoc(doc)) {
           return acc + getDocTimbreFiscal(doc).baseBs;
         }
         return acc;
@@ -643,7 +765,7 @@
   let totalTimbreFiscalBs = $derived(
     r2(
       documentos.reduce((acc, doc) => {
-        if (checkedDocs[doc.nro_doc.trim()] && !isNcDoc(doc)) {
+        if (checkedDocs[docKey(doc)] && !isNcDoc(doc)) {
           return acc + getDocTimbreFiscal(doc).timbreBs;
         }
         return acc;
@@ -657,8 +779,9 @@
   let totalFacturasNetoBs = $derived(
     r2(
       documentos.reduce((acc, doc) => {
-        if (!checkedDocs[doc.nro_doc.trim()] || isNcDoc(doc)) return acc;
-        const inp = docInputs[doc.nro_doc.trim()];
+        const k = docKey(doc);
+        if (!checkedDocs[k] || isNcDoc(doc)) return acc;
+        const inp = docInputs[k];
         const saldoBs = r2(doc.saldo);
         const retIvaBs = inp ? getAppliedRetIvaBs(inp) : 0;
         const retIslrBs = inp ? getAppliedRetIslrBs(inp) : 0;
@@ -670,12 +793,13 @@
 
   let totalFacturasNetoUsd = $derived(toUsd(totalFacturasNetoBs));
 
-  // Total crédito aportado por Notas de Crédito / AJPA seleccionadas (después de retenciones)
+  // Total crédito aportado por Notas de Crédito / Anticipos seleccionados (después de retenciones)
   let totalCreditoDisponibleBs = $derived(
     r2(
       documentos.reduce((acc, doc) => {
-        if (!checkedDocs[doc.nro_doc.trim()] || !isNcDoc(doc)) return acc;
-        const inp = docInputs[doc.nro_doc.trim()];
+        const k = docKey(doc);
+        if (!checkedDocs[k] || !isNcDoc(doc)) return acc;
+        const inp = docInputs[k];
         const saldoBs = r2(doc.saldo);
         const retIvaBs = inp ? getAppliedRetIvaBs(inp) : 0;
         const retIslrBs = inp ? getAppliedRetIslrBs(inp) : 0;
@@ -686,14 +810,14 @@
 
   let totalCreditoDisponibleUsd = $derived(toUsd(totalCreditoDisponibleBs));
 
-  // Crédito de N/CR que realmente se aplica a las facturas seleccionadas
+  // Crédito / Anticipo que realmente se aplica a las facturas seleccionadas
   let creditoNcAplicadoBs = $derived(
     r2(Math.min(totalCreditoDisponibleBs, totalFacturasNetoBs))
   );
 
   let creditoNcAplicadoUsd = $derived(toUsd(creditoNcAplicadoBs));
 
-  // Excedente de la N/CR que NO se consume y permanece como saldo pendiente en la misma N/CR
+  // Excedente de la N/CR o Anticipo que NO se consume y permanece disponible en Profit Plus
   let creditoNcExcedenteBs = $derived(
     r2(Math.max(0, totalCreditoDisponibleBs - totalFacturasNetoBs))
   );
@@ -709,33 +833,45 @@
 
   // Excedente cuando el monto ingresado en instrumentos de pago es MAYOR a la sumatoria neta de las facturas
   let excedentePagoBs = $derived(
-    r2(Math.max(0, totalInstrumentosPagoBs - montoNetoAPagarBs))
+    paymentMode === "advance"
+      ? totalInstrumentosPagoBs
+      : r2(Math.max(0, totalInstrumentosPagoBs - montoNetoAPagarBs))
   );
 
   let excedentePagoUsd = $derived(toUsd(excedentePagoBs));
 
-  // Solo se genera AJPA cuando se ingresa un pago en efectivo/banco mayor a la sumatoria de las facturas
+  // Solo se genera AJPA por excedente cuando se paga documentos y sobra efectivo/banco
   let hasPaymentSurplus = $derived(
-    totalInstrumentosPagoBs > montoNetoAPagarBs + 0.05
+    paymentMode !== "advance" && totalInstrumentosPagoBs > montoNetoAPagarBs + 0.05
   );
 
   // Saldo pendiente por pagar (Bs exactos del documento)
   let saldoPendientePorCobrarBs = $derived(
-    hasPaymentSurplus ? 0 : r2(Math.max(0, montoNetoAPagarBs - totalInstrumentosPagoBs))
+    paymentMode === "advance" || hasPaymentSurplus ? 0 : r2(Math.max(0, montoNetoAPagarBs - totalInstrumentosPagoBs))
   );
 
   let saldoPendientePorCobrar = $derived(toUsd(saldoPendientePorCobrarBs));
 
   // Cuadre: si hay excedente en instrumentos, se cuadra generando el AJPA
   let diferenciaCuadreBs = $derived(
-    hasPaymentSurplus ? 0 : r2(Math.abs(montoNetoAPagarBs - totalInstrumentosPagoBs))
+    paymentMode === "advance" || hasPaymentSurplus ? 0 : r2(Math.abs(montoNetoAPagarBs - totalInstrumentosPagoBs))
   );
 
   let diferenciaCuadre = $derived(toUsd(diferenciaCuadreBs));
 
-  // Condición para habilitar Guardar Pago
+  // Condición para habilitar Guardar Pago / Anticipo Directo
   let canSave = $derived.by(() => {
-    if (saving) return false;
+    if (saving || !selectedSupplier) return false;
+
+    if (paymentMode === "advance") {
+      if (totalInstrumentosPagoBs <= 0.01) return false;
+      return formasPago.some(
+        (fp) =>
+          (Number(fp.mont_doc_bs) || 0) > 0.01 &&
+          (fp.forma_pag === "EF" ? Boolean(fp.cod_caja) : Boolean(fp.cod_cta)),
+      );
+    }
+
     const selectedCount = Object.values(checkedDocs).filter(Boolean).length;
     if (selectedCount === 0) return false;
 
@@ -744,7 +880,7 @@
       return true;
     }
 
-    // Caso 2: Sin instrumentos de pago (pago parcial exclusivamente de retenciones o cubierto 100% por N/CR)
+    // Caso 2: Sin instrumentos de pago (pago parcial exclusivamente de retenciones o cubierto 100% por N/CR / Anticipo)
     if (totalInstrumentosPagoBs === 0) {
       const hasRetentions =
         totalRetenidoIvaBs > 0 ||
@@ -793,8 +929,9 @@
     doc: any,
     lineIndex = -1,
   ) {
+    const k = docKey(doc);
     const nro = doc?.nro_doc?.trim() || "";
-    const inp = docInputs[nro];
+    const inp = docInputs[k];
     if (!inp) return;
 
     if (kind === "IVA") {
@@ -844,8 +981,8 @@
   ) {
     const doc = retAuthModal.doc;
     if (!doc) return;
-    const nro = doc.nro_doc.trim();
-    const inp = docInputs[nro];
+    const k = docKey(doc);
+    const inp = docInputs[k];
     if (!inp) return;
     const authName = authorizer.full_name || authorizer.email;
     const rounded = Math.max(0, Math.round(Number(newVal || 0) * 100) / 100);
@@ -854,7 +991,7 @@
       inp.reten_iva_bs = rounded;
       inp.manual_override_iva = true;
       inp.authorized_iva_by = authName;
-      recalculateDocAmounts(nro, doc, true);
+      recalculateDocAmounts(k, doc, true);
     } else if (retAuthModal.kind === "ISLR") {
       ensureIslrLines(inp, doc);
       const idx = retAuthModal.lineIndex >= 0 ? retAuthModal.lineIndex : 0;
@@ -864,13 +1001,13 @@
         inp.islr_lines[idx].authorized_by = authName;
       }
       inp.manual_override_islr = true;
-      recalculateDocAmounts(nro, doc, true);
+      recalculateDocAmounts(k, doc, true);
     } else if (retAuthModal.kind === "TIMBRE") {
       aplicarTimbreFiscal = true;
       inp.reten_timbre_bs = rounded;
       inp.manual_override_timbre = true;
       inp.authorized_timbre_by = authName;
-      recalculateDocAmounts(nro, doc, true);
+      recalculateDocAmounts(k, doc, true);
     }
   }
 
@@ -954,6 +1091,86 @@
     }
   });
 
+  // Cambio entre Pagar Documentos vs Registrar Anticipo Directo
+  function switchPaymentMode(mode: "documents" | "advance") {
+    if (paymentMode === mode) return;
+    paymentMode = mode;
+    if (mode === "advance") {
+      checkedDocs = {};
+      if (selectedSupplier) {
+        if (!advanceDescrip.trim()) {
+          advanceDescrip = `ANTICIPO A PROVEEDOR ${selectedSupplier.descripcion || selectedSupplier.co_prov}`;
+        }
+        if (formasPago.length === 0) {
+          addFormaPago();
+        }
+      } else {
+        openSupplierSearchModal();
+      }
+    } else if (selectedSupplier) {
+      loadSupplierDocuments(selectedSupplier.co_prov);
+    }
+  }
+
+  function openSupplierSearchModal() {
+    showSupplierSearchModal = true;
+    searchSuppliersList(supplierSearchInput);
+  }
+
+  function closeSupplierSearchModal() {
+    showSupplierSearchModal = false;
+  }
+
+  async function searchSuppliersList(query = "") {
+    if (!selectedBranch) return;
+    searchingSuppliers = true;
+    try {
+      const q = new URLSearchParams({
+        branch_id: selectedBranch,
+        limit: "25",
+      });
+      if (query.trim()) q.set("search", query.trim());
+      const res = await fetch(`/api/agent/suppliers?${q.toString()}`);
+      if (res.ok) {
+        const json = await res.json();
+        supplierResults = json.data || [];
+      } else {
+        supplierResults = [];
+      }
+    } catch (e) {
+      console.error("Error searching suppliers:", e);
+      supplierResults = [];
+    } finally {
+      searchingSuppliers = false;
+    }
+  }
+
+  function selectSupplierForAdvance(prov: any) {
+    closeSupplierSearchModal();
+    const effectiveTab = resolveTabulador(prov.co_tab, prov.rif || prov.co_prov, prov.tipo_per);
+    selectedSupplier = {
+      co_prov: String(prov.co_prov || "").trim(),
+      descripcion: String(prov.prov_des || prov.descripcion || "").trim(),
+      rif: String(prov.rif || "").trim(),
+      contribu_e: prov.contribu_e,
+      porc_esp: prov.porc_esp || 75,
+      co_tab: effectiveTab,
+      tab_des: prov.tab_des?.trim() || getTabDescription(effectiveTab),
+      tipo_per: prov.tipo_per ? String(prov.tipo_per).trim() : (effectiveTab === "5" ? "1" : "3"),
+      direc1: String(prov.direc1 || "").trim(),
+      telefonos: String(prov.telefonos || "").trim(),
+    };
+    co_prov = selectedSupplier.co_prov;
+    documentos = [];
+    checkedDocs = {};
+    docInputs = {};
+    advanceDescrip = `ANTICIPO A PROVEEDOR ${selectedSupplier.descripcion || selectedSupplier.co_prov}`;
+    if (formasPago.length === 0) {
+      addFormaPago();
+    }
+    toast.success(`Proveedor seleccionado: ${selectedSupplier.descripcion}`);
+  }
+
   // Modal Importar Factura
   function openImportModal() {
     showImportModal = true;
@@ -990,6 +1207,7 @@
 
   async function selectInvoiceFromModal(inv: any) {
     closeImportModal();
+    paymentMode = "documents";
     const invTasa = Number(inv.tasa || 0);
     if (invTasa > 1) {
       currentExchangeRate = invTasa;
@@ -1008,11 +1226,11 @@
       telefonos: "",
     };
     co_prov = selectedSupplier.co_prov;
-    await loadSupplierDocuments(co_prov, inv.nro_doc.trim());
+    await loadSupplierDocuments(co_prov, docKey(inv));
   }
 
   // Cargar Documentos del Proveedor
-  async function loadSupplierDocuments(provCode: string, specificDocToSelect: string | null = null) {
+  async function loadSupplierDocuments(provCode: string, specificKeyToSelect: string | null = null) {
     if (!selectedBranch || !provCode) return;
     loadingDocs = true;
     try {
@@ -1026,9 +1244,9 @@
         const json = await res.json();
         documentos = json.data || [];
 
-        if (specificDocToSelect) {
+        if (specificKeyToSelect) {
           const targetDoc = documentos.find(
-            (d) => d.nro_doc.trim() === specificDocToSelect.trim()
+            (d) => docKey(d) === specificKeyToSelect || d.nro_doc.trim() === specificKeyToSelect
           );
           if (targetDoc && Number(targetDoc.tasa || 0) > 1) {
             currentExchangeRate = Number(targetDoc.tasa);
@@ -1070,12 +1288,13 @@
         const { porcRet: defaultPorcIslr, porcImp: defaultPorcBaseIslr, sustraen: defaultSustraendoIslr } = resolveConceptValues(defaultConceptObj, defaultIslrConcept, currentTab);
 
         documentos.forEach((doc) => {
+          const k = docKey(doc);
           const nro = doc.nro_doc.trim();
-          const isNC = isNcDoc(doc);
+          const isAdv = isAdvanceDoc(doc);
 
           // Verificar si ya tiene retención de IVA o ISLR aplicada
-          const yaTieneRetIva = (Number(doc.ya_reten_iva_bs) > 0) || Boolean(doc.nro_comp_iva);
-          const yaTieneRetIslr = (Number(doc.ya_reten_islr_bs) > 0) || Boolean(doc.nro_comp_islr);
+          const yaTieneRetIva = !isAdv && ((Number(doc.ya_reten_iva_bs) > 0) || Boolean(doc.nro_comp_iva));
+          const yaTieneRetIslr = !isAdv && ((Number(doc.ya_reten_islr_bs) > 0) || Boolean(doc.nro_comp_islr));
           const montoRetIvaPrevioBs = r2(doc.ya_reten_iva_bs);
           const montoRetIslrPrevioBs = r2(doc.ya_reten_islr_bs);
 
@@ -1083,17 +1302,14 @@
           const baseImpBs = getDocBaseBs(doc);
           const baseImpIvaBs = getDocIvaBaseBs(doc);
 
-          // Retención de IVA por defecto (75% / 100%) sobre el IVA en Bs - Solo si NO tiene retención previa
+          // Retención de IVA por defecto (75% / 100%) sobre el IVA en Bs - Solo si NO es anticipo y NO tiene retención previa
           const ivaBs = Number(doc.monto_imp) || 0;
           const porcRetIva = getPorcRetIva();
-          const retIvaBs = !yaTieneRetIva && ivaBs > 0
+          const retIvaBs = !isAdv && !yaTieneRetIva && ivaBs > 0
             ? r2(ivaBs * (porcRetIva / 100))
             : 0;
 
-          // Retención ISLR (desactivada por defecto hasta que se active el toggle)
-          const porcIslr = 2; // Default 2%
-
-          docInputs[nro] = {
+          docInputs[k] = {
             mont_cob: 0,
             mont_cob_bs: 0,
             reten_iva: toUsd(retIvaBs),
@@ -1124,8 +1340,8 @@
                 reten_islr_bs: 0
               }
             ],
-            showIvaDetails: !yaTieneRetIva && retIvaBs > 0,
-            showIslrDetails: !yaTieneRetIslr && (Boolean(doc.sujeto_obj_retenISLR_auto) || Boolean(selectedSupplier?.co_tab)),
+            showIvaDetails: !isAdv && !yaTieneRetIva && retIvaBs > 0,
+            showIslrDetails: !isAdv && !yaTieneRetIslr && (Boolean(doc.sujeto_obj_retenISLR_auto) || Boolean(selectedSupplier?.co_tab)),
             yaTieneRetIva,
             nro_comp_iva_previo: doc.nro_comp_iva ? doc.nro_comp_iva.trim() : "",
             monto_ret_iva_previo_bs: montoRetIvaPrevioBs,
@@ -1136,14 +1352,14 @@
             monto_ret_islr_previo_usd: toUsd(montoRetIslrPrevioBs),
           };
 
-          if (specificDocToSelect && nro === specificDocToSelect) {
-            checkedDocs[nro] = true;
+          if (specificKeyToSelect && (k === specificKeyToSelect || nro === specificKeyToSelect)) {
+            checkedDocs[k] = true;
           }
         });
 
         // Si no se especificó un documento, seleccionamos el primero si hay
-        if (!specificDocToSelect && documentos.length > 0) {
-          checkedDocs[documentos[0].nro_doc.trim()] = true;
+        if (!specificKeyToSelect && documentos.length > 0) {
+          checkedDocs[docKey(documentos[0])] = true;
         }
 
         recalculateAllDocAmounts();
@@ -1170,11 +1386,20 @@
     docInputs = {};
     formasPago = [];
     aplicarTimbreFiscal = false;
+    advanceDescrip = "";
+    advanceCtaIngrEgr = "";
+    paymentCtaIngrEgr = "";
+    showMovCtaModal = false;
+    confirmedMovCta = false;
+    modalCtaSelected = "";
+    modalCtaSearch = "";
+    generatedAdvanceDoc = null;
+    generatedMovBan = null;
   }
 
-  function toggleDocSelection(docNo: string, doc: any, isChecked: boolean) {
-    checkedDocs[docNo] = isChecked;
-    recalculateDocAmounts(docNo, doc, true);
+  function toggleDocSelection(docKeyStr: string, doc: any, isChecked: boolean) {
+    checkedDocs[docKeyStr] = isChecked;
+    recalculateDocAmounts(docKeyStr, doc, true);
   }
 
   function recalculateDocAmounts(docNo: string, doc: any, syncInstrument = true) {
@@ -1257,32 +1482,32 @@
 
   function recalculateAllDocAmounts() {
     documentos.forEach((doc) => {
-      recalculateDocAmounts(doc.nro_doc.trim(), doc, false);
+      recalculateDocAmounts(docKey(doc), doc, false);
     });
     syncSinglePaymentInstrument();
   }
 
   // Helper para calcular el monto neto pendiente (en Bs exactos) que deja el saldo del documento en 0
   function getRemainingPendingBalance(excludeIndex: number = -1) {
-    if (montoNetoAPagarBs === 0) {
+    if (paymentMode === "advance" || montoNetoAPagarBs === 0) {
       return { pendingBs: 0, pendingUsd: 0 };
     }
     let totalNeededBs = 0;
 
     for (const doc of documentos) {
-      const nro = doc.nro_doc.trim();
-      if (!checkedDocs[nro]) continue;
+      const k = docKey(doc);
+      if (!checkedDocs[k]) continue;
 
       const saldoBs = r2(doc.saldo);
       if (isNcDoc(doc)) {
-        const inp = docInputs[nro];
+        const inp = docInputs[k];
         const retIvaBs = inp ? getAppliedRetIvaBs(inp) : 0;
         const retIslrBs = inp ? getAppliedRetIslrBs(inp) : 0;
         totalNeededBs -= Math.max(0, r2(saldoBs - retIvaBs - retIslrBs));
         continue;
       }
 
-      const inp = docInputs[nro];
+      const inp = docInputs[k];
       const retTimbreBs = getDocTimbreFiscal(doc).timbreBs;
       totalNeededBs += Math.max(0, r2(saldoBs - getAppliedRetIvaBs(inp) - getAppliedRetIslrBs(inp) - retTimbreBs));
     }
@@ -1301,6 +1526,7 @@
   }
 
   function applyExactPendingAmount(index: number) {
+    if (paymentMode === "advance") return;
     if (!formasPago[index]) return;
     const fp = formasPago[index];
     const { pendingBs, pendingUsd } = getRemainingPendingBalance(index);
@@ -1311,6 +1537,7 @@
   }
 
   function syncSinglePaymentInstrument() {
+    if (paymentMode === "advance") return;
     if (formasPago.length === 1 && !formasPago[0].manual_override) {
       applyExactPendingAmount(0);
     }
@@ -1319,20 +1546,25 @@
   // Manejo de Formas de Pago
   function addFormaPago() {
     const defaultCaja = data.cajas?.[0]?.cod_caja || "02";
+    const defaultCta = data.cuentasBancarias?.[0]?.cod_cta || "";
+    const defaultBan = data.bancos?.[0]?.co_ban || "";
+    const preferBank = paymentMode === "advance" && Boolean(defaultCta);
     const newFp = {
-      forma_pag: "EF",
-      cod_caja: defaultCaja,
-      cod_cta: "",
-      co_ban: "",
+      forma_pag: preferBank ? "TR" : "EF",
+      cod_caja: preferBank ? "" : defaultCaja,
+      cod_cta: preferBank ? defaultCta : "",
+      co_ban: preferBank ? defaultBan : "",
       num_doc: "",
       mont_doc: 0,
       mont_doc_bs: 0,
       fecha_che: null,
-      manual_override: false,
+      manual_override: paymentMode === "advance",
     };
     const newIndex = formasPago.length;
     formasPago = [...formasPago, newFp];
-    applyExactPendingAmount(newIndex);
+    if (paymentMode !== "advance") {
+      applyExactPendingAmount(newIndex);
+    }
   }
 
   function removeFormaPago(index: number) {
@@ -1405,12 +1637,134 @@
   let generatedDocNum = $state("");
   let showAjpaConfirmModal = $state(false);
   let confirmedAjpa = $state(false);
+  let showMovCtaModal = $state(false);
+  let confirmedMovCta = $state(false);
+  let modalCtaSelected = $state("");
+  let modalCtaSearch = $state("");
+
+  let filteredCuentasIngrEgr = $derived.by(() => {
+    const list = data.cuentasIngrEgr || [];
+    const q = modalCtaSearch.trim().toLowerCase();
+    if (!q) return list;
+    return list.filter(
+      (c: any) =>
+        String(c.co_cta_ingr_egr || "").toLowerCase().includes(q) ||
+        String(c.descrip || "").toLowerCase().includes(q)
+    );
+  });
+
+  let modalCtaSelectedObj = $derived(
+    (data.cuentasIngrEgr || []).find(
+      (c: any) =>
+        String(c.co_cta_ingr_egr || "").trim().toUpperCase() ===
+        modalCtaSelected.trim().toUpperCase()
+    ) || null
+  );
+
+  function getFormaPagLabel(forma: string): string {
+    if (forma === "EF") return "Efectivo";
+    if (forma === "TR" || forma === "TE") return "Transferencia";
+    if (forma === "DP") return "Depósito";
+    if (forma === "CH") return "Cheque";
+    return forma || "Pago";
+  }
+
+  function getInstrumentAccountLabel(fp: any): string {
+    if (fp.forma_pag === "EF") {
+      const caja = (data.cajas || []).find(
+        (c: any) => c.cod_caja?.trim() === fp.cod_caja?.trim()
+      );
+      return caja
+        ? `${caja.cod_caja?.trim()} - ${caja.descrip?.trim()}`
+        : `Caja ${fp.cod_caja || "02"}`;
+    }
+    const cb = (data.cuentasBancarias || []).find(
+      (c: any) => c.cod_cta?.trim() === fp.cod_cta?.trim()
+    );
+    return cb
+      ? `${cb.cod_cta?.trim()} - ${cb.descrip?.trim()}`
+      : `Banco ${fp.cod_cta || ""}`;
+  }
 
   function handleSaveClick() {
-    if (hasPaymentSurplus && !confirmedAjpa) {
+    if (!selectedSupplier) {
+      toast.error("Debe seleccionar un proveedor.");
+      return;
+    }
+
+    const activeInstruments = formasPago.filter(
+      (fp) => (Number(fp.mont_doc_bs) || 0) > 0.001
+    );
+
+    if (paymentMode === "advance") {
+      if (activeInstruments.length === 0 || totalInstrumentosPagoBs <= 0.01) {
+        toast.error(
+          "Debe ingresar al menos un instrumento de pago con monto mayor a 0 para el anticipo."
+        );
+        return;
+      }
+    } else {
+      const selectedDocsList = documentos.filter((d) => checkedDocs[docKey(d)]);
+      if (selectedDocsList.length === 0) {
+        toast.error("Debe seleccionar al menos un documento a pagar.");
+        return;
+      }
+      if (
+        !hasPaymentSurplus &&
+        totalInstrumentosPagoBs === 0 &&
+        totalRetenidoIvaBs === 0 &&
+        totalRetenidoIslrBs === 0 &&
+        totalTimbreFiscalBs === 0 &&
+        creditoNcAplicadoBs === 0
+      ) {
+        toast.error(
+          "Debe ingresar un monto a pagar o aplicar al menos una retención (IVA, ISLR o 1x1000)."
+        );
+        return;
+      }
+      if (
+        !hasPaymentSurplus &&
+        totalInstrumentosPagoBs > 0 &&
+        diferenciaCuadreBs !== 0
+      ) {
+        toast.error(
+          "El monto abonado en facturas debe coincidir exactamente con los instrumentos de pago."
+        );
+        return;
+      }
+    }
+
+    if (paymentMode !== "advance" && hasPaymentSurplus && !confirmedAjpa) {
       showAjpaConfirmModal = true;
       return;
     }
+
+    const willGenerateMovement = activeInstruments.length > 0;
+    if (
+      willGenerateMovement &&
+      !confirmedMovCta &&
+      (data.cuentasIngrEgr || []).length > 0
+    ) {
+      modalCtaSearch = "";
+      if (paymentMode === "advance") {
+        modalCtaSelected = String(advanceCtaIngrEgr || "").trim();
+      } else {
+        const uniqueCodes: string[] = [];
+        for (const item of selectedDocsWithCta) {
+          if (
+            !uniqueCodes.some(
+              (u) => u.toUpperCase() === item.code.toUpperCase()
+            )
+          ) {
+            uniqueCodes.push(item.code);
+          }
+        }
+        modalCtaSelected = uniqueCodes.length === 1 ? uniqueCodes[0] : "";
+      }
+      showMovCtaModal = true;
+      return;
+    }
+
     executeSavePago();
   }
 
@@ -1420,7 +1774,82 @@
       return;
     }
 
-    const selectedDocsList = documentos.filter((d) => checkedDocs[d.nro_doc.trim()]);
+    const formas_pago_cleaned = formasPago
+      .filter((fp) => (Number(fp.mont_doc_bs) || 0) > 0.001)
+      .map((fp) => ({
+        forma_pag: fp.forma_pag,
+        cod_caja: fp.cod_caja || null,
+        cod_cta: fp.cod_cta || null,
+        co_ban: fp.co_ban || null,
+        num_doc: fp.num_doc ? fp.num_doc.trim() : null,
+        mont_doc: fp.mont_doc_bs || 0,
+        fecha_che: fp.fecha_che || null,
+      }));
+
+    if (paymentMode === "advance") {
+      if (formas_pago_cleaned.length === 0 || totalInstrumentosPagoBs <= 0.01) {
+        toast.error("Debe ingresar al menos un instrumento de pago con monto mayor a 0 para el anticipo.");
+        return;
+      }
+
+      saving = true;
+      try {
+        const advPayload = {
+          co_prov: selectedSupplier.co_prov,
+          co_mone: showUSD ? "USD" : "BS",
+          fecha: paymentDate,
+          tasa: Number(currentExchangeRate || 1),
+          monto: showUSD ? totalInstrumentosPago : totalInstrumentosPagoBs,
+          descrip: (advanceDescrip || `ANTICIPO A PROVEEDOR ${selectedSupplier.descripcion || selectedSupplier.co_prov}`).trim(),
+          co_cta_ingr_egr: advanceCtaIngrEgr || null,
+          is_advance: true,
+          advance_doc_type: advanceDocType,
+          renglones: [],
+          formas_pago: formas_pago_cleaned,
+          retenciones_iva: [],
+          retenciones_islr: [],
+        };
+
+        const res = await fetch(`/api/agent/payables/payments?branch_id=${selectedBranch}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(advPayload),
+        });
+
+        if (res.ok) {
+          const resJson = await res.json();
+          const docNum = resJson.data?.doc_num || resJson.doc_num || resJson.results?.[0]?.doc_num;
+          const advDoc = resJson.data?.advance_doc || resJson.advance_doc || null;
+          const movBan = resJson.data?.mov_ban || resJson.mov_ban || null;
+          if (resJson.success && docNum) {
+            generatedDocNum = docNum;
+            generatedAdvanceDoc = advDoc;
+            generatedMovBan = movBan;
+            saveSuccess = true;
+            toast.success(
+              advDoc
+                ? `¡Anticipo ${advDoc.co_tipo_doc} ${advDoc.nro_doc} y Pago ${docNum} registrados exitosamente!`
+                : `¡Anticipo ${docNum} registrado exitosamente!`
+            );
+          } else {
+            toast.error(resJson.message || resJson.error || "Error al procesar el anticipo en el agente.");
+          }
+        } else {
+          const errJson = await res.json().catch(() => ({}));
+          toast.error(errJson.message || errJson.error || `Error del servidor: ${res.status}`);
+        }
+      } catch (e: any) {
+        console.error("Error guardando anticipo:", e);
+        toast.error(`Error inesperado: ${e.message}`);
+      } finally {
+        saving = false;
+        confirmedMovCta = false;
+        confirmedAjpa = false;
+      }
+      return;
+    }
+
+    const selectedDocsList = documentos.filter((d) => checkedDocs[docKey(d)]);
     if (selectedDocsList.length === 0) {
       toast.error("Debe seleccionar al menos un documento a pagar.");
       return;
@@ -1440,25 +1869,23 @@
 
     try {
       const firstParent = selectedDocsList.find((d) =>
-        ["FACT", "NDEB", "N/DB", "GIRO", "AJPA"].includes(d.co_tipo_doc.trim())
+        ["FACT", "NDEB", "N/DB", "GIRO"].includes(d.co_tipo_doc.trim().toUpperCase())
       );
       const parentDocNo = firstParent ? firstParent.nro_doc.trim() : null;
 
       let totalDocBs = 0;
       const renglones = selectedDocsList.map((doc) => {
-        const inp = docInputs[doc.nro_doc.trim()];
-        const isParent = ["FACT", "NDEB", "N/DB", "GIRO", "AJPA"].includes(doc.co_tipo_doc.trim());
+        const k = docKey(doc);
+        const inp = docInputs[k];
+        const isParent = ["FACT", "NDEB", "N/DB", "GIRO"].includes(doc.co_tipo_doc.trim().toUpperCase());
         const retIvaBs = (!inp.yaTieneRetIva && inp.showIvaDetails) ? (inp.reten_iva_bs || 0) : 0;
         const retIslrBs = (!inp.yaTieneRetIslr && inp.showIslrDetails) ? (inp.reten_islr_bs || 0) : 0;
         const retTimbreBs = isNcDoc(doc) ? 0 : getDocTimbreFiscal(doc).timbreBs;
 
         let montCobBs;
         if (isNcDoc(doc)) {
-          // La N/CR amortiza únicamente lo que las facturas necesitan; el saldo restante permanece en la N/CR
-          const saldoBs = r2(doc.saldo);
-          const netCreditBs = Math.max(0, r2(saldoBs - retIvaBs - retIslrBs));
-          const appliedToInvoicesBs = Math.min(netCreditBs, totalFacturasNetoBs);
-          montCobBs = -appliedToInvoicesBs;
+          const allocBs = creditAllocations[k]?.appliedBs ?? 0;
+          montCobBs = -allocBs;
         } else {
           montCobBs = inp.mont_cob_bs || 0;
         }
@@ -1481,11 +1908,11 @@
       // Retenciones de IVA (solo nuevas)
       const retenciones_iva = selectedDocsList
         .filter((doc) => {
-          const inp = docInputs[doc.nro_doc.trim()];
+          const inp = docInputs[docKey(doc)];
           return inp && !inp.yaTieneRetIva && inp.showIvaDetails && inp.reten_iva_bs > 0;
         })
         .map((doc) => {
-          const inp = docInputs[doc.nro_doc.trim()];
+          const inp = docInputs[docKey(doc)];
           const tipoUpper = (doc.co_tipo_doc || '').trim().toUpperCase();
           const isNcOrNd = ['N/CR', 'NCR', 'N/DB', 'NDEB'].includes(tipoUpper);
           const affectedDocNo = isNcOrNd
@@ -1511,11 +1938,11 @@
       const retenciones_islr = [];
       selectedDocsList
         .filter((doc) => {
-          const inp = docInputs[doc.nro_doc.trim()];
+          const inp = docInputs[docKey(doc)];
           return inp && !inp.yaTieneRetIslr && inp.showIslrDetails && ((inp.reten_islr_bs || 0) > 0 || (inp.islr_lines?.length || 0) > 0);
         })
         .forEach((doc) => {
-          const inp = docInputs[doc.nro_doc.trim()];
+          const inp = docInputs[docKey(doc)];
           const lines = (inp.islr_lines && inp.islr_lines.length > 0)
             ? inp.islr_lines
             : [{
@@ -1540,21 +1967,6 @@
           });
         });
 
-      // Formas de pago limpiadas (si hay excedente cubierto por N/CR y no hay formas de pago, se envían vacías)
-      const formas_pago_cleaned = formasPago
-        .filter((fp) => (Number(fp.mont_doc_bs) || 0) > 0.001)
-        .map((fp) => {
-          return {
-            forma_pag: fp.forma_pag,
-            cod_caja: fp.cod_caja || null,
-            cod_cta: fp.cod_cta || null,
-            co_ban: fp.co_ban || null,
-            num_doc: fp.num_doc ? fp.num_doc.trim() : null,
-            mont_doc: fp.mont_doc_bs || 0,
-            fecha_che: fp.fecha_che || null,
-          };
-        });
-
       const firstDoc = selectedDocsList[0];
       const docMone = (firstDoc?.co_mone || "").trim().toUpperCase();
       const safeCurrency = !docMone || ["BS", "VES", "BS.", "BOL"].includes(docMone) ? "BS" : docMone;
@@ -1566,6 +1978,7 @@
         tasa: Number(currentExchangeRate || 1),
         monto: Math.max(0, Math.round(totalDocBs * 100) / 100),
         descrip: `PAGO PROVEEDOR ${selectedSupplier.co_prov}`,
+        co_cta_ingr_egr: paymentCtaIngrEgr || null,
         renglones,
         formas_pago: formas_pago_cleaned,
         retenciones_iva,
@@ -1593,8 +2006,12 @@
       if (res.ok) {
         const resJson = await res.json();
         const docNum = resJson.data?.doc_num || resJson.doc_num || resJson.results?.[0]?.doc_num;
+        const advDoc = resJson.data?.advance_doc || resJson.advance_doc || null;
+        const movBan = resJson.data?.mov_ban || resJson.mov_ban || null;
         if (resJson.success && docNum) {
           generatedDocNum = docNum;
+          generatedAdvanceDoc = advDoc;
+          generatedMovBan = movBan;
           saveSuccess = true;
           showAjpaConfirmModal = false;
           confirmedAjpa = false;
@@ -1607,17 +2024,19 @@
                 : `¡Pago ${docNum} generado exitosamente!`
           );
         } else {
-          toast.error(resJson.message || "Error al procesar el pago en el agente.");
+          toast.error(resJson.message || resJson.error || "Error al procesar el pago en el agente.");
         }
       } else {
         const errJson = await res.json().catch(() => ({}));
-        toast.error(errJson.message || `Error del servidor: ${res.status}`);
+        toast.error(errJson.message || errJson.error || `Error del servidor: ${res.status}`);
       }
     } catch (e: any) {
       console.error("Error guardando pago:", e);
       toast.error(`Error inesperado: ${e.message}`);
     } finally {
       saving = false;
+      confirmedMovCta = false;
+      confirmedAjpa = false;
     }
   }
 </script>
@@ -1636,52 +2055,82 @@
         >
           <Wallet size={24} />
         </div>
-        <div>
-          <h1 class="text-2xl sm:text-3xl font-black text-text-base tracking-tight">
-            Registrar Pago a Proveedor
-          </h1>
-          <p class="text-sm text-text-muted font-medium">
-            Emisión de pagos a cuentas por pagar con retenciones de IVA e ISLR en Profit Plus
-          </p>
-        </div>
+      <div>
+        <h1 class="text-2xl sm:text-3xl font-black text-text-base tracking-tight">
+          {paymentMode === "advance" ? "Registrar Anticipo a Proveedor" : "Registrar Pago a Proveedor"}
+        </h1>
+        <p class="text-sm text-text-muted font-medium">
+          {paymentMode === "advance"
+            ? "Emisión de anticipo directo con movimiento bancario o de caja y saldo a favor en Profit Plus"
+            : "Emisión de pagos a cuentas por pagar con cruce de anticipos y retenciones de IVA e ISLR"}
+        </p>
       </div>
     </div>
+  </div>
 
-    <div class="flex flex-wrap items-center gap-3 w-full lg:w-auto">
-      <!-- Selector de Fecha de Pago -->
+  <div class="flex flex-wrap items-center gap-3 w-full lg:w-auto">
+    <!-- Selector de Modo: Pagar Documentos vs Registrar Anticipo -->
+    <div class="flex bg-surface-strong p-1 rounded-2xl border border-border-subtle shadow-sm">
+      <button
+        type="button"
+        onclick={() => switchPaymentMode("documents")}
+        class={`px-4 h-12 rounded-xl text-xs font-black transition-all cursor-pointer ${paymentMode === "documents" ? "bg-brand-600 text-white shadow-md" : "text-text-muted hover:text-text-base"}`}
+      >
+        Pagar Documentos
+      </button>
+      <button
+        type="button"
+        onclick={() => switchPaymentMode("advance")}
+        class={`px-4 h-12 rounded-xl text-xs font-black transition-all cursor-pointer flex items-center gap-1.5 ${paymentMode === "advance" ? "bg-emerald-600 text-white shadow-md" : "text-text-muted hover:text-text-base"}`}
+      >
+        <Plus size={14} />
+        Registrar Anticipo
+      </button>
+    </div>
+
+    <!-- Selector de Fecha de Pago -->
+    <div class="relative w-full sm:w-auto">
+      <input
+        type="date"
+        bind:value={paymentDate}
+        class="h-14 px-4 bg-surface-strong border border-border-subtle rounded-2xl text-text-base font-bold text-sm outline-none focus:border-brand-500 transition-all cursor-pointer w-full sm:w-44 shadow-sm"
+        title="Fecha del pago / emisión de retención"
+      />
+    </div>
+
+    <!-- Selector de Sucursal -->
+    {#if data.branches && data.branches.length > 1}
       <div class="relative w-full sm:w-auto">
-        <input
-          type="date"
-          bind:value={paymentDate}
-          class="h-14 px-4 bg-surface-strong border border-border-subtle rounded-2xl text-text-base font-bold text-sm outline-none focus:border-brand-500 transition-all cursor-pointer w-full sm:w-44 shadow-sm"
-          title="Fecha del pago / emisión de retención"
+        <select
+          value={selectedBranch}
+          onchange={(e) => onBranchChange(e.currentTarget.value)}
+          class="h-14 pl-11 pr-10 bg-surface-strong border border-border-subtle rounded-2xl text-text-base font-bold text-sm outline-none focus:border-brand-500 transition-all appearance-none cursor-pointer w-full sm:w-64"
+        >
+          {#each data.branches as b}
+            <option value={b.id}>{b.name}</option>
+          {/each}
+        </select>
+        <Store
+          size={18}
+          class="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none"
+        />
+        <ChevronDown
+          size={16}
+          class="absolute right-4 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none"
         />
       </div>
+    {/if}
 
-      <!-- Selector de Sucursal -->
-      {#if data.branches && data.branches.length > 1}
-        <div class="relative w-full sm:w-auto">
-          <select
-            value={selectedBranch}
-            onchange={(e) => onBranchChange(e.currentTarget.value)}
-            class="h-14 pl-11 pr-10 bg-surface-strong border border-border-subtle rounded-2xl text-text-base font-bold text-sm outline-none focus:border-brand-500 transition-all appearance-none cursor-pointer w-full sm:w-64"
-          >
-            {#each data.branches as b}
-              <option value={b.id}>{b.name}</option>
-            {/each}
-          </select>
-          <Store
-            size={18}
-            class="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none"
-          />
-          <ChevronDown
-            size={16}
-            class="absolute right-4 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none"
-          />
-        </div>
-      {/if}
-
-
+    {#if paymentMode === "advance"}
+      <button
+        type="button"
+        onclick={openSupplierSearchModal}
+        class="flex items-center justify-center gap-2 px-6 h-14 rounded-2xl bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-500 border border-emerald-500/30 transition-all font-bold active:scale-95 shadow-sm shrink-0 cursor-pointer w-full sm:w-auto text-sm"
+      >
+        <Search size={18} />
+        Buscar Proveedor
+      </button>
+    {:else}
       <!-- Botón Importar Factura de Compra -->
       <button
         onclick={openImportModal}
@@ -1690,130 +2139,182 @@
         <ShoppingBag size={18} />
         Importar Factura
       </button>
+    {/if}
 
-      <!-- Botón Ver Historial de Pagos -->
-      <a
-        href="/dashboard/purchases/payments/history?branch_id={selectedBranch}"
-        class="flex items-center justify-center gap-2 px-6 h-14 rounded-2xl bg-surface-strong hover:bg-surface-base text-text-base border border-border-subtle transition-all font-bold active:scale-95 shadow-sm shrink-0 cursor-pointer w-full sm:w-auto text-sm"
-      >
-        <Clock size={18} class="text-brand-600 dark:text-brand-400" />
-        Ver Historial
-      </a>
-    </div>
-  </div>
-
-  <!-- EXITOSO -->
-  {#if saveSuccess}
-    <div
-      class="glass p-12 rounded-[40px] border border-green-500/20 max-w-xl mx-auto flex flex-col items-center justify-center text-center space-y-6"
+    <!-- Botón Ver Historial de Pagos -->
+    <a
+      href="/dashboard/purchases/payments/history?branch_id={selectedBranch}"
+      class="flex items-center justify-center gap-2 px-6 h-14 rounded-2xl bg-surface-strong hover:bg-surface-base text-text-base border border-border-subtle transition-all font-bold active:scale-95 shadow-sm shrink-0 cursor-pointer w-full sm:w-auto text-sm"
     >
-      <div
-        class="h-20 w-20 rounded-3xl bg-green-500/10 flex items-center justify-center text-green-400"
-      >
-        <CheckCircle size={48} />
-      </div>
-      <div class="space-y-2">
-        <h2 class="text-3xl font-black text-text-base">¡Pago Registrado!</h2>
-        <p class="text-text-muted">
-          El pago a proveedor ha sido guardado exitosamente en Profit Plus.
-        </p>
-      </div>
-      <div class="bg-white/5 px-6 py-4 rounded-2xl border border-white/5">
+      <Clock size={18} class="text-brand-600 dark:text-brand-400" />
+      Ver Historial
+    </a>
+  </div>
+</div>
+
+<!-- EXITOSO -->
+{#if saveSuccess}
+  <div
+    class="glass p-12 rounded-[40px] border border-green-500/20 max-w-xl mx-auto flex flex-col items-center justify-center text-center space-y-6"
+  >
+    <div
+      class="h-20 w-20 rounded-3xl bg-green-500/10 flex items-center justify-center text-green-400"
+    >
+      <CheckCircle size={48} />
+    </div>
+    <div class="space-y-2">
+      <h2 class="text-3xl font-black text-text-base">
+        {generatedAdvanceDoc ? "¡Anticipo Registrado!" : "¡Pago Registrado!"}
+      </h2>
+      <p class="text-text-muted">
+        {generatedAdvanceDoc
+          ? "El anticipo a proveedor y su documento de saldo a favor fueron guardados en Profit Plus."
+          : "El pago a proveedor ha sido guardado exitosamente en Profit Plus."}
+      </p>
+    </div>
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full">
+      <div class="bg-white/5 px-6 py-4 rounded-2xl border border-white/5 {(!generatedAdvanceDoc && !generatedMovBan) ? 'sm:col-span-2' : ''}">
         <span class="text-xs text-text-muted/60 uppercase font-bold tracking-wider"
           >Documento de Pago Generado</span
         >
-        <div class="text-2xl font-black text-brand-500 mt-1">
+        <div class="text-2xl font-black text-brand-500 mt-1 font-mono">
           {generatedDocNum}
         </div>
       </div>
-      <div class="flex gap-4 w-full">
-        <a
-          href="/dashboard/purchases/payments/history?branch_id={selectedBranch}"
-          class="flex-1 text-center bg-white/5 hover:bg-white/10 text-text-base px-6 py-3.5 rounded-2xl font-bold transition-all text-sm flex items-center justify-center"
-        >
-          Volver al Historial
-        </a>
-        <button
-          onclick={() => {
-            saveSuccess = false;
-            clearSupplier();
-          }}
-          class="flex-1 bg-brand-600 hover:bg-brand-500 text-white px-6 py-3.5 rounded-2xl font-bold transition-all shadow-lg shadow-brand-500/20 text-sm cursor-pointer"
-        >
-          Registrar Otro Pago
-        </button>
-      </div>
+      {#if generatedAdvanceDoc}
+        <div class="bg-emerald-500/10 px-6 py-4 rounded-2xl border border-emerald-500/20">
+          <span class="text-xs text-emerald-400/80 uppercase font-bold tracking-wider"
+            >Documento de Anticipo</span
+          >
+          <div class="text-xl font-black text-emerald-400 mt-1 font-mono">
+            {generatedAdvanceDoc.co_tipo_doc} {generatedAdvanceDoc.nro_doc}
+          </div>
+        </div>
+      {/if}
+      {#if generatedMovBan}
+        <div class="sm:col-span-2 bg-cyan-500/10 px-6 py-3 rounded-2xl border border-cyan-500/20 flex items-center justify-between">
+          <span class="text-xs text-cyan-400 uppercase font-bold tracking-wider flex items-center gap-1.5">
+            <Landmark size={14} /> Movimiento Bancario (PAG)
+          </span>
+          <span class="text-base font-black text-cyan-400 font-mono">{generatedMovBan}</span>
+        </div>
+      {/if}
     </div>
-  {:else}
-    <!-- FORMULARIO DE PAGO SPLIT LAYOUT -->
-    <div class="grid grid-cols-1 xl:grid-cols-3 gap-8">
-      <!-- SECCIÓN IZQUIERDA: PROVEEDOR Y DOCUMENTOS (2/3 de ancho) -->
-      <div class="xl:col-span-2 space-y-6">
-        <!-- DATOS DEL PROVEEDOR -->
-        <div
-          class="glass p-6 rounded-3xl border border-border-subtle shadow-xl space-y-4"
-        >
-          <div class="flex items-center justify-between">
-            <h3
-              class="text-sm font-black uppercase tracking-widest text-text-muted flex items-center gap-2"
-            >
-              <Building size={16} />
-              Datos del Proveedor
-            </h3>
+    <div class="flex gap-4 w-full">
+      <a
+        href="/dashboard/purchases/payments/history?branch_id={selectedBranch}"
+        class="flex-1 text-center bg-white/5 hover:bg-white/10 text-text-base px-6 py-3.5 rounded-2xl font-bold transition-all text-sm flex items-center justify-center"
+      >
+        Volver al Historial
+      </a>
+      <button
+        onclick={() => {
+          saveSuccess = false;
+          clearSupplier();
+        }}
+        class="flex-1 bg-brand-600 hover:bg-brand-500 text-white px-6 py-3.5 rounded-2xl font-bold transition-all shadow-lg shadow-brand-500/20 text-sm cursor-pointer"
+      >
+        {generatedAdvanceDoc ? "Registrar Otro" : "Registrar Otro Pago"}
+      </button>
+    </div>
+  </div>
+{:else}
+  <!-- FORMULARIO DE PAGO SPLIT LAYOUT -->
+  <div class="grid grid-cols-1 xl:grid-cols-3 gap-8">
+    <!-- SECCIÓN IZQUIERDA: PROVEEDOR Y DOCUMENTOS (2/3 de ancho) -->
+    <div class="xl:col-span-2 space-y-6">
+      <!-- DATOS DEL PROVEEDOR -->
+      <div
+        class="glass p-6 rounded-3xl border border-border-subtle shadow-xl space-y-4"
+      >
+        <div class="flex items-center justify-between">
+          <h3
+            class="text-sm font-black uppercase tracking-widest text-text-muted flex items-center gap-2"
+          >
+            <Building size={16} />
+            Datos del Proveedor
+          </h3>
+          <div class="flex items-center gap-3">
+            {#if paymentMode === "advance"}
+              <button
+                type="button"
+                onclick={openSupplierSearchModal}
+                class="text-xs text-emerald-400 hover:text-emerald-300 font-bold flex items-center gap-1 cursor-pointer"
+              >
+                <Search size={13} />
+                {selectedSupplier ? "Buscar Otro" : "Seleccionar Proveedor"}
+              </button>
+            {/if}
             {#if selectedSupplier}
               <button
                 onclick={clearSupplier}
                 class="text-xs text-text-muted hover:text-red-400 font-bold flex items-center gap-1 cursor-pointer"
               >
                 <X size={14} />
-                Cambiar Proveedor
+                Limpiar
               </button>
             {/if}
           </div>
+        </div>
 
-          {#if !selectedSupplier}
-            <div
-              class="p-8 border border-dashed border-border-subtle rounded-2xl flex flex-col items-center justify-center text-center gap-2"
-            >
-              <Building size={32} class="text-text-muted/30" />
-              <p class="text-xs text-text-muted font-bold">
-                No hay ningún proveedor seleccionado. Haz clic en "Importar Factura" para cargar sus deudas.
+        {#if !selectedSupplier}
+          <div
+            class="p-8 border border-dashed border-border-subtle rounded-2xl flex flex-col items-center justify-center text-center gap-3"
+          >
+            <Building size={32} class="text-text-muted/30" />
+            <p class="text-xs text-text-muted font-bold max-w-md">
+              {#if paymentMode === "advance"}
+                Selecciona el proveedor al cual entregarás el anticipo sin necesidad de factura previa.
+              {:else}
+                No hay ningún proveedor seleccionado. Haz clic en "Importar Factura" para cargar sus deudas y anticipos disponibles.
+              {/if}
+            </p>
+            {#if paymentMode === "advance"}
+              <button
+                type="button"
+                onclick={openSupplierSearchModal}
+                class="px-5 py-2.5 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-400 border border-emerald-500/30 text-xs font-bold flex items-center gap-2 cursor-pointer"
+              >
+                <Search size={14} />
+                Buscar Proveedor
+              </button>
+            {/if}
+          </div>
+        {:else}
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-4" in:fade>
+            <div class="md:col-span-2 space-y-1">
+              <span class="text-[9px] font-black uppercase tracking-widest text-text-muted"
+                >Razón Social / Proveedor</span
+              >
+              <p class="text-base font-black text-text-base">
+                {selectedSupplier.descripcion}
               </p>
             </div>
-          {:else}
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-4" in:fade>
-              <div class="md:col-span-2 space-y-1">
-                <span class="text-[9px] font-black uppercase tracking-widest text-text-muted"
-                  >Razón Social / Proveedor</span
-                >
-                <p class="text-base font-black text-text-base">
-                  {selectedSupplier.descripcion}
-                </p>
-              </div>
-              <div class="space-y-1">
-                <span class="text-[9px] font-black uppercase tracking-widest text-text-muted"
-                  >RIF</span
-                >
-                <p class="text-base font-bold font-mono text-text-base">
-                  {selectedSupplier.rif || "---"}
-                </p>
-              </div>
-              <div class="space-y-1">
-                <span class="text-[9px] font-black uppercase tracking-widest text-text-muted"
-                  >Código Proveedor</span
-                >
-                <p class="text-xs text-text-muted font-bold font-mono">
-                  {selectedSupplier.co_prov}
-                </p>
-              </div>
-              <div class="md:col-span-2 space-y-1">
-                <span class="text-[9px] font-black uppercase tracking-widest text-text-muted"
-                  >Estatus Fiscal y Retención</span
-                >
-                <p class="text-xs font-bold text-brand-400">
-                  Contribuyente Especial ({selectedSupplier.porc_esp || 75}% Ret. IVA) • Tabulador ISLR: {selectedSupplier.tab_des || getTabDescription(selectedSupplier.co_tab)}
-                </p>
-              </div>
+            <div class="space-y-1">
+              <span class="text-[9px] font-black uppercase tracking-widest text-text-muted"
+                >RIF</span
+              >
+              <p class="text-base font-bold font-mono text-text-base">
+                {selectedSupplier.rif || "---"}
+              </p>
+            </div>
+            <div class="space-y-1">
+              <span class="text-[9px] font-black uppercase tracking-widest text-text-muted"
+                >Código Proveedor</span
+              >
+              <p class="text-xs text-text-muted font-bold font-mono">
+                {selectedSupplier.co_prov}
+              </p>
+            </div>
+            <div class="md:col-span-2 space-y-1">
+              <span class="text-[9px] font-black uppercase tracking-widest text-text-muted"
+                >Estatus Fiscal y Retención</span
+              >
+              <p class="text-xs font-bold text-brand-400">
+                Contribuyente Especial ({selectedSupplier.porc_esp || 75}% Ret. IVA) • Tabulador ISLR: {selectedSupplier.tab_des || getTabDescription(selectedSupplier.co_tab)}
+              </p>
+            </div>
+            {#if paymentMode === "documents"}
               <div class="md:col-span-3 pt-2 border-t border-border-subtle/50 flex flex-wrap items-center justify-between gap-3">
                 <label class="inline-flex items-center gap-2.5 cursor-pointer select-none">
                   <input
@@ -1832,10 +2333,84 @@
                   </span>
                 {/if}
               </div>
-            </div>
-          {/if}
-        </div>
+            {/if}
+          </div>
+        {/if}
+      </div>
 
+      {#if paymentMode === "advance"}
+        <!-- CONFIGURACIÓN DE ANTICIPO DIRECTO -->
+        <div class="glass p-6 rounded-3xl border border-emerald-500/20 shadow-xl space-y-5 bg-emerald-500/[0.02]">
+          <div class="flex items-center justify-between">
+            <h3 class="text-sm font-black uppercase tracking-widest text-emerald-400 flex items-center gap-2">
+              <Landmark size={16} />
+              Configuración del Anticipo Directo
+            </h3>
+            <span class="text-[10px] font-black uppercase px-2.5 py-1 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+              Sin factura previa
+            </span>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+            <div>
+              <label for="adv_tipo_doc" class="text-[10px] font-black uppercase text-text-muted block mb-1.5">
+                Tipo de Documento en Profit Plus *
+              </label>
+              <select
+                id="adv_tipo_doc"
+                bind:value={advanceDocType}
+                class="w-full h-12 px-3 bg-surface-soft border border-border-subtle rounded-xl text-sm font-bold text-text-base focus:border-emerald-500 outline-none cursor-pointer"
+              >
+                <option value="ADEL">ADEL - Adelanto Compra (Serie C007 • Recomendado)</option>
+                <option value="AJPA">AJPA - Ajuste Positivo Automático (Serie C010)</option>
+                <option value="AJNM">AJNM - Ajuste Negativo Manual (Serie C009)</option>
+              </select>
+            </div>
+
+            <div>
+              <label for="adv_cta_ie" class="text-[10px] font-black uppercase text-text-muted block mb-1.5">
+                Cuenta de Ingreso / Egreso
+              </label>
+              <select
+                id="adv_cta_ie"
+                bind:value={advanceCtaIngrEgr}
+                class="w-full h-12 px-3 bg-surface-soft border border-border-subtle rounded-xl text-sm font-medium text-text-base focus:border-emerald-500 outline-none cursor-pointer"
+              >
+                <option value="">(Preguntar al guardar)</option>
+                {#each (data.cuentasIngrEgr || []) as cta}
+                  <option value={cta.co_cta_ingr_egr?.trim()}>
+                    {cta.co_cta_ingr_egr?.trim()} - {cta.descrip?.trim()}
+                  </option>
+                {/each}
+              </select>
+            </div>
+
+            <div class="md:col-span-2">
+              <label for="adv_descrip" class="text-[10px] font-black uppercase text-text-muted block mb-1.5">
+                Descripción / Concepto del Anticipo
+              </label>
+              <input
+                id="adv_descrip"
+                type="text"
+                maxlength="120"
+                bind:value={advanceDescrip}
+                placeholder="Ej: Anticipo por compra de materiales / honorarios..."
+                class="w-full h-12 px-4 bg-surface-soft border border-border-subtle rounded-xl text-sm font-medium text-text-base focus:border-emerald-500 outline-none"
+              />
+            </div>
+          </div>
+
+          <div class="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-xs flex items-start gap-3">
+            <Info size={18} class="text-emerald-400 shrink-0 mt-0.5" />
+            <div class="space-y-1">
+              <p class="font-bold text-text-base">Creación atómica en Profit Plus</p>
+              <p class="text-text-muted leading-relaxed">
+                Al guardar, se registrará el Pago (<code>saPago</code>), el movimiento bancario o de caja por el monto ingresado (actualizando <code>saSaldoBanco</code> con origen <code>PAG</code>) y el documento <strong>{advanceDocType}</strong> con el 100% de su saldo disponible para cruzarlo posteriormente contra facturas del proveedor.
+              </p>
+            </div>
+          </div>
+        </div>
+      {:else}
         <!-- FACTURAS Y DOCUMENTOS DE COMPRA -->
         <div
           class="glass p-6 rounded-3xl border border-border-subtle shadow-xl space-y-4"
@@ -1845,7 +2420,7 @@
               class="text-sm font-black uppercase tracking-widest text-text-muted flex items-center gap-2"
             >
               <Receipt size={16} />
-              Facturas y Documentos a Pagar
+              Facturas, Anticipos y Documentos
             </h3>
             {#if documentos.length > 0}
               <span class="text-xs font-bold text-brand-400">
@@ -1860,7 +2435,7 @@
             >
               <Receipt size={32} class="text-text-muted/30" />
               <p class="text-xs text-text-muted font-bold">
-                Las facturas con saldo pendiente aparecerán aquí una vez seleccionado un proveedor.
+                Las facturas, notas de crédito y anticipos con saldo aparecerán aquí una vez seleccionado un proveedor.
               </p>
             </div>
           {:else if loadingDocs}
@@ -1869,7 +2444,7 @@
             >
               <RefreshCw size={32} class="animate-spin text-brand-500" />
               <p class="text-sm font-bold text-text-muted">
-                Cargando facturas pendientes del proveedor...
+                Cargando documentos pendientes del proveedor...
               </p>
             </div>
           {:else if documentos.length === 0}
@@ -1881,17 +2456,22 @@
                 Sin saldos pendientes
               </h4>
               <p class="text-xs">
-                No hay facturas ni notas de compra con saldo pendiente para este proveedor en esta sede.
+                No hay facturas, anticipos ni notas con saldo pendiente para este proveedor en esta sede.
               </p>
             </div>
           {:else}
             <!-- Acordeón / Listado de Documentos con Saldo -->
             <div class="space-y-4">
-              {#each documentos as doc}
-                {@const input = docInputs[doc.nro_doc.trim()]}
+              {#each documentos as doc (docKey(doc))}
+                {@const k = docKey(doc)}
+                {@const input = docInputs[k]}
+                {@const isCredit = isNcDoc(doc)}
+                {@const isAdv = isAdvanceDoc(doc)}
+                {@const docBadge = getDocTypeBadge(doc.co_tipo_doc)}
+                {@const alloc = creditAllocations[k]}
                 {#if input}
                   <div
-                    class="bg-surface-soft/20 rounded-2xl border border-border-subtle p-5 hover:border-white/10 transition-all space-y-4"
+                    class="bg-surface-soft/20 rounded-2xl border p-5 transition-all space-y-4 {checkedDocs[k] && isCredit ? 'border-emerald-500/40 bg-emerald-500/[0.03]' : 'border-border-subtle hover:border-white/10'}"
                   >
                     <!-- Fila Superior -->
                     <div
@@ -1900,30 +2480,43 @@
                       <div class="flex items-start gap-3">
                         <input
                           type="checkbox"
-                          checked={checkedDocs[doc.nro_doc.trim()]}
+                          checked={checkedDocs[k]}
                           onchange={(e) =>
                             toggleDocSelection(
-                              doc.nro_doc.trim(),
+                              k,
                               doc,
                               e.currentTarget.checked,
                             )}
                           class="w-5 h-5 rounded-lg border-border-subtle bg-surface-soft text-brand-500 focus:ring-brand-500 focus:ring-offset-0 cursor-pointer mt-1"
                         />
                         <div>
-                          <div class="flex items-center gap-2">
+                          <div class="flex flex-wrap items-center gap-2">
                             <span
                               class="bg-white/5 border border-white/5 px-2 py-0.5 rounded-md font-bold text-xs text-text-muted uppercase"
                               >{doc.co_tipo_doc}</span
                             >
-                            <span class="font-black text-text-base text-base"
+                            <span class="font-black text-text-base text-base font-mono"
                               >{doc.nro_doc}</span
                             >
-                            {#if doc.nro_fact && doc.nro_fact !== doc.nro_doc}
+                            <span class={`text-[10px] font-black uppercase px-2 py-0.5 rounded-full ${docBadge.class}`}>
+                              {docBadge.label}
+                            </span>
+                            {#if doc.nro_fact && doc.nro_fact.trim() !== doc.nro_doc.trim()}
                               <span class="text-xs bg-brand-500/10 text-brand-400 font-bold px-2 py-0.5 rounded-md">
                                 Fact. Prov: {doc.nro_fact}
                               </span>
                             {/if}
+                            {#if doc.mov_ban}
+                              <span class="text-[10px] bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 font-bold px-2 py-0.5 rounded-md font-mono">
+                                Mov. Banco: {doc.mov_ban}
+                              </span>
+                            {/if}
                           </div>
+                          {#if isAdv && doc.observa}
+                            <p class="text-xs font-semibold text-emerald-400/90 mt-1">
+                              {doc.observa}
+                            </p>
+                          {/if}
                           <div
                             class="text-xs text-text-muted/85 mt-1.5 flex flex-wrap gap-x-2 gap-y-0.5"
                           >
@@ -1943,30 +2536,121 @@
                       <div class="text-left sm:text-right shrink-0">
                         <span
                           class="text-xs text-text-muted font-black block uppercase tracking-wider"
-                          >Saldo Pendiente</span
+                          >{isCredit ? "Saldo a Favor" : "Saldo Pendiente"}</span
                         >
-                        <span class="text-lg font-black text-brand-500">
-                          {#if doc.co_tipo_doc.trim() === "N/CR"}-{/if}$ {toUsd(doc.saldo).toLocaleString("de-DE", {
+                        <span class="text-lg font-black {isCredit ? 'text-emerald-400' : 'text-brand-500'}">
+                          {#if isCredit}-{/if}$ {toUsd(doc.saldo).toLocaleString("de-DE", {
                             minimumFractionDigits: 2,
                             maximumFractionDigits: 2,
                           })}
                         </span>
                         <span
-                          class="block text-xs text-text-muted font-bold mt-1"
+                          class="block text-xs {isCredit ? 'text-emerald-400/80' : 'text-text-muted'} font-bold mt-1"
                         >
-                          Bs. {#if doc.co_tipo_doc.trim() === "N/CR"}-{/if}{r2(doc.saldo).toLocaleString("de-DE", {
+                          Bs. {#if isCredit}-{/if}{r2(doc.saldo).toLocaleString("de-DE", {
                             minimumFractionDigits: 2,
                             maximumFractionDigits: 2,
                           })}
                         </span>
+                        {#if isCredit && checkedDocs[k] && alloc}
+                          {#if alloc.isPartial}
+                            <span
+                              class="inline-block text-[10px] bg-amber-500/15 text-amber-300 border border-amber-500/40 px-2.5 py-0.5 rounded-full font-bold mt-1.5"
+                            >
+                              {showUSD
+                                ? `Aplica: -$${alloc.appliedUsd.toFixed(2)} | Queda disponible: +$${alloc.remainingUsd.toFixed(2)}`
+                                : `Aplica: -Bs. ${alloc.appliedBs.toFixed(2)} | Queda disponible: +Bs. ${alloc.remainingBs.toFixed(2)}`}
+                            </span>
+                          {:else if alloc.appliedBs > 0.005}
+                            <span
+                              class="inline-block text-[10px] bg-emerald-500/15 text-emerald-300 border border-emerald-500/40 px-2.5 py-0.5 rounded-full font-bold mt-1.5"
+                            >
+                              {showUSD
+                                ? `Aplica: -$${alloc.appliedUsd.toFixed(2)} (Total)`
+                                : `Aplica: -Bs. ${alloc.appliedBs.toFixed(2)} (Total)`}
+                            </span>
+                          {:else}
+                            <span
+                              class="inline-block text-[10px] bg-blue-500/15 text-blue-300 border border-blue-500/40 px-2.5 py-0.5 rounded-full font-bold mt-1.5"
+                            >
+                              {showUSD
+                                ? `Sin aplicar • Disponible: +$${alloc.remainingUsd.toFixed(2)}`
+                                : `Sin aplicar • Disponible: +Bs. ${alloc.remainingBs.toFixed(2)}`}
+                            </span>
+                          {/if}
+                        {/if}
                       </div>
                     </div>
 
-                    <!-- Detalle de Abonos y Retenciones -->
-                    {#if checkedDocs[doc.nro_doc.trim()]}
+                    <!-- Detalle de Abonos, Prorrateo de Anticipos y Retenciones -->
+                    {#if checkedDocs[k]}
                       <div
                         class="border-t border-border-subtle/50 pt-4 space-y-4 transition-all duration-200"
                       >
+                        {#if isCredit && alloc}
+                          {#if alloc.appliedBs <= 0.005}
+                            <div class="bg-blue-500/10 border border-blue-500/30 p-4 rounded-2xl text-xs space-y-1.5">
+                              <div class="flex items-center justify-between">
+                                <span class="font-bold text-blue-300 flex items-center gap-1.5">
+                                  <Info size={16} class="text-blue-400 shrink-0" />
+                                  {isAdv ? "Anticipo disponible aún no consumido" : "Nota de Crédito sin consumo"}
+                                </span>
+                                <span class="text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full bg-blue-500/20 text-blue-200 border border-blue-500/40">
+                                  Sin Aplicar
+                                </span>
+                              </div>
+                              <p class="text-text-muted leading-relaxed">
+                                Marca una o más facturas del proveedor en esta pantalla para cruzarlas contra este saldo a favor. Mientras tanto, su saldo (+Bs. {r2(doc.saldo).toLocaleString("de-DE", { minimumFractionDigits: 2 })}) permanecerá intacto en Profit Plus.
+                              </p>
+                            </div>
+                          {:else if alloc.isPartial}
+                            <div class="bg-amber-500/10 border border-amber-500/30 p-4 rounded-2xl text-xs space-y-3">
+                              <div class="flex items-center justify-between">
+                                <span class="font-bold text-amber-300 flex items-center gap-1.5">
+                                  <AlertCircle size={16} class="text-amber-400 shrink-0" />
+                                  Prorrateo Automático (Rebaja únicamente el saldo consumido)
+                                </span>
+                                <span class="text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-200 border border-amber-500/40">
+                                  Consumo Parcial
+                                </span>
+                              </div>
+                              <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                                <div class="bg-surface-base/80 p-3.5 rounded-xl border border-border-subtle">
+                                  <span class="block text-[10px] text-text-muted uppercase font-black tracking-wider">Aplica a Facturas en este Pago:</span>
+                                  <span class="text-base font-black text-emerald-400 font-mono block mt-0.5">
+                                    -$ {alloc.appliedUsd.toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                  </span>
+                                  <span class="block text-xs text-text-muted font-bold mt-0.5">
+                                    -Bs. {alloc.appliedBs.toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                  </span>
+                                </div>
+                                <div class="bg-surface-base/80 p-3.5 rounded-xl border border-amber-500/30">
+                                  <span class="block text-[10px] text-amber-300 uppercase font-black tracking-wider">Queda Disponible para Futuros Pagos:</span>
+                                  <span class="text-base font-black text-amber-300 font-mono block mt-0.5">
+                                    +$ {alloc.remainingUsd.toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                  </span>
+                                  <span class="block text-xs text-text-muted font-bold mt-0.5">
+                                    +Bs. {alloc.remainingBs.toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+                          {:else}
+                            <div class="bg-emerald-500/10 border border-emerald-500/30 p-3.5 rounded-2xl text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                              <div class="flex items-center gap-2">
+                                <CheckCircle size={16} class="text-emerald-400 shrink-0" />
+                                <span class="font-bold text-emerald-300">
+                                  {isAdv ? "Anticipo consumido en su totalidad contra las facturas seleccionadas" : "Nota de Crédito aplicada en su totalidad"}
+                                </span>
+                              </div>
+                              <span class="font-mono font-black text-emerald-400">
+                                -$ {alloc.appliedUsd.toLocaleString("de-DE", { minimumFractionDigits: 2 })} (Bs. {alloc.appliedBs.toLocaleString("de-DE", { minimumFractionDigits: 2 })})
+                              </span>
+                            </div>
+                          {/if}
+                        {/if}
+
+                        {#if !isAdv}
                         <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
                           <div>
                             <label
@@ -2037,7 +2721,7 @@
                                     } else {
                                       input.manual_override_iva = false;
                                     }
-                                    recalculateDocAmounts(doc.nro_doc.trim(), doc);
+                                    recalculateDocAmounts(k, doc);
                                   }}
                                   class="text-xs text-brand-500 font-bold hover:underline cursor-pointer"
                                 >
@@ -2106,7 +2790,7 @@
                                         input.sustraendo_islr_bs = sustraen;
                                       }
                                     }
-                                    recalculateDocAmounts(doc.nro_doc.trim(), doc);
+                                    recalculateDocAmounts(k, doc);
                                   }}
                                   class="text-xs text-brand-500 font-bold hover:underline cursor-pointer"
                                 >
@@ -2151,7 +2835,7 @@
                                   input.reten_iva_bs = 0;
                                   input.reten_iva = 0;
                                   input.manual_override_iva = true;
-                                  recalculateDocAmounts(doc.nro_doc.trim(), doc);
+                                  recalculateDocAmounts(k, doc);
                                 }}
                                 class="text-text-muted hover:text-text-base cursor-pointer"
                                 ><X size={14} /></button
@@ -2201,7 +2885,7 @@
                                   bind:value={input.porc_ret_iva}
                                   onchange={() => {
                                     input.manual_override_iva = false;
-                                    recalculateDocAmounts(doc.nro_doc.trim(), doc);
+                                    recalculateDocAmounts(k, doc);
                                   }}
                                   class="w-full bg-surface-soft border border-border-subtle px-2 py-1.5 rounded-lg text-xs"
                                 >
@@ -2265,7 +2949,7 @@
                                     onclick={() => {
                                       if (difBaseBs > 0) {
                                         const targetIdx = (input.islr_lines || []).findIndex((l) => (Number(l.base_imponible_islr_bs) || 0) === 0);
-                                        assignRemainingBaseToLine(doc.nro_doc.trim(), doc, targetIdx !== -1 ? targetIdx : (input.islr_lines?.length || 1) - 1);
+                                        assignRemainingBaseToLine(k, doc, targetIdx !== -1 ? targetIdx : (input.islr_lines?.length || 1) - 1);
                                       }
                                     }}
                                     class="text-[10px] px-2 py-0.5 rounded-full {difBaseBs > 0 ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30 hover:bg-amber-500/30 cursor-pointer' : 'bg-rose-500/20 text-rose-300 border border-rose-500/30'} font-semibold transition-colors"
@@ -2282,7 +2966,7 @@
                                   input.reten_islr_bs = 0;
                                   input.reten_islr = 0;
                                   input.manual_override_islr = true;
-                                  recalculateDocAmounts(doc.nro_doc.trim(), doc);
+                                  recalculateDocAmounts(k, doc);
                                 }}
                                 class="text-text-muted hover:text-text-base cursor-pointer"
                                 ><X size={14} /></button
@@ -2303,7 +2987,7 @@
                                       value={line.co_islr}
                                       onchange={(e) => {
                                         const selectedCode = (e.currentTarget as HTMLSelectElement).value;
-                                        handleLineConceptChange(doc.nro_doc.trim(), doc, lineIdx, selectedCode);
+                                        handleLineConceptChange(k, doc, lineIdx, selectedCode);
                                       }}
                                       class="w-full bg-surface-base border border-border-subtle px-2 py-1.5 rounded-lg text-xs"
                                     >
@@ -2323,7 +3007,7 @@
                                           <button
                                             type="button"
                                             title="Asignar el remanente no cubierto a este concepto"
-                                            onclick={() => assignRemainingBaseToLine(doc.nro_doc.trim(), doc, lineIdx)}
+                                            onclick={() => assignRemainingBaseToLine(k, doc, lineIdx)}
                                             class="text-[9px] font-bold text-amber-500 hover:text-amber-400 underline cursor-pointer"
                                           >
                                             + Remanente
@@ -2333,7 +3017,7 @@
                                           <button
                                             type="button"
                                             title="Colocar la base total de la factura a este concepto"
-                                            onclick={() => setLineToFullBase(doc.nro_doc.trim(), doc, lineIdx)}
+                                            onclick={() => setLineToFullBase(k, doc, lineIdx)}
                                             class="text-[9px] font-semibold text-text-muted hover:text-amber-400 cursor-pointer"
                                           >
                                             Base total
@@ -2348,7 +3032,7 @@
                                       oninput={() => {
                                         line.manual_override_islr = false;
                                         input.manual_override_islr = false;
-                                        recalculateDocAmounts(doc.nro_doc.trim(), doc);
+                                        recalculateDocAmounts(k, doc);
                                       }}
                                       class="w-full bg-surface-base border border-border-subtle px-2 py-1.5 rounded-lg text-xs text-right font-mono"
                                     />
@@ -2362,7 +3046,7 @@
                                       oninput={() => {
                                         line.manual_override_islr = false;
                                         input.manual_override_islr = false;
-                                        recalculateDocAmounts(doc.nro_doc.trim(), doc);
+                                        recalculateDocAmounts(k, doc);
                                       }}
                                       class="w-full bg-surface-base border border-border-subtle px-1.5 py-1.5 rounded-lg text-xs text-right font-mono"
                                     />
@@ -2400,7 +3084,7 @@
                                       <button
                                         type="button"
                                         title="Eliminar este concepto"
-                                        onclick={() => removeIslrConceptLine(doc.nro_doc.trim(), doc, lineIdx)}
+                                        onclick={() => removeIslrConceptLine(k, doc, lineIdx)}
                                         class="p-1.5 text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 rounded-lg transition-colors cursor-pointer"
                                       >
                                         <Trash2 size={14} />
@@ -2414,7 +3098,7 @@
                             <div class="flex items-center justify-between pt-1 flex-wrap gap-2">
                               <button
                                 type="button"
-                                onclick={() => addIslrConceptLine(doc.nro_doc.trim(), doc)}
+                                onclick={() => addIslrConceptLine(k, doc)}
                                 class="inline-flex items-center gap-1.5 text-xs font-bold text-amber-400 hover:text-amber-300 transition-colors px-3 py-1.5 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/20 cursor-pointer"
                               >
                                 <Plus size={13} />
@@ -2436,9 +3120,10 @@
                             {/if}
                           </div>
                         {/if}
+                        {/if}
 
                         <!-- Retención Timbre Fiscal 1x1000 por Documento -->
-                        {#if !isNcDoc(doc) && (aplicarTimbreFiscal || input.manual_override_timbre || allowEditableRetentions)}
+                        {#if !isCredit && (aplicarTimbreFiscal || input.manual_override_timbre || allowEditableRetentions)}
                           {@const docTimbre = getDocTimbreFiscal(doc)}
                           {#if docTimbre.timbreBs > 0 || allowEditableRetentions}
                             <div class="flex flex-wrap items-center justify-between gap-2 px-3 py-2 rounded-xl bg-indigo-500/5 border border-indigo-500/20 text-xs">
@@ -2472,7 +3157,7 @@
                         {/if}
 
                         <!-- Neto Abonado por este Documento -->
-                        {#if doc.co_tipo_doc.trim() !== "N/CR" && input.mont_cob_bs > 0}
+                        {#if !isCredit && input.mont_cob_bs > 0}
                           <div
                             class="flex flex-col sm:flex-row sm:items-center justify-between border-t border-border-subtle/40 pt-3 gap-3"
                           >
@@ -2501,7 +3186,8 @@
             </div>
           {/if}
         </div>
-      </div>
+      {/if}
+    </div>
 
       <!-- SECCIÓN DERECHA: RESUMEN DE TOTALES Y FORMAS DE PAGO (1/3 de ancho) -->
       <div class="xl:col-span-1 space-y-6">
@@ -2558,6 +3244,29 @@
           </div>
 
           <div class="space-y-4 relative z-10 text-sm">
+            {#if paymentMode === "advance"}
+              <div class="flex justify-between items-center text-base font-bold text-text-muted">
+                <span>Documento a Generar</span>
+                <span class="px-2.5 py-0.5 rounded-full text-xs font-black bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 font-mono">
+                  {advanceDocType}
+                </span>
+              </div>
+              <div class="flex justify-between items-center text-base font-bold text-text-muted border-t border-border-subtle/50 pt-4">
+                <span>Movimiento de Banco / Caja</span>
+                <span class="text-xs font-black text-cyan-400 bg-cyan-500/10 border border-cyan-500/20 px-2.5 py-1 rounded-full">
+                  Automático (Origen PAG)
+                </span>
+              </div>
+              <div class="flex justify-between items-center text-base font-bold text-text-muted border-t border-border-subtle/50 pt-4">
+                <span>Instrumentos Emitidos</span>
+                <span class="font-mono text-text-base">
+                  {showUSD ? "$" : "Bs."} {(showUSD ? totalInstrumentosPago : totalInstrumentosPagoBs).toLocaleString("de-DE", {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
+                  })}
+                </span>
+              </div>
+            {:else}
             <div
               class="flex justify-between items-center text-base font-bold text-text-muted"
             >
@@ -2623,11 +3332,11 @@
               <div
                 class="flex justify-between items-center text-base font-bold text-text-muted border-t border-border-subtle/50 pt-4"
               >
-                <span class="flex items-center gap-1.5 text-blue-400">
+                <span class="flex items-center gap-1.5 text-emerald-400">
                   <Receipt size={16} />
-                  Crédito N/CR Aplicado
+                  Crédito / Anticipo Aplicado
                 </span>
-                <span class="font-mono text-blue-400 font-bold">
+                <span class="font-mono text-emerald-400 font-bold">
                   - {showUSD ? "$" : "Bs."} {(showUSD ? creditoNcAplicadoUsd : creditoNcAplicadoBs).toLocaleString("de-DE", {
                     minimumFractionDigits: 2,
                     maximumFractionDigits: 2,
@@ -2639,12 +3348,12 @@
               <div
                 class="flex justify-between items-center text-xs font-bold text-text-muted border-t border-border-subtle/50 pt-3"
               >
-                <span class="text-emerald-400 flex items-center gap-1.5">
+                <span class="text-amber-400 flex items-center gap-1.5">
                   <Receipt size={14} />
-                  Saldo restante en N/CR
+                  Queda disponible en Crédito / Anticipo
                 </span>
-                <span class="font-mono text-emerald-400 font-bold">
-                  {showUSD ? "$" : "Bs."} {(showUSD ? creditoNcExcedenteUsd : creditoNcExcedenteBs).toLocaleString("de-DE", {
+                <span class="font-mono text-amber-400 font-bold">
+                  +{showUSD ? "$" : "Bs."} {(showUSD ? creditoNcExcedenteUsd : creditoNcExcedenteBs).toLocaleString("de-DE", {
                     minimumFractionDigits: 2,
                     maximumFractionDigits: 2,
                   })}
@@ -2694,6 +3403,7 @@
                 </span>
               {/if}
             </div>
+            {/if}
           </div>
 
           <div
@@ -2703,12 +3413,16 @@
               <div>
                 <span
                   class="text-[10px] font-black uppercase tracking-[0.2em] text-brand-400/60 block mb-2"
-                  >Saldo pendiente por pagar</span
+                  >{paymentMode === "advance" ? "Monto Total del Anticipo" : "Saldo pendiente por pagar"}</span
                 >
                 <div
-                  class="text-5xl font-black text-text-base drop-shadow-[0_4px_12px_rgba(var(--brand-rgb),0.3)] tracking-tight leading-none text-brand-400"
+                  class="text-5xl font-black text-text-base drop-shadow-[0_4px_12px_rgba(var(--brand-rgb),0.3)] tracking-tight leading-none {paymentMode === 'advance' ? 'text-emerald-400' : 'text-brand-400'}"
                 >
-                  {showUSD ? "$" : "Bs."} {(showUSD ? saldoPendientePorCobrar : saldoPendientePorCobrarBs).toLocaleString("de-DE", {
+                  {showUSD ? "$" : "Bs."} {(
+                    paymentMode === "advance"
+                      ? (showUSD ? totalInstrumentosPago : totalInstrumentosPagoBs)
+                      : (showUSD ? saldoPendientePorCobrar : saldoPendientePorCobrarBs)
+                  ).toLocaleString("de-DE", {
                     minimumFractionDigits: 2,
                     maximumFractionDigits: 2,
                   })}
@@ -2879,17 +3593,19 @@
                           >Monto {getRowCurrency(fp) === 'BS' ? 'en Bolívares (Bs.)' : 'en Dólares ($)'}</span
                         >
                         <div class="flex items-center gap-2">
-                          <button
-                            type="button"
-                            onclick={() => {
-                              fp.manual_override = false;
-                              applyExactPendingAmount(index);
-                            }}
-                            class="text-[9px] text-brand-400 hover:text-brand-300 font-bold underline cursor-pointer"
-                            title="Ajustar automáticamente para saldar el documento en 0"
-                          >
-                            Saldar pendiente
-                          </button>
+                          {#if paymentMode !== "advance"}
+                            <button
+                              type="button"
+                              onclick={() => {
+                                fp.manual_override = false;
+                                applyExactPendingAmount(index);
+                              }}
+                              class="text-[9px] text-brand-400 hover:text-brand-300 font-bold underline cursor-pointer"
+                              title="Ajustar automáticamente para saldar el documento en 0"
+                            >
+                              Saldar pendiente
+                            </button>
+                          {/if}
                           <span class="text-[10px] text-brand-400 font-bold">
                             {getRowCurrency(fp) === 'BS' ? `Equiv: $ ${fp.mont_doc || 0}` : `Equiv: Bs. ${fp.mont_doc_bs || 0}`}
                           </span>
@@ -2913,8 +3629,8 @@
             </div>
           {/if}
 
-          <!-- ALERTA INFORMATIVA: EXCEDENTE QUE PERMANECE EN LA N/CR -->
-          {#if creditoNcExcedenteBs > 0}
+          <!-- ALERTA INFORMATIVA: EXCEDENTE QUE PERMANECE EN LA N/CR O ANTICIPO -->
+          {#if paymentMode !== "advance" && creditoNcExcedenteBs > 0}
             <div
               class="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 text-xs flex items-start gap-3 relative z-10"
               transition:slide={{ duration: 150 }}
@@ -2922,13 +3638,13 @@
               <Info size={18} class="text-emerald-400 shrink-0 mt-0.5" />
               <div class="space-y-1">
                 <p class="font-bold text-text-base">
-                  Nota de Crédito con saldo disponible
+                  Crédito / Anticipo con saldo remanente disponible
                 </p>
                 <p class="text-text-muted leading-relaxed">
                   {#if totalFacturasNetoBs > 0}
-                    La Nota de Crédito cubre el 100% de las facturas seleccionadas. El saldo excedente de <strong class="text-emerald-400 font-mono">{showUSD ? "$" : "Bs."} {(showUSD ? creditoNcExcedenteUsd : creditoNcExcedenteBs).toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong> permanecerá en la misma Nota de Crédito para futuros pagos.
+                    El crédito/anticipo cubre el 100% de las facturas seleccionadas. El saldo excedente de <strong class="text-emerald-400 font-mono">{showUSD ? "$" : "Bs."} {(showUSD ? creditoNcExcedenteUsd : creditoNcExcedenteBs).toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong> quedará disponible para futuros pagos.
                   {:else}
-                    Se descontará únicamente la retención de la Nota de Crédito. El saldo restante de <strong class="text-emerald-400 font-mono">{showUSD ? "$" : "Bs."} {(showUSD ? creditoNcExcedenteUsd : creditoNcExcedenteBs).toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong> permanecerá en la misma Nota de Crédito para futuros pagos.
+                    No se rebajará saldo hasta seleccionar una factura a cruzar (o aplicar retención). Quedarán disponibles <strong class="text-emerald-400 font-mono">{showUSD ? "$" : "Bs."} {(showUSD ? creditoNcExcedenteUsd : creditoNcExcedenteBs).toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong> para futuros pagos.
                   {/if}
                 </p>
               </div>
@@ -2936,7 +3652,7 @@
           {/if}
 
           <!-- ALERTA INFORMATIVA: PAGO EN EXCESO EN INSTRUMENTOS -> AJPA -->
-          {#if hasPaymentSurplus}
+          {#if paymentMode !== "advance" && hasPaymentSurplus}
             <div
               class="p-4 rounded-2xl bg-blue-500/10 border border-blue-500/20 text-blue-300 text-xs flex items-start gap-3 relative z-10"
               transition:slide={{ duration: 150 }}
@@ -2954,7 +3670,7 @@
                 </p>
               </div>
             </div>
-          {:else if totalInstrumentosPagoBs === 0 && (totalRetenidoIvaBs > 0 || totalRetenidoIslrBs > 0)}
+          {:else if paymentMode !== "advance" && totalInstrumentosPagoBs === 0 && (totalRetenidoIvaBs > 0 || totalRetenidoIslrBs > 0)}
             <div
               class="p-4 rounded-2xl bg-blue-500/10 border border-blue-500/20 text-blue-300 text-xs flex items-start gap-3 relative z-10"
               transition:slide={{ duration: 150 }}
@@ -2971,16 +3687,19 @@
             </div>
           {/if}
 
-          <!-- BOTÓN PRINCIPAL: GUARDAR PAGO -->
+          <!-- BOTÓN PRINCIPAL: GUARDAR PAGO O ANTICIPO -->
           {#if selectedSupplier}
             <button
               onclick={handleSaveClick}
               disabled={!canSave}
-              class="w-full py-4 rounded-2xl bg-brand-600 hover:bg-brand-500 active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none text-white font-black text-base transition-all shadow-xl shadow-brand-500/25 flex items-center justify-center gap-3 cursor-pointer mt-4"
+              class="w-full py-4 rounded-2xl {paymentMode === 'advance' ? 'bg-emerald-600 hover:bg-emerald-500 shadow-emerald-500/25' : 'bg-brand-600 hover:bg-brand-500 shadow-brand-500/25'} active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none text-white font-black text-base transition-all shadow-xl flex items-center justify-center gap-3 cursor-pointer mt-4"
             >
               {#if saving}
                 <RefreshCw size={20} class="animate-spin" />
-                Procesando Pago...
+                {paymentMode === "advance" ? "Registrando Anticipo..." : "Procesando Pago..."}
+              {:else if paymentMode === "advance"}
+                <Landmark size={20} />
+                Registrar Anticipo y Movimiento
               {:else if hasPaymentSurplus}
                 <Wallet size={20} />
                 Generar AJPA y Guardar Pago
@@ -3075,18 +3794,28 @@
           </div>
         {:else}
           {#each pendingInvoices as inv}
+            {@const invBadge = getDocTypeBadge(inv.co_tipo_doc)}
+            {@const invIsCredit = isNcDoc(inv)}
             <button
               onclick={() => selectInvoiceFromModal(inv)}
               class="w-full text-left bg-surface-base hover:bg-surface-soft border border-border-subtle hover:border-brand-500/40 p-4 rounded-2xl transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-4 group cursor-pointer shadow-xs hover:shadow-md"
             >
               <div class="space-y-1">
-                <div class="flex items-center gap-2">
+                <div class="flex flex-wrap items-center gap-2">
                   <span class="bg-brand-500/10 text-brand-500 font-bold px-2 py-0.5 rounded-md text-xs border border-brand-500/20">
                     {inv.co_tipo_doc} {inv.nro_doc}
                   </span>
-                  {#if inv.nro_fact && inv.nro_fact !== inv.nro_doc}
+                  <span class={`text-[10px] font-black uppercase px-2 py-0.5 rounded-full ${invBadge.class}`}>
+                    {invBadge.label}
+                  </span>
+                  {#if inv.nro_fact && inv.nro_fact.trim() !== inv.nro_doc.trim()}
                     <span class="text-xs text-text-muted font-bold">
                       (Fact. {inv.nro_fact})
+                    </span>
+                  {/if}
+                  {#if inv.mov_ban}
+                    <span class="text-[10px] bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 font-bold px-2 py-0.5 rounded-md font-mono">
+                      Mov. Banco: {inv.mov_ban}
                     </span>
                   {/if}
                   <span class="text-xs text-text-muted font-mono">
@@ -3096,18 +3825,25 @@
                 <p class="font-black text-sm text-text-base group-hover:text-brand-500 transition-colors">
                   {inv.prov_des}
                 </p>
+                {#if inv.observa && isAdvanceDoc(inv)}
+                  <p class="text-xs font-semibold text-emerald-400/90">
+                    {inv.observa}
+                  </p>
+                {/if}
                 <p class="text-xs text-text-muted font-mono">
                   RIF: {inv.rif} • Emisión: {new Date(inv.fec_emis).toLocaleDateString("es-VE")}
                 </p>
               </div>
 
               <div class="text-left sm:text-right shrink-0">
-                <span class="text-[10px] uppercase font-bold text-text-muted block">Saldo Pendiente</span>
-                <span class="text-base font-black text-brand-500">
-                  $ {(inv.saldo / (inv.tasa > 0 ? inv.tasa : 1)).toLocaleString("de-DE", { minimumFractionDigits: 2 })}
+                <span class="text-[10px] uppercase font-bold text-text-muted block">
+                  {invIsCredit ? "Saldo a Favor" : "Saldo Pendiente"}
                 </span>
-                <span class="block text-xs text-text-muted font-bold">
-                  Bs. {Number(inv.saldo).toLocaleString("de-DE", { minimumFractionDigits: 2 })}
+                <span class="text-base font-black {invIsCredit ? 'text-emerald-400' : 'text-brand-500'}">
+                  {#if invIsCredit}-{/if}$ {(inv.saldo / (inv.tasa > 0 ? inv.tasa : 1)).toLocaleString("de-DE", { minimumFractionDigits: 2 })}
+                </span>
+                <span class="block text-xs {invIsCredit ? 'text-emerald-400/80' : 'text-text-muted'} font-bold">
+                  Bs. {#if invIsCredit}-{/if}{Number(inv.saldo).toLocaleString("de-DE", { minimumFractionDigits: 2 })}
                 </span>
                 <span class="block text-[11px] text-brand-400 font-bold">
                   Tasa: {Number(inv.tasa || 1).toFixed(2)} Bs/$
@@ -3193,7 +3929,7 @@
           onclick={() => {
             confirmedAjpa = true;
             showAjpaConfirmModal = false;
-            executeSavePago();
+            handleSaveClick();
           }}
           disabled={saving}
           class="px-5 py-3 rounded-xl bg-brand-600 hover:bg-brand-500 text-white text-xs font-black transition-all shadow-lg shadow-brand-500/25 flex items-center gap-2 cursor-pointer disabled:opacity-50"
@@ -3206,6 +3942,219 @@
             Confirmar y Guardar Pago
           {/if}
         </button>
+      </div>
+    </div>
+  </div>
+{/if}
+
+<!-- MODAL DE SELECCIÓN DE CUENTA INGRESO/EGRESO PARA EL MOVIMIENTO BANCARIO / CAJA -->
+{#if showMovCtaModal}
+  <div
+    class="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 backdrop-blur-md"
+    style="background-color: var(--modal-backdrop);"
+    transition:fade={{ duration: 150 }}
+  >
+    <!-- svelte-ignore a11y_click_events_have_key_events -->
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <div
+      class="fixed inset-0"
+      onclick={() => {
+        showMovCtaModal = false;
+        confirmedAjpa = false;
+      }}
+    ></div>
+
+    <div
+      class="relative z-10 bg-surface-raised border border-border-subtle rounded-[32px] w-full max-w-xl max-h-[88vh] flex flex-col shadow-2xl overflow-hidden animate-in zoom-in-95 duration-150"
+    >
+      <div class="p-6 border-b border-border-subtle flex items-center justify-between bg-surface-soft shrink-0">
+        <div class="flex items-center gap-3">
+          <div class="h-11 w-11 rounded-2xl bg-brand-500/10 border border-brand-500/20 flex items-center justify-center text-brand-400 shrink-0">
+            <Landmark size={22} />
+          </div>
+          <div>
+            <h3 class="font-black text-lg text-text-base leading-tight">
+              Cuenta para el Movimiento Bancario / Caja
+            </h3>
+            <p class="text-xs text-text-muted font-medium">
+              Selecciona la cuenta de Ingreso/Egreso donde se registrará el egreso en Profit Plus
+            </p>
+          </div>
+        </div>
+        <button
+          type="button"
+          onclick={() => {
+            showMovCtaModal = false;
+            confirmedAjpa = false;
+          }}
+          class="h-10 w-10 rounded-xl bg-surface-soft hover:bg-surface-strong flex items-center justify-center text-text-muted hover:text-text-base transition-all cursor-pointer"
+          aria-label="Cerrar modal"
+        >
+          <X size={18} />
+        </button>
+      </div>
+
+      <div class="p-6 space-y-4 overflow-y-auto flex-1">
+        <!-- Resumen de movimientos a generar -->
+        <div class="bg-surface-soft/50 border border-border-subtle rounded-2xl p-3.5 space-y-2 text-xs">
+          <span class="text-[10px] font-black uppercase tracking-wider text-text-muted block">
+            Movimientos a generar en Profit Plus
+          </span>
+          <div class="space-y-1.5">
+            {#each formasPago.filter((fp) => (Number(fp.mont_doc_bs) || 0) > 0.001) as fp}
+              <div class="flex flex-wrap items-center justify-between gap-2 bg-surface-base/70 px-3 py-2 rounded-xl border border-border-subtle/60">
+                <div class="flex items-center gap-2 min-w-0">
+                  <span class="px-2 py-0.5 rounded-md bg-brand-500/10 text-brand-400 border border-brand-500/20 text-[10px] font-black uppercase">
+                    {getFormaPagLabel(fp.forma_pag)}
+                  </span>
+                  <span class="font-semibold text-text-base truncate">
+                    {getInstrumentAccountLabel(fp)}
+                  </span>
+                  {#if fp.num_doc}
+                    <span class="text-[10px] font-mono text-text-muted">Ref: {fp.num_doc}</span>
+                  {/if}
+                </div>
+                <span class="font-mono font-black text-text-base shrink-0">
+                  Bs. {r2(fp.mont_doc_bs).toLocaleString("de-DE", { minimumFractionDigits: 2 })}
+                  <span class="text-[10px] text-text-muted font-normal">($ {r2(fp.mont_doc).toLocaleString("de-DE", { minimumFractionDigits: 2 })})</span>
+                </span>
+              </div>
+            {/each}
+          </div>
+        </div>
+
+        <!-- Quick-picks desde los documentos seleccionados -->
+        {#if selectedDocsWithCta.length > 0}
+          <div class="space-y-2">
+            <span class="text-[10px] font-black uppercase tracking-wider text-text-muted block">
+              Cuentas definidas en los documentos de este pago (clic para elegir):
+            </span>
+            <div class="flex flex-wrap gap-2">
+              {#each selectedDocsWithCta as item}
+                {@const isActiveChip = modalCtaSelected.trim().toUpperCase() === item.code.toUpperCase()}
+                <button
+                  type="button"
+                  onclick={() => (modalCtaSelected = item.code)}
+                  class={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-all cursor-pointer flex items-center gap-1.5 ${
+                    isActiveChip
+                      ? "bg-brand-600 text-white border-brand-500 shadow-sm shadow-brand-500/20"
+                      : "bg-surface-soft text-text-base border-border-subtle hover:border-brand-500/40"
+                  }`}
+                >
+                  <span class="font-mono text-[10px] opacity-85">{item.label}</span>
+                  <span>·</span>
+                  <span class="font-mono font-black">{item.code}</span>
+                  {#if item.descrip}
+                    <span class="opacity-85 truncate max-w-[180px]">· {item.descrip}</span>
+                  {/if}
+                </button>
+              {/each}
+            </div>
+          </div>
+        {/if}
+
+        <!-- Buscador + listado completo de saCuentaIngEgr -->
+        <div class="space-y-2.5">
+          <div class="relative">
+            <Search size={16} class="absolute left-3.5 top-1/2 -translate-y-1/2 text-text-muted" />
+            <input
+              type="text"
+              bind:value={modalCtaSearch}
+              placeholder="Buscar cuenta por código (ej. P-001, G-021) o nombre..."
+              class="w-full h-11 pl-10 pr-4 bg-surface-soft border border-border-subtle rounded-xl text-xs font-medium text-text-base outline-none focus:border-brand-500 transition-all"
+            />
+          </div>
+
+          <div class="max-h-56 overflow-y-auto space-y-1.5 pr-1">
+            {#if filteredCuentasIngrEgr.length === 0}
+              <div class="py-8 text-center text-xs text-text-muted font-semibold bg-surface-soft/30 rounded-2xl border border-dashed border-border-subtle">
+                No se encontraron cuentas de Ingreso/Egreso que coincidan con "{modalCtaSearch}".
+              </div>
+            {:else}
+              {#each filteredCuentasIngrEgr as cta}
+                {@const ctaCode = String(cta.co_cta_ingr_egr || "").trim()}
+                {@const isSelectedCta = modalCtaSelected.trim().toUpperCase() === ctaCode.toUpperCase()}
+                <button
+                  type="button"
+                  onclick={() => (modalCtaSelected = ctaCode)}
+                  class={`w-full text-left px-3.5 py-2.5 rounded-xl border transition-all flex items-center justify-between gap-3 cursor-pointer ${
+                    isSelectedCta
+                      ? "bg-brand-500/15 border-brand-500/50 text-text-base shadow-xs"
+                      : "bg-surface-soft/40 hover:bg-surface-soft border-border-subtle/70 text-text-base"
+                  }`}
+                >
+                  <div class="flex items-center gap-2.5 min-w-0">
+                    <span
+                      class={`px-2 py-0.5 rounded-md font-mono text-[11px] font-black border shrink-0 ${
+                        isSelectedCta
+                          ? "bg-brand-600 text-white border-brand-500"
+                          : "bg-surface-base text-brand-400 border-border-subtle"
+                      }`}
+                    >
+                      {ctaCode}
+                    </span>
+                    <span class="text-xs font-semibold truncate">{cta.descrip?.trim()}</span>
+                  </div>
+                  {#if isSelectedCta}
+                    <CheckCircle size={15} class="text-brand-400 shrink-0" />
+                  {/if}
+                </button>
+              {/each}
+            {/if}
+          </div>
+        </div>
+      </div>
+
+      <div class="p-5 border-t border-border-subtle bg-surface-soft flex flex-col sm:flex-row sm:items-center justify-between gap-3 shrink-0">
+        <div class="text-xs min-w-0">
+          {#if modalCtaSelected.trim()}
+            <span class="text-[10px] uppercase font-bold text-text-muted block">Cuenta seleccionada:</span>
+            <span class="font-mono font-black text-brand-400 truncate block">
+              {modalCtaSelected.trim()}{modalCtaSelectedObj?.descrip ? ` · ${modalCtaSelectedObj.descrip.trim()}` : ""}
+            </span>
+          {:else}
+            <span class="text-xs font-bold text-amber-400 flex items-center gap-1.5">
+              <AlertCircle size={14} class="shrink-0" />
+              Debes seleccionar una cuenta para continuar
+            </span>
+          {/if}
+        </div>
+        <div class="flex items-center justify-end gap-2.5 shrink-0">
+          <button
+            type="button"
+            onclick={() => {
+              showMovCtaModal = false;
+              confirmedAjpa = false;
+            }}
+            class="px-4 py-2.5 rounded-xl bg-surface-base hover:bg-surface-strong border border-border-subtle text-text-muted hover:text-text-base text-xs font-bold transition-all cursor-pointer"
+          >
+            Cancelar
+          </button>
+          <button
+            type="button"
+            disabled={!modalCtaSelected.trim() || saving}
+            onclick={() => {
+              const chosen = modalCtaSelected.trim();
+              if (!chosen) return;
+              paymentCtaIngrEgr = chosen;
+              if (paymentMode === "advance") {
+                advanceCtaIngrEgr = chosen;
+              }
+              confirmedMovCta = true;
+              showMovCtaModal = false;
+              executeSavePago();
+            }}
+            class="px-5 py-2.5 rounded-xl bg-brand-600 hover:bg-brand-500 disabled:opacity-40 disabled:pointer-events-none text-white text-xs font-black transition-all shadow-lg shadow-brand-500/25 flex items-center gap-2 cursor-pointer"
+          >
+            {#if saving}
+              <RefreshCw size={14} class="animate-spin" />
+              Procesando...
+            {:else}
+              <CheckCircle size={14} />
+              Confirmar y Generar Movimiento
+            {/if}
+          </button>
+        </div>
       </div>
     </div>
   </div>
@@ -3224,3 +4173,94 @@
   currentUserEmail={($page.data as any)?.profile?.email || ""}
   onAuthorized={applyAuthorizedRetention}
 />
+
+<!-- MODAL DE BÚSQUEDA DE PROVEEDORES (MODO ANTICIPO DIRECTO) -->
+{#if showSupplierSearchModal}
+  <div
+    class="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 backdrop-blur-md"
+    style="background-color: var(--modal-backdrop);"
+    transition:fade={{ duration: 150 }}
+  >
+    <!-- svelte-ignore a11y_click_events_have_key_events -->
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <div class="fixed inset-0" onclick={closeSupplierSearchModal}></div>
+
+    <div
+      class="relative z-10 bg-surface-raised border border-border-subtle rounded-[32px] w-full max-w-2xl max-h-[85vh] flex flex-col shadow-2xl overflow-hidden animate-in zoom-in-95 duration-150"
+    >
+      <div class="p-6 border-b border-border-subtle flex items-center justify-between bg-surface-soft">
+        <div class="flex items-center gap-3">
+          <div class="h-10 w-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-500 shrink-0">
+            <Building size={20} />
+          </div>
+          <div>
+            <h3 class="font-black text-lg text-text-base">Seleccionar Proveedor para Anticipo</h3>
+            <p class="text-xs text-text-muted font-medium">Busca cualquier proveedor activo aunque no tenga facturas emitidas</p>
+          </div>
+        </div>
+        <button
+          type="button"
+          onclick={closeSupplierSearchModal}
+          class="h-10 w-10 rounded-xl bg-surface-soft hover:bg-surface-strong flex items-center justify-center text-text-muted hover:text-text-base transition-all cursor-pointer"
+          aria-label="Cerrar modal"
+        >
+          <X size={18} />
+        </button>
+      </div>
+
+      <div class="p-5 border-b border-border-subtle bg-surface-soft/50">
+        <div class="relative flex gap-2">
+          <div class="relative flex-1">
+            <input
+              type="text"
+              placeholder="Buscar por RIF, Código o Razón Social..."
+              bind:value={supplierSearchInput}
+              oninput={() => searchSuppliersList(supplierSearchInput)}
+              onkeydown={(e) => e.key === "Enter" && searchSuppliersList(supplierSearchInput)}
+              class="w-full h-12 pl-12 pr-4 bg-surface-base border border-border-subtle rounded-xl text-sm font-medium focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none text-text-base"
+            />
+            <Search size={18} class="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted" />
+          </div>
+        </div>
+      </div>
+
+      <div class="flex-1 overflow-y-auto p-5 space-y-2.5 bg-surface-raised">
+        {#if searchingSuppliers}
+          <div class="py-12 flex flex-col items-center justify-center gap-3 text-text-muted">
+            <RefreshCw size={24} class="animate-spin text-emerald-500" />
+            <p class="text-xs font-bold">Buscando proveedores...</p>
+          </div>
+        {:else if supplierResults.length === 0}
+          <div class="py-12 text-center text-text-muted text-xs font-bold">
+            No se encontraron proveedores para esta búsqueda.
+          </div>
+        {:else}
+          {#each supplierResults as prov}
+            <button
+              type="button"
+              onclick={() => selectSupplierForAdvance(prov)}
+              class="w-full text-left bg-surface-base hover:bg-surface-soft border border-border-subtle hover:border-emerald-500/40 p-4 rounded-2xl transition-all flex items-center justify-between gap-4 group cursor-pointer"
+            >
+              <div class="space-y-1">
+                <div class="flex items-center gap-2">
+                  <span class="font-black text-sm text-text-base group-hover:text-emerald-400 transition-colors">
+                    {prov.prov_des || prov.descripcion}
+                  </span>
+                  <span class="text-[10px] font-mono px-2 py-0.5 rounded bg-surface-soft border border-border-subtle text-text-muted">
+                    {prov.co_prov}
+                  </span>
+                </div>
+                <p class="text-xs text-text-muted font-mono">
+                  RIF: {prov.rif || "N/A"} {prov.telefonos ? `• Tlf: ${prov.telefonos}` : ""}
+                </p>
+              </div>
+              <span class="text-xs font-black text-emerald-400 opacity-0 group-hover:opacity-100 transition-opacity">
+                Seleccionar →
+              </span>
+            </button>
+          {/each}
+        {/if}
+      </div>
+    </div>
+  </div>
+{/if}

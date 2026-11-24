@@ -29,6 +29,8 @@ export const load: PageServerLoad = protectLoad('pur_documents', async ({ url, l
             paymentConditions: [],
             expenseAccounts: [],
             docTypes: [],
+            bankAccounts: [],
+            bankDefaults: { cta_ingr_egr_egreso: '02' },
             editDocument: null,
             editError: null,
             error: 'No tienes sucursales asignadas.'
@@ -46,6 +48,8 @@ export const load: PageServerLoad = protectLoad('pur_documents', async ({ url, l
     let paymentConditions: any[] = [];
     let expenseAccounts: any[] = [];
     let docTypes: any[] = [];
+    let bankAccounts: any[] = [];
+    let bankDefaults: any = { cta_ingr_egr_egreso: '02' };
     let editDocument: any = null;
     let editError: string | null = null;
 
@@ -61,7 +65,8 @@ export const load: PageServerLoad = protectLoad('pur_documents', async ({ url, l
                 agentClient.request<any>('/catalogos/tasa').catch(() => null),
                 agentClient.request<any>('/catalogos/condiciones-pago').catch(() => null),
                 agentClient.request<any>('/documentos-compra/cuentas').catch(() => null),
-                agentClient.request<any>('/documentos-compra/tipos').catch(() => null)
+                agentClient.request<any>('/documentos-compra/tipos').catch(() => null),
+                agentClient.request<any>('/bancos/catalogos').catch(() => null)
             ];
 
             if (isEditMode) {
@@ -72,7 +77,7 @@ export const load: PageServerLoad = protectLoad('pur_documents', async ({ url, l
                 );
             }
 
-            const [tasaRes, condRes, ctasRes, tiposRes, docRes] = await Promise.all(requests);
+            const [tasaRes, condRes, ctasRes, tiposRes, bancosRes, docRes] = await Promise.all(requests);
 
             const tasaData = (tasaRes as any)?.data || (Array.isArray(tasaRes) ? tasaRes : []);
             if (tasaData.length > 0 && Number(tasaData[0].tasa) > 0) {
@@ -82,6 +87,10 @@ export const load: PageServerLoad = protectLoad('pur_documents', async ({ url, l
             paymentConditions = (condRes as any)?.data || (Array.isArray(condRes) ? condRes : []);
             expenseAccounts = (ctasRes as any)?.data || [];
             docTypes = (tiposRes as any)?.data || [];
+            bankAccounts = (bancosRes as any)?.cuentas_bancarias || [];
+            if ((bancosRes as any)?.defaults) {
+                bankDefaults = (bancosRes as any).defaults;
+            }
 
             if (isEditMode) {
                 if (docRes?.success && docRes?.data) {
@@ -103,6 +112,8 @@ export const load: PageServerLoad = protectLoad('pur_documents', async ({ url, l
         paymentConditions,
         expenseAccounts,
         docTypes,
+        bankAccounts,
+        bankDefaults,
         editDocument,
         editError,
         canCreate,

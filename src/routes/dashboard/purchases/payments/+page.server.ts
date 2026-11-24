@@ -1,4 +1,5 @@
 import { protectLoad } from '$lib/server/permissions';
+import { AgentClient } from '$lib/server/agent';
 import { hasPermission } from '$lib/server/auth';
 import { redirect } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
@@ -22,6 +23,8 @@ export const load: PageServerLoad = protectLoad('pur_payments', async ({ url, lo
 			bancos: [],
 			tarjetasCredito: [],
 			conceptosIslr: [],
+			cuentasIngrEgr: [],
+			defaultCtaEgreso: '',
 			activeRate: 1,
 			error: 'No tienes sucursales asignadas.'
 		};
@@ -36,6 +39,8 @@ export const load: PageServerLoad = protectLoad('pur_payments', async ({ url, lo
 	let bancos: any[] = [];
 	let tarjetasCredito: any[] = [];
 	let conceptosIslr: any[] = [];
+	let cuentasIngrEgr: any[] = [];
+	let defaultCtaEgreso = '';
 	let activeRate = 1;
 	let errorMsg = '';
 
@@ -53,13 +58,24 @@ export const load: PageServerLoad = protectLoad('pur_payments', async ({ url, lo
 				return [];
 			};
 
-			const [cRes, cbRes, bRes, tRes, islrRes, tasaRes] = await Promise.all([
+			const agentClient = selectedBranch?.agent_url
+				? new AgentClient({
+					slug: selectedBranch.id,
+					agent_url: selectedBranch.agent_url,
+					agent_api_key: selectedBranch.agent_token
+				}, profile, fetch)
+				: null;
+
+			const [cRes, cbRes, bRes, tRes, islrRes, tasaRes, ctasIeRes] = await Promise.all([
 				fetchCatalog('cajas'),
 				fetchCatalog('cuentas_bancarias'),
 				fetchCatalog('bancos'),
 				fetchCatalog('tarjetas_credito'),
 				fetch(`/api/agent/payables/conceptos-islr?branch_id=${selectedBranchId}`).then(r => r.ok ? r.json() : { data: [] }).catch(() => ({ data: [] })),
-				fetch(`/api/agent/tasa?branch_id=${selectedBranchId}`).then(r => r.ok ? r.json() : { tasa: 1 }).catch(() => ({ tasa: 1 }))
+				fetch(`/api/agent/tasa?branch_id=${selectedBranchId}`).then(r => r.ok ? r.json() : { tasa: 1 }).catch(() => ({ tasa: 1 })),
+				agentClient
+					? agentClient.request<any>('/documentos-compra/cuentas').catch(() => ({ data: [] }))
+					: Promise.resolve({ data: [] })
 			]);
 
 			cajas = cRes;
@@ -67,6 +83,8 @@ export const load: PageServerLoad = protectLoad('pur_payments', async ({ url, lo
 			bancos = bRes;
 			tarjetasCredito = tRes;
 			conceptosIslr = islrRes.data || [];
+			cuentasIngrEgr = (ctasIeRes as any)?.data || [];
+			defaultCtaEgreso = (ctasIeRes as any)?.default_egreso || '';
 			unidadTributaria = islrRes.unidad_tributaria || 43;
 			tabuladores = islrRes.tabuladores || [];
 			if (tasaRes && Number(tasaRes.tasa || tasaRes.data?.tasa || 0) > 0) {
@@ -86,6 +104,8 @@ export const load: PageServerLoad = protectLoad('pur_payments', async ({ url, lo
 		bancos,
 		tarjetasCredito,
 		conceptosIslr,
+		cuentasIngrEgr,
+		defaultCtaEgreso,
 		unidadTributaria,
 		tabuladores,
 		activeRate,

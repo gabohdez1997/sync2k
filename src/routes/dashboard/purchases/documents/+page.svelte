@@ -21,7 +21,9 @@
     Percent,
     Tag,
     Receipt,
-    Sparkles
+    Sparkles,
+    Landmark,
+    Info
   } from "lucide-svelte";
   import { toast } from "svelte-sonner";
   import { goto } from "$app/navigation";
@@ -99,11 +101,20 @@
   let alicuotaIva = $state<number>(16);
   let customIvaOverride = $state<number | null>(null);
 
+  // Movimiento de Banco (Anticipos / Ajustes con egreso bancario)
+  let generarMovBanco = $state(false);
+  let movBancoCodCta = $state("");
+  let movBancoTipoOp = $state<"TR" | "CH" | "ND">("TR");
+  let movBancoRef = $state("");
+  let movBancoFecha = $state(dayjs().format("YYYY-MM-DD"));
+  let movBancoCtaIngrEgr = $state("");
+
   // Status & Submit
   let isSavingDocument = $state(false);
   let saveSuccess = $state(false);
   let savedDocNum = $state("");
   let savedNroFact = $state("");
+  let savedMovBan = $state("");
   let savedTipoDoc = $state("");
   let savedTotalNeto = $state(0);
   let savedMoneda = $state<"BS" | "USD">("USD");
@@ -229,14 +240,74 @@
     (data.branches || []).find((b: any) => b.id === filterSede)
   );
 
+  const ADVANCE_DOC_TYPES = ["ADEL", "AJNM", "AJPM", "AJPA", "AJNA"];
+  const isAdvanceOrAdjustDoc = $derived(
+    ADVANCE_DOC_TYPES.includes(String(docMetadata.co_tipo_doc || "").trim().toUpperCase())
+  );
+
+  const selectedBankAccount = $derived(
+    (data.bankAccounts || []).find(
+      (b: any) => String(b.cod_cta || "").trim() === String(movBancoCodCta || "").trim()
+    ) || null
+  );
+
+  const bankMovePreviewAmount = $derived.by(() => {
+    if (!selectedBankAccount) return { amount: calculatedTotals.totalBS, currency: "BS" };
+    const m = String(selectedBankAccount.co_mone || "BS").trim().toUpperCase();
+    const isUsdBank = m === "US$" || m === "USD" || m.includes("US") || m.includes("$");
+    return isUsdBank
+      ? { amount: calculatedTotals.totalUSD, currency: "USD" }
+      : { amount: calculatedTotals.totalBS, currency: "BS" };
+  });
+
+  function initBankMovementDefaults() {
+    if (!movBancoCodCta && (data.bankAccounts || []).length > 0) {
+      movBancoCodCta = String(data.bankAccounts[0].cod_cta || "").trim();
+    }
+    if (!movBancoCtaIngrEgr && docMetadata.co_cta_ingr_egr) {
+      movBancoCtaIngrEgr = String(docMetadata.co_cta_ingr_egr).trim();
+    }
+    if (!movBancoFecha) {
+      movBancoFecha = docMetadata.fec_emis || dayjs().format("YYYY-MM-DD");
+    }
+  }
+
+  function handleTipoDocChange() {
+    if (isEditing) return;
+    const tipo = String(docMetadata.co_tipo_doc || "").trim().toUpperCase();
+    const shouldAutoBank = ["ADEL", "AJNM", "AJPM", "AJPA"].includes(tipo);
+    if (shouldAutoBank) {
+      generarMovBanco = true;
+      alicuotaIva = 0;
+      customIvaOverride = null;
+      initBankMovementDefaults();
+    } else {
+      generarMovBanco = false;
+      if (alicuotaIva === 0) {
+        alicuotaIva = 16;
+        customIvaOverride = null;
+      }
+    }
+    triggerDuplicateCheck();
+  }
+
+  function toggleGenerarMovBanco() {
+    if (isEditing) return;
+    generarMovBanco = !generarMovBanco;
+    if (generarMovBanco) {
+      initBankMovementDefaults();
+    }
+  }
+
   const selectedDocTypeObj = $derived(
     (data.docTypes || []).find((td: any) => td.co_tipo_doc?.trim() === docMetadata.co_tipo_doc?.trim())
   );
   const tipoMovLabel = $derived.by(() => {
     const mov = selectedDocTypeObj?.tipo_mov?.trim().toUpperCase();
-    if (mov === "D" || mov === "DEBITO" || mov === "DÉBITO") return "Débito";
-    if (mov === "C" || mov === "CREDITO" || mov === "CRÉDITO") return "Crédito";
-    if (docMetadata.co_tipo_doc === "N/CR") return "Crédito";
+    if (mov === "D" || mov === "DE" || mov === "DEBITO" || mov === "DÉBITO") return "Débito";
+    if (mov === "C" || mov === "CR" || mov === "CREDITO" || mov === "CRÉDITO") return "Crédito";
+    const tipo = String(docMetadata.co_tipo_doc || "").trim().toUpperCase();
+    if (["N/CR", "ADEL", "AJNM", "AJNA"].includes(tipo)) return "Crédito";
     return "Débito";
   });
 
@@ -564,9 +635,16 @@
     montoExentoInput = 0;
     otrosInput = 0;
     customIvaOverride = null;
+    generarMovBanco = false;
+    movBancoCodCta = "";
+    movBancoTipoOp = "TR";
+    movBancoRef = "";
+    movBancoFecha = dayjs().format("YYYY-MM-DD");
+    movBancoCtaIngrEgr = "";
     saveSuccess = false;
     savedDocNum = "";
     savedNroFact = "";
+    savedMovBan = "";
   }
 
   async function handleRegisterDocument() {
@@ -583,13 +661,27 @@
       return;
     }
     const nroFactClean = (docMetadata.nro_fact || "").trim();
-    if (!nroFactClean) {
+    if (!nroFactClean && !isAdvanceOrAdjustDoc) {
       toast.error("El número de factura / documento fiscal del proveedor es obligatorio.");
       return;
     }
-    if (duplicateFound) {
+    if (duplicateFound && (!isAdvanceOrAdjustDoc || nroFactClean)) {
       toast.error(`El documento fiscal N° "${nroFactClean}" ya fue registrado en la sucursal "${duplicateFound.branch_name}" (${duplicateFound.co_tipo_doc} #${duplicateFound.nro_doc}). No se permite registrar documentos duplicados.`);
       return;
+    }
+    if (!isEditing && generarMovBanco) {
+      if (!movBancoCodCta.trim()) {
+        toast.error("Debe seleccionar una cuenta bancaria para generar el movimiento de banco.");
+        return;
+      }
+      if (!movBancoRef.trim()) {
+        toast.error("Debe ingresar el N° de Referencia / Comprobante del movimiento bancario.");
+        return;
+      }
+      if (!movBancoCtaIngrEgr.trim()) {
+        toast.error("Debe seleccionar la Cuenta de Ingreso/Egreso para el movimiento bancario.");
+        return;
+      }
     }
     if (docMetadata.fec_reg && docMetadata.fec_emis && docMetadata.fec_reg < docMetadata.fec_emis) {
       toast.error("La Fecha de registro no puede ser menor a la Fecha de emisión.");
@@ -607,24 +699,26 @@
     isSavingDocument = true;
     try {
       // Verificación estricta anti-duplicados en tiempo real antes de guardar
-      try {
-        const checkParams = new URLSearchParams({
-          branch_id: filterSede,
-          co_prov: selectedSupplier.co_prov,
-          rif: selectedSupplier.rif || "",
-          nro_fact: nroFactClean,
-          exclude_doc: editingKey?.nro_doc || ""
-        });
-        const checkRes = await fetch(`/api/agent/documentos-compra/check-duplicate?${checkParams.toString()}`);
-        const checkData = await checkRes.json().catch(() => null);
-        if (checkData?.duplicate) {
-          duplicateFound = checkData.duplicate;
-          toast.error(`El documento fiscal N° "${nroFactClean}" ya fue registrado en la sucursal "${checkData.duplicate.branch_name}" (${checkData.duplicate.co_tipo_doc} #${checkData.duplicate.nro_doc}). No se permite registrar documentos duplicados.`);
-          isSavingDocument = false;
-          return;
+      if (!isAdvanceOrAdjustDoc || nroFactClean) {
+        try {
+          const checkParams = new URLSearchParams({
+            branch_id: filterSede,
+            co_prov: selectedSupplier.co_prov,
+            rif: selectedSupplier.rif || "",
+            nro_fact: nroFactClean,
+            exclude_doc: editingKey?.nro_doc || ""
+          });
+          const checkRes = await fetch(`/api/agent/documentos-compra/check-duplicate?${checkParams.toString()}`);
+          const checkData = await checkRes.json().catch(() => null);
+          if (checkData?.duplicate) {
+            duplicateFound = checkData.duplicate;
+            toast.error(`El documento fiscal N° "${nroFactClean}" ya fue registrado en la sucursal "${checkData.duplicate.branch_name}" (${checkData.duplicate.co_tipo_doc} #${checkData.duplicate.nro_doc}). No se permite registrar documentos duplicados.`);
+            isSavingDocument = false;
+            return;
+          }
+        } catch (eDup) {
+          console.warn("No se pudo verificar duplicado previo a guardar:", eDup);
         }
-      } catch (eDup) {
-        console.warn("No se pudo verificar duplicado previo a guardar:", eDup);
       }
       // Profit Plus stores financial amounts in national currency (BS) while recording the document's selected currency (co_mone) and rate
       const selectedCurrency = showUSD ? "USD" : "BS";
@@ -654,8 +748,19 @@
         nro_orig: docMetadata.nro_orig ? docMetadata.nro_orig.trim() : null,
         co_cond: docMetadata.co_cond,
         co_cta_ingr_egr: docMetadata.co_cta_ingr_egr || null,
-        observa: docMetadata.observa || `${docMetadata.co_tipo_doc} N° ${nroFactClean} - ${selectedSupplier.prov_des}`,
-        co_sucu_in: defaultBranchCode || "01"
+        observa: docMetadata.observa || `${docMetadata.co_tipo_doc}${nroFactClean ? ` N° ${nroFactClean}` : ""} - ${selectedSupplier.prov_des}`,
+        co_sucu_in: defaultBranchCode || "01",
+        generar_mov_banco: !isEditing && generarMovBanco,
+        mov_banco: !isEditing && generarMovBanco
+          ? {
+              cod_cta: movBancoCodCta.trim(),
+              tipo_op: movBancoTipoOp,
+              doc_num: movBancoRef.trim(),
+              fecha: movBancoFecha || docMetadata.fec_emis,
+              co_cta_ingr_egr: movBancoCtaIngrEgr.trim(),
+              descrip: docMetadata.observa?.trim() || `${docMetadata.co_tipo_doc} - ${selectedSupplier.prov_des} (Ref. ${movBancoRef.trim()})`
+            }
+          : null
       };
 
       const endpoint = isEditing && editingKey
@@ -674,7 +779,8 @@
       const result = await res.json();
       if (result.success !== false) {
         savedDocNum = result.doc_num || result.nro_doc || editingKey?.nro_doc || "";
-        savedNroFact = nroFactClean;
+        savedNroFact = nroFactClean || (isAdvanceOrAdjustDoc && movBancoRef.trim() ? movBancoRef.trim() : "N/A");
+        savedMovBan = result.mov_ban || "";
         savedTipoDoc = docMetadata.co_tipo_doc;
         savedTotalNeto = calculatedTotals.totalBS;
         savedMoneda = selectedCurrency;
@@ -720,9 +826,25 @@
         <div class="text-xl font-black text-brand-400 mt-0.5 font-mono">{savedDocNum}</div>
       </div>
       <div class="bg-surface-soft p-4 rounded-2xl border border-border-subtle text-left">
-        <span class="text-[10px] text-text-muted/70 uppercase font-bold tracking-wider">N° Factura Fiscal</span>
+        <span class="text-[10px] text-text-muted/70 uppercase font-bold tracking-wider">N° Factura / Ref. Proveedor</span>
         <div class="text-xl font-black text-text-base mt-0.5 font-mono">{savedNroFact}</div>
       </div>
+      {#if savedMovBan}
+        <div class="col-span-2 bg-emerald-500/10 p-4 rounded-2xl border border-emerald-500/30 flex items-center justify-between text-left">
+          <div class="flex items-center gap-3">
+            <div class="h-10 w-10 rounded-xl bg-emerald-500/20 flex items-center justify-center text-emerald-400">
+              <Landmark size={18} />
+            </div>
+            <div>
+              <span class="text-[10px] text-emerald-400 uppercase font-bold tracking-wider block">
+                Movimiento Bancario Generado (saMovimientoBanco)
+              </span>
+              <span class="text-xs text-text-muted">Egreso registrado y saldo bancario sincronizado en Profit Plus</span>
+            </div>
+          </div>
+          <div class="text-lg font-black text-emerald-400 font-mono">{savedMovBan}</div>
+        </div>
+      {/if}
       <div class="col-span-2 bg-surface-soft/60 px-4 py-3 rounded-2xl border border-border-subtle text-left flex justify-between items-center text-sm">
         <span class="text-text-muted font-medium">Monto Total Registrado ({savedMoneda}):</span>
         <div class="text-right">
@@ -938,6 +1060,7 @@
               <select
                 id="tipo_doc"
                 bind:value={docMetadata.co_tipo_doc}
+                onchange={handleTipoDocChange}
                 disabled={isEditing}
                 class="w-full h-11 px-3 bg-surface-soft border border-border-subtle rounded-xl text-sm font-semibold focus:border-brand-500 outline-none cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
               >
@@ -955,7 +1078,7 @@
             <!-- N° documento proveedor -->
             <div class="relative">
               <label for="nro_fact" class="text-xs font-bold text-text-muted block mb-1.5 flex items-center justify-between">
-                <span>N° documento proveedor *</span>
+                <span>{isAdvanceOrAdjustDoc ? "N° documento / ref. proveedor (opcional)" : "N° documento proveedor *"}</span>
                 {#if isCheckingDuplicate}
                   <span class="text-[10px] text-text-muted flex items-center gap-1 font-normal">
                     <Loader2 size={10} class="animate-spin" /> Verificando...
@@ -967,7 +1090,7 @@
                 type="text"
                 bind:value={docMetadata.nro_fact}
                 oninput={triggerDuplicateCheck}
-                placeholder="Ej. 13784 o Factura"
+                placeholder={isAdvanceOrAdjustDoc ? "Opcional (se usará la ref. bancaria)" : "Ej. 13784 o Factura"}
                 class={`w-full h-11 px-3 bg-surface-soft border rounded-xl text-sm font-mono font-bold outline-none uppercase transition-colors ${duplicateFound ? 'border-rose-500 bg-rose-500/5 focus:border-rose-500 text-rose-500' : 'border-border-subtle focus:border-brand-500'}`}
               />
               {#if duplicateFound}
@@ -1119,7 +1242,197 @@
               />
             </div>
           </div>
+
+          {#if isAdvanceOrAdjustDoc}
+            <div class="p-3.5 rounded-2xl bg-violet-500/10 border border-violet-500/25 flex items-start gap-2.5 text-xs text-violet-300" transition:slide>
+              <Info size={14} class="shrink-0 mt-0.5 text-violet-400" />
+              <div>
+                <span class="font-bold text-violet-200">Documento de Anticipo / Ajuste ({docMetadata.co_tipo_doc}):</span>
+                Quedará disponible con saldo a favor en <strong>Pagos a Proveedores</strong> para cruzar contra facturas (aplica prorrateo automático).
+              </div>
+            </div>
+          {/if}
         </div>
+
+        <!-- 2.5 MOVIMIENTO BANCARIO ASOCIADO -->
+        {#if isEditing}
+          {#if data.editDocument?.mov_ban && String(data.editDocument.mov_ban).trim()}
+            <div class="glass p-6 rounded-3xl border border-emerald-500/25 shadow-xl space-y-4">
+              <div class="flex flex-wrap items-center justify-between gap-2">
+                <h3 class="text-sm font-black uppercase tracking-widest text-emerald-400 flex items-center gap-2">
+                  <Landmark size={16} />
+                  Movimiento Bancario Asociado
+                </h3>
+                <span class={`text-[10px] font-black uppercase px-2.5 py-1 rounded-full border ${data.editDocument.mov_ban_anulado ? 'bg-rose-500/10 text-rose-400 border-rose-500/20' : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'}`}>
+                  {data.editDocument.mov_ban_anulado ? 'Anulado' : 'Activo'}
+                </span>
+              </div>
+
+              <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
+                <div class="bg-surface-soft p-3 rounded-xl border border-border-subtle">
+                  <span class="text-[10px] uppercase font-bold text-text-muted block">N° Movimiento</span>
+                  <span class="font-mono font-black text-emerald-400 text-sm">{String(data.editDocument.mov_ban).trim()}</span>
+                </div>
+                <div class="bg-surface-soft p-3 rounded-xl border border-border-subtle">
+                  <span class="text-[10px] uppercase font-bold text-text-muted block">Banco / Cuenta</span>
+                  <span class="font-bold text-text-base block truncate">
+                    {data.editDocument.mov_ban_des_ban || data.editDocument.mov_ban_cod_cta || 'N/D'}
+                  </span>
+                </div>
+                <div class="bg-surface-soft p-3 rounded-xl border border-border-subtle">
+                  <span class="text-[10px] uppercase font-bold text-text-muted block">Operación / Referencia</span>
+                  <span class="font-mono font-bold text-text-base">
+                    {data.editDocument.mov_ban_tipo_op || 'TR'} • {data.editDocument.mov_ban_doc_num || '---'}
+                  </span>
+                </div>
+                <div class="bg-surface-soft p-3 rounded-xl border border-border-subtle">
+                  <span class="text-[10px] uppercase font-bold text-text-muted block">Monto Egreso</span>
+                  <span class="font-mono font-black text-text-base">
+                    {data.editDocument.mov_ban_co_mone || 'BS'} {Number(data.editDocument.mov_ban_monto_d || 0).toLocaleString("es-VE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </span>
+                </div>
+              </div>
+
+              <p class="text-[11px] text-amber-400/90 flex items-center gap-1.5">
+                <AlertCircle size={13} class="shrink-0" />
+                La edición de montos está restringida mientras el documento posea un movimiento bancario vinculado.
+              </p>
+            </div>
+          {/if}
+        {:else}
+          <div class="glass p-6 rounded-3xl border {generarMovBanco ? 'border-emerald-500/35 shadow-emerald-500/5' : 'border-border-subtle'} shadow-xl space-y-5 transition-all">
+            <div class="flex flex-wrap items-center justify-between gap-3">
+              <div class="flex items-center gap-2.5">
+                <div class="h-9 w-9 rounded-xl {generarMovBanco ? 'bg-emerald-500/15 text-emerald-400' : 'bg-surface-soft text-text-muted'} flex items-center justify-center border border-border-subtle">
+                  <Landmark size={16} />
+                </div>
+                <div>
+                  <h3 class="text-sm font-black uppercase tracking-widest text-text-base">
+                    Movimiento de Banco
+                  </h3>
+                  <p class="text-[11px] text-text-muted">
+                    Genera automáticamente el egreso en <span class="font-mono">saMovimientoBanco</span> y actualiza el saldo bancario.
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onclick={toggleGenerarMovBanco}
+                aria-pressed={generarMovBanco}
+                class={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-black transition-all cursor-pointer border ${
+                  generarMovBanco
+                    ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/40 shadow-sm shadow-emerald-500/10'
+                    : 'bg-surface-soft text-text-muted border-border-subtle hover:text-text-base'
+                }`}
+              >
+                <span class={`w-8 h-4 rounded-full relative transition-colors ${generarMovBanco ? 'bg-emerald-500' : 'bg-border-subtle'}`}>
+                  <span class={`absolute top-0.5 left-0.5 w-3 h-3 rounded-full bg-white transition-transform ${generarMovBanco ? 'translate-x-4' : 'translate-x-0'}`}></span>
+                </span>
+                Generar Movimiento de Banco
+              </button>
+            </div>
+
+            {#if generarMovBanco}
+              <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 pt-2 border-t border-border-subtle/60" transition:slide>
+                <!-- Cuenta Bancaria -->
+                <div class="sm:col-span-2 lg:col-span-1">
+                  <label for="mov_banco_cod_cta" class="text-xs font-bold text-text-muted block mb-1.5">Cuenta Bancaria *</label>
+                  {#if (data.bankAccounts || []).length === 0}
+                    <div class="h-11 px-3 bg-rose-500/10 border border-rose-500/25 rounded-xl text-xs text-rose-400 flex items-center">
+                      No hay cuentas bancarias activas en esta sucursal.
+                    </div>
+                  {:else}
+                    <select
+                      id="mov_banco_cod_cta"
+                      bind:value={movBancoCodCta}
+                      class="w-full h-11 px-3 bg-surface-soft border border-border-subtle rounded-xl text-sm font-semibold focus:border-emerald-500 outline-none cursor-pointer"
+                    >
+                      <option value="">Seleccione cuenta bancaria...</option>
+                      {#each data.bankAccounts || [] as b}
+                        <option value={b.cod_cta?.trim()}>
+                          {b.des_ban?.trim()} - {b.num_cta?.trim() || b.cod_cta?.trim()} ({b.co_mone?.trim()})
+                        </option>
+                      {/each}
+                    </select>
+                  {/if}
+                </div>
+
+                <!-- Tipo de Operación -->
+                <div>
+                  <label for="mov_banco_tipo_op" class="text-xs font-bold text-text-muted block mb-1.5">Tipo de Operación *</label>
+                  <select
+                    id="mov_banco_tipo_op"
+                    bind:value={movBancoTipoOp}
+                    class="w-full h-11 px-3 bg-surface-soft border border-border-subtle rounded-xl text-sm font-semibold focus:border-emerald-500 outline-none cursor-pointer"
+                  >
+                    <option value="TR">TR - Transferencia</option>
+                    <option value="CH">CH - Cheque</option>
+                    <option value="ND">ND - Nota de Débito</option>
+                  </select>
+                </div>
+
+                <!-- N° Referencia / Comprobante -->
+                <div>
+                  <label for="mov_banco_ref" class="text-xs font-bold text-text-muted block mb-1.5">N° Referencia / Comprobante *</label>
+                  <input
+                    id="mov_banco_ref"
+                    type="text"
+                    bind:value={movBancoRef}
+                    maxlength="20"
+                    placeholder="Ej. 00123456"
+                    class="w-full h-11 px-3 bg-surface-soft border border-border-subtle rounded-xl text-sm font-mono font-bold focus:border-emerald-500 outline-none uppercase"
+                  />
+                </div>
+
+                <!-- Fecha Movimiento Banco -->
+                <div>
+                  <label for="mov_banco_fecha" class="text-xs font-bold text-text-muted block mb-1.5">Fecha Movimiento Banco</label>
+                  <input
+                    id="mov_banco_fecha"
+                    type="date"
+                    bind:value={movBancoFecha}
+                    class="w-full h-11 px-3 bg-surface-soft border border-border-subtle rounded-xl text-sm font-semibold focus:border-emerald-500 outline-none"
+                  />
+                </div>
+
+                <!-- Cuenta de Ingreso/Egreso -->
+                <div>
+                  <label for="mov_banco_cta_ie" class="text-xs font-bold text-text-muted block mb-1.5">Cuenta de Ingreso/Egreso *</label>
+                  <select
+                    id="mov_banco_cta_ie"
+                    bind:value={movBancoCtaIngrEgr}
+                    class="w-full h-11 px-3 bg-surface-soft border border-border-subtle rounded-xl text-sm font-medium focus:border-emerald-500 outline-none cursor-pointer"
+                  >
+                    <option value="">Seleccione cuenta de ingreso/egreso...</option>
+                    {#each data.expenseAccounts || [] as cta}
+                      <option value={cta.co_cta_ingr_egr?.trim()}>{cta.descrip?.trim()} ({cta.co_cta_ingr_egr?.trim()})</option>
+                    {/each}
+                  </select>
+                </div>
+
+                <!-- Resumen del Egreso Bancario -->
+                <div class="bg-emerald-500/10 border border-emerald-500/25 rounded-xl px-4 py-2.5 flex flex-col justify-center">
+                  <span class="text-[10px] font-black uppercase tracking-wider text-emerald-400">
+                    Resumen del Egreso Bancario
+                  </span>
+                  <div class="text-base font-black font-mono text-text-base mt-0.5">
+                    {#if bankMovePreviewAmount.currency === "USD"}
+                      $ {bankMovePreviewAmount.amount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    {:else}
+                      Bs. {bankMovePreviewAmount.amount.toLocaleString("es-VE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    {/if}
+                  </div>
+                  {#if selectedBankAccount}
+                    <span class="text-[10px] text-text-muted truncate">
+                      {selectedBankAccount.des_ban?.trim()} • Moneda: {selectedBankAccount.co_mone?.trim()}
+                    </span>
+                  {/if}
+                </div>
+              </div>
+            {/if}
+          </div>
+        {/if}
 
         <!-- 3. AMOUNTS & TAX INPUT CARD (ESTRUCTURA PROFIT PLUS ESCRITORIO) -->
         <div class="glass p-6 rounded-3xl border border-border-subtle shadow-xl space-y-6">
