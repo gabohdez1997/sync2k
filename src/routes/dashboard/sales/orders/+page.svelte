@@ -210,6 +210,7 @@
   let quantities = $state<Record<string, number>>({});
   let selectedItemWarehouse = $state<Record<string, string>>({});
   let selectedItemPriceIndex = $state<Record<string, number>>({});
+  let showCardIva = $state<Record<string, boolean>>({});
   let cart = $state<any[]>([]);
   let lastLoadedDoc = $state("");
   let isInitializing = false;
@@ -2576,6 +2577,10 @@
               {@const curAlm =
                 article.disponibilidad?.find((a) => a.co_alma === curAlmId) ||
                 article.disponibilidad?.[0]}
+              {@const artKey = article.co_art || article.codigo}
+              {@const cardWithIva = Boolean(showCardIva[artKey]) && !isExemptArticle(article)}
+              {@const baseCardPrice = Number((showUSD ? selPrice?.precio : selPrice?.precio_ves) || 0)}
+              {@const displayCardPrice = cardWithIva ? baseCardPrice * 1.16 : baseCardPrice}
               <div
                 class="glass p-4 rounded-3xl border border-border-subtle hover:border-brand-500/30 transition-all flex flex-col group relative overflow-hidden"
               >
@@ -2625,19 +2630,22 @@
                   class="flex flex-wrap items-center gap-1.5 mt-1.5"
                 >
                   <span class="text-[10px] text-brand-400 font-bold uppercase tracking-wider">{article.unidad || "UNID"}</span>
-                  {#if isServiceArticle(article)}
-                    <span class="px-1.5 py-0.5 rounded bg-violet-500/15 border border-violet-500/30 text-[9px] font-black text-violet-600 dark:text-violet-300 uppercase">
-                      SERVICIO · Stock ∞
-                    </span>
-                  {/if}
-                  {#if isExemptArticle(article)}
-                    <span class="px-1.5 py-0.5 rounded bg-amber-500/15 border border-amber-500/30 text-[9px] font-black text-amber-400 uppercase">
-                      EXENTO 0%
-                    </span>
-                  {:else}
-                    <span class="px-1.5 py-0.5 rounded bg-emerald-500/15 border border-emerald-500/30 text-[9px] font-black text-emerald-400 uppercase">
-                      IVA 16%
-                    </span>
+                  {#if !isExemptArticle(article)}
+                    <button
+                      type="button"
+                      onclick={(e) => {
+                        e.stopPropagation();
+                        showCardIva[artKey] = !showCardIva[artKey];
+                      }}
+                      title={cardWithIva
+                        ? "Clic para ver precio sin IVA"
+                        : "Clic para sumar 16% de IVA al precio"}
+                      class="px-2 py-0.5 rounded-md border text-[9px] font-black uppercase transition-all cursor-pointer active:scale-95 {cardWithIva
+                        ? 'bg-emerald-500 text-white border-emerald-500 shadow-sm shadow-emerald-500/20'
+                        : 'bg-surface-soft text-text-muted border-border-bold hover:border-emerald-500/40 hover:text-emerald-600 dark:hover:text-emerald-400'}"
+                    >
+                      {cardWithIva ? "CON IVA 16%" : "+ IVA 16%"}
+                    </button>
                   {/if}
                 </div>
 
@@ -2646,14 +2654,17 @@
                   <div class="flex flex-col gap-1">
                     <div class="flex justify-between items-end px-1">
                       <span
-                        class="text-[9px] font-black text-text-muted uppercase tracking-wider"
-                        >Precio</span
+                        class="text-[9px] font-black uppercase tracking-wider {cardWithIva
+                          ? 'text-emerald-600 dark:text-emerald-400'
+                          : 'text-text-muted'}"
+                        >{cardWithIva ? "Precio c/IVA" : "Precio"}</span
                       >
-                      <span class="text-base font-black text-brand-400">
-                        {(showUSD
-                          ? selPrice?.precio
-                          : selPrice?.precio_ves
-                        )?.toLocaleString("de-DE", {
+                      <span
+                        class="text-base font-black {cardWithIva
+                          ? 'text-emerald-600 dark:text-emerald-400'
+                          : 'text-brand-400'}"
+                      >
+                        {displayCardPrice.toLocaleString("de-DE", {
                           minimumFractionDigits: 2,
                           maximumFractionDigits: 2,
                         })}
