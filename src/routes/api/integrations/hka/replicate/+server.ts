@@ -134,6 +134,16 @@ export const POST: RequestHandler = async ({ request, locals, fetch }) => {
     if (Array.isArray(body.selected_hka_docs) && body.selected_hka_docs.length > 0) {
       const selectedSet = new Set(body.selected_hka_docs.map((x: any) => String(x).trim()));
       docs = docs.filter((d) => selectedSet.has(d.numeroDocumento));
+      if (docs.length === 0) {
+        return json(
+          {
+            success: false,
+            message:
+              'No se pudieron recuperar los documentos seleccionados desde The Factory HKA (posible límite temporal de consulta). Espere 30 segundos e intente nuevamente.'
+          },
+          { status: 400 }
+        );
+      }
     }
 
     const replicationOptions: HkaReplicationOptions = {

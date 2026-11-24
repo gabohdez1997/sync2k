@@ -3308,7 +3308,7 @@
               >
                 <table class="w-full text-left text-xs">
                   <thead
-                    class="bg-surface-soft/80 text-[10px] uppercase text-text-muted sticky top-0"
+                    class="bg-surface-raised border-b border-border-subtle z-10 shadow-[0_1px_0_0_var(--border-color)] text-[10px] uppercase text-text-muted sticky top-0"
                   >
                     <tr>
                       <th class="p-2">Co_Art</th>
@@ -3508,7 +3508,7 @@
               <div class="max-h-72 overflow-auto">
                 <table class="w-full text-left text-xs">
                   <thead
-                    class="bg-surface-soft/70 text-[10px] uppercase text-text-muted sticky top-0"
+                    class="bg-surface-raised border-b border-border-subtle z-10 shadow-[0_1px_0_0_var(--border-color)] text-[10px] uppercase text-text-muted sticky top-0"
                   >
                     <tr>
                       <th class="p-2.5 w-8 text-center">Sel</th>

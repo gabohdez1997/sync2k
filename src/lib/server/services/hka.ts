@@ -130,6 +130,13 @@ interface CachedToken {
 let tokenCache: CachedToken | null = null;
 const lastDocNumberCache = new Map<string, number>();
 
+interface CachedAssignmentsEntry {
+  items: HkaAssignmentItem[];
+  fetchedAt: number;
+}
+const assignmentsWindowCache = new Map<string, CachedAssignmentsEntry>();
+const ASSIGNMENTS_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutos
+
 /**
  * Formatea fecha y hora según los regex estrictos de The Factory HKA (.swaggerHKA)
  * Fecha: DD/MM/YYYY
@@ -1154,6 +1161,16 @@ export async function listHkaAssignments(
   const url = `${baseUrl}/api/ListadoAsignaciones`;
 
   const fetchWindow = async (windowBody: Record<string, any>): Promise<{ ok: boolean; items: HkaAssignmentItem[]; msg?: string }> => {
+    const exactCacheKey = `${baseUrl}__${cfg.token_empresa}__${JSON.stringify({
+      tipoDocumento: windowBody.tipoDocumento || '',
+      serie: windowBody.serie || '',
+      fechaInicio: windowBody.fechaInicio || '',
+      fechaFin: windowBody.fechaFin || '',
+      numeroDocumentoInicio: windowBody.numeroDocumentoInicio || '',
+      numeroDocumentoFin: windowBody.numeroDocumentoFin || ''
+    })}`;
+    const broadRangeKey = `${baseUrl}__${cfg.token_empresa}__RANGE__${windowBody.fechaInicio || ''}__${windowBody.fechaFin || ''}__${windowBody.numeroDocumentoInicio || ''}__${windowBody.numeroDocumentoFin || ''}`;
+
     const collected: HkaAssignmentItem[] = [];
     let page = 1;
     let totalPages = 1;
@@ -1173,13 +1190,58 @@ export async function listHkaAssignments(
       });
 
       const data = await res.json().catch(() => null);
-      // Código 204 o "No se encontraron registros" no es un fallo fatal sino lista vacía
-      if (!res.ok) {
-        const msg = String(data?.mensaje || '');
-        if (res.status === 404 || msg.toLowerCase().includes('no se encontr') || msg.toLowerCase().includes('sin registros')) {
-          break;
+      const hkaCode = String(data?.codigo ?? '').trim();
+      const msg = String(data?.mensaje ?? '').trim();
+      const msgLower = msg.toLowerCase();
+
+      // Código 204 o "No se encontraron registros" no es un fallo fatal sino lista vacía legítima
+      if (
+        res.status === 404 ||
+        hkaCode === '204' ||
+        msgLower.includes('no se encontr') ||
+        msgLower.includes('sin registros')
+      ) {
+        break;
+      }
+
+      // Código 99 ("Consulta realizada previamente, favor de intentarlo en 30 segundos"): usar caché vigente o reportar error
+      if (
+        hkaCode === '99' ||
+        msgLower.includes('30 segundos') ||
+        msgLower.includes('realizada previamente')
+      ) {
+        const now = Date.now();
+        const exactEntry = assignmentsWindowCache.get(exactCacheKey);
+        if (exactEntry && now - exactEntry.fetchedAt < ASSIGNMENTS_CACHE_TTL_MS) {
+          return { ok: true, items: [...exactEntry.items] };
         }
-        return { ok: false, items: collected, msg: msg || `HTTP ${res.status} en ListadoAsignaciones` };
+        const broadEntry = assignmentsWindowCache.get(broadRangeKey);
+        if (broadEntry && now - broadEntry.fetchedAt < ASSIGNMENTS_CACHE_TTL_MS) {
+          const wantTipo = windowBody.tipoDocumento ? String(windowBody.tipoDocumento).trim() : '';
+          const wantSerie =
+            windowBody.serie !== undefined && windowBody.serie !== null
+              ? String(windowBody.serie).trim().toUpperCase()
+              : '';
+          const filtered = broadEntry.items.filter((it) => {
+            if (wantTipo && String(it.tipoDocumento || '').trim() !== wantTipo) return false;
+            if (wantSerie && String(it.serie || '').trim().toUpperCase() !== wantSerie) return false;
+            return true;
+          });
+          return { ok: true, items: filtered };
+        }
+        return {
+          ok: false,
+          items: [],
+          msg: msg || 'The Factory HKA indicó esperar 30 segundos antes de repetir esta consulta.'
+        };
+      }
+
+      if (!res.ok || (hkaCode && hkaCode !== '200')) {
+        return {
+          ok: false,
+          items: collected,
+          msg: msg || `Error HKA (código ${hkaCode || res.status}) en ListadoAsignaciones`
+        };
       }
 
       if (Array.isArray(data?.asignaciones)) {
@@ -1196,6 +1258,12 @@ export async function listHkaAssignments(
 
       totalPages = Math.max(1, Number(data?.totalPaginas || 1));
       page++;
+    }
+
+    const now = Date.now();
+    assignmentsWindowCache.set(exactCacheKey, { items: [...collected], fetchedAt: now });
+    if (!windowBody.tipoDocumento && !windowBody.serie) {
+      assignmentsWindowCache.set(broadRangeKey, { items: [...collected], fetchedAt: now });
     }
 
     return { ok: true, items: collected };
