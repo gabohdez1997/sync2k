@@ -42,9 +42,9 @@
     function parseSafeDate(val: any): Date {
         if (!val) return new Date();
         const s = String(val).trim();
-        if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
-            const [y, m, d] = s.split('-').map(Number);
-            return new Date(y, m - 1, d, 12, 0, 0);
+        const m = s.match(/^(\d{4})-(\d{2})-(\d{2})(?:$|T00:00:00(?:\.000)?Z$)/i);
+        if (m) {
+            return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]), 12, 0, 0);
         }
         return new Date(val);
     }
@@ -53,9 +53,9 @@
         const target = val || fallback;
         if (!target) return dayjs().format("DD/MM/YYYY");
         const s = String(target).trim();
-        if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
-            const [y, m, d] = s.split('-');
-            return `${d}/${m}/${y}`;
+        const m = s.match(/^(\d{4})-(\d{2})-(\d{2})(?:$|T00:00:00(?:\.000)?Z$)/i);
+        if (m) {
+            return `${m[3]}/${m[2]}/${m[1]}`;
         }
         return dayjs(target).format("DD/MM/YYYY");
     }

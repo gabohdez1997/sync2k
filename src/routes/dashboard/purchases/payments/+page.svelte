@@ -43,7 +43,11 @@
   let loadingDocs = $state(false);
   let currentExchangeRate = $state(data.activeRate || 1);
   let showUSD = $state(true);
-  let paymentDate = $state(new Date().toISOString().split("T")[0]);
+  function todayLocalISO(): string {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  }
+  let paymentDate = $state(todayLocalISO());
 
   function switchCurrency(toUSD: boolean) {
     showUSD = toUSD;
