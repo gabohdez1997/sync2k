@@ -125,6 +125,11 @@
   let devToVoid = $state<any>(null);
   let isVoiding = $state(false);
 
+  // Deleting State
+  let showDeleteConfirmModal = $state(false);
+  let devToDelete = $state<any>(null);
+  let isDeleting = $state(false);
+
   // Fetch exchange rate on branch change or mount
   async function loadBranchRate(branchId: string) {
     if (!branchId) return;
@@ -990,6 +995,52 @@
       toast.error("Error de red: " + err.message);
     } finally {
       isVoiding = false;
+    }
+  }
+
+  function promptDeleteDev(dev: any) {
+    if (!data.permissions?.canDelete) {
+      toast.error("No tienes permisos para eliminar devoluciones.");
+      return;
+    }
+    devToDelete = dev;
+    showDeleteConfirmModal = true;
+  }
+
+  async function confirmDeleteDev() {
+    if (!devToDelete) return;
+    isDeleting = true;
+
+    try {
+      const targetBranchId =
+        devToDelete.sede_id ||
+        devToDelete._branch_id ||
+        filterSede ||
+        data.selectedBranchId;
+      const res = await fetch(
+        `/api/agent/credits/${encodeURIComponent(devToDelete.doc_num.trim())}?branch_id=${encodeURIComponent(targetBranchId)}`,
+        { method: "DELETE" },
+      );
+      const json = await res.json();
+
+      if (json.success) {
+        toast.success(
+          json.message ||
+            `Devolución ${devToDelete.doc_num.trim()} eliminada permanentemente.`,
+        );
+        showDeleteConfirmModal = false;
+        devToDelete = null;
+        if (showDetailModal) {
+          showDetailModal = false;
+        }
+        loadHistory(historyPage);
+      } else {
+        toast.error(json.message || "Error al eliminar devolución.");
+      }
+    } catch (err: any) {
+      toast.error("Error de red: " + err.message);
+    } finally {
+      isDeleting = false;
     }
   }
 
@@ -2290,6 +2341,18 @@
                               <Ban size={18} />
                             </button>
                           {/if}
+
+                          <!-- Eliminar -->
+                          {#if data.permissions?.canDelete}
+                            <button
+                              type="button"
+                              onclick={() => promptDeleteDev(dev)}
+                              class="p-2 text-text-muted hover:text-red-500 hover:bg-red-500/10 rounded-xl transition-all cursor-pointer"
+                              title="Eliminar Devolución Permanentemente"
+                            >
+                              <Trash2 size={18} />
+                            </button>
+                          {/if}
                         </div>
                       </td>
                     </tr>
@@ -2787,6 +2850,84 @@
           {:else}
             <Ban size={14} />
             Confirmar Anulación
+          {/if}
+        </button>
+      </div>
+    </div>
+  </div>
+{/if}
+
+<!-- MODAL: CONFIRMACION DE ELIMINACION -->
+{#if showDeleteConfirmModal && devToDelete}
+  <div
+    class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-md"
+    in:fade={{ duration: 150 }}
+  >
+    <div
+      class="bg-surface-raised border border-red-500/30 rounded-[32px] max-w-md w-full p-6 space-y-6 shadow-2xl"
+      in:scale={{ start: 0.95, duration: 200 }}
+    >
+      <div class="flex items-center gap-3 text-red-400">
+        <div
+          class="h-12 w-12 rounded-2xl bg-red-500/10 flex items-center justify-center shrink-0"
+        >
+          <Trash2 size={24} />
+        </div>
+        <div>
+          <h3 class="text-lg font-black text-text-base">
+            ¿Eliminar Devolución Permanentemente?
+          </h3>
+          <p class="text-xs text-text-muted">
+            Esta acción borrará el registro físico de Profit Plus y no se puede deshacer.
+          </p>
+        </div>
+      </div>
+
+      <div
+        class="p-4 rounded-2xl bg-surface-soft/60 border border-border-subtle text-xs space-y-2"
+      >
+        <p class="text-text-muted">
+          Al eliminar la devolución <strong>{devToDelete.doc_num}</strong>:
+        </p>
+        <ul class="list-disc list-inside space-y-1 text-text-muted text-[11px]">
+          <li>
+            Se eliminarán físicamente la devolución, sus renglones, lotes y su Nota de Crédito asociada (<code>N/CR</code>).
+          </li>
+          <li>
+            Se limpiarán las referencias de cobros o documentos asociados para evitar bloqueos de clave foránea.
+          </li>
+          {#if !devToDelete.anulado}
+            <li>
+              El stock regresado será descontado nuevamente y se revertirán las cantidades devueltas en la factura origen.
+            </li>
+          {/if}
+        </ul>
+      </div>
+
+      <div class="flex gap-3">
+        <button
+          type="button"
+          onclick={() => {
+            showDeleteConfirmModal = false;
+            devToDelete = null;
+          }}
+          disabled={isDeleting}
+          class="flex-1 py-3 bg-surface-soft hover:bg-surface-soft/80 text-text-base rounded-xl text-xs font-bold border border-border-subtle transition-all cursor-pointer disabled:opacity-50"
+        >
+          Cancelar
+        </button>
+        <button
+          type="button"
+          onclick={confirmDeleteDev}
+          disabled={isDeleting}
+          class="flex-1 py-3 bg-red-600 hover:bg-red-500 text-white rounded-xl text-xs font-bold transition-all shadow-lg shadow-red-500/20 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+        >
+          {#if isDeleting}
+            <Loader2 size={14} class="animate-spin" />
+            Eliminando...
+          {:else}
+            <Trash2 size={14} />
+            Eliminar Permanentemente
           {/if}
         </button>
       </div>
