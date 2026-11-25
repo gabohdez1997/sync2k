@@ -410,16 +410,23 @@
           .filter((l: any) => Number(l.pendiente ?? l.cantidad) > 0)
           .map((l: any) => {
             const itemQty = Number(l.pendiente ?? l.cantidad);
-            const usdPrice =
+            const docUsdPrice =
               Number(l.prec_vta_om || 0) > 0
                 ? Number(l.prec_vta_om)
                 : linesStoredInUsd
                   ? Number(l.precio || 0)
                   : Number(l.precio || 0) / tasa;
             const rawComment = String(l.comentario || "").trim();
-            const authBy = rawComment.startsWith("PRECIO_AUT:")
-              ? rawComment.replace(/^PRECIO_AUT:/, "").trim()
+            const hasAuthTag = rawComment.toUpperCase().startsWith("PRECIO_AUT:");
+            const authBy = hasAuthTag
+              ? rawComment.replace(/^PRECIO_AUT:/i, "").trim() || "Autorizado"
               : "";
+            const latestCatalogUsd = Number(l.precio_actual_om || 0);
+            const usdPrice = hasAuthTag
+              ? docUsdPrice
+              : latestCatalogUsd > 0
+                ? latestCatalogUsd
+                : docUsdPrice;
             const normTipoImp =
               String(l.tipo_imp || l.art_tipo_imp || "1").trim() || "1";
             const normPorcImp = EXEMPT_TAX_CODES.includes(normTipoImp)
@@ -438,7 +445,7 @@
               checked: true,
               co_ven: orderDetails.co_ven,
               ven_des: orderDetails.ven_des,
-              is_custom_price: Boolean(authBy),
+              is_custom_price: hasAuthTag,
               authorized_by: authBy || null,
             };
           });
@@ -853,6 +860,9 @@
         rowguid_doc: line.rowguid,
         co_subl: line.co_subl,
         co_lin: line.co_lin,
+        comentario: line.is_custom_price
+          ? `PRECIO_AUT:${line.authorized_by || "Autorizado"}`
+          : "",
       })),
     };
 
@@ -886,12 +896,31 @@
         `Factura Nro. ${realDocNum} guardada exitosamente en la base de datos.`,
       );
 
+      const resolvedRengs =
+        saveResult.resolved_renglones ||
+        saveResult.results?.[0]?.resolved_renglones;
+      const finalActiveLines =
+        Array.isArray(resolvedRengs) &&
+        resolvedRengs.length === activeLines.length
+          ? activeLines.map((line: any, idx: number) => {
+              const resolvedUsd = Number(resolvedRengs[idx]?.precio_usd || 0);
+              return resolvedUsd > 0 ? { ...line, precio: resolvedUsd } : line;
+            })
+          : activeLines;
+      const finalInvoiceData = {
+        ...invoiceData,
+        renglones: finalActiveLines.map((line: any, idx: number) => ({
+          ...invoiceData.renglones[idx],
+          precio: Number(line.precio),
+        })),
+      };
+
       const multiplier = showUSD ? 1 : Number(activeTasa || 1);
-      const totalBruto = activeLines.reduce(
+      const totalBruto = finalActiveLines.reduce(
         (sum, l) => sum + Number(l.cantidad) * (Number(l.precio) * multiplier),
         0,
       );
-      const montoImp = activeLines.reduce((sum, l) => {
+      const montoImp = finalActiveLines.reduce((sum, l) => {
         const isExento = isLineExempt(l);
         return (
           sum +
@@ -930,7 +959,7 @@
               selectedClient.co_cli,
             );
             const rateBs = Number(activeTasa || 1);
-            const hkaItems = activeLines.map((line: any) => {
+            const hkaItems = finalActiveLines.map((line: any) => {
               const isExento = isLineExempt(line);
               return {
                 codigo: (line.co_art || "ART").trim(),
@@ -1011,7 +1040,7 @@
                 branch_id: filterSede,
                 printer_id: fiscalPrinter.id,
                 invoice: {
-                  ...invoiceData,
+                  ...finalInvoiceData,
                   doc_num: realDocNum,
                   invoice_num: realDocNum,
                   cli_des: selectedClient.cli_des,
@@ -1116,7 +1145,7 @@
                 data.userProfile?.full_name || data.userProfile?.name || "---",
               co_cond: selectedClient.co_cond || "CONTADO",
               cond_des: selectedClient.cond_des || "CONTADO",
-              renglones: activeLines.map((l: any) => {
+              renglones: finalActiveLines.map((l: any) => {
                 const itemPrice = Number(l.precio) * multiplier;
                 return {
                   co_art: l.co_art,
@@ -1187,7 +1216,7 @@
             body: JSON.stringify({
               branch_id: filterSede,
               invoice: {
-                ...invoiceData,
+                ...finalInvoiceData,
                 invoice_num: realDocNum, // Usado para imprimir origen FACTURA Nro. XXX
                 doc_num: realDocNum, // Usado para el código grande al pie del ticket
                 cli_des: selectedClient.cli_des,

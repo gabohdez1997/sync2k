@@ -65,6 +65,13 @@
 
   let { data }: { data: PageData } = $props();
 
+  function normalizePriceCode(code: any): string {
+    const s = String(code || "").trim().toUpperCase();
+    if (!s) return "1";
+    if (/^\d+$/.test(s)) return String(parseInt(s, 10));
+    return s;
+  }
+
   // --- ESTADO GLOBAL ---
   let activeTab = $state(0); // 0: Cliente, 1: Artículos, 2: Confirmación
   let searchTerm = $state($page.url.searchParams.get("search") || "");
@@ -292,18 +299,29 @@
           const mappedCart = q.renglones.map((r: any) => {
             const artId = String(r.co_art || "").trim();
             const almaId = String(r.co_alma || "").trim();
-            const savedVes = Number(r.precio || 0);
-            const savedUsd =
+            const docVes = Number(r.precio || 0);
+            const docUsd =
               Number(r.prec_vta_om || 0) > 0
                 ? Number(r.prec_vta_om)
                 : docTasa > 0
-                  ? savedVes / docTasa
+                  ? docVes / docTasa
                   : 0;
             const rawComment = String(r.comentario || "").trim();
-            const authBy = rawComment.startsWith("PRECIO_AUT:")
-              ? rawComment.replace(/^PRECIO_AUT:/, "").trim()
+            const hasAuthTag = rawComment.toUpperCase().startsWith("PRECIO_AUT:");
+            const authBy = hasAuthTag
+              ? rawComment.replace(/^PRECIO_AUT:/i, "").trim() || "Autorizado"
               : "";
-            const isExplicitCustom = Boolean(authBy);
+            const isExplicitCustom = hasAuthTag;
+            const catalogUsd = Number(r.precio_actual_om || 0);
+            const catalogVes = Number(r.precio_actual_bs || 0);
+            const savedUsd =
+              !isExplicitCustom && catalogUsd > 0 ? catalogUsd : docUsd;
+            const savedVes =
+              !isExplicitCustom && catalogUsd > 0
+                ? catalogVes > 0
+                  ? catalogVes
+                  : savedUsd * docTasa
+                : docVes;
             const coPrecio = String(r.co_precio || "01").trim();
 
             // Set individual states
@@ -399,6 +417,9 @@
           if (parsed.activeTab !== undefined) activeTab = parsed.activeTab;
           if (parsed.rifInput) rifInput = parsed.rifInput;
           console.log("📝 [DRAFT] Borrador cargado automáticamente");
+          if (parsed.cart && Array.isArray(parsed.cart) && parsed.cart.length > 0) {
+            rehydrateCart();
+          }
         } catch (e) {
           console.error("Error loading draft", e);
         }
@@ -555,7 +576,8 @@
             }
           }
 
-          // --- BUSCAR ÍNDICE DE PRECIO QUE COINCIDA CON LA COTIZACIÓN ---
+          // --- BUSCAR ÍNDICE DE PRECIO VIGENTE EN CATÁLOGO ---
+          // Solo se respeta un precio distinto al catálogo cuando el renglón está autorizado (PRECIO_AUT:)
           let matchedPriceIndex = -1;
           const targetIdPrecio = String(
             cart[i].price_selected?.id_precio ||
@@ -569,7 +591,10 @@
           const targetVES = Number(
             cart[i].price_selected?.precio_ves ?? cart[i].precio_ves ?? 0,
           );
-          const explicitCustom = Boolean(cart[i].price_selected?.is_custom);
+          const explicitCustom = Boolean(
+            cart[i].price_selected?.is_custom &&
+              cart[i].price_selected?.authorized_by,
+          );
 
           const refFreshPrice = fresh.precios?.[0];
           const freshTasa =
@@ -582,34 +607,14 @@
                     1,
                 );
 
-          const matchesCatalogPrice = (p: any) => {
-            const pUsd = Number(p.precio || 0);
-            const pVes = Number(p.precio_ves || 0);
-            if (showUSD && targetOM > 0) {
-              return Math.abs(pUsd - targetOM) < 0.015;
-            }
-            if (!showUSD && targetVES > 0) {
-              return (
-                Math.abs(pVes - targetVES) < 0.05 ||
-                (targetOM > 0 && Math.abs(pUsd - targetOM) < 0.015)
-              );
-            }
-            return (
-              (targetOM > 0 && Math.abs(pUsd - targetOM) < 0.015) ||
-              (targetVES > 0 && Math.abs(pVes - targetVES) < 0.05)
-            );
-          };
-
           if (!explicitCustom && fresh.precios && fresh.precios.length > 0) {
-            if (targetIdPrecio) {
-              matchedPriceIndex = fresh.precios.findIndex(
-                (p: any) =>
-                  String(p.id_precio || p.co_precio || "").trim() ===
-                    targetIdPrecio && matchesCatalogPrice(p),
-              );
-            }
+            const normTarget = normalizePriceCode(targetIdPrecio || "01");
+            matchedPriceIndex = fresh.precios.findIndex(
+              (p: any) =>
+                normalizePriceCode(p.id_precio || p.co_precio) === normTarget,
+            );
             if (matchedPriceIndex === -1) {
-              matchedPriceIndex = fresh.precios.findIndex(matchesCatalogPrice);
+              matchedPriceIndex = 0;
             }
           }
 
@@ -619,10 +624,7 @@
               ? fresh.precios?.[matchedPriceIndex]
               : cart[i].price_selected;
 
-          if (
-            explicitCustom ||
-            (matchedPriceIndex === -1 && (targetOM > 0 || targetVES > 0))
-          ) {
+          if (explicitCustom) {
             finalPriceIndex = -1;
             const customUsd =
               targetOM > 0
@@ -647,9 +649,12 @@
               is_custom: true,
               authorized_by: cart[i].price_selected?.authorized_by,
             };
-          } else if (finalPriceIndex === -1) {
+          } else if (fresh.precios && fresh.precios.length > 0) {
+            finalPriceIndex = matchedPriceIndex >= 0 ? matchedPriceIndex : 0;
+            finalPriceSelected = fresh.precios[finalPriceIndex];
+          } else {
             finalPriceIndex = 0;
-            finalPriceSelected = fresh.precios?.[0] || cart[i].price_selected;
+            finalPriceSelected = cart[i].price_selected;
           }
 
           // Actualizar estados reactivos globales (el catálogo usa índice >= 0)
@@ -680,6 +685,18 @@
                 : cart[i].precios,
             unidad: fresh.unidad || cart[i].unidad,
             porc_imp: EXEMPT_TAX_CODES.includes(normFreshTipoImp) ? 0 : 16,
+            precio_usd: Number(
+              finalPriceSelected?.precio ?? cart[i].precio_usd ?? 0,
+            ),
+            precio_ves: Number(
+              finalPriceSelected?.precio_ves ?? cart[i].precio_ves ?? 0,
+            ),
+            co_precio: String(
+              finalPriceSelected?.id_precio ||
+                finalPriceSelected?.co_precio ||
+                cart[i].co_precio ||
+                "01",
+            ).trim(),
             price_index_selected: finalPriceIndex,
             price_selected: finalPriceSelected,
             co_alma_selected: item.co_alma_selected,
