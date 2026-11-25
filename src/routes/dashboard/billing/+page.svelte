@@ -390,6 +390,22 @@
         const tasa =
           docTasa > 1 ? docTasa : Number(orderDetails.tasa_actual || 1);
 
+        // Detectar pedidos editados en Profit Desktop cuya cabecera quedó en BS pero los renglones en USD sin prec_vta_om
+        const headerBruto = Number(orderDetails.total_bruto || 0);
+        const sumRengNeto = lines.reduce(
+          (acc: number, l: any) => acc + Number(l.total_renglon || 0),
+          0,
+        );
+        const allMissingOm =
+          lines.length > 0 &&
+          lines.every((l: any) => !(Number(l.prec_vta_om || 0) > 0));
+        const linesStoredInUsd =
+          tasa > 10 &&
+          headerBruto > 0 &&
+          allMissingOm &&
+          sumRengNeto > 0 &&
+          Math.abs(headerBruto / sumRengNeto - tasa) / tasa < 0.05;
+
         const newLines = lines
           .filter((l: any) => Number(l.pendiente ?? l.cantidad) > 0)
           .map((l: any) => {
@@ -397,7 +413,9 @@
             const usdPrice =
               Number(l.prec_vta_om || 0) > 0
                 ? Number(l.prec_vta_om)
-                : Number(l.precio || 0) / tasa;
+                : linesStoredInUsd
+                  ? Number(l.precio || 0)
+                  : Number(l.precio || 0) / tasa;
             const rawComment = String(l.comentario || "").trim();
             const authBy = rawComment.startsWith("PRECIO_AUT:")
               ? rawComment.replace(/^PRECIO_AUT:/, "").trim()
