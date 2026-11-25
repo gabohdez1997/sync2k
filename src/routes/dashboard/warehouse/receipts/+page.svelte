@@ -214,6 +214,14 @@
   });
 
   function handleBranchChange() {
+    selectedOrders = [];
+    receiptLines = [];
+    foundOrders = [];
+    observations = "";
+    nroFacturaProveedor = "";
+    linesSearchTerm = "";
+    showImportModal = false;
+
     const params = new URLSearchParams($page.url.searchParams);
     if (filterSede) params.set("branch_id", filterSede);
     else params.delete("branch_id");
@@ -287,7 +295,11 @@
 
       const result = deserialize(await res.text());
       if (result.type === "success" && (result.data as any)?.orders) {
-        let orders = (result.data as any).orders || [];
+        const expectedBranch = String(filterSede || "").trim().toLowerCase();
+        let orders = ((result.data as any).orders || []).filter((o: any) => {
+          if (!o?.sede_id || !expectedBranch) return true;
+          return String(o.sede_id).trim().toLowerCase() === expectedBranch;
+        });
 
         // Asegurar filtro en cliente si ya hay orden cargada (doble garantía: mismo proveedor y comprador)
         if (primaryOrder) {
@@ -323,6 +335,12 @@
 
   // --- SELECCIONAR E INCORPORAR ORDEN DE COMPRA ---
   async function selectOrder(order: any) {
+    const expectedBranch = String(filterSede || "").trim().toLowerCase();
+    if (order?.sede_id && expectedBranch && String(order.sede_id).trim().toLowerCase() !== expectedBranch) {
+      toast.error(`No se puede importar: La orden ${order.doc_num} pertenece a la sede "${order.sede_nombre || order.sede_id}" y no a la sede actual.`);
+      return;
+    }
+
     const isAlreadyLoaded = selectedOrders.some(
       (o) => o.doc_num?.trim().toUpperCase() === order.doc_num?.trim().toUpperCase()
     );
@@ -359,6 +377,11 @@
 
       if (result.type === "success" && (result.data as any)?.order) {
         const orderData = (result.data as any).order;
+        if (orderData?.sede_id && expectedBranch && String(orderData.sede_id).trim().toLowerCase() !== expectedBranch) {
+          toast.error(`No se puede importar: La orden ${orderData.doc_num || order.doc_num} pertenece a otra sede (${orderData.sede_nombre || orderData.sede_id}).`);
+          return;
+        }
+        orderData.sede_id = orderData.sede_id || order.sede_id || filterSede;
         // Preservar co_us_in de order si orderData no lo trae
         if (!orderData.co_us_in && order.co_us_in) {
           orderData.co_us_in = order.co_us_in;
@@ -410,6 +433,7 @@
               newLinesToAdd.push({
                 ...l,
                 doc_num: orderData.doc_num,
+                sede_id: orderData.sede_id || filterSede,
                 checked: true,
                 cant_recibida: pending,
                 cant_pendiente: pending,
@@ -519,10 +543,15 @@
       return;
     }
 
-    // Validar coherencia: todas las órdenes deben ser del mismo proveedor y comprador
+    // Validar coherencia: todas las órdenes deben ser de la sede actual, mismo proveedor y comprador
     const mainProv = (primaryOrder.co_prov || "").trim().toUpperCase();
     const mainBuyer = (primaryBuyer || "").trim().toUpperCase();
+    const expectedBranch = String(filterSede || "").trim().toLowerCase();
     for (const ord of selectedOrders) {
+      if (ord.sede_id && expectedBranch && String(ord.sede_id).trim().toLowerCase() !== expectedBranch) {
+        toast.error(`Conflicto de sede: La orden ${ord.doc_num} pertenece a otra sede (${ord.sede_nombre || ord.sede_id}) y no puede recepcionarse aquí.`);
+        return;
+      }
       const oProv = (ord.co_prov || "").trim().toUpperCase();
       const oBuyer = (ord.co_us_in || "").trim().toUpperCase();
       if (mainProv && oProv && mainProv !== oProv) {
@@ -556,6 +585,7 @@
       const ocDisplay = ocNums.join(", ");
 
       const payload = {
+        sede_id: filterSede,
         isEditing: isEditing,
         doc_num: isEditing ? editingDocNum : undefined,
         co_prov: primaryOrder.co_prov,
@@ -583,6 +613,7 @@
             reng_num_oc: l.reng_num_oc || l.reng_num,
             rowguid_doc: l.rowguid_doc,
             num_doc: l.doc_num || primaryOrder.doc_num,
+            sede_id: l.sede_id || filterSede,
             co_art: l.co_art,
             art_des: l.art_des,
             co_uni: l.co_uni || "UNI",

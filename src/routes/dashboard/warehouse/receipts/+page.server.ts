@@ -162,10 +162,15 @@ export const actions: Actions = {
             }
             if (coUsIn) filters.co_us_in = coUsIn;
 
-            const res = await agentClient.getPendingPurchaseOrders(filters);
+            const res = await agentClient.getPendingPurchaseOrders(filters, branch.id);
+            const expectedBranchId = String(branch.id || '').trim().toLowerCase();
+            const filteredOrders = (res?.data || []).filter((o: any) => {
+                if (!o?.sede_id) return true;
+                return String(o.sede_id).trim().toLowerCase() === expectedBranchId;
+            });
             return {
                 success: true,
-                orders: res?.data || []
+                orders: filteredOrders
             };
         } catch (err: any) {
             console.error('[RECEIPTS ACTION] Error buscando órdenes pendientes:', err);
@@ -191,10 +196,23 @@ export const actions: Actions = {
         }, profile, fetch);
 
         try {
-            const res = await agentClient.getPendingPurchaseOrderDetail(docNum);
+            const res = await agentClient.getPendingPurchaseOrderDetail(docNum, branch.id);
+            if (!res?.success || !res?.data) {
+                return fail(400, {
+                    message: res?.message || `La orden de compra ${docNum} no pertenece a la sede "${branch.name || branch.id}" o no existe.`
+                });
+            }
+            if (
+                res.data.sede_id &&
+                String(res.data.sede_id).trim().toLowerCase() !== String(branch.id).trim().toLowerCase()
+            ) {
+                return fail(400, {
+                    message: `La orden de compra ${docNum} pertenece a otra sede (${res.data.sede_nombre || res.data.sede_id}) y no puede importarse en "${branch.name || branch.id}".`
+                });
+            }
             return {
                 success: true,
-                order: res?.data || null
+                order: res.data
             };
         } catch (err: any) {
             console.error('[RECEIPTS ACTION] Error cargando detalle de orden:', err);
@@ -238,8 +256,21 @@ export const actions: Actions = {
             agent_api_key: branch.agent_token
         }, profile, fetch);
 
+        const expectedBranchId = String(branch.id || '').trim().toLowerCase();
+        if (payload.sede_id && String(payload.sede_id).trim().toLowerCase() !== expectedBranchId) {
+            return fail(400, { message: 'No se permite recepcionar órdenes de compra de otra sede.' });
+        }
+        if (Array.isArray(payload.renglones)) {
+            const foreignLine = payload.renglones.find(
+                (r: any) => r?.sede_id && String(r.sede_id).trim().toLowerCase() !== expectedBranchId
+            );
+            if (foreignLine) {
+                return fail(400, { message: 'No se permite recepcionar órdenes de compra de otra sede.' });
+            }
+        }
+
         try {
-            const saveRes = await agentClient.saveReceivingNote(payload);
+            const saveRes = await agentClient.saveReceivingNote(payload, branch.id);
 
             if (!saveRes.success) {
                 return fail(400, { message: saveRes.message || 'Error al procesar la nota de recepción en el servidor.' });
