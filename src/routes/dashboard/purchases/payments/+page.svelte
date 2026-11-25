@@ -1389,6 +1389,8 @@
     advanceDescrip = "";
     advanceCtaIngrEgr = "";
     paymentCtaIngrEgr = "";
+    ajpaReason = "diferencial_cambiario";
+    ajpaCtaIngrEgr = "";
     showMovCtaModal = false;
     confirmedMovCta = false;
     modalCtaSelected = "";
@@ -1637,8 +1639,37 @@
   let generatedDocNum = $state("");
   let showAjpaConfirmModal = $state(false);
   let confirmedAjpa = $state(false);
+  let ajpaReason = $state<"timbre_1x1000" | "diferencial_cambiario">("diferencial_cambiario");
+  let ajpaCtaIngrEgr = $state("");
   let showMovCtaModal = $state(false);
   let confirmedMovCta = $state(false);
+
+  function resolveDefaultAjpaCta(reason: "timbre_1x1000" | "diferencial_cambiario"): string {
+    const list = (data.cuentasIngrEgr || []) as Array<{ co_cta_ingr_egr?: string; descrip?: string }>;
+    const byCode = (code: string) =>
+      list.find((c) => String(c.co_cta_ingr_egr || "").trim().toUpperCase() === code.toUpperCase());
+    const codeOf = (c: { co_cta_ingr_egr?: string } | undefined) =>
+      c ? String(c.co_cta_ingr_egr || "").trim() : "";
+
+    if (reason === "timbre_1x1000") {
+      const picked =
+        byCode("I-002") ||
+        byCode("I-001") ||
+        list.find((c) => /^I-/i.test(String(c.co_cta_ingr_egr || "").trim())) ||
+        list[0];
+      return codeOf(picked);
+    }
+
+    const byDif = list.find((c) => /DIFERENCIAL|CAMBIAR/i.test(`${c.co_cta_ingr_egr || ""} ${c.descrip || ""}`));
+    const byFin = list.find((c) => /INGRESO.*FINANCIER/i.test(String(c.descrip || "")));
+    const picked =
+      byDif ||
+      byCode("I-001") ||
+      byFin ||
+      byCode("G-024") ||
+      list[0];
+    return codeOf(picked);
+  }
   let modalCtaSelected = $state("");
   let modalCtaSearch = $state("");
 
@@ -1735,6 +1766,8 @@
     }
 
     if (paymentMode !== "advance" && hasPaymentSurplus && !confirmedAjpa) {
+      ajpaReason = aplicarTimbreFiscal || totalTimbreFiscalBs > 0 ? "timbre_1x1000" : "diferencial_cambiario";
+      ajpaCtaIngrEgr = resolveDefaultAjpaCta(ajpaReason);
       showAjpaConfirmModal = true;
       return;
     }
@@ -1994,6 +2027,8 @@
           tipo: 'AJPA',
           monto_usd: excedentePagoUsd,
           monto_bs: excedentePagoBs,
+          motivo: ajpaReason,
+          co_cta_ingr_egr: ajpaCtaIngrEgr || null,
         } : null,
       };
 
@@ -3914,8 +3949,67 @@
         </div>
       </div>
 
+      <!-- Clasificación del Excedente (AJPA) -->
+      <div class="bg-surface-soft/50 border border-border-subtle rounded-2xl p-3.5 space-y-3 text-xs">
+        <span class="text-[10px] font-black uppercase tracking-wider text-text-muted block">
+          Clasificación del Ajuste (AJPA)
+        </span>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          <button
+            type="button"
+            onclick={() => {
+              ajpaReason = "diferencial_cambiario";
+              ajpaCtaIngrEgr = resolveDefaultAjpaCta("diferencial_cambiario");
+            }}
+            class={`px-3 py-2.5 rounded-xl border text-left transition-all cursor-pointer ${
+              ajpaReason === "diferencial_cambiario"
+                ? "bg-brand-500/15 border-brand-500 text-text-base font-bold"
+                : "bg-surface-base/60 border-border-subtle text-text-muted hover:text-text-base"
+            }`}
+          >
+            <div class="font-bold text-xs">Diferencial Cambiario</div>
+            <div class="text-[10px] opacity-80">Ajuste por variación de tasa</div>
+          </button>
+          <button
+            type="button"
+            onclick={() => {
+              ajpaReason = "timbre_1x1000";
+              ajpaCtaIngrEgr = resolveDefaultAjpaCta("timbre_1x1000");
+            }}
+            class={`px-3 py-2.5 rounded-xl border text-left transition-all cursor-pointer ${
+              ajpaReason === "timbre_1x1000"
+                ? "bg-emerald-500/15 border-emerald-500 text-emerald-300 font-bold"
+                : "bg-surface-base/60 border-border-subtle text-text-muted hover:text-text-base"
+            }`}
+          >
+            <div class="font-bold text-xs">Excedente Ret. 1x1000</div>
+            <div class="text-[10px] opacity-80">Registrar en cuenta de ingreso</div>
+          </button>
+        </div>
+
+        <div class="space-y-1">
+          <label for="ajpa-cta-select" class="text-[11px] font-bold text-text-muted block">
+            Cuenta de Ingreso/Egreso para el AJPA
+          </label>
+          <select
+            id="ajpa-cta-select"
+            bind:value={ajpaCtaIngrEgr}
+            class="w-full h-10 px-3 bg-surface-base border border-border-subtle rounded-xl text-xs font-medium text-text-base outline-none focus:border-brand-500 transition-all"
+          >
+            {#each data.cuentasIngrEgr || [] as cta}
+              {@const code = String(cta.co_cta_ingr_egr || "").trim()}
+              <option value={code}>{code} · {cta.descrip?.trim()}</option>
+            {/each}
+          </select>
+        </div>
+      </div>
+
       <p class="text-xs text-text-muted leading-relaxed">
-        El monto pagado en efectivo/banco supera las facturas seleccionadas. El sistema registrará el pago de las facturas y creará automáticamente un documento <strong>AJPA (Ajuste Positivo Automático de Compra)</strong> en la serie <strong>C010</strong> por la diferencia a favor en la cuenta del proveedor para compensar futuras compras.
+        {#if ajpaReason === "timbre_1x1000"}
+          El excedente proviene de la <strong>Retención 1x1000 (Timbre Fiscal)</strong>. Se creará un documento <strong>AJPA</strong> en la serie <strong>C010</strong> imputado a la cuenta de ingreso seleccionada ({ajpaCtaIngrEgr || "I-002"}).
+        {:else}
+          El monto pagado supera las facturas por <strong>diferencial cambiario</strong>. Se creará un documento <strong>AJPA (Ajuste Positivo Automático de Compra)</strong> en la serie <strong>C010</strong> imputado a la cuenta seleccionada ({ajpaCtaIngrEgr || "I-001"}) para compensar futuras compras.
+        {/if}
       </p>
 
       <div class="flex items-center justify-end gap-3 pt-2">
