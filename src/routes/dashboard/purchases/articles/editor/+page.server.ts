@@ -47,16 +47,20 @@ export const load: PageServerLoad = protectLoad('pur_articles', async ({ url, lo
         let ubicaciones: any[] = [];
         let procedencias: any[] = [];
         let colores: any[] = [];
+        let tiposPrecio: any[] = [];
+        let impuestosIva: any[] = [];
 
         try {
-            const [linRes, subRes, catRes, uniRes, ubiRes, procRes, colRes] = await Promise.all([
+            const [linRes, subRes, catRes, uniRes, ubiRes, procRes, colRes, tpRes, ivaRes] = await Promise.all([
                 agentClient.request<any>('/catalogos/lineas').catch(() => ({ data: [] })),
                 agentClient.request<any>('/catalogos/sublineas').catch(() => ({ data: [] })),
                 agentClient.request<any>('/catalogos/categorias').catch(() => ({ data: [] })),
                 agentClient.request<any>('/catalogos/unidades').catch(() => ({ data: [] })),
                 agentClient.request<any>('/ubicaciones').catch(() => ({ data: [] })),
                 agentClient.request<any>('/catalogos/procedencias').catch(() => ({ data: [] })),
-                agentClient.request<any>('/catalogos/colores').catch(() => ({ data: [] }))
+                agentClient.request<any>('/catalogos/colores').catch(() => ({ data: [] })),
+                agentClient.request<any>('/catalogos/tipos-precio').catch(() => ({ data: [] })),
+                agentClient.request<any>('/catalogos/impuestos-iva').catch(() => ({ data: [] }))
             ]);
 
             lineas = (linRes as any).data || (linRes as any).items || (Array.isArray(linRes) ? linRes : []);
@@ -66,6 +70,8 @@ export const load: PageServerLoad = protectLoad('pur_articles', async ({ url, lo
             ubicaciones = (ubiRes as any).data || (ubiRes as any).items || (Array.isArray(ubiRes) ? ubiRes : []);
             procedencias = (procRes as any).data || (procRes as any).items || (Array.isArray(procRes) ? procRes : []);
             colores = (colRes as any).data || (colRes as any).items || (Array.isArray(colRes) ? colRes : []);
+            tiposPrecio = (tpRes as any).data || (tpRes as any).items || (Array.isArray(tpRes) ? tpRes : []);
+            impuestosIva = (ivaRes as any).data || (ivaRes as any).items || (Array.isArray(ivaRes) ? ivaRes : []);
         } catch (e) {
             console.error('[PUR_ARTICLES_EDITOR] Catalog fetch error:', e);
         }
@@ -107,7 +113,9 @@ export const load: PageServerLoad = protectLoad('pur_articles', async ({ url, lo
                 unidades,
                 ubicaciones,
                 procedencias,
-                colores
+                colores,
+                tiposPrecio,
+                impuestosIva
             }
         };
 
@@ -154,15 +162,47 @@ export const actions: Actions = {
             image_base64: formData.get('imageBase64')?.toString() || null,
         };
 
-        // Extraer Márgenes y Precios dinámicos y enviarlos como margen_1, precio_1, etc.
-        for (let i = 1; i <= 5; i++) {
-            const margenVal = formData.get(`margen_${i}`);
-            if (margenVal !== null && margenVal !== '') {
-                payload[`margen_${i}`] = Number(margenVal) || 0;
+        // Extraer todos los N Márgenes y Precios dinámicos (vía JSON + campos margen_X/precio_X)
+        const dynamicPricesMap = new Map<string, { co_precio: string; margen: number; precio: number }>();
+        const preciosJsonRaw = formData.get('precios_json')?.toString();
+        if (preciosJsonRaw) {
+            try {
+                const parsed = JSON.parse(preciosJsonRaw);
+                if (Array.isArray(parsed)) {
+                    for (const p of parsed) {
+                        const code = String(p?.co_precio ?? p?.id_precio ?? p?.tipo ?? '').trim();
+                        if (!code) continue;
+                        dynamicPricesMap.set(code, {
+                            co_precio: code,
+                            margen: Number(p?.margen) || 0,
+                            precio: Number(p?.precio) || 0
+                        });
+                    }
+                }
+            } catch (_) {}
+        }
+
+        for (const [key, val] of formData.entries()) {
+            const match = /^(margen|precio)_(.+)$/.exec(key);
+            if (!match) continue;
+            const field = match[1];
+            const code = String(match[2] || '').trim();
+            if (!code || val === null || val === '') continue;
+            const numVal = Number(val) || 0;
+            payload[`${field}_${code}`] = numVal;
+            const entry = dynamicPricesMap.get(code) || { co_precio: code, margen: 0, precio: 0 };
+            if (field === 'margen') entry.margen = numVal;
+            else entry.precio = numVal;
+            dynamicPricesMap.set(code, entry);
+        }
+
+        payload.precios = [...dynamicPricesMap.values()];
+        for (const entry of payload.precios) {
+            if (payload[`margen_${entry.co_precio}`] === undefined) {
+                payload[`margen_${entry.co_precio}`] = entry.margen;
             }
-            const precioVal = formData.get(`precio_${i}`);
-            if (precioVal !== null && precioVal !== '') {
-                payload[`precio_${i}`] = Number(precioVal) || 0;
+            if (payload[`precio_${entry.co_precio}`] === undefined) {
+                payload[`precio_${entry.co_precio}`] = entry.precio;
             }
         }
 

@@ -34,29 +34,138 @@
   let sCo_Uni_Sec = $state(data.article?.sSco_Uni || "");
   let bManeja_Serial = $state(data.article?.bManeja_Serial ?? false);
   let bManeja_Lote = $state(data.article?.bManeja_Lote ?? false);
+  function normalizePriceCode(code: any): string {
+    const s = String(code ?? "").trim();
+    if (!s) return "";
+    if (/^\d+$/.test(s)) return String(parseInt(s, 10));
+    return s.toUpperCase();
+  }
+
+  function formatPriceTypeLabel(coPrecio: string, desPrecio?: string): string {
+    const desc = String(desPrecio || "").trim();
+    if (!desc || /^precio\s+\d+$/i.test(desc)) return `Precio ${coPrecio}`;
+    return desc;
+  }
+
+  function formatIvaPct(val: any): string {
+    const n = Number(val || 0);
+    return Number.isInteger(n) ? String(n) : n.toFixed(2).replace(/\.?0+$/, "");
+  }
+
+  // ── I.V.A. dinámico desde saImpuestoSobreVentaReng ──
   const rawTipoImp = String(data.article?.tipo_imp || "1").trim();
-  let tipo_imp = $state(["4", "5", "6", "7"].includes(rawTipoImp) ? "4" : rawTipoImp || "1");
+
+  const ivaOptions = $derived.by(() => {
+    const rawList = Array.isArray(data.catalogs?.impuestosIva) ? data.catalogs.impuestosIva : [];
+    const standardOrder = ["1", "4", "2", "3"];
+    const baseDefaults = [
+      { tipo_imp: "1", nombre: "Tasa General", porcentaje: 16, ventas: true },
+      { tipo_imp: "4", nombre: "Exento", porcentaje: 0, ventas: true },
+      { tipo_imp: "2", nombre: "Tasa Reducida", porcentaje: 8, ventas: true },
+      { tipo_imp: "3", nombre: "Tasa Suntuaria", porcentaje: 31, ventas: true }
+    ];
+
+    const source = rawList.length > 0 ? rawList : baseDefaults;
+    const filtered = source.filter((item: any) => {
+      const code = String(item.tipo_imp || "").trim();
+      const pct = Number(item.porcentaje ?? (Number(item.porc_tasa || 0) + Number(item.porc_suntuario || 0)));
+      return standardOrder.includes(code) || (item.ventas && pct > 0) || code === rawTipoImp;
+    });
+
+    const listToFormat = filtered.length > 0 ? filtered : baseDefaults;
+    listToFormat.sort((a: any, b: any) => {
+      const ca = String(a.tipo_imp || "").trim();
+      const cb = String(b.tipo_imp || "").trim();
+      const ia = standardOrder.indexOf(ca);
+      const ib = standardOrder.indexOf(cb);
+      if (ia !== -1 || ib !== -1) {
+        if (ia === -1) return 1;
+        if (ib === -1) return -1;
+        return ia - ib;
+      }
+      return (parseInt(ca, 10) || 999) - (parseInt(cb, 10) || 999);
+    });
+
+    return listToFormat.map((item: any) => {
+      const code = String(item.tipo_imp || "").trim();
+      const pct = Number(item.porcentaje ?? (Number(item.porc_tasa || 0) + Number(item.porc_suntuario || 0)));
+      const nombre = String(item.nombre || `Tipo ${code}`).trim();
+      return {
+        tipo_imp: code,
+        nombre,
+        porcentaje: pct,
+        label: `${nombre} (${formatIvaPct(pct)}%)`
+      };
+    });
+  });
+
+  const initialIvaCodes = (Array.isArray(data.catalogs?.impuestosIva) ? data.catalogs.impuestosIva : [])
+    .map((x: any) => String(x.tipo_imp || "").trim());
+  const defaultTipoImp = initialIvaCodes.includes(rawTipoImp)
+    ? rawTipoImp
+    : (["4", "5", "6", "7"].includes(rawTipoImp) ? "4" : rawTipoImp || "1");
+  let tipo_imp = $state(defaultTipoImp);
   let peso = $state(data.article?.peso || 0);
   let volumen = $state(data.article?.volumen || 0);
   let stock_min = $state(data.article?.stock_min || 0);
   let stock_max = $state(data.article?.stock_max || 0);
   let garantia = $state(data.article?.garantia || "0");
 
-  // ── Precios / Márgenes Dinámicos ──
+  // ── Precios / Márgenes Dinámicos (todos los N tipos de saTipoPrecio) ──
   let costo_act = $state(data.article?.costo_act || 0);
   let priceEntries = $state<Array<{tipo: string, margen: number | null, precio: number | null}>>(
     (data.article?.precios || [])
       .filter((p: any) => (p.margen || 0) > 0 || (p.precio || 0) > 0)
       .map((p: any) => ({
-        tipo: String(parseInt(p.id_precio)),
+        tipo: normalizePriceCode(p.id_precio ?? p.co_precio),
         margen: p.margen || null,
         precio: p.precio || null
       }))
+      .filter((p: any) => Boolean(p.tipo))
+      .sort((a: any, b: any) => {
+        const na = /^\d+$/.test(a.tipo) ? parseInt(a.tipo, 10) : Number.MAX_SAFE_INTEGER;
+        const nb = /^\d+$/.test(b.tipo) ? parseInt(b.tipo, 10) : Number.MAX_SAFE_INTEGER;
+        return na !== nb ? na - nb : a.tipo.localeCompare(b.tipo);
+      })
   );
+
+  const priceTypes = $derived.by(() => {
+    const raw = Array.isArray(data.catalogs?.tiposPrecio) ? data.catalogs.tiposPrecio : [];
+    const map = new Map<string, { co_precio: string; label: string }>();
+    const seed = raw.length > 0
+      ? raw
+      : ["1", "2", "3", "4", "5"].map(c => ({ co_precio: c, des_precio: `Precio ${c}` }));
+
+    for (const tp of seed) {
+      const code = normalizePriceCode(tp.co_precio);
+      if (!code || map.has(code)) continue;
+      map.set(code, {
+        co_precio: code,
+        label: formatPriceTypeLabel(code, tp.des_precio)
+      });
+    }
+
+    for (const entry of priceEntries) {
+      const code = normalizePriceCode(entry.tipo);
+      if (code && !map.has(code)) {
+        map.set(code, { co_precio: code, label: `Precio ${code}` });
+      }
+    }
+
+    return [...map.values()].sort((a, b) => {
+      const na = /^\d+$/.test(a.co_precio) ? parseInt(a.co_precio, 10) : Number.MAX_SAFE_INTEGER;
+      const nb = /^\d+$/.test(b.co_precio) ? parseInt(b.co_precio, 10) : Number.MAX_SAFE_INTEGER;
+      return na !== nb ? na - nb : a.co_precio.localeCompare(b.co_precio);
+    });
+  });
+
+  function getPriceTypeLabel(code: string) {
+    return priceTypes.find(pt => pt.co_precio === code)?.label || `Precio ${code}`;
+  }
 
   const usedPriceTypes = $derived(priceEntries.map(e => e.tipo));
   const availablePriceTypes = $derived(
-    ['1','2','3','4','5'].filter(t => !usedPriceTypes.includes(t))
+    priceTypes.map(pt => pt.co_precio).filter(t => !usedPriceTypes.includes(t))
   );
 
   function addPriceEntry() {
@@ -176,14 +285,15 @@
       return;
     }
     for (const entry of priceEntries) {
+      const label = getPriceTypeLabel(entry.tipo);
       if (entry.margen === undefined || entry.margen === null || isNaN(entry.margen) || entry.margen <= 0) {
-        toast.error(`El margen para el Precio ${entry.tipo} debe ser mayor a 0%`);
+        toast.error(`El margen para el ${label} debe ser mayor a 0%`);
         activeTab = 2;
         cancel();
         return;
       }
       if (entry.precio === undefined || entry.precio === null || isNaN(entry.precio) || entry.precio <= 0) {
-        toast.error(`El precio para el Precio ${entry.tipo} debe ser mayor a 0 USD`);
+        toast.error(`El precio para el ${label} debe ser mayor a 0 USD`);
         activeTab = 2;
         cancel();
         return;
@@ -242,6 +352,7 @@
     <form id="articleForm" method="POST" use:enhance={handleEnhance} novalidate class="p-6 flex-1 bg-surface-base/20 rounded-3xl">
       <input type="hidden" name="co_art_ori" value={data.article?.co_art || ""} />
       <input type="hidden" name="is_new" value={isEditing ? 'false' : 'true'} />
+      <input type="hidden" name="precios_json" value={JSON.stringify(priceEntries.map(e => ({ co_precio: e.tipo, margen: e.margen, precio: e.precio })))} />
 
       <!-- TAB 0: GENERAL -->
       <div class:hidden={activeTab !== 0}>
@@ -365,10 +476,9 @@
                 <div class="space-y-2">
                   <label class="text-xs uppercase font-black tracking-widest text-text-muted">I.V.A.</label>
                   <select name="tipo_imp" bind:value={tipo_imp} class="w-full bg-surface-base h-12 px-4 rounded-xl border border-border-subtle focus:border-brand-500 outline-none text-sm transition-all">
-                    <option value="1">Tasa General</option>
-                    <option value="4">Exento</option>
-                    <option value="2">Tasa Reducida</option>
-                    <option value="3">Tasa Suntuaria</option>
+                    {#each ivaOptions as opt (opt.tipo_imp)}
+                      <option value={opt.tipo_imp}>{opt.label}</option>
+                    {/each}
                   </select>
                 </div>
               </div>
@@ -404,9 +514,9 @@
                         <!-- Fila del Selector de Categoría y Eliminar en Móvil -->
                         <div class="flex items-center gap-2 w-full md:w-auto">
                           <select bind:value={entry.tipo} class="bg-surface-raised h-10 px-3 rounded-lg border border-border-subtle focus:border-brand-500 outline-none text-sm font-bold transition-all w-full md:w-[140px] md:min-w-[140px]">
-                            {#each ['1','2','3','4','5'] as t}
-                              {#if t === entry.tipo || !usedPriceTypes.includes(t)}
-                                <option value={t}>Precio {t}</option>
+                            {#each priceTypes as pt (pt.co_precio)}
+                              {#if pt.co_precio === entry.tipo || !usedPriceTypes.includes(pt.co_precio)}
+                                <option value={pt.co_precio}>{pt.label}</option>
                               {/if}
                             {/each}
                           </select>
