@@ -70,8 +70,7 @@ export const GET: RequestHandler = async ({ url, locals }) => {
       const params = new URLSearchParams();
       params.set('limit', '500');
       if (searchTerm) {
-        const isCode = /^\d/.test(searchTerm.trim());
-        params.set(isCode ? 'co_art' : 'descripcion', searchTerm);
+        params.set('search', searchTerm);
       }
       if (lineaId) params.set('linea', lineaId);
       if (categoriaId) params.set('categoria', categoriaId);
