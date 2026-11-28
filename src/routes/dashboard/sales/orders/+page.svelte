@@ -752,6 +752,73 @@
     });
   });
 
+  function getOriginalOrderCommittedQty(coArt: string, coAlma: string): number {
+    if (
+      !data.preloadedOrder ||
+      !lastLoadedDoc ||
+      !Array.isArray(data.preloadedOrder.renglones)
+    ) {
+      return 0;
+    }
+    const targetArt = String(coArt || "").trim().toUpperCase();
+    const targetAlma = String(coAlma || "").trim().toUpperCase();
+    if (!targetArt || !targetAlma) return 0;
+
+    let total = 0;
+    for (const r of data.preloadedOrder.renglones) {
+      const rArt = String(r.co_art || "").trim().toUpperCase();
+      const rAlma = String(r.co_alma || "").trim().toUpperCase();
+      if (rArt === targetArt && rAlma === targetAlma) {
+        total += Math.max(0, Number(r.cantidad || 0));
+      }
+    }
+    return total;
+  }
+
+  function getAdjustedArticleDisponibilidad(coArt: string, rawDispo: any[]): any[] {
+    const baseList = Array.isArray(rawDispo) ? rawDispo : [];
+    const seenAlmas = new Set<string>();
+    const adjusted = baseList.map((disp: any) => {
+      const almaCode = String(disp.co_alma || "").trim().toUpperCase();
+      if (almaCode) seenAlmas.add(almaCode);
+      const committed = almaCode ? getOriginalOrderCommittedQty(coArt, almaCode) : 0;
+      return {
+        ...disp,
+        stock: Number(disp.stock ?? disp.cant_stock ?? 0) + committed,
+      };
+    });
+
+    if (
+      data.preloadedOrder &&
+      lastLoadedDoc &&
+      Array.isArray(data.preloadedOrder.renglones)
+    ) {
+      const targetArt = String(coArt || "").trim().toUpperCase();
+      const missingAlmas = new Map<string, number>();
+      for (const r of data.preloadedOrder.renglones) {
+        const rArt = String(r.co_art || "").trim().toUpperCase();
+        const rAlma = String(r.co_alma || "").trim().toUpperCase();
+        const qty = Math.max(0, Number(r.cantidad || 0));
+        if (rArt === targetArt && rAlma && !seenAlmas.has(rAlma) && qty > 0) {
+          missingAlmas.set(rAlma, (missingAlmas.get(rAlma) || 0) + qty);
+        }
+      }
+
+      for (const [almaCode, committedQty] of missingAlmas.entries()) {
+        const ctxAlma = data.context?.warehouses?.find(
+          (w: any) => String(w.co_alma || "").trim().toUpperCase() === almaCode,
+        );
+        adjusted.push({
+          co_alma: almaCode,
+          des_alma: String(ctxAlma?.des_alma || ctxAlma?.nombre || almaCode).trim(),
+          stock: committedQty,
+        });
+      }
+    }
+
+    return adjusted;
+  }
+
   async function rehydrateCart() {
     if (!browser || !cart.length) return;
 
@@ -774,12 +841,16 @@
             d.data.find((a: any) => a.co_art?.trim() === co) || d.data[0];
 
           // --- FILTRADO DE ALMACENES POR PERMISO Y STOCK DISPONIBLE (> 0 o seleccionado) ---
+          const adjustedFreshDispo = getAdjustedArticleDisponibilidad(
+            co,
+            fresh.disponibilidad || [],
+          );
           const allowedIds = (data.context?.warehouses || []).map((w: any) =>
             String(w.co_alma || "")
               .trim()
               .toUpperCase(),
           );
-          let validDispo = (fresh.disponibilidad || []).filter(
+          let validDispo = adjustedFreshDispo.filter(
             (disp: any) =>
               allowedIds.includes(
                 String(disp.co_alma || "")
@@ -799,7 +870,7 @@
           );
 
           if (!hasCurrentInDispo) {
-            const freshSel = fresh.disponibilidad?.find(
+            const freshSel = adjustedFreshDispo.find(
               (d: any) =>
                 String(d.co_alma || "")
                   .trim()
@@ -826,7 +897,10 @@
                 item.co_alma_selected ||
                 currentAlmaCode,
             ).trim();
-            const stockVal = Number(freshSel?.stock ?? cartSel?.stock ?? 0);
+            const stockVal =
+              freshSel !== undefined
+                ? Number(freshSel.stock || 0)
+                : getOriginalOrderCommittedQty(co, currentAlmaCode);
 
             validDispo.unshift({
               co_alma: item.co_alma_selected || currentAlmaCode,
@@ -1280,6 +1354,11 @@
       }
     }
 
+    const effectiveDispo = getAdjustedArticleDisponibilidad(
+      co_art,
+      article.disponibilidad || [],
+    );
+
     // Obtener almacén seleccionado
     let almId =
       selectedItemWarehouse[co_art] ||
@@ -1289,7 +1368,7 @@
           return selectedBranchConfig.default_warehouse;
         }
 
-        const disp = article.disponibilidad || [];
+        const disp = effectiveDispo;
         if (!disp.length) {
           // Fallback to the branch default warehouse even if not in disp list for services
           if (isService && selectedBranchConfig?.default_warehouse) {
@@ -1320,19 +1399,30 @@
       return;
     }
 
-    const availableStock =
-      article.disponibilidad?.find((a: any) => a.co_alma === almId)?.stock || 0;
+    const normCoArt = String(co_art || "").trim().toUpperCase();
+    const normAlmId = String(almId || "").trim().toUpperCase();
+    const availableStock = Number(
+      effectiveDispo.find(
+        (a: any) => String(a.co_alma || "").trim().toUpperCase() === normAlmId,
+      )?.stock || 0,
+    );
     const existingIndex = cart.findIndex(
       (i) =>
-        (i.co_art || i.codigo || i.id) === co_art &&
-        i.co_alma_selected === almId,
+        String(i.co_art || i.codigo || i.id || "").trim().toUpperCase() === normCoArt &&
+        String(i.co_alma_selected || "").trim().toUpperCase() === normAlmId,
     );
-    const currentCartQty = existingIndex >= 0 ? cart[existingIndex].qty : 0;
+    const currentCartQty = cart.reduce((sum, i) => {
+      const iArt = String(i.co_art || i.codigo || i.id || "").trim().toUpperCase();
+      const iAlm = String(i.co_alma_selected || "").trim().toUpperCase();
+      return iArt === normCoArt && iAlm === normAlmId
+        ? sum + Number(i.qty || 0)
+        : sum;
+    }, 0);
 
     // Skip stock validation for services
     if (!isService && currentCartQty + qty > availableStock) {
       toast.error(
-        `Stock insuficiente. Disponible: ${availableStock - currentCartQty}`,
+        `Stock insuficiente. Disponible: ${Math.max(0, availableStock - currentCartQty)}`,
       );
       return;
     }
@@ -1348,11 +1438,12 @@
     }
 
     if (existingIndex >= 0) {
+      cart[existingIndex].disponibilidad = effectiveDispo;
       cart[existingIndex].qty += qty;
     } else {
       const itemDispo =
-        article.disponibilidad && article.disponibilidad.length > 0
-          ? article.disponibilidad
+        effectiveDispo.length > 0
+          ? effectiveDispo
           : (data.context?.warehouses || []).map((w: any) => ({
               co_alma: w.co_alma,
               des_alma: w.des_alma || w.nombre || w.co_alma,
@@ -1400,13 +1491,30 @@
       return;
     }
 
-    const available =
-      item.disponibilidad?.find((a: any) => a.co_alma === item.co_alma_selected)
-        ?.stock || 0;
+    const normArt = String(item.co_art || item.codigo || item.id || "")
+      .trim()
+      .toUpperCase();
+    const normAlma = String(item.co_alma_selected || "").trim().toUpperCase();
+    const available = Number(
+      item.disponibilidad?.find(
+        (a: any) => String(a.co_alma || "").trim().toUpperCase() === normAlma,
+      )?.stock || 0,
+    );
+    const otherRowsQty = cart.reduce((sum, other, idx) => {
+      if (idx === index) return sum;
+      const oArt = String(other.co_art || other.codigo || other.id || "")
+        .trim()
+        .toUpperCase();
+      const oAlma = String(other.co_alma_selected || "").trim().toUpperCase();
+      return oArt === normArt && oAlma === normAlma
+        ? sum + Number(other.qty || 0)
+        : sum;
+    }, 0);
+    const maxAllowed = Math.max(0, available - otherRowsQty);
 
-    if (roundedQty > available) {
-      toast.error(`Stock insuficiente en este almacén. Máximo: ${available}`);
-      cart[index].qty = Math.floor(available / step) * step || step;
+    if (roundedQty > maxAllowed) {
+      toast.error(`Stock insuficiente en este almacén. Máximo: ${maxAllowed}`);
+      cart[index].qty = Math.floor(maxAllowed / step) * step || step;
     } else {
       cart[index].qty = roundedQty;
     }
@@ -1414,14 +1522,30 @@
 
   function updateCartWarehouse(index: number, co_alma: string) {
     const item = cart[index];
-    const newAlm = item.disponibilidad?.find((a: any) => a.co_alma === co_alma);
+    const normTargetAlma = String(co_alma || "").trim().toUpperCase();
+    const newAlm = item.disponibilidad?.find(
+      (a: any) => String(a.co_alma || "").trim().toUpperCase() === normTargetAlma,
+    );
     if (!newAlm) return;
 
-    item.co_alma_selected = co_alma;
-    const stock = newAlm.stock || 0;
-    if (!isServiceArticle(item) && item.qty > stock) {
+    item.co_alma_selected = newAlm.co_alma || co_alma;
+    const normArt = String(item.co_art || item.codigo || item.id || "")
+      .trim()
+      .toUpperCase();
+    const otherRowsQty = cart.reduce((sum, other, idx) => {
+      if (idx === index) return sum;
+      const oArt = String(other.co_art || other.codigo || other.id || "")
+        .trim()
+        .toUpperCase();
+      const oAlma = String(other.co_alma_selected || "").trim().toUpperCase();
+      return oArt === normArt && oAlma === normTargetAlma
+        ? sum + Number(other.qty || 0)
+        : sum;
+    }, 0);
+    const maxAllowed = Math.max(0, Number(newAlm.stock || 0) - otherRowsQty);
+    if (!isServiceArticle(item) && item.qty > maxAllowed) {
       toast.warning(`Cantidad ajustada al stock de ${newAlm.des_alma}`);
-      item.qty = Math.max(1, stock);
+      item.qty = Math.max(getStep(item), maxAllowed);
     }
     cart[index] = { ...item };
   }
@@ -2596,16 +2720,19 @@
             class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"
           >
             {#each displayArticles as article}
-              {@const pIdx =
-                selectedItemPriceIndex[article.co_art || article.codigo] || 0}
+              {@const artKey = article.co_art || article.codigo}
+              {@const pIdx = selectedItemPriceIndex[artKey] || 0}
               {@const selPrice =
                 article.precios?.[pIdx] || article.precios?.[0]}
-              {@const curAlmId =
-                selectedItemWarehouse[article.co_art || article.codigo]}
+              {@const adjustedDispo = getAdjustedArticleDisponibilidad(
+                artKey,
+                article.disponibilidad || [],
+              )}
+              {@const curAlmId = selectedItemWarehouse[artKey]}
               {@const curAlm =
-                article.disponibilidad?.find((a) => a.co_alma === curAlmId) ||
-                article.disponibilidad?.[0]}
-              {@const artKey = article.co_art || article.codigo}
+                adjustedDispo.find((a) => a.co_alma === curAlmId) ||
+                adjustedDispo[0]}
+              {@const curAlmStock = Number(curAlm?.stock || 0)}
               {@const cardWithIva = Boolean(showCardIva[artKey]) && !isExemptArticle(article)}
               {@const baseCardPrice = Number((showUSD ? selPrice?.precio : selPrice?.precio_ves) || 0)}
               {@const displayCardPrice = cardWithIva ? baseCardPrice * 1.16 : baseCardPrice}
@@ -2736,13 +2863,13 @@
                       >
                       <span
                         class="text-sm font-black {isServiceArticle(article) ||
-                        (curAlm?.stock || 0) > 0
+                        curAlmStock > 0
                           ? 'text-green-400'
                           : 'text-red-400'}"
                       >
                         {isServiceArticle(article)
                           ? "Stock ∞"
-                          : curAlm?.stock || 0}
+                          : curAlmStock}
                       </span>
                     </div>
 
@@ -2755,7 +2882,7 @@
                         }
                         class="w-full h-11 bg-surface-soft hover:bg-surface-strong rounded-xl px-4 text-xs font-black outline-none border border-border-subtle appearance-none transition-all cursor-pointer text-text-muted hover:text-text-base"
                       >
-                        {#each article.disponibilidad && article.disponibilidad.length > 0 ? article.disponibilidad : isServiceArticle(article) ? data.context?.warehouses || [] : [] as alm}
+                        {#each adjustedDispo.length > 0 ? adjustedDispo : isServiceArticle(article) ? data.context?.warehouses || [] : [] as alm}
                           <option
                             value={alm.co_alma}
                             class="bg-surface-dark text-white text-sm"
